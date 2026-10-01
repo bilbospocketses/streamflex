@@ -218,6 +218,7 @@ typedef struct {
     SDL_Surface *transition_surface;
     SDL_Texture *transition_texture;
     bool only_one;   // Set by the loader: the only image that loads is the one already on show
+    double transition_luminance;   // The next image's mean luminance, measured on the loader thread
 } Slideshow;
 
 // Screensaver
@@ -322,6 +323,7 @@ void describe_titles(const LayoutGeometry *geometry, char *out, size_t size);
 
 extern ModeBackground background_shown;
 extern SDL_Texture *background_override;
+extern double background_luminance;              // The image on show's mean luminance; -1 unknown
 void draw_scene(bool preview);
 void present_frame(void);
 void reload_background(void);

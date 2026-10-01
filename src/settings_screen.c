@@ -13,6 +13,8 @@
 #include "settings.h"
 #include "config_fields.h"
 #include "settings_screen.h"
+#include "settings_pickers.h"
+#include "colourpick.h"
 #include "config_save.h"
 #include "browser.h"
 #include "fileio.h"
@@ -96,6 +98,7 @@ static int measures = 0;                      // Paragraphs measured while setti
 static char drawn_note[512];                  // The note under the preview last drawn, for the log
 static char drawn_cursor[480];                // The row under the cursor as last drawn, for the log
 static char logged_path[512];                 // The page path last logged
+static char logged_hint[160];                 // The key hint last logged
 static Menu *preview_wanted = NULL;           // The menu the preview switches to once the cursor rests...
 static Uint32 preview_asked = 0;              // ...since when it has rested
 static int shown_first = -1;                  // The rows last on show, for the log
@@ -290,11 +293,14 @@ static void list_pads(void)
     settings_set_pads(model, names, count);
 }
 
-// A function to name the pads again after one was plugged in or pulled out, while settings are open
+// A function to name the pads again after one was plugged in or pulled out, while settings are
+// open: the Device row, and the Device list when it is open
 void settings_pads_changed(void)
 {
-    if (model != NULL)
-        list_pads();
+    if (model == NULL)
+        return;
+    list_pads();
+    pickers_pads_changed();
 }
 
 // A function to refresh what a group of settings affects in the running launcher
@@ -736,6 +742,7 @@ static void free_screen(void)
     log_debug("Test hook: %i paragraphs were measured while settings were open", measures);
     measures = 0;
 #endif
+    pickers_end();
     if (browser != NULL)
         close_browser();
     stop_decoding();
@@ -876,11 +883,13 @@ static void handle_event(const SettingsEvent *event)
             close_settings();
             return;
         case SETTINGS_EVENT_PICK:
-            // OK on a picker row opens its picker here: Task 9 the colour picker (a colour) and the
-            // list picker (the default menu, the device, a command), Task 10 the font picker. The
-            // mappings file (Task 15) is a browse row, which SETTINGS_EVENT_BROWSE opens. Until
-            // then OK does nothing; the rows that step still step with Left and Right.
-            break;
+            // OK on a picker row opens its picker (settings_pickers.c): the colour picker for a
+            // colour, the list picker for the default menu, the device and a command. A font's row
+            // opens nothing until Task 10 adds the font picker. The mappings file (Task 15) is a
+            // browse row, which SETTINGS_EVENT_BROWSE opens. The rows that step still step with
+            // Left and Right.
+            pickers_open(event->slot);
+            return;
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
             break;
@@ -990,11 +999,32 @@ static void handle_browser_command(const char *command)
     preview_highlighted();
 }
 
-// A function to act on a key while settings are open: the remote's keys move through them, and
-// every other command waits until they close
+// A function to log the column's path when it changes: the page's, or with a picker open, the
+// setting it chooses for after it
+static void log_path(void)
+{
+    char path[512];
+    if (pickers_active())
+        pickers_path(path, sizeof(path));
+    else
+        settings_path(model, path, sizeof(path));
+    if (strcmp(path, logged_path) != 0) {
+        copy_string(logged_path, path, sizeof(logged_path));
+        log_debug("Settings: page %s", path);
+    }
+}
+
+// A function to act on a key while settings are open: the remote's keys move through them (or
+// through a picker, while one is open), and every other command waits until they close
 static void handle_command(const char *command)
 {
     SettingsCommand key;
+    if (pickers_active()) {
+        pickers_command(command);
+        if (model != NULL)
+            log_path();
+        return;
+    }
     if (browser != NULL) {
         handle_browser_command(command);
         return;
@@ -1010,12 +1040,7 @@ static void handle_command(const char *command)
         return;
     if (before != SETTINGS_PAGE_BACKGROUND && settings_page(model) == SETTINGS_PAGE_BACKGROUND)
         counted_folder[0] = '\0';   // The Background page opened: count the Folder's images again
-    char path[512];
-    settings_path(model, path, sizeof(path));
-    if (strcmp(path, logged_path) != 0) {
-        copy_string(logged_path, path, sizeof(logged_path));
-        log_debug("Settings: page %s", path);
-    }
+    log_path();
 }
 
 // A function to act on a special command while settings are open, logging a key that kept the
@@ -1246,29 +1271,39 @@ static void draw_browser_rows(int x, int top, int bottom)
     }
 }
 
-// A function to draw the column: the title, the page path (or the folder being browsed), the rows
-// (the page's, built once for the frame, or the browser's) and the key hint
+// A function to draw the column: the title, the page path (or the folder being browsed, or the
+// setting a picker chooses for), the rows (the page's, built once for the frame, the browser's or
+// the picker's) and the key hint, logged when it changes
 static void draw_column(SettingsRow *rows, int count)
 {
     char path[512];
     int x = margin;
     draw_text(font_header, "Settings", x, margin, column_width, 255, false);
-    if (browser != NULL)
+    if (pickers_active())
+        pickers_path(path, sizeof(path));
+    else if (browser != NULL)
         copy_string(path, browser_folder(browser) != NULL ? browser_folder(browser) : "Places", sizeof(path));
     else
         settings_path(model, path, sizeof(path));
     draw_text(font_small, path, x, margin + TTF_FontHeight(font_header), column_width, ALPHA_DIM, false);
     int top = (int) (ROWS_TOP_RATIO * (float) geo.screen_height);
     int hint_y = geo.screen_height - margin - TTF_FontHeight(font_small);
-    if (browser != NULL)
+    if (pickers_active())
+        pickers_draw(x, top, hint_y - margin);
+    else if (browser != NULL)
         draw_browser_rows(x, top, hint_y - margin);
     else
         draw_model_rows(rows, count, x, top, hint_y - margin);
-    const char *hint = browser != NULL ? "Left and right page \xC2\xB7 OK opens or chooses \xC2\xB7 Back goes up"
+    const char *hint = pickers_active() ? pickers_hint()
+                     : browser != NULL ? "Left and right page \xC2\xB7 OK opens or chooses \xC2\xB7 Back goes up"
                      : settings_page(model) == SETTINGS_PAGE_TOP
                        ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back saves and closes"
                        : "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back goes back";
     draw_text(font_small, hint, x, hint_y, column_width, ALPHA_DIM, false);
+    if (strcmp(hint, logged_hint) != 0) {
+        copy_string(logged_hint, hint, sizeof(logged_hint));
+        log_debug("Settings: the key hint reads %s", hint);
+    }
 }
 
 // A function to say why the row under the cursor is greyed, or "" when it is not
@@ -1280,9 +1315,22 @@ static const char *cursor_why(const SettingsRow *rows, int count)
     return rows[cursor].why;
 }
 
+// A function to warn in the caption when the row under the cursor is a title or clock colour that
+// stands out too little from the background; "" otherwise
+static const char *row_warning(const SettingsRow *rows, int count)
+{
+    static char warning[160];
+    int cursor = settings_cursor(model);
+    warning[0] = '\0';
+    if (cursor >= 0 && cursor < count && rows[cursor].slot != NULL)
+        contrast_warning(rows[cursor].slot->def->id, rows[cursor].slot->value.color, warning, sizeof(warning));
+    return warning;
+}
+
 // A function to draw the caption, two lines from (x, y) at most `width` wide: which menu, its grid
-// and titles, and any note: the last key's, else why the row under the cursor is greyed (greyed_why)
-static void draw_caption(const char *greyed_why, int x, int y, int width)
+// and titles, and any note: the open picker's; the browser's; the last key's; else what the row under
+// the cursor says (row_note: why it is greyed, or a contrast warning)
+static void draw_caption(const char *row_note, int x, int y, int width)
 {
     char caption[512];
     char titles[32];
@@ -1293,8 +1341,9 @@ static void draw_caption(const char *greyed_why, int x, int y, int width)
     snprintf(caption, sizeof(caption), "Preview: %s \xC2\xB7 %i \xC3\x97 %i, %i px buttons, %s%s", current_menu->name,
         layout.columns, layout.rows, layout.button, titles, reduced ? " (reduced to fit the screen)" : "");
     draw_text(font_small, caption, x, y, width, ALPHA_VALUE, false);
-    const char *note = browser != NULL ? browser_caption()
-                     : settings_notice(model)[0] != '\0' ? settings_notice(model) : greyed_why;
+    const char *note = pickers_active() ? pickers_note()
+                     : browser != NULL ? browser_caption()
+                     : settings_notice(model)[0] != '\0' ? settings_notice(model) : row_note;
     draw_text(font_small, note, x, y + TTF_FontHeight(font_small), width, 255, false);
     if (strcmp(note, drawn_note) != 0) {
         copy_string(drawn_note, note, sizeof(drawn_note));
@@ -1327,10 +1376,13 @@ void settings_draw(void)
     }
 
     // The page's rows, built once for the frame: the column draws them, and the caption says why the
-    // one under the cursor is greyed. The browser has rows of its own.
+    // one under the cursor is greyed, or warns of its low contrast. The browser and the pickers have
+    // rows of their own.
     SettingsRow rows[SETTINGS_MAX_ROWS];
-    int count = browser == NULL ? settings_rows(model, rows, SETTINGS_MAX_ROWS) : 0;
-    const char *greyed_why = cursor_why(rows, count);
+    int count = browser == NULL && !pickers_active() ? settings_rows(model, rows, SETTINGS_MAX_ROWS) : 0;
+    const char *row_note = cursor_why(rows, count);
+    if (row_note[0] == '\0')
+        row_note = row_warning(rows, count);
     if (preview != NULL) {
         SDL_SetRenderTarget(renderer, preview);
         draw_scene(true);
@@ -1341,7 +1393,7 @@ void settings_draw(void)
         SDL_RenderCopy(renderer, preview, NULL, &preview_rect);
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_FRAME);
         SDL_RenderDrawRect(renderer, &preview_rect);
-        draw_caption(greyed_why, preview_rect.x, preview_rect.y + preview_rect.h + margin / 2, preview_rect.w);
+        draw_caption(row_note, preview_rect.x, preview_rect.y + preview_rect.h + margin / 2, preview_rect.w);
     }
     else {
         // No render targets: the scene fills the screen, the column sits on a dark backing, and
@@ -1354,7 +1406,7 @@ void settings_draw(void)
         int caption_h = 2 * TTF_FontHeight(font_small) + margin;
         SDL_Rect strip = { backing.w, geo.screen_height - caption_h, geo.screen_width - backing.w, caption_h };
         SDL_RenderFillRect(renderer, &strip);
-        draw_caption(greyed_why, strip.x + margin, strip.y + margin / 2, strip.w - 2 * margin);
+        draw_caption(row_note, strip.x + margin, strip.y + margin / 2, strip.w - 2 * margin);
     }
     draw_column(rows, count);
     present_frame();
@@ -1408,7 +1460,14 @@ void settings_open(void)
     drawn_note[0] = '\0';
     drawn_cursor[0] = '\0';
     logged_path[0] = '\0';
+    logged_hint[0] = '\0';
     measure_layout();
+    PickerHost host = {
+        .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
+        .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
+        .row_height = row_height, .column_width = column_width, .margin = margin
+    };
+    pickers_begin(&host);
     bool targets = SDL_RenderTargetSupported(renderer);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: it draws as a renderer without render targets would

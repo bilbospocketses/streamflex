@@ -10,6 +10,7 @@
 #include <launcher_config.h>
 #include "image.h"
 #include "chroma.h"
+#include "colourpick.h"
 #include "util.h"
 #include "debug.h"
 #include <ini.h>
@@ -162,29 +163,56 @@ int load_next_slideshow_background_async(void *data)
 {
     Slideshow *slideshow = (Slideshow*) data;
     slideshow->transition_surface = load_next_slideshow_background(slideshow, true);
+    slideshow->transition_luminance = slideshow->transition_surface != NULL
+                                      ? surface_luminance(slideshow->transition_surface) : -1.0;
     SDL_AtomicSet(&state.slideshow_background_rendering, 0);
     SDL_AtomicSet(&state.slideshow_background_ready, 1);
     return 0;
 }
 
+// A function to measure a decoded image's mean relative luminance, for the contrast warning: a copy
+// converted to RGBA32 bytes (R at byte 0) is read at most 64 points across and down, by its own
+// pitch. -1 when it cannot be converted. It touches only the surface and logs nothing, so the
+// slideshow's thread can use it; each image is measured once, as it is decoded.
+double surface_luminance(SDL_Surface *surface)
+{
+    SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_NO_LUMINANCE fails the conversion
+    if (rgba != NULL && getenv("STREAMFLEX_TEST_NO_LUMINANCE") != NULL) {
+        SDL_FreeSurface(rgba);
+        rgba = NULL;
+    }
+#endif
+    if (rgba == NULL)
+        return -1.0;
+    // A surface converted without flags is never RLE-encoded, so its pixels can be read unlocked
+    double luminance = colour_mean_luminance(rgba->pixels, rgba->w, rgba->h, rgba->pitch);
+    SDL_FreeSurface(rgba);
+    return luminance;
+}
+
+// A function to load a texture from a file, measuring its mean luminance when asked (NULL: not)
+SDL_Texture *load_texture_measured(const char *path, double *luminance)
+{
+    if (luminance != NULL)
+        *luminance = -1.0;
+    if (path == NULL)
+        return NULL;
+    SDL_Surface *surface = IMG_Load(path);
+    if (surface == NULL) {
+        log_error("Could not load image %s\n%s", path, IMG_GetError());
+        return NULL;
+    }
+    if (luminance != NULL)
+        *luminance = surface_luminance(surface);
+    return load_texture(surface);
+}
+
 // A function to load a texture from a file
 SDL_Texture *load_texture_from_file(const char *path)
 {
-    SDL_Surface *surface = NULL;
-    SDL_Texture *texture = NULL;
-    if (path != NULL) {
-        surface = IMG_Load(path);
-        if (surface == NULL) {
-            log_error(
-                "Could not load image %s\n%s", 
-                path, 
-                IMG_GetError()
-            );
-        }
-        else
-            texture = load_texture(surface);
-    }
-    return texture;
+    return load_texture_measured(path, NULL);
 }
 
 // A function to load a texture from a    SDL surface

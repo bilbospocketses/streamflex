@@ -190,6 +190,7 @@ SDL_Texture *background_override      = NULL; // The image being browsed in sett
 Menu *default_menu                    = NULL;
 Menu *current_menu                    = NULL;
 ModeBackground background_shown       = BACKGROUND_COLOR; // What is on screen: the colour when the chosen background failed
+double background_luminance           = -1.0; // The image on show's mean luminance, for the contrast warning; -1 unknown
 Entry *current_entry                  = NULL;
 Highlight *highlight                  = NULL;
 Scroll *scroll                        = NULL;
@@ -674,6 +675,15 @@ void quit_slideshow()
     slideshow = NULL;
 }
 
+// A function to log the mean luminance of the image on show, which the contrast warning reads
+static void log_luminance(void)
+{
+    if (background_luminance >= 0.0)
+        log_debug("Background: the image on show has a mean luminance of %.3f", background_luminance);
+    else
+        log_debug("Background: the image on show could not be measured");
+}
+
 // A function to stop a slideshow that can no longer show two images, on the main thread: show the
 // one image that still loads (surface, the same image as the one on show), or the colour when none
 // does. The Mode setting stays Slideshow, so the folder is tried again when the background is next
@@ -731,7 +741,8 @@ static void init_slideshow()
         .transition_change_rate = 0.f,
         .images = NULL,
         .order = NULL,
-        .only_one = false
+        .only_one = false,
+        .transition_luminance = -1.0
     };
     scan_slideshow_directory(slideshow, config.slideshow_directory);
     if (!slideshow->num_images) {
@@ -746,7 +757,7 @@ static void init_slideshow()
         log_error("Only one image found in slideshow directory %s, showing it as a single image",
             config.slideshow_directory
         );
-        background_texture = load_texture_from_file(slideshow->images[0]);
+        background_texture = load_texture_measured(slideshow->images[0], &background_luminance);
         background_shown = background_texture != NULL ? BACKGROUND_IMAGE : BACKGROUND_COLOR;
         quit_slideshow();
     }
@@ -1011,6 +1022,7 @@ void reload_background()
         SDL_DestroyTexture(background_texture);
         background_texture = NULL;
     }
+    background_luminance = -1.0;
 
     background_shown = config.background_mode;
     if (config.background_mode == BACKGROUND_IMAGE) {
@@ -1021,7 +1033,7 @@ void reload_background()
         else if (config.background_image == NULL)
             log_error("Background 'Image' setting not specified in config file");
         else
-            background_texture = load_texture_from_file(config.background_image);
+            background_texture = load_texture_measured(config.background_image, &background_luminance);
         if (background_texture == NULL) {
             if (config.background_image != NULL || !settings_is_open())
                 log_error("Couldn't load background image, defaulting to color background");
@@ -1033,6 +1045,7 @@ void reload_background()
         if (background_shown == BACKGROUND_SLIDESHOW) {
             SDL_Surface *surface = load_next_slideshow_background(slideshow, false);
             if (surface != NULL) {
+                background_luminance = surface_luminance(surface);
                 background_texture = load_texture(surface);
                 ticks.slideshow_load = ticks.main;
             }
@@ -1040,6 +1053,8 @@ void reload_background()
                 fall_back_from_slideshow(NULL);
         }
     }
+    if (background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW)
+        log_luminance();
     update_slideshow_timing();
 #ifdef _WIN32
     if (background_shown == BACKGROUND_TRANSPARENT)
@@ -1981,6 +1996,8 @@ static void update_slideshow()
             else {
                 SDL_DestroyTexture(background_texture);
                 background_texture = load_texture(slideshow->transition_surface);
+                background_luminance = slideshow->transition_luminance;
+                log_luminance();
                 ticks.slideshow_load = ticks.main;
             }
         slideshow->transition_surface = NULL;
@@ -1999,6 +2016,8 @@ static void update_slideshow()
             SDL_DestroyTexture(background_texture);
             background_texture = slideshow->transition_texture;
             slideshow->transition_texture = NULL;
+            background_luminance = slideshow->transition_luminance;
+            log_luminance();
             state.slideshow_transition = false;
             ticks.slideshow_load = ticks.main;
         }

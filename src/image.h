@@ -30,6 +30,8 @@ SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transitio
 int load_next_slideshow_background_async(void *data);
 SDL_Texture *load_texture(SDL_Surface *surface);
 SDL_Texture *load_texture_from_file(const char *path);
+SDL_Texture *load_texture_measured(const char *path, double *luminance);
+double surface_luminance(SDL_Surface *surface);   // -1 when it cannot be read
 SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect);
 SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect);
 SDL_Texture *load_icon(const char *path, int size);

@@ -40,6 +40,8 @@ set(SOURCES
   browser.h
   settings_screen.c
   settings_screen.h
+  settings_pickers.c
+  settings_pickers.h
   test_hooks.c
   test_hooks.h
 )

@@ -13,8 +13,9 @@
 
 #ifdef STREAMFLEX_TEST_HOOKS
 // Only the headless harness builds these. STREAMFLEX_TEST_FAIL names one of the settings screen's
-// steps (places, browser, command or keep), which then runs as if memory had run out, or for keep,
-// as if the saved file's permissions could not be kept: failures no real run can be made to give.
+// steps (places, browser, command or keep; the pickers' list, rows, select or pads), which then runs
+// as if memory had run out, or for keep, as if the saved file's permissions could not be kept:
+// failures no real run can be made to give.
 
 // A function standing in for realloc that always fails
 static void *failing_reallocate(void *memory, size_t size)
