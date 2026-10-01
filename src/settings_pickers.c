@@ -56,6 +56,8 @@ void pickers_begin(const PickerHost *given)
 // A function to close the picker on show, if any
 static void close_picker(void)
 {
+    if (kind != PICKER_NONE)
+        log_debug("Settings: closed the picker for [%s] %s", slot->def->section, slot->def->key);
     listpick_free(list);
     list = NULL;
     kind = PICKER_NONE;

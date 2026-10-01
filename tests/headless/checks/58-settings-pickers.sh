@@ -227,11 +227,14 @@ for fail in list:f58-pickers:9:'Quit command' rows:f58-pickers:9:'Quit command' 
     result "pickers: a list whose $step step runs out of memory does not open (exit $(cat "$out/$name.code"))" $ok
 done
 
-# Quitting with a list open frees it (the leak pass finds any left)
+# Quitting with a list open closes it as settings close. LeakSanitizer cannot see a list left open,
+# which a static still points to, so the log says the picker closed.
 # shellcheck disable=SC2046
 CFG=$FX/f58-pickers.ini run_keys f58-quitopen Menu Return $(p58_downs 9) Return
 ok=1
-grep -q 'Settings: opened the picker for \[General\] StartupCmd' "$out/f58-quitopen.log" && ran_clean f58-quitopen && ok=0
+grep -q 'Settings: opened the picker for \[General\] StartupCmd' "$out/f58-quitopen.log" \
+    && sed -n '/Quitting program/,$p' "$out/f58-quitopen.log" | grep -q 'Settings: closed the picker for \[General\] StartupCmd' \
+    && ran_clean f58-quitopen && ok=0
 result "pickers: quitting with a list open closes it cleanly (exit $(cat "$out/f58-quitopen.code"))" $ok
 
 # The contrast warning under an image, measured as it loads (blue.png, luminance 0.074): black
