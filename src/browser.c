@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "browser.h"
+#include "fileio.h"
 #include "alloc.h"
 
 static const char *const IMAGE_EXTENSIONS[] = { ".jpg", ".jpeg", ".png", ".webp" };
@@ -30,28 +31,16 @@ struct Browser {
     const char *why;        // Why the last command did nothing because of the browser itself; NULL otherwise
 };
 
-// A function to tell a path separator, in either style
-static bool is_separator(char c)
-{
-    return c == '/' || c == '\\';
-}
-
-// A function to lower-case an ASCII letter, for sorting and extensions
-static int lower(char c)
-{
-    return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : (unsigned char) c;
-}
-
 // A function to compare names without regard to ASCII case, then exactly
 static int compare_names(const char *a, const char *b)
 {
     const char *x = a;
     const char *y = b;
-    while (*x != '\0' && lower(*x) == lower(*y)) {
+    while (*x != '\0' && fileio_lower(*x) == fileio_lower(*y)) {
         x++;
         y++;
     }
-    int difference = lower(*x) - lower(*y);
+    int difference = fileio_lower(*x) - fileio_lower(*y);
     return difference != 0 ? difference : strcmp(a, b);
 }
 
@@ -73,7 +62,7 @@ bool browser_is_image(const char *name)
             continue;
         const char *tail = name + length - extension_length;
         size_t k = 0;
-        while (k < extension_length && lower(tail[k]) == IMAGE_EXTENSIONS[i][k])
+        while (k < extension_length && fileio_lower(tail[k]) == IMAGE_EXTENSIONS[i][k])
             k++;
         if (k == extension_length)
             return true;
@@ -92,14 +81,14 @@ bool browser_is_image_file(const FileioEntry *entry)
 // A function to tell a root, which has no parent: "/", "C:", "C:\" or "\\server\share"
 static bool is_root(const char *path, size_t length)
 {
-    if (length == 1 && is_separator(path[0]))
+    if (length == 1 && fileio_is_separator(path[0]))
         return true;
-    if ((length == 2 || length == 3) && path[1] == ':' && (length == 2 || is_separator(path[2])))
+    if ((length == 2 || length == 3) && path[1] == ':' && (length == 2 || fileio_is_separator(path[2])))
         return true;
-    if (length >= 2 && is_separator(path[0]) && is_separator(path[1])) {
+    if (length >= 2 && fileio_is_separator(path[0]) && fileio_is_separator(path[1])) {
         int separators = 0;
         for (size_t i = 2; i < length; i++) {
-            if (is_separator(path[i]))
+            if (fileio_is_separator(path[i]))
                 separators++;
         }
         return separators <= 1;
@@ -111,12 +100,12 @@ static bool is_root(const char *path, size_t length)
 bool browser_parent(const char *path, char *out, size_t size)
 {
     size_t length = strlen(path);
-    while (length > 1 && is_separator(path[length - 1]) && !is_root(path, length))
+    while (length > 1 && fileio_is_separator(path[length - 1]) && !is_root(path, length))
         length--;
     if (length == 0 || is_root(path, length))
         return false;
     size_t cut = length;
-    while (cut > 0 && !is_separator(path[cut - 1]))
+    while (cut > 0 && !fileio_is_separator(path[cut - 1]))
         cut--;
     if (cut == 0)
         return false;
@@ -139,7 +128,7 @@ static char *join_path(const char *folder, const char *name)
 {
     size_t length = strlen(folder);
     bool backslash = strchr(folder, '\\') != NULL || (strchr(folder, '/') == NULL && length >= 2 && folder[1] == ':');
-    const char *between = length > 0 && is_separator(folder[length - 1]) ? "" : (backslash ? "\\" : "/");
+    const char *between = length > 0 && fileio_is_separator(folder[length - 1]) ? "" : (backslash ? "\\" : "/");
     size_t size = length + strlen(between) + strlen(name) + 1;
     char *path = alloc_malloc(size);
     if (path != NULL)
@@ -338,7 +327,7 @@ Browser *browser_open(BrowserMode mode, const char *start, const BrowserPlace *p
     LoadResult loaded = LOAD_UNLISTED;
     if (folder != NULL) {
         size_t length = strlen(folder);
-        while (length > 1 && is_separator(folder[length - 1]) && !is_root(folder, length))
+        while (length > 1 && fileio_is_separator(folder[length - 1]) && !is_root(folder, length))
             folder[--length] = '\0';
         if (mode == BROWSER_IMAGE && browser_is_image(folder)) {
             char *parent = alloc_malloc(length + 1);

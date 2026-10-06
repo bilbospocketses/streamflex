@@ -97,10 +97,32 @@ static void test_rules(void)
     fontlist_free(list);
 }
 
+// A function to test a face added after the families were put in order: the list goes back to the
+// order found, every family in it, until it is put in order again
+static void test_add_after_finish(void)
+{
+    FontList *list = fontlist_create();
+    CHECK(fontlist_add(list, "/f/b.ttf", 0, "B", "Regular", false));
+    CHECK(fontlist_add(list, "/f/a.ttf", 0, "A", "Regular", false));
+    fontlist_finish(list);
+    CHECK_STR(fontlist_family(list, 0), "A");
+    CHECK(fontlist_add(list, "/f/c.ttf", 0, "C", "Regular", true));
+    CHECK_INT(fontlist_count(list), 3);
+    CHECK_STR(fontlist_family(list, 0), "B");          // The order found
+    CHECK_STR(fontlist_family(list, 2), "C");
+    CHECK_INT(fontlist_find(list, "/f/c.ttf", 0), 2);
+    fontlist_finish(list);
+    CHECK_STR(fontlist_family(list, 0), "C");          // In order again: bundled first, then by name
+    CHECK_STR(fontlist_family(list, 1), "A");
+    CHECK_INT(fontlist_find(list, "/f/b.ttf", 0), 2);
+    fontlist_free(list);
+}
+
 int main(void)
 {
     test_families();
     test_empty();
     test_rules();
+    test_add_after_finish();
     return check_report();
 }

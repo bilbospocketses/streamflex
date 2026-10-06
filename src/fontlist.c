@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fontlist.h"
+#include "fileio.h"
 #include "alloc.h"
 
 typedef struct {
@@ -33,20 +34,14 @@ struct FontList {
     Place *order;     // After fontlist_finish(): the families in sorted order; NULL, the order found
 };
 
-// A function to lower-case an ASCII letter
-static int lower(char c)
-{
-    return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : (unsigned char) c;
-}
-
 // A function to compare two names without regard to ASCII case
 static int compare_names(const char *a, const char *b)
 {
-    while (*a != '\0' && lower(*a) == lower(*b)) {
+    while (*a != '\0' && fileio_lower(*a) == fileio_lower(*b)) {
         a++;
         b++;
     }
-    return lower(*a) - lower(*b);
+    return fileio_lower(*a) - fileio_lower(*b);
 }
 
 // A function to make an empty list; NULL when out of memory
@@ -142,6 +137,8 @@ bool fontlist_add(FontList *list, const char *path, int face, const char *family
             alloc_free(family_path);
     }
     list->faces[list->face_count++] = (Face) { .path = face_path, .face = face, .family = index };
+    alloc_free(list->order);   // Added after fontlist_finish(): the order found, until it is called again
+    list->order = NULL;
     return true;
 }
 

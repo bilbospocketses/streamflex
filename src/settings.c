@@ -4,6 +4,7 @@
 #include <limits.h>
 #include "settings.h"
 #include "layout.h"
+#include "fileio.h"
 #include "alloc.h"
 #include <launcher_config.h>
 
@@ -766,18 +767,6 @@ SettingValue setting_step(const SettingDef *def, const SettingValue *current, co
     return result;
 }
 
-// A function to find the last name in a path, ignoring a trailing separator
-static void base_name(const char *path, char *out, size_t size)
-{
-    size_t length = strlen(path);
-    while (length > 1 && (path[length - 1] == '/' || path[length - 1] == '\\'))
-        length--;
-    size_t start = length;
-    while (start > 0 && path[start - 1] != '/' && path[start - 1] != '\\')
-        start--;
-    snprintf(out, size, "%.*s", (int) (length - start), path + start);
-}
-
 // The special commands and what the screen calls them
 static const struct {
     const char *command;
@@ -844,7 +833,7 @@ void setting_describe(const SettingDef *def, const SettingValue *value, const Se
             if (value->text[0] == '\0')
                 snprintf(out, size, "Choose" ELLIPSIS);
             else
-                base_name(value->text, out, size);
+                fileio_base_name(value->text, out, size);
             break;
         case SET_TYPE_SECONDS:
             if (value->number >= 60 && value->number % 60 == 0)

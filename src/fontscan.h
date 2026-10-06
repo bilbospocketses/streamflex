@@ -11,8 +11,9 @@
 typedef struct FontScan FontScan;
 
 FontScan *fontscan_start(const char *bundled_folder);  // Lists font files on a thread
-bool fontscan_done(FontScan *scan);
-int fontscan_count(const FontScan *scan);              // These three only once it is done
+bool fontscan_done(FontScan *scan);                    // True once listed; the thread is then waited for
+bool fontscan_failed(const FontScan *scan);            // A file could not be added: the list is short
+int fontscan_count(const FontScan *scan);              // These four only once it is done
 const char *fontscan_file(const FontScan *scan, int index);
 bool fontscan_bundled(const FontScan *scan, int index);
 void fontscan_free(FontScan *scan);                    // Waits for the thread

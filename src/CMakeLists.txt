@@ -46,6 +46,8 @@ set(SOURCES
   settings_screen.h
   settings_pickers.c
   settings_pickers.h
+  settings_fonts.c
+  settings_fonts.h
   test_hooks.c
   test_hooks.h
 )

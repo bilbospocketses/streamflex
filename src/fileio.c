@@ -66,9 +66,27 @@ const char *fileio_last_warning(void)
 }
 
 // A function to tell a path separator, in either style
-static bool is_separator(char c)
+bool fileio_is_separator(char c)
 {
     return c == '/' || c == '\\';
+}
+
+// A function to lower-case an ASCII letter, for comparing names and extensions
+int fileio_lower(char c)
+{
+    return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : (unsigned char) c;
+}
+
+// A function to find the last name in a path, ignoring a trailing separator
+void fileio_base_name(const char *path, char *out, size_t size)
+{
+    size_t length = strlen(path);
+    while (length > 1 && fileio_is_separator(path[length - 1]))
+        length--;
+    size_t start = length;
+    while (start > 0 && !fileio_is_separator(path[start - 1]))
+        start--;
+    snprintf(out, size, "%.*s", (int) (length - start), path + start);
 }
 
 // A function to describe a C library error in a few words
@@ -537,10 +555,10 @@ bool fileio_make_dirs(const char *path)
     // be made
     size_t start = 1;
 #ifdef _WIN32
-    if (length >= 2 && is_separator(buffer[0]) && is_separator(buffer[1])) {
+    if (length >= 2 && fileio_is_separator(buffer[0]) && fileio_is_separator(buffer[1])) {
         int parts = 0;
         for (start = 2; start < length && parts < 2; start++) {
-            if (is_separator(buffer[start]))
+            if (fileio_is_separator(buffer[start]))
                 parts++;
         }
 
@@ -554,7 +572,7 @@ bool fileio_make_dirs(const char *path)
     }
 #endif
     for (size_t i = start; i < length; i++) {
-        if (is_separator(buffer[i]) && buffer[i - 1] != ':') {
+        if (fileio_is_separator(buffer[i]) && buffer[i - 1] != ':') {
             char separator = buffer[i];
             buffer[i] = '\0';
             if (!make_dir(buffer)) {
@@ -896,7 +914,7 @@ int fileio_list(const char *folder, FileioEntry **entries)
         set_error("out of memory");
         return -1;
     }
-    bool separator = length > 0 && is_separator(folder[length - 1]);
+    bool separator = length > 0 && fileio_is_separator(folder[length - 1]);
     snprintf(pattern, length + 3, "%s%s*", folder, separator ? "" : "\\");
     wchar_t *wide = to_wide(pattern);
     alloc_free(pattern);
@@ -1094,7 +1112,7 @@ static int finish_places(PlaceList *list, FileioPlace **places)
 // drive, so it cannot wait on the network.
 static bool is_network_path(const char *path)
 {
-    if (is_separator(path[0]) && is_separator(path[1]))
+    if (fileio_is_separator(path[0]) && fileio_is_separator(path[1]))
         return true;
     if (path[0] == '\0' || path[1] != ':')
         return false;

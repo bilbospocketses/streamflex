@@ -37,6 +37,9 @@ int fileio_list(const char *folder, FileioEntry **entries);
 void fileio_free_list(FileioEntry *entries, int count);
 const char *fileio_last_error(void);
 const char *fileio_last_warning(void);   // What the last replace could not keep, though it succeeded; "" if nothing
+bool fileio_is_separator(char c);        // '/' or '\', on every platform
+int fileio_lower(char c);                // An ASCII capital in lower case; any other byte as it is (0-255)
+void fileio_base_name(const char *path, char *out, size_t size);   // The last name in a path, ignoring a trailing separator
 
 #ifdef _WIN32
 #include <wchar.h>

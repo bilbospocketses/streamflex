@@ -338,7 +338,7 @@ for fail in list:f60 rows:f60 select:custom; do
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
     result "fonts: a font list whose $step step runs out of memory does not open (exit $(cat "$out/$name.code"))" $ok
 done
-for step in fontlist fontscan; do
+for step in fontlist fontscan fontfolder fontthread; do
     name=f59-fail$step
     # shellcheck disable=SC2086
     STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
@@ -349,9 +349,8 @@ for step in fontlist fontscan; do
         && ! grep -q 'Settings: opened the picker' "$log" && ! grep -q 'Fonts: listing' "$log" \
         && sed -n '/the fonts cannot be listed/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
-    result "fonts: a font list whose $step step runs out of memory does not open (exit $(cat "$out/$name.code"))" $ok
+    result "fonts: a font list whose $step step fails does not open (exit $(cat "$out/$name.code"))" $ok
 done
-name=f59-failfaces
 # Functions to wait for the first and the second font list let go
 f59_lost() {
     local i
@@ -364,15 +363,36 @@ f59_lost() {
 }
 f59_lost1() { f59_lost "$2" 1; }
 f59_lost2() { f59_lost "$2" 2; }
+# A font list whose faces (faces) or whose files (fontadd, on the listing's own thread) run out of
+# memory is let go, and listed and read anew at the next opening
+for fail in 'faces:reading the faces' 'fontadd:listing the font files'; do
+    IFS=: read -r step what <<< "$fail"
+    name=f59-fail$step
+    # shellcheck disable=SC2086
+    STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+        run_keys "$name" $TITLES_FONT +f59_lost1 Return +f59_lost2 Down Menu
+    log=$out/$name.log
+    ok=1
+    [ "$(f59_count 'Fonts: listing the font files' "$log")" = 2 ] \
+        && [ "$(f59_count "Fonts: out of memory while $what, so the list was let go" "$log")" = 2 ] \
+        && [ "$(f59_count 'Settings: the list cannot open: out of memory' "$log")" = 2 ] \
+        && ! grep -q 'Fonts: found' "$log" \
+        && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
+        && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
+    result "fonts: a font list that runs out of memory $what is let go, and read anew (exit $(cat "$out/$name.code"))" $ok
+done
+
+# A sample that cannot be kept (out of memory for its place in the cache) is not drawn: its row
+# reads in the settings' font, and nothing is drawn or logged in its own face. The hook, tried each
+# frame, says it fails once.
 # shellcheck disable=SC2086
-STREAMFLEX_TEST_FAIL=faces STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
-    run_keys "$name" $TITLES_FONT +f59_lost1 Return +f59_lost2 Down Menu
-log=$out/$name.log
+STREAMFLEX_TEST_FAIL=sample STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+    run_keys f59-failsample $TITLES_FONT +wait_fonts Down Menu
+log=$out/f59-failsample.log
+reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')
 ok=1
-[ "$(f59_count 'Fonts: listing the font files' "$log")" = 2 ] \
-    && [ "$(f59_count 'Fonts: out of memory while reading the faces, so the list was let go' "$log")" = 2 ] \
-    && [ "$(f59_count 'Settings: the list cannot open: out of memory' "$log")" = 2 ] \
-    && ! grep -q 'Fonts: found' "$log" \
-    && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
-    && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
-result "fonts: a font list whose faces run out of memory is let go, and read anew (exit $(cat "$out/$name.code"))" $ok
+[ "$(f59_count 'Test hook: sample fails' "$log")" = 1 ] && [ "$reads" = 'Open Sans|Roboto|' ] \
+    && ! grep -q 'the font picker drew' "$log" && ! grep -q 'the font picker could not draw' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f59-failsample && ok=0
+result "fonts: a sample that cannot be kept is not drawn (exit $(cat "$out/f59-failsample.code"))" $ok
+echo "      the cursor read: ${reads:-nothing}; $(grep -c 'the font picker drew' "$log") samples drawn"

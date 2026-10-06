@@ -47,10 +47,11 @@ link_fileio(test_config_save)
 add_test(NAME config_save COMMAND test_config_save)
 
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
-# sizes through layout.c's parsers
+# sizes through layout.c's parsers, and paths through fileio.c's helpers
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
-  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_settings)
 add_test(NAME settings COMMAND test_settings)
 
 # Unit tests for deriving the values the launcher draws with from the configured ones (pure)
@@ -71,9 +72,11 @@ if (UNIX)
 endif ()
 add_test(NAME colourpick COMMAND test_colourpick)
 
-# Unit tests for grouping font faces into families (pure)
-add_executable(test_fontlist test_fontlist.c "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+# Unit tests for grouping font faces into families (pure; names compare through fileio.c's helpers)
+add_executable(test_fontlist test_fontlist.c "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
 target_include_directories(test_fontlist PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_fontlist)
 add_test(NAME fontlist COMMAND test_fontlist)
 
 # Unit tests for the folder browser's model, over a pretend file system

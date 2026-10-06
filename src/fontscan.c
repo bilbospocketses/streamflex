@@ -5,6 +5,7 @@
 #include "fontscan.h"
 #include "fileio.h"
 #include "alloc.h"
+#include "test_hooks.h"
 #ifdef _WIN32
 #include <windows.h>
 #define SEPARATOR "\\"       // As join_paths() writes it, so a bundled font's path reads as the launcher's
@@ -16,30 +17,16 @@
 #define PATH_BYTES 2048
 
 struct FontScan {
-    SDL_Thread *thread;
+    SDL_Thread *thread;     // NULL once it has been waited for
     SDL_atomic_t done;
     char *bundled_folder;
     char **files;
     bool *bundled;
     int count;
     int capacity;
+    bool failed;            // A file could not be added (out of memory): the list is short
+    bool fail_adds;         // Harness only: every add fails as out of memory would (set before the thread starts)
 };
-
-// A function to lower-case an ASCII letter
-static char lower(char c)
-{
-    return c >= 'A' && c <= 'Z' ? (char) (c - 'A' + 'a') : c;
-}
-
-// A function to tell a path's separator: '/', and on Windows '\' too
-static bool is_separator(char c)
-{
-#ifdef _WIN32
-    return c == '/' || c == '\\';
-#else
-    return c == '/';
-#endif
-}
 
 // A function to tell a font file by its extension: TrueType or OpenType, single or a collection
 static bool is_font_file(const char *name)
@@ -50,7 +37,7 @@ static bool is_font_file(const char *name)
         if (length <= 4)
             continue;
         size_t k = 0;
-        while (k < 4 && lower(name[length - 4 + k]) == extensions[i][k])
+        while (k < 4 && fileio_lower(name[length - 4 + k]) == extensions[i][k])
             k++;
         if (k == 4)
             return true;
@@ -58,29 +45,38 @@ static bool is_font_file(const char *name)
     return false;
 }
 
+// A function to make room for one more file; false when out of memory
+static bool grow_files(FontScan *scan)
+{
+    if (scan->count < scan->capacity)
+        return true;
+    int capacity = scan->capacity ? scan->capacity * 2 : 256;
+    char **files = alloc_realloc(scan->files, (size_t) capacity * sizeof(char*));
+    if (files == NULL)
+        return false;
+    scan->files = files;
+    bool *flags = alloc_realloc(scan->bundled, (size_t) capacity * sizeof(bool));
+    if (flags == NULL)
+        return false;
+    scan->bundled = flags;
+    scan->capacity = capacity;
+    return true;
+}
+
 // A function to add a file to the list; a file already listed (by path) is left as it is. Out of
-// memory, the file is left out: the thread cannot say so, and the list stays whole otherwise.
+// memory, the file is left out and the list marked as failed: the thread cannot say so, and the
+// main thread lets a short list go (fontscan_failed()).
 static void add_file(FontScan *scan, const char *path, bool bundled)
 {
     for (int i = 0; i < scan->count; i++) {
         if (strcmp(scan->files[i], path) == 0)
             return;
     }
-    if (scan->count == scan->capacity) {
-        int capacity = scan->capacity ? scan->capacity * 2 : 256;
-        char **files = alloc_realloc(scan->files, (size_t) capacity * sizeof(char*));
-        if (files == NULL)
-            return;
-        scan->files = files;
-        bool *flags = alloc_realloc(scan->bundled, (size_t) capacity * sizeof(bool));
-        if (flags == NULL)
-            return;
-        scan->bundled = flags;
-        scan->capacity = capacity;
-    }
-    char *copy = alloc_strdup(path);
-    if (copy == NULL)
+    char *copy = !scan->fail_adds && grow_files(scan) ? alloc_strdup(path) : NULL;
+    if (copy == NULL) {
+        scan->failed = true;
         return;
+    }
     scan->files[scan->count] = copy;
     scan->bundled[scan->count] = bundled;
     scan->count++;
@@ -94,7 +90,7 @@ static void scan_folder(FontScan *scan, const char *folder, bool bundled, int de
     int count = fileio_list(folder, &entries);
     char path[PATH_BYTES];
     size_t length = strlen(folder);
-    bool slash = length > 0 && is_separator(folder[length - 1]);
+    bool slash = length > 0 && fileio_is_separator(folder[length - 1]);
     for (int i = 0; i < count; i++) {
         if (entries[i].hidden)
             continue;
@@ -215,18 +211,24 @@ static int scan_thread(void *data)
 
 // A function to start listing the font files on a thread; NULL when it cannot start (out of memory,
 // a list without the bundled folder would leave the bundled fonts out)
+// The harness can fail the bundled folder's copy (STREAMFLEX_TEST_FAIL=fontfolder), the thread's start
+// (fontthread) and every file's add (fontadd); each is decided here, on the main thread, so nothing
+// changes under the thread's feet.
 FontScan *fontscan_start(const char *bundled_folder)
 {
     FontScan *scan = alloc_calloc(1, sizeof(FontScan));
+    test_fail("fontfolder", true);
     char *folder = bundled_folder != NULL ? alloc_strdup(bundled_folder) : NULL;
+    test_fail("fontfolder", false);
     if (scan == NULL || (bundled_folder != NULL && folder == NULL)) {
         alloc_free(scan);
         alloc_free(folder);
         return NULL;
     }
     scan->bundled_folder = folder;
+    scan->fail_adds = test_failing("fontadd");
     SDL_AtomicSet(&scan->done, 0);
-    scan->thread = SDL_CreateThread(scan_thread, "Font scan", scan);
+    scan->thread = test_failing("fontthread") ? NULL : SDL_CreateThread(scan_thread, "Font scan", scan);
     if (scan->thread == NULL) {
         fontscan_free(scan);
         return NULL;
@@ -234,10 +236,25 @@ FontScan *fontscan_start(const char *bundled_folder)
     return scan;
 }
 
-// A function to tell whether the list is complete
+// A function to tell whether the list is complete. Once the thread says so it is waited for, which
+// costs nothing (it has finished) and makes everything it wrote safe to read here, on any CPU:
+// SDL_AtomicSet() alone does not order the thread's earlier writes on a weakly ordered one.
 bool fontscan_done(FontScan *scan)
 {
-    return SDL_AtomicGet(&scan->done) != 0;
+    if (scan->thread == NULL)
+        return true;
+    if (SDL_AtomicGet(&scan->done) == 0)
+        return false;
+    SDL_WaitThread(scan->thread, NULL);
+    scan->thread = NULL;
+    return true;
+}
+
+// A function to tell whether a file could not be added (out of memory), so the list is short; only
+// once the scan is done
+bool fontscan_failed(const FontScan *scan)
+{
+    return scan->failed;
 }
 
 // A function to count the files found; only once the scan is done
