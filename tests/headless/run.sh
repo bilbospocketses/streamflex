@@ -67,6 +67,18 @@ export DISPLAY=:99
 for i in $(seq 100); do xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
 xdotool getdisplaygeometry > /dev/null 2>&1 || { echo "Xvfb DID NOT START"; exit 2; }
 
+# A function standing in for xdotool. A function key pressed, let go or both (key, keydown or keyup
+# with one F key) goes through key.py, by its keycode with no modifier held: Fedora's keymap makes
+# xdotool hold Alt down for every F key, which a key capture would catch (key.py says why). Anything
+# else goes to xdotool itself.
+xdotool() {
+    if [ $# = 2 ] && [[ $1 =~ ^key(down|up)?$ ]] && [[ $2 =~ ^F[0-9]+$ ]]; then
+        python3 "$HERE/key.py" "$1" "$2"
+    else
+        command xdotool "$@"
+    fi
+}
+
 # The launcher runs as `tester`: root ignores file permissions, and the settings checks need a
 # config it cannot write. setpriv, env and setarch each exec the next, so the launcher keeps the
 # PID the shell sees. setarch -R turns address randomization off, because GCC 12's ASan crashes
