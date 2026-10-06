@@ -81,6 +81,23 @@ ok=1
 result "pickers: the settings key leaves the hex editor keeping nothing, and the Custom row follows the cursor (exit $(cat "$out/f58-hexhome.code"))" $ok
 echo "      the Custom row read: ${custom:-nothing}"
 
+# The preview is applied only when the colour it shows changes: in the hex editor, Right, Right and
+# Left choose a digit and leave the colour as it is, and so do opening the editor and leaving it
+# (Up on the second digit then shows #010000, which proves the digit moved). What was last previewed
+# is forgotten as the picker opens again: Lime, the last colour previewed before Back, is previewed
+# again when the cursor reaches it in the picker opened anew.
+# shellcheck disable=SC2046
+CFG=$FX/f60-colour.ini run_keys f58-digits Menu Down Return Down Return $(p58_downs 4) Return Right Right Left Up \
+    BackSpace Up BackSpace Return $(p58_downs 3) BackSpace BackSpace BackSpace
+log=$out/f58-digits.log
+previews=$(grep -o 'Settings: previewing #[0-9A-F]*' "$log" | sed 's/.* //' | tr '\n' ' ')
+ok=1
+[ "$previews" = '#07606C #808080 #80C040 #000000 #010000 #80C040 #07606C #808080 #80C040 ' ] \
+    && [ "$(grep -c 'Settings: the colour picker put \[Background\] Color back' "$log")" = 2 ] \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-digits && ok=0
+result "pickers: a key that leaves the previewed colour as it is applies nothing (exit $(cat "$out/f58-digits.code"))" $ok
+echo "      previewed: ${previews:-nothing}"
+
 # The swatches as drawn: Red in its place, the colour the picker opened with (White) marked in its
 # middle with its opposite and outlined, as the cursor is on it, and the cell of a swatch the cursor
 # is not on left without an outline
@@ -104,6 +121,33 @@ ok=1
 grep -qx 'swatches yes' "$out/f58-swatches.seen" && ran_clean f58-swatches && ok=0
 result "pickers: the swatches are drawn in their colours, the current one marked and the cursor's outlined (exit $(cat "$out/f58-swatches.code"))" $ok
 sed 's/^/      /' "$out/f58-swatches.pixels" 2> /dev/null | tail -6
+
+# On a short, wide screen (a second X display, 3840 x 480, where the column is a fifth of the width
+# and so the swatches would be large) the swatches shrink so that they, the Custom row and the hex
+# editor all end above the key hint. The log gives where the editor's row would end and the bottom.
+Xvfb :98 -screen 0 3840x480x24 -ac > /dev/null 2>&1 &
+p58_xvfb=$!
+for i in $(seq 100); do DISPLAY=:98 xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+p58_short=()
+for word in "${TESTER[@]}"; do
+    case $word in
+        DISPLAY=:99) p58_short+=(DISPLAY=:98) ;;
+        *) p58_short+=("$word") ;;
+    esac
+done
+# shellcheck disable=SC2046
+( export DISPLAY=:98; TESTER=("${p58_short[@]}")
+  CFG=$FX/f60-colour.ini run_keys f58-short Menu Down Return Down Return $(p58_downs 4) Return )
+kill "$p58_xvfb" 2> /dev/null; wait "$p58_xvfb" 2> /dev/null
+log=$out/f58-short.log
+line=$(grep -o 'Settings: the colour picker draws [0-9]* px cells from [0-9]*,[0-9]*, down to [0-9]* of [0-9]*' "$log" | tail -1)
+read -r p58_end p58_bottom <<< "$(sed 's/.* down to \([0-9]*\) of \([0-9]*\)/\1 \2/' <<< "$line")"
+ok=1
+[ -n "${p58_bottom:-}" ] && [ "$p58_end" -le "$p58_bottom" ] \
+    && grep -qF "Settings: the key hint reads Left and right choose a digit $P58_DOT" "$log" \
+    && ran_clean f58-short && ok=0
+result "pickers: on a short, wide screen the swatches end above the key hint (exit $(cat "$out/f58-short.code"))" $ok
+echo "      ${line:-the cells of the colour picker were never logged}"
 
 # Home (a hotkey for :home in these fixtures) and the settings key close the picker before they
 # close settings: with a save that fails (a read-only config), the failure page that follows takes
@@ -174,7 +218,7 @@ STREAMFLEX_TEST_PAD=/tmp/pad-none STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$cf
     run_keys f58-device Menu $(p58_downs 8) Return Return Down Return Down +p58_plug_in Down Return BackSpace BackSpace BackSpace
 ok=1
 grep -qx 'DeviceIndex=1' "$cfg" && grep -q 'Settings: the pads changed, so the list was made again' "$out/f58-device.log" \
-    && ran_clean f58-device && ok=0
+    && ! grep -q 'Settings: the command picker lists' "$out/f58-device.log" && ran_clean f58-device && ok=0
 result "pickers: a pad plugged in while the Device list is open joins it, the cursor staying put (exit $(cat "$out/f58-device.code"))" $ok
 grep -E "Test hook: pad|Settings: (the pads|the list's cursor|\[Gamepad\])" "$out/f58-device.log" | sed 's/^/      /'
 rm -f /tmp/pad-plug
@@ -198,6 +242,26 @@ result "pickers: a pad pulled out leaves the Device list, and the file's own ind
 grep -E "Test hook: pad|Settings: (the pads|the list's cursor|\[Gamepad\])" "$log" | sed 's/^/      /'
 rm -f /tmp/pad-plug
 
+# A list made again keeps the file's pinned index while the cursor stays on another row that is
+# still there: with the cursor on Any as the pad is pulled out, Up reaches Pad 3 (not connected)
+# again, and OK keeps it
+: > /tmp/pad-plug
+chmod 666 /tmp/pad-plug
+cfg=$(writable_config f58-device3)
+# shellcheck disable=SC2046
+STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$cfg WAIT_FOR='Test hook: pad plugged in' \
+    run_keys f58-keeppin Menu $(p58_downs 8) Return Return Down Return Down +p58_pull_out Up Return BackSpace BackSpace BackSpace
+log=$out/f58-keeppin.log
+cursor=$(sed -n '/Test hook: pad unplugged/,$p' "$log" | grep -o "Settings: the list's cursor reads .*" | sed 's/.*reads //' | tr '\n' '|')
+ok=1
+sed -n '/Test hook: pad unplugged/,$p' "$log" | grep -q 'Settings: the pads changed, so the list was made again' \
+    && [ "$cursor" = 'Any|Pad 3 (not connected)|' ] \
+    && grep -q 'Settings: \[Gamepad\] DeviceIndex is unchanged' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f58-device3.ini" "$cfg" && ran_clean f58-keeppin && ok=0
+result "pickers: a Device list made again keeps the file's pinned index beside the cursor's row (exit $(cat "$out/f58-keeppin.code"))" $ok
+echo "      the cursor read, from the pull: ${cursor:-nothing}"
+rm -f /tmp/pad-plug
+
 # Out of memory (STREAMFLEX_TEST_FAIL, the harness's build only): a list that cannot be made again
 # when the pads change closes, and the keys go back to the page
 # shellcheck disable=SC2046
@@ -211,6 +275,22 @@ grep -q 'Settings: the pads changed, and the list could not be made again: out o
 result "pickers: a Device list that cannot be made again closes (exit $(cat "$out/f58-padfail.code"))" $ok
 rm -f /tmp/pad-plug
 
+# Only a Device list is made again when the pads change: a pad plugged in while General > Startup
+# command's list is open leaves that list as it is, its cursor on None until Down moves it
+# shellcheck disable=SC2046
+STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$FX/f58-pickers.ini \
+    run_keys f58-cmdplug Menu Return $(p58_downs 9) Return +p58_plug_in Down BackSpace Menu
+log=$out/f58-cmdplug.log
+cursor=$(sed -n '/Settings: opened the picker for \[General\] StartupCmd/,$p' "$log" \
+         | grep -o "Settings: the list's cursor reads .*" | sed 's/.*reads //' | tr '\n' '|')
+ok=1
+sed -n '/Test hook: pad plugged in/,$p' "$log" | grep -q 'Gamepad connected' \
+    && ! grep -q 'Settings: the pads changed' "$log" && [ "$cursor" = 'None|Left|' ] \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-cmdplug && ok=0
+result "pickers: a pad plugged in leaves an open command list alone (exit $(cat "$out/f58-cmdplug.code"))" $ok
+echo "      the cursor read: ${cursor:-nothing}"
+rm -f /tmp/pad-plug
+
 # A list that cannot be made, cannot take its rows, or cannot pin the file's value does not open:
 # it says why, and the keys stay with the page
 for fail in list:f58-pickers:9:'Quit command' rows:f58-pickers:9:'Quit command' select:f58-custom:10:'Startup command'; do
@@ -222,6 +302,7 @@ for fail in list:f58-pickers:9:'Quit command' rows:f58-pickers:9:'Quit command' 
     log=$out/$name.log
     ok=1
     grep -q 'Settings: the list cannot open: out of memory' "$log" && ! grep -q 'Settings: opened the picker' "$log" \
+        && ! grep -q 'Settings: the command picker lists' "$log" \
         && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads $next" \
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
     result "pickers: a list whose $step step runs out of memory does not open (exit $(cat "$out/$name.code"))" $ok
