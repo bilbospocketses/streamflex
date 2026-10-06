@@ -740,6 +740,40 @@ static void prove_list_mode(void)
     report("list mode");
 }
 
+// A function to prove that a save with list edits fails cleanly: refused with a reason (memory's) and
+// the config as it was, or done in full
+static void prove_config_save_lists(void)
+{
+    static const char *const before = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n";
+    static const char *const after = "[Hotkeys]\nHotkey1=#4000003A;:settings\nHotkey2=#4000003C;:back\n";
+    ConfigListEdit lists[] = {
+        { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:quit", "Hotkey", true, "#4000003A;:settings" },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey2=#4000003B;:home", NULL, false, NULL },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003C;:back" }
+    };
+    CHECK(fileio_make_dirs(DIR));
+    for (int n = 1;; n++) {
+        fileio_remove(CONFIG ".tmp");
+        fileio_remove(CONFIG ".bak.tmp");
+        CHECK(fileio_write_all(CONFIG, before, strlen(before)));
+        ConfigSaveResult result;
+        arm(n);
+        bool ok = config_save_all(CONFIG, NULL, NULL, NULL, 0, lists, 3, &result);
+        disarm();
+        if (ok)
+            CHECK_RUN(holds(CONFIG, after), n);
+        else {
+            CHECK_RUN(failed && result.why[0] != '\0' && holds(CONFIG, before), n);
+            CHECK_RUN(strstr(result.why, "out of memory") != NULL, n);   // Memory's reason, never another's
+        }
+        CHECK_RUN(!fileio_exists(CONFIG ".tmp"), n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("saving list edits");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -773,6 +807,7 @@ int main(void)
     prove_fontlist();
     prove_fontlist_finish();
     prove_list_mode();
+    prove_config_save_lists();
     alloc_set_hooks(NULL);
     return check_report();
 }

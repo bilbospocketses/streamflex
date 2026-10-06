@@ -486,6 +486,189 @@ static void test_hidden_files(void)
 }
 #endif
 
+// A function to test list edits: a set, a removal and two additions. The additions are numbered
+// after the highest HotkeyN the file holds once the removal is made.
+static void test_list_edits(void)
+{
+    reset(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey4=#4000003B;:home\n"
+                  "; end\n\n[Main]\nEntry1=One;apps;:quit\n");
+    ConfigListEdit lists[] = {
+        { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:quit", "Hotkey", true, "#4000003A;:settings" },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey4=#4000003B;:home", NULL, false, NULL },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003C;:back" },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003D;:up" }
+    };
+    ConfigSaveResult result;
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, lists, 4, &result));
+    CHECK(holds(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\nHotkey1=#4000003A;:settings\nHotkey2=#4000003C;:back\n"
+                        "Hotkey3=#4000003D;:up\n; end\n\n[Main]\nEntry1=One;apps;:quit\n"));
+    CHECK_STR(result.notes, "");
+}
+
+// A function to test list edits after a hand edit made while settings were open (Review Focus 4).
+// Settings read Hotkey1, Hotkey2 and Hotkey3; by the save, a hand edit changed Hotkey2, removed
+// Hotkey3 and added Hotkey7. The change is written as a new line and the removal skipped, each with
+// a note, and every new line is numbered after 7.
+static void test_list_edits_after_hand_edit(void)
+{
+    reset(CONFIG, "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:back ; changed by hand\n"
+                  "Hotkey7=#40000040;:sleep\n");
+    ConfigListEdit lists[] = {
+        { CONFIG_LIST_SET, "Hotkeys", "Hotkey2=#4000003B;:home", "Hotkey", true, "#4000003B;:up" },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey3=#4000003C;:quit", NULL, false, NULL },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003D;:down" }
+    };
+    ConfigSaveResult result;
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, lists, 3, &result));
+    CHECK(holds(CONFIG, "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:back ; changed by hand\n"
+                        "Hotkey7=#40000040;:sleep\nHotkey8=#4000003B;:up\nHotkey9=#4000003D;:down\n"));
+    CHECK(strstr(result.notes, "'Hotkey2=#4000003B;:home' changed meanwhile, so its change is written as a new line") != NULL);
+    CHECK(strstr(result.notes, "'Hotkey3=#4000003C;:quit' is not there any more, so its removal is skipped") != NULL);
+
+    // A gamepad control keeps its label, with no number; a line that cannot be written fails the
+    // whole save, and nothing is written
+    reset(CONFIG, "[Gamepad]\nButtonA=:select\n");
+    ConfigListEdit pad[] = {
+        { CONFIG_LIST_SET, "Gamepad", "ButtonA=:select", "ButtonB", false, ":back" },
+        { CONFIG_LIST_ADD, "Gamepad", NULL, "ButtonA", false, "; not a command" }
+    };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, pad, 2, &result));
+    CHECK(strstr(result.why, "cannot be written") != NULL);
+    CHECK(holds(CONFIG, "[Gamepad]\nButtonA=:select\n"));
+}
+
+// A function to test how a new line is numbered: only <stem><digits> keys count, the highest wins
+// wherever it stands, a section with no keys starts at 1, and a number too large to go above fails
+// the save rather than wrapping round to one already taken
+static void test_list_numbering(void)
+{
+    reset(CONFIG, "[Hotkeys]\nHotkey5=#40000001;:a\nHotkey2=#40000002;:b\nHotkez9=#40000003;:c\n"
+                  "Hotkey9x=#40000004;:d\nHotkey=#40000005;:e\n");
+    ConfigListEdit add = { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#40000006;:f" };
+    ConfigSaveResult result;
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, &add, 1, &result));
+    CHECK(holds(CONFIG, "[Hotkeys]\nHotkey5=#40000001;:a\nHotkey2=#40000002;:b\nHotkez9=#40000003;:c\n"
+                        "Hotkey9x=#40000004;:d\nHotkey=#40000005;:e\nHotkey6=#40000006;:f\n"));
+
+    reset(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\n; none yet\n");
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, &add, 1, &result));
+    CHECK(holds(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\nHotkey1=#40000006;:f\n; none yet\n"));
+
+    static const char *const huge = "[Hotkeys]\nHotkey99999999999999999999=#40000001;:a\n";
+    reset(CONFIG, huge);
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &add, 1, &result));
+    CHECK_STR(result.why, "a new Hotkey line in [Hotkeys] cannot be numbered: the highest number there is too large");
+    CHECK(holds(CONFIG, huge));
+    CHECK(!fileio_exists(CONFIG ".bak"));
+}
+
+// A function to test the list edits' other paths: a gamepad control renamed and added without a
+// number; a key longer than a short buffer kept whole; single-key edits saved with list edits; and
+// each refusal (a line break, a gone line's new line, an empty-named key's removal) failing the
+// save with its reason and the file as it was
+static void test_list_edit_edges(void)
+{
+    ConfigSaveResult result;
+    reset(CONFIG, "[Gamepad]\nButtonA=:select\n");
+    ConfigListEdit pad[] = {
+        { CONFIG_LIST_SET, "Gamepad", "ButtonA=:select", "ButtonB", false, ":back" },
+        { CONFIG_LIST_ADD, "Gamepad", NULL, "ButtonX", false, ":home" }
+    };
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, pad, 2, &result));
+    CHECK(holds(CONFIG, "[Gamepad]\nButtonB=:back\nButtonX=:home\n"));
+
+    // A key of 150 bytes, set by its own (numbered) key and added under a fixed one
+    char long_key[160];
+    memset(long_key, 'k', 150);
+    long_key[150] = '\0';
+    char text[400];
+    snprintf(text, sizeof(text), "[Hotkeys]\n%s=#40000001;:a\n", long_key);
+    char original[200];
+    snprintf(original, sizeof(original), "%s=#40000001;:a", long_key);
+    reset(CONFIG, text);
+    ConfigListEdit longs[] = {
+        { CONFIG_LIST_SET, "Hotkeys", original, "Hotkey", true, "#40000001;:b" },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, long_key, false, "#40000002;:c" }
+    };
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, longs, 2, &result));
+    snprintf(text, sizeof(text), "[Hotkeys]\n%s=#40000001;:b\n%s=#40000002;:c\n", long_key, long_key);
+    CHECK(holds(CONFIG, text));
+
+    // Single-key edits and list edits in one save
+    reset(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    ConfigEdit edit = { "General", "DefaultMenu", NULL, "Games", INIDOC_AFTER_LAST_KEY };
+    ConfigListEdit add = { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003B;:up" };
+    CHECK(config_save_all(CONFIG, NULL, NULL, &edit, 1, &add, 1, &result));
+    CHECK(holds(CONFIG, "[General]\nDefaultMenu=Games\n\n[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:up\n"));
+
+    // A line break typed into a binding is refused with its reason, for a set and for an add
+    static const char *const hotkeys = "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    reset(CONFIG, hotkeys);
+    ConfigListEdit broken_set = { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:quit", "Hotkey", true, "#4000003A;:a\nb" };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &broken_set, 1, &result));
+    CHECK_STR(result.why, "the Hotkey1 value in [Hotkeys] cannot be written: it contains a line break");
+    CHECK(holds(CONFIG, hotkeys));
+    ConfigListEdit broken_add = { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003A;:a\r" };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &broken_add, 1, &result));
+    CHECK_STR(result.why, "the Hotkey2 value in [Hotkeys] cannot be written: it contains a line break");
+    CHECK(holds(CONFIG, hotkeys));
+
+    // A gone line's change that cannot be written as a new line fails the save, and leaves no note
+    // for a change that was never made
+    ConfigListEdit gone = { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:home", "Hotkey", true, "#4000003A ;:a" };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &gone, 1, &result));
+    CHECK(strstr(result.why, "the Hotkey2 value in [Hotkeys] cannot be written: ") != NULL);
+    CHECK_STR(result.notes, "");
+    CHECK(holds(CONFIG, hotkeys));
+
+    // A key with an empty name cannot be removed: the indented line after it would join Hotkey1
+    static const char *const empty_named = "[Hotkeys]\nHotkey1=#4000003A;:quit\n=#4000003B;:home\n  Hotkey2=#4000003C;:up\n";
+    reset(CONFIG, empty_named);
+    ConfigListEdit remove_empty = { CONFIG_LIST_REMOVE, "Hotkeys", "=#4000003B;:home", NULL, false, NULL };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &remove_empty, 1, &result));
+    CHECK_STR(result.why, "the line '=#4000003B;:home' in [Hotkeys] cannot be removed: it would change how other lines read");
+    CHECK(holds(CONFIG, empty_named));
+    CHECK(!fileio_exists(CONFIG ".bak"));
+}
+
+// A function to test the notes: one line each, in order; cut short at the buffer's end, still ended;
+// and none after a save that failed later on (the backup cannot be written), since nothing was made
+static void test_list_notes(void)
+{
+    static const char *const hotkeys = "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    reset(CONFIG, hotkeys);
+    ConfigListEdit two[] = {
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey3=#4000003C;:quit", NULL, false, NULL },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey4=#4000003D;:quit", NULL, false, NULL }
+    };
+    ConfigSaveResult result;
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, two, 2, &result));
+    CHECK_STR(result.notes, "'Hotkey3=#4000003C;:quit' is not there any more, so its removal is skipped\n"
+                            "'Hotkey4=#4000003D;:quit' is not there any more, so its removal is skipped");
+
+    // Six notes of about 230 bytes each overrun the 1024 bytes
+    char gone[180];
+    memset(gone, 'g', 170);
+    snprintf(gone + 170, sizeof(gone) - 170, "=#4000");
+    ConfigListEdit many[6];
+    for (int i = 0; i < 6; i++)
+        many[i] = (ConfigListEdit) { CONFIG_LIST_REMOVE, "Hotkeys", gone, NULL, false, NULL };
+    reset(CONFIG, hotkeys);
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, many, 6, &result));
+    CHECK(result.notes[sizeof(result.notes) - 1] == '\0');
+    CHECK_INT((int) strlen(result.notes), (int) sizeof(result.notes) - 1);
+    CHECK(strncmp(result.notes, "'ggg", 4) == 0);
+
+    reset(CONFIG, hotkeys);
+    CHECK(fileio_make_dirs(CONFIG ".bak.tmp"));   // A folder in the way: the backup cannot be written
+    ConfigListEdit changed = { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:home", "Hotkey", true, "#4000003A;:up" };
+    CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &changed, 1, &result));
+    CHECK(strstr(result.why, "could not write the backup") != NULL);
+    CHECK_STR(result.notes, "");
+    CHECK(holds(CONFIG, hotkeys));
+    remove_folder(CONFIG ".bak.tmp");
+}
+
 int main(void)
 {
     test_saves_only_the_edits();
@@ -500,6 +683,11 @@ int main(void)
     test_fallback_changes_an_existing_user_config();
     test_user_config_too_long();
     test_missing_file_fails();
+    test_list_edits();
+    test_list_edits_after_hand_edit();
+    test_list_numbering();
+    test_list_edit_edges();
+    test_list_notes();
 #ifndef _WIN32
     test_unreadable_user_config_fails();
     test_follows_a_symbolic_link();
