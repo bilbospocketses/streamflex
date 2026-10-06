@@ -79,6 +79,12 @@ target_include_directories(test_fontlist PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_fontlist)
 add_test(NAME fontlist COMMAND test_fontlist)
 
+# Unit tests for the bindings model: lists, the safety floor, confirmation and capture (pure)
+add_executable(test_bindings test_bindings.c "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/inidoc.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_bindings PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME bindings COMMAND test_bindings)
+
 # Unit tests for the folder browser's model, over a pretend file system
 add_executable(test_browser test_browser.c "${PROJECT_SOURCE_DIR}/src/browser.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/alloc.c")
@@ -90,7 +96,7 @@ add_test(NAME browser COMMAND test_browser)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
-  "${PROJECT_SOURCE_DIR}/src/fontlist.c")
+  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
 add_test(NAME alloc COMMAND test_alloc)

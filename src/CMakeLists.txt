@@ -40,6 +40,8 @@ set(SOURCES
   fontlist.h
   fontscan.c
   fontscan.h
+  bindings.c
+  bindings.h
   browser.c
   browser.h
   settings_screen.c

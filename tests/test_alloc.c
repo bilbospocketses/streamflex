@@ -14,6 +14,7 @@
 #include "settings.h"
 #include "listpick.h"
 #include "fontlist.h"
+#include "bindings.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -774,6 +775,69 @@ static void prove_config_save_lists(void)
     report("saving list edits");
 }
 
+// A function to prove that loading and changing bindings fails cleanly: a list that could not be
+// loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
+// nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
+static void prove_bindings(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n"
+        "Hotkey3=#4000003D;:up\nHotkey4=#4000003E;:down\nHotkey5=#4000003F;:left\nHotkey6=#40000040;:right\n"
+        "Hotkey7=#40000041;:select\nHotkey8=#40000042;:back\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[8];
+        int count = inidoc_list(doc, "Hotkeys", NULL, items, 8);
+        arm(n);
+        Bindings *b = bindings_create(false, true);
+        bool loaded = b != NULL && bindings_load(b, BINDINGS_KEYBOARD, items, count);
+        bool ok = loaded && bindings_set(b, BINDINGS_KEYBOARD, -1, 0x4000003C, ":back") == 8;
+        disarm();
+        CHECK_RUN(failed || ok, n);
+        if (b != NULL && !ok) {
+            CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == (loaded ? 8 : 0), n);
+            bindings_discard(b);
+            CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == (loaded ? 8 : 0), n);
+        }
+        bindings_free(b);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the bindings");
+}
+
+// A function to prove that loading a list again fails cleanly: out of memory, the list is empty, and
+// Discard does not bring back the list loaded before it. Nine lines make the list grow past its first
+// block, so both of the load's allocations can fail.
+static void prove_bindings_reload(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n"
+        "Hotkey3=#4000003D;:up\nHotkey4=#4000003E;:down\nHotkey5=#4000003F;:left\nHotkey6=#40000040;:right\n"
+        "Hotkey7=#40000041;:select\nHotkey8=#40000042;:back\nHotkey9=#40000043;:settings\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[9];
+        int count = inidoc_list(doc, "Hotkeys", NULL, items, 9);
+        Bindings *b = bindings_create(false, true);
+        CHECK(b != NULL && bindings_load(b, BINDINGS_KEYBOARD, items, 1));
+        arm(n);
+        bool ok = bindings_load(b, BINDINGS_KEYBOARD, items, count);
+        disarm();
+        CHECK_RUN(failed != ok, n);
+        int expected = ok ? 9 : 0;
+        CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == expected, n);
+        bindings_discard(b);
+        CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == expected, n);
+        bindings_free(b);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("loading the bindings again");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -808,6 +872,8 @@ int main(void)
     prove_fontlist_finish();
     prove_list_mode();
     prove_config_save_lists();
+    prove_bindings();
+    prove_bindings_reload();
     alloc_set_hooks(NULL);
     return check_report();
 }
