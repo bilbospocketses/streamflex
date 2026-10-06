@@ -28,16 +28,29 @@ typedef enum {
     INIDOC_UNDER_HEADER     // Directly under the section header (menus: above the entries)
 } IniDocPlacement;
 
+// A line of a list section ([Hotkeys], [Gamepad]), where every key line counts and a key may repeat
+typedef struct {
+    int line;           // Its index in the document, for inidoc_list_set() and inidoc_list_remove()
+    const char *key;
+    const char *value;  // As inih reads it
+    const char *text;   // The whole line as written, without its line ending
+} IniDocItem;
+
 typedef struct IniDoc IniDoc;
 
 IniDoc *inidoc_parse(const char *text, size_t length);
 char *inidoc_serialize(const IniDoc *doc, size_t *length);
 const char *inidoc_get(const IniDoc *doc, const char *section, const char *key);
 bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *value, IniDocPlacement placement);
-const char *inidoc_why(const IniDoc *doc);   // Why the last inidoc_set() failed; "" when it succeeded
+const char *inidoc_why(const IniDoc *doc);   // Why the last set or add (list mode's too) failed; "" when it succeeded
 bool inidoc_remove(IniDoc *doc, const char *section, const char *key);
 const char *inidoc_check(const char *key, const char *value);
 const char *inidoc_check_in(const IniDoc *doc, const char *section, const char *key, const char *value);
+int inidoc_list(const IniDoc *doc, const char *section, const char *const *skip, IniDocItem *items, int max);
+int inidoc_find_line(const IniDoc *doc, const char *section, const char *text);
+bool inidoc_list_set(IniDoc *doc, int line, const char *key, const char *value);
+bool inidoc_list_add(IniDoc *doc, const char *section, const char *key, const char *value);
+bool inidoc_list_remove(IniDoc *doc, int line);
 void inidoc_free(IniDoc *doc);
 
 #endif

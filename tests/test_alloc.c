@@ -709,6 +709,37 @@ static void prove_fontlist_finish(void)
     report("sorting the font list");
 }
 
+// A function to prove that list mode's add and set fail cleanly: refused, saying "out of memory",
+// with the document as it was, and no later add refused for it
+static void prove_list_mode(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Main]\nEntry1=One;apps;:quit\n";
+    static const char *const after_set = "[Hotkeys]\nHotkey1=#40000045;:home\n\n[Main]\nEntry1=One;apps;:quit\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[2];
+        inidoc_list(doc, "Hotkeys", NULL, items, 2);
+        arm(n);
+        bool set = inidoc_list_set(doc, items[0].line, "Hotkey1", "#40000045;:home");
+        bool added = set && inidoc_list_add(doc, "Hotkeys", "Hotkey2", "#4000003A;:up");
+        disarm();
+        char *out = text_of(doc);
+        if (!failed)
+            CHECK_RUN(set && added && strstr(out, "Hotkey1=#40000045;:home\nHotkey2=#4000003A;:up\n") != NULL, n);
+        else {
+            CHECK_RUN(strcmp(inidoc_why(doc), "out of memory") == 0, n);
+            CHECK_RUN(out != NULL && strcmp(out, set ? after_set : text) == 0, n);   // As it was before the call that failed
+            CHECK_RUN(inidoc_list_add(doc, "Hotkeys", "Hotkey3", ":x"), n);           // A refusal for memory does not stick
+        }
+        alloc_free(out);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("list mode");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -741,6 +772,7 @@ int main(void)
     prove_listpick();
     prove_fontlist();
     prove_fontlist_finish();
+    prove_list_mode();
     alloc_set_hooks(NULL);
     return check_report();
 }
