@@ -24,7 +24,8 @@ typedef enum {
     CONFIG_LIST_REMOVE     // Remove the line that read `original`
 } ConfigListOp;
 
-// One edit to a list section ([Hotkeys], [Gamepad]), whose lines are found by their text, not their key
+// One edit to a list section ([Hotkeys], [Gamepad]), whose lines are found by their text, not their key.
+// At most one edit per settings row; the settings screen folds multiple edits into one (edit-then-delete becomes REMOVE, repeats become SET).
 typedef struct {
     ConfigListOp op;
     const char *section;
