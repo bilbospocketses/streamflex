@@ -346,3 +346,4 @@ void apply_frame_timing(void);  // VSync and FPSLimit, live
 void apply_os_screensaver(void);
 void apply_default_menu(void);  // Points :home at config.default_menu
 bool gamepad_running(void);
+int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none

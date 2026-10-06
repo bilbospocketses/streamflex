@@ -69,6 +69,7 @@ typedef struct {
 } CachedText;
 
 static SettingsState *model = NULL;   // NULL while settings are closed
+static Bindings *bindings = NULL;     // The key and gamepad bindings while settings are open; NULL: unread
 static Menu **menus = NULL;           // The launcher's menus, in the model's order
 static int menu_count = 0;
 static Menu *origin = NULL;           // The menu settings opened over
@@ -335,6 +336,8 @@ static void run_refresh(SettingRefresh refresh)
         case SET_REFRESH_GAMEPAD:
             reload_gamepad();
             list_pads();
+            if (bindings != NULL)
+                bindings_set_gamepad_on(bindings, gamepad_running());   // Its floor follows it
             break;
         case SET_REFRESH_FRAME:
             apply_frame_timing();
@@ -761,6 +764,8 @@ static void free_screen(void)
     font_small = NULL;
     settings_free(model);
     model = NULL;
+    bindings_free(bindings);
+    bindings = NULL;
     free(menus);
     menus = NULL;
     menu_count = 0;
@@ -779,17 +784,45 @@ static void close_settings(void)
     trim_title_fonts();
 }
 
-// A function to save every changed setting into config.ini; on failure, show why
+// A function to log what the save could not make as asked (config_save's notes, one a line). A change
+// written as a new line beside a line changed by hand is not said to have taken effect: the first line
+// on a key or button is the one that runs.
+static void log_save_notes(char *notes)
+{
+    for (char *line = notes; line[0] != '\0';) {
+        char *end = strchr(line, '\n');
+        if (end != NULL)
+            *end = '\0';
+        log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
+        if (end == NULL)
+            break;
+        line = end + 1;
+    }
+}
+
+// A function to save every changed setting and binding into config.ini; on failure, show why. The
+// bindings' list edits are sized to their lists, which holds every edit they can make.
 static bool save_changes(void)
 {
     int count = settings_slot_count(model);
+    int list_max = bindings != NULL ? bindings_count(bindings, BINDINGS_KEYBOARD) + bindings_count(bindings, BINDINGS_GAMEPAD) : 0;
     ConfigEdit *edits = calloc((size_t) count, sizeof(ConfigEdit));
     char (*values)[SETTING_TEXT_MAX] = calloc((size_t) count, SETTING_TEXT_MAX);
-    if (edits == NULL || values == NULL) {
+    ConfigListEdit *lists = calloc((size_t) (list_max > 0 ? list_max : 1), sizeof(ConfigListEdit));
+    char (*list_values)[BINDINGS_VALUE_MAX] = calloc((size_t) (list_max > 0 ? list_max : 1), BINDINGS_VALUE_MAX);
+    if (edits == NULL || values == NULL || lists == NULL || list_values == NULL) {
         free(edits);
         free(values);
+        free(lists);
+        free(list_values);
         settings_show_save_failed(model, "Couldn't save: out of memory");
         return false;
+    }
+    int list_count = 0;
+    if (bindings != NULL) {
+        list_count = bindings_edits(bindings, BINDINGS_KEYBOARD, lists, list_values, bindings_count(bindings, BINDINGS_KEYBOARD));
+        list_count += bindings_edits(bindings, BINDINGS_GAMEPAD, lists + list_count, list_values + list_count,
+                                     bindings_count(bindings, BINDINGS_GAMEPAD));
     }
     int n = 0;
     for (int i = 0; i < count; i++) {
@@ -814,18 +847,22 @@ static bool save_changes(void)
     bool has_home = home_directory(home, sizeof(home));
     if (has_home)
         join_paths(user_config, sizeof(user_config), 4, home, ".config", EXECUTABLE_TITLE, FILENAME_DEFAULT_CONFIG);
-    ok = config_save(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, n, &result);
+    ok = config_save_all(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, n, lists, list_count,
+                         &result);
 #else
-    ok = config_save(config.config_path, NULL, NULL, edits, n, &result);
+    ok = config_save_all(config.config_path, NULL, NULL, edits, n, lists, list_count, &result);
 #endif
     test_fail("keep", false);
     free(edits);
     free(values);
+    free(lists);
+    free(list_values);
     if (ok) {
-        log_debug("Settings saved %i change(s) to %s (backup: %s)", n, result.path,
+        log_debug("Settings saved %i change(s) to %s (backup: %s)", n + list_count, result.path,
             result.backup[0] != '\0' ? result.backup : "none");
         if (result.warning[0] != '\0')
             log_error("Settings saved to %s, but %s", result.path, result.warning);
+        log_save_notes(result.notes);
         if (strcmp(result.path, config.config_path) != 0) {
             free(config.config_path);
             config.config_path = strdup(result.path);
@@ -861,16 +898,31 @@ static void handle_event(const SettingsEvent *event)
         case SETTINGS_EVENT_DISCARD:
             log_debug("Settings: discarded the changes");
             apply_all();
+            if (bindings != NULL)
+                apply_bindings(bindings);
+            pickers_end_probation();   // The change the 10 s were for went with the rest
             break;
         case SETTINGS_EVENT_BROWSE:
             open_browser(event->slot);
             return;
+        case SETTINGS_EVENT_CAPTURE:
+            pickers_capture(event->device);
+            return;
+        case SETTINGS_EVENT_PICK_COMMAND:
+            pickers_open_binding_command();
+            return;
+        case SETTINGS_EVENT_BINDINGS:
+            apply_bindings(bindings);
+            if (event->confirm)
+                pickers_probation(event->device, event->code, settings_binding_command(model));
+            break;
         case SETTINGS_EVENT_CLOSE:
         case SETTINGS_EVENT_CLOSE_HOME:
             if (event->slot != NULL) {
                 log_change(event->slot, &event->before);
                 apply_slot(event->slot, true);
             }
+            pickers_settle();   // A change still waiting for its key goes back before the save
             go_home = event->kind == SETTINGS_EVENT_CLOSE_HOME;
             save_and_close();
             return;
@@ -1042,16 +1094,42 @@ static void handle_command(const char *command)
 }
 
 // A function to act on a special command while settings are open, logging a key that kept the
-// screen waiting
+// screen waiting. A special command is read by its first word, as execute_command() and the bindings'
+// floor read it (":select now" is OK). The command is copied first: it may be a hotkey's or a
+// control's, whose list a binding change rebuilds.
 void settings_handle_command(const char *command)
 {
     if (model == NULL)
         return;
+    char text[SETTING_TEXT_MAX];
+    snprintf(text, sizeof(text), "%s", command);
+    if (text[0] == ':')
+        text[strcspn(text, " ")] = '\0';
     Uint32 start = SDL_GetTicks();
-    handle_command(command);
+    handle_command(text);
     Uint32 took = SDL_GetTicks() - start;
     if (took >= SLOW_KEY_MS)
-        log_debug("Settings: '%s' kept the screen waiting %u ms", command, took);
+        log_debug("Settings: '%s' kept the screen waiting %u ms", text, took);
+}
+
+// A function to take a key before anything else does while settings are open: a capture's, or the
+// 10 s's; true when it was taken
+bool settings_raw_key(int code, bool repeat)
+{
+    return model != NULL && pickers_raw_key(code, repeat);
+}
+
+// A function to take a key's release while settings are open
+void settings_raw_release(int code)
+{
+    if (model != NULL)
+        pickers_raw_release(code);
+}
+
+// A function to take the pad's state each frame while settings are open; true when it was taken
+bool settings_raw_pad(int label)
+{
+    return model != NULL && pickers_raw_pad(label);
 }
 
 // A function to tell how tall a paragraph wraps to a width
@@ -1128,12 +1206,14 @@ static int row_drawn_height(const SettingsRow *row, int note_room)
 
 // A function to write what a row shows on its right: under the cursor, Left and Right arrows round
 // the value of a row they step (the model says which) while it is not greyed; the › marker after
-// any row OK opens (a page, the browser, a picker); else the value alone
+// any row OK opens (a page, the browser, a picker, a binding, a binding's command); else the value alone
 static void row_value_text(const SettingsRow *row, bool highlighted, char *out, size_t size)
 {
     if (row->enabled && highlighted && row->steps)
         snprintf(out, size, LEFT_ARROW " %s " RIGHT_ARROW, row->value);
-    else if (row->kind == SETTINGS_ROW_LINK || row->kind == SETTINGS_ROW_BROWSE || row->kind == SETTINGS_ROW_PICK)
+    else if (row->kind == SETTINGS_ROW_LINK || row->kind == SETTINGS_ROW_BROWSE || row->kind == SETTINGS_ROW_PICK ||
+             row->kind == SETTINGS_ROW_BINDING ||
+             (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_BIND_COMMAND))
         snprintf(out, size, "%s " RIGHT_ARROW, row->value);
     else
         snprintf(out, size, "%s", row->value);
@@ -1339,7 +1419,7 @@ static void draw_caption(const char *row_note, int x, int y, int width)
     snprintf(caption, sizeof(caption), "Preview: %s \xC2\xB7 %i \xC3\x97 %i, %i px buttons, %s%s", current_menu->name,
         layout.columns, layout.rows, layout.button, titles, reduced ? " (reduced to fit the screen)" : "");
     draw_text(font_small, caption, x, y, width, ALPHA_VALUE, false);
-    const char *note = pickers_active() ? pickers_note()
+    const char *note = pickers_active() || pickers_busy() ? pickers_note()
                      : browser != NULL ? browser_caption()
                      : settings_notice(model)[0] != '\0' ? settings_notice(model) : row_note;
     draw_text(font_small, note, x, y + TTF_FontHeight(font_small), width, 255, false);
@@ -1366,6 +1446,7 @@ void settings_draw(void)
         return;
     poll_decode(false);
     pickers_tick();
+    log_path();   // A capture's end or the 10 s's moves no key through handle_command()
 
     // The Menus list's cursor has rested: the preview follows it now
     if (preview_wanted != NULL && SDL_GetTicks() - preview_asked >= PREVIEW_REST_MS) {
@@ -1421,6 +1502,49 @@ static void handle_quiet(const SettingsEvent *event)
     apply_slot(event->slot, false);
 }
 
+// A function to load a list section's lines into the bindings; false when they could not be listed
+// or loaded (out of memory)
+static bool load_section(const IniDoc *doc, const char *section, const char *const *skip, BindingsDevice device)
+{
+    int count = inidoc_list(doc, section, skip, NULL, 0);
+    IniDocItem *items = calloc((size_t) (count > 0 ? count : 1), sizeof(IniDocItem));
+    if (items == NULL)
+        return false;
+    inidoc_list(doc, section, skip, items, count);
+    test_fail("bindings", true);
+    bool loaded = bindings_load(bindings, device, items, count);
+    test_fail("bindings", false);
+    free(items);
+    return loaded;
+}
+
+// A function to load the bindings from config.ini as it is now, whose lines the save finds again by
+// their text. Bindings that cannot be read (the file gone, or out of memory) leave the binding pages
+// out, and say so.
+static void load_bindings(void)
+{
+    static const char *const skip[] = { SETTING_GAMEPAD_ENABLED, SETTING_GAMEPAD_DEVICE, SETTING_GAMEPAD_MAPPINGS_FILE, NULL };
+    size_t length = 0;
+    char *text = fileio_read_all(config.config_path, &length);
+    IniDoc *doc = text != NULL ? inidoc_parse(text, length) : NULL;
+    alloc_free(text);
+#ifdef _WIN32
+    bindings = bindings_create(true, gamepad_running());
+#else
+    bindings = bindings_create(false, gamepad_running());
+#endif
+    bool loaded = bindings != NULL && doc != NULL && load_section(doc, "Hotkeys", NULL, BINDINGS_KEYBOARD) &&
+                  load_section(doc, "Gamepad", skip, BINDINGS_GAMEPAD);
+    inidoc_free(doc);
+    if (!loaded) {
+        log_error("Settings: the bindings could not be read from %s, so the binding pages are left out", config.config_path);
+        bindings_free(bindings);
+        bindings = NULL;
+        return;
+    }
+    settings_set_bindings(model, bindings, pickers_key_name);
+}
+
 // A function to open settings over the menu on show
 void settings_open(void)
 {
@@ -1448,6 +1572,7 @@ void settings_open(void)
         settings_set_entry(model, (SettingId) id, -1, &value);
     }
     list_pads();
+    load_bindings();
     for (int m = 0; m < menu_count; m++) {
         for (int id = SET_ID_MENU_ROWS; id < SET_ID_COUNT; id++) {
             SettingValue value = read_value((SettingId) id, m);

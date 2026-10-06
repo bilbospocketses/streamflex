@@ -17,7 +17,7 @@ tour() {
     for page in Titles Highlight Scroll Clock Screensaver; do
         keys="$keys Return $(walk) BackSpace Down"
     done
-    keys="$keys Return Return $(walk) BackSpace BackSpace Down"   # Controls, Gamepad
+    keys="$keys Return Return $(walk) BackSpace Down Return $(walk) BackSpace BackSpace Down"   # Controls, Keyboard, Gamepad
     keys="$keys Return BackSpace"                        # Discard, then close with nothing to save
     # shellcheck disable=SC2086
     xdotool key --delay 100 $keys
@@ -28,7 +28,7 @@ CFG=$cfg UNTIL='Settings closed' run_keys f55-tour Menu +tour
 log=$out/f55-tour.log
 ok=1
 for page in General Background Menus "Menus${ARROW}All menus" Titles Highlight "Scroll indicators" Clock \
-            Screensaver Controls "Controls${ARROW}Gamepad"; do
+            Screensaver Controls "Controls${ARROW}Keyboard" "Controls${ARROW}Gamepad"; do
     grep -qF "Settings: page Settings${ARROW}${page}" "$log" || { echo "      page never opened: $page"; ok=2; }
 done
 [ "$ok" = 1 ] && [ "$(grep -c 'Settings: \[' "$log")" -ge 40 ] && grep -q 'Settings: discarded the changes' "$log" \
@@ -178,7 +178,7 @@ grep -E "Settings: (the cursor's row reads (Default menu|Startup command|Show da
 # the row reads its name, never "Pad 0 (not connected)"; Left puts Any back, so nothing is saved
 rm -f /tmp/pad-none
 STREAMFLEX_TEST_PAD=/tmp/pad-none CFG=$FX/f55-frame.ini WAIT_FOR='Gamepad connected' \
-    run_keys f55-pads Menu Down Down Down Down Down Down Down Down Return Return Down Right Left Menu
+    run_keys f55-pads Menu Down Down Down Down Down Down Down Down Return Down Return Down Right Left Menu
 log=$out/f55-pads.log
 device=$(grep -F "Settings: the cursor's row reads Device: $LEFT_MARK" "$log" | grep -vF "$LEFT_MARK Any $RIGHT_MARK" | head -1)
 ok=1
@@ -195,7 +195,7 @@ plug_in() { : > /tmp/pad-plug; wait_line 'Test hook: pad plugged in' "$2"; sleep
 pull_out() { rm -f /tmp/pad-plug; wait_line 'Test hook: pad unplugged' "$2"; sleep 1; }
 rm -f /tmp/pad-plug
 STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$FX/f55-frame.ini \
-    run_keys f55-plug Menu Down Down Down Down Down Down Down Down Return Return Down +plug_in Right +pull_out Left Menu
+    run_keys f55-plug Menu Down Down Down Down Down Down Down Down Return Down Return Down +plug_in Right +pull_out Left Menu
 log=$out/f55-plug.log
 named=$(sed -n '/Test hook: pad plugged in/,/Test hook: pad unplugged/p' "$log" \
         | grep -F "Settings: the cursor's row reads Device: $LEFT_MARK" | grep -vF "$LEFT_MARK Any $RIGHT_MARK" \

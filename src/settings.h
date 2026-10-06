@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "bindings.h"
 
 #define SETTING_TEXT_MAX 1024  // Longest path a setting holds
 #define SETTINGS_MAX_ROWS 64   // Most rows one page shows; Menus counts the rest in a note
@@ -204,6 +205,10 @@ typedef enum {
     SETTINGS_PAGE_SCREENSAVER,
     SETTINGS_PAGE_CONTROLS,
     SETTINGS_PAGE_GAMEPAD,
+    SETTINGS_PAGE_KEYBOARD,      // The hotkeys
+    SETTINGS_PAGE_BINDING,       // One binding: its key or button, its command, Remove
+    SETTINGS_PAGE_CAPTURE,       // Press the key or button
+    SETTINGS_PAGE_CONFIRM,       // Keep the key captured, try again, or cancel
     SETTINGS_PAGE_SAVE_FAILED
 } SettingsPage;
 
@@ -213,6 +218,7 @@ typedef enum {
     SETTINGS_ROW_BROWSE,         // OK opens the folder browser for its path
     SETTINGS_ROW_PICK,           // OK opens a picker for its slot; Left and Right step it when its type steps
     SETTINGS_ROW_ACTION,         // OK does something
+    SETTINGS_ROW_BINDING,        // OK opens a binding's page
     SETTINGS_ROW_DIVIDER,
     SETTINGS_ROW_NOTE            // Text only
 } SettingsRowKind;
@@ -221,7 +227,14 @@ typedef enum {
     SETTINGS_ACTION_NONE,
     SETTINGS_ACTION_DISCARD,
     SETTINGS_ACTION_RETRY,
-    SETTINGS_ACTION_LEAVE
+    SETTINGS_ACTION_LEAVE,
+    SETTINGS_ACTION_ADD_BINDING,
+    SETTINGS_ACTION_CAPTURE,
+    SETTINGS_ACTION_BIND_COMMAND,
+    SETTINGS_ACTION_REMOVE_BINDING,
+    SETTINGS_ACTION_KEEP,
+    SETTINGS_ACTION_TRY_AGAIN,
+    SETTINGS_ACTION_CANCEL
 } SettingsAction;
 
 typedef struct {
@@ -237,6 +250,7 @@ typedef struct {
     const char *why;             // A greyed row's reason (the cursor may rest on it); NULL for none
     bool steps;                  // Left and Right step its value while it is enabled: a setting, or a
                                  // picker for a colour, the default menu or the device
+    int binding;                 // BINDING rows: the binding's index
 } SettingsRow;
 
 typedef enum {
@@ -260,16 +274,25 @@ typedef enum {
     SETTINGS_EVENT_CLOSE,        // Save and close; apply `slot` first when it is set
     SETTINGS_EVENT_CLOSE_HOME,   // The same, then go to the default menu
     SETTINGS_EVENT_RETRY,        // Try the failed save again
-    SETTINGS_EVENT_LEAVE         // Close without saving
+    SETTINGS_EVENT_LEAVE,        // Close without saving
+    SETTINGS_EVENT_CAPTURE,      // Start capturing a key or button for the binding page's device
+    SETTINGS_EVENT_PICK_COMMAND, // Open the command picker for the binding page's binding
+    SETTINGS_EVENT_BINDINGS      // The binding lists changed: apply them; with `confirm`, start the 10 s for `code`
 } SettingsEventKind;
 
 typedef struct {
     SettingsEventKind kind;
     SettingSlot *slot;
     SettingValue before;
+    int device;                  // CAPTURE and BINDINGS: the BindingsDevice captured from, or changed
+    int code;                    // BINDINGS with confirm: the key whose navigation was taken
+    bool confirm;
 } SettingsEvent;
 
 typedef struct SettingsState SettingsState;
+
+// A function the screen gives to name a key or button: a key by its name, a pad's control by its label
+typedef void (*SettingsKeyNamer)(int device, int code, char *out, size_t size);
 
 const SettingDef *setting_def(SettingId id);
 const SettingDef *setting_find(const char *section, const char *key);
@@ -305,5 +328,14 @@ void settings_set_pads(SettingsState *state, const char *const *names, int count
 int settings_pad_count(const SettingsState *state);
 const char *settings_pad_name(const SettingsState *state, int index);
 void settings_show_save_failed(SettingsState *state, const char *message);
+// The key and gamepad bindings, while settings are open (NULL: no binding pages), and a way to name
+// keys and buttons (NULL: "#<HEX>"). The caller owns the bindings and frees them after the model.
+void settings_set_bindings(SettingsState *state, Bindings *bindings, SettingsKeyNamer namer);
+SettingsEvent settings_captured(SettingsState *state, int code);
+void settings_capture_ended(SettingsState *state, const char *why);
+SettingsEvent settings_bind_command(SettingsState *state, const char *command);
+SettingsEvent settings_revert_binding(SettingsState *state);
+void settings_keep_binding(SettingsState *state);   // The 10 s were confirmed: nothing goes back
+const char *settings_binding_command(const SettingsState *state);   // The command the binding page shows
 
 #endif

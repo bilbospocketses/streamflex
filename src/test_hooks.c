@@ -13,7 +13,7 @@
 
 #ifdef STREAMFLEX_TEST_HOOKS
 // Only the headless harness builds these. STREAMFLEX_TEST_FAIL names one of the settings screen's
-// steps (places, browser, command or keep; the pickers' list, rows, select or pads; the font
+// steps (places, browser, command, keep or bindings; the pickers' list, rows, select or pads; the font
 // picker's fontlist, fontscan, fontfolder, faces or sample), which then runs as if memory had run
 // out, or for keep, as if the saved file's permissions could not be kept; or one its own code fails
 // (fontthread: no thread starts; fontadd: the listing thread cannot add a file): failures no real

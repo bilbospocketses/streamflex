@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "layout.h"
 #include "fileio.h"
+#include "inidoc.h"
 #include "alloc.h"
 #include <launcher_config.h>
 
@@ -896,6 +897,8 @@ typedef struct {
     int menu;          // MENU pages: the menu's index, -1 for All menus
     int cursor;
     int entry_mode;    // The background mode when the page opened, for the incomplete-mode rule
+    int device;        // The bindings the page is about (BindingsDevice): the Keyboard and Gamepad pages
+                       // set it, and the binding pages opened from them inherit it
 } PageRef;
 
 struct SettingsState {
@@ -911,6 +914,24 @@ struct SettingsState {
     char *pads[SETTINGS_MAX_PADS]; // The gamepads present, by device index, for the Device row; NULL: no name
     char pad_fallback[SETTINGS_MAX_PADS][16];  // "Pad N", for a pad with no name
     int pad_count;
+    Bindings *bindings;          // The key and gamepad bindings, while settings are open; NULL: no binding rows
+    SettingsKeyNamer namer;
+    struct {                     // The binding the binding page edits
+        int device;
+        int index;               // -1: a new one, not yet in the list
+        int code;                // -1 until a key is kept
+        char command[BINDINGS_COMMAND_MAX];
+        int captured;            // The key the confirm page asks about
+    } pending;
+    struct {                     // What the 10 s would put back
+        bool active;
+        int device;
+        int index;
+        int code;                // The key that confirms it
+        bool added;
+        Binding before;
+    } undo;
+    char confirm_note[96];       // The confirm page's "Captured: ..."
 };
 
 // A function to start the model over the launcher's menus; the caller then sets every entry value
@@ -1035,14 +1056,14 @@ bool settings_changed(const SettingSlot *slot)
     return !setting_equal(slot->def, &slot->value, &slot->entry);
 }
 
-// A function to tell whether anything has changed
+// A function to tell whether anything has changed: a setting, or a binding
 bool settings_any_changed(const SettingsState *state)
 {
     for (int i = 0; i < state->slot_count; i++) {
         if (settings_changed(&state->slots[i]))
             return true;
     }
-    return false;
+    return state->bindings != NULL && bindings_changed(state->bindings);
 }
 
 // A function to get the value a per-menu setting follows when it inherits
@@ -1073,6 +1094,10 @@ static const char *const WHY_SCREENSAVER = "The screensaver is off";
 static const char *const WHY_GAMEPAD = "The gamepad is off";
 static const char *const WHY_VSYNC = "Used only while VSync is off";
 static const char *const MAPPINGS_NOTE = "The mappings file applies at next start: SDL can add mappings, but never take one back.";
+static const char *const KEYBOARD_NOTE = "The arrows, OK (Enter) and Back (Backspace) always keep their own meaning.";
+static const char *const BUILT_IN_NOTE = "Up, Down and Settings have built-in buttons while nothing else is bound to them.";
+static const char *const WHY_NO_NAME =
+    "This line has no name in config.ini, so removing it would change how the lines after it read";
 
 // A function to start a row of a kind
 static SettingsRow new_row(SettingsRowKind kind, const char *label)
@@ -1213,6 +1238,53 @@ static int add_row(SettingsRow *rows, int count, int max, SettingsRow row)
     if (count < max)
         rows[count] = row;
     return count + 1;
+}
+
+// A function to give the model its bindings, and a way to name keys and buttons
+void settings_set_bindings(SettingsState *state, Bindings *bindings, SettingsKeyNamer namer)
+{
+    state->bindings = bindings;
+    state->namer = namer;
+}
+
+// A function to name a key or button through the screen's namer
+static void key_name(const SettingsState *state, int device, int code, char *out, size_t size)
+{
+    if (state->namer != NULL)
+        state->namer(device, code, out, size);
+    else
+        snprintf(out, size, "#%X", (unsigned int) code);
+}
+
+// A function to add a device's binding rows: Add binding, then every binding that is not removed
+static int binding_rows(SettingsState *state, int device, SettingsRow *rows, int n, int max)
+{
+    char text[BINDINGS_COMMAND_MAX];
+    SettingsRow add = action_row("Add binding", SETTINGS_ACTION_ADD_BINDING, true);
+    n = add_row(rows, n, max, add);
+    for (int i = 0; i < bindings_count(state->bindings, (BindingsDevice) device); i++) {
+        const Binding *binding = bindings_at(state->bindings, (BindingsDevice) device, i);
+        if (binding->removed)
+            continue;
+        key_name(state, device, binding->code, text, sizeof(text));
+        SettingsRow row = new_row(SETTINGS_ROW_BINDING, text);
+        setting_command_label(binding->command, row.value, sizeof(row.value));
+        row.binding = i;
+        n = add_row(rows, n, max, row);
+    }
+    return n;
+}
+
+// A function to say why the binding page's binding cannot be removed, or NULL when it can: a
+// [Hotkeys] line with no name cannot be (inidoc refuses removing it, which would fail the whole
+// save), and the floor may refuse it
+static const char *refuse_remove(const SettingsState *state)
+{
+    BindingsDevice device = (BindingsDevice) state->pending.device;
+    const Binding *binding = bindings_at(state->bindings, device, state->pending.index);
+    if (binding->original[0] != '\0' && binding->key[0] == '\0')
+        return WHY_NO_NAME;
+    return bindings_refuse_change(state->bindings, device, state->pending.index, 0, NULL, true);
 }
 
 // A function to list the rows of the page on show
@@ -1397,6 +1469,13 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             break;
         }
         case SETTINGS_PAGE_CONTROLS:
+            if (state->bindings != NULL) {
+                int keys = 0;
+                for (int i = 0; i < bindings_count(state->bindings, BINDINGS_KEYBOARD); i++)
+                    keys += bindings_at(state->bindings, BINDINGS_KEYBOARD, i)->removed ? 0 : 1;
+                snprintf(text, sizeof(text), keys == 1 ? "%d hotkey" : "%d hotkeys", keys);
+                n = add_row(rows, n, max, link_row("Keyboard", text, SETTINGS_PAGE_KEYBOARD, -1));
+            }
             n = add_row(rows, n, max, link_row("Gamepad", on_off(state, SET_ID_GAMEPAD_ENABLED), SETTINGS_PAGE_GAMEPAD, -1));
             break;
         case SETTINGS_PAGE_GAMEPAD: {
@@ -1405,6 +1484,50 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_DEVICE), off, WHY_GAMEPAD));
             n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_MAPPINGS), off, WHY_GAMEPAD));
             n = add_row(rows, n, max, note_row(MAPPINGS_NOTE));
+            if (state->bindings != NULL) {
+                n = binding_rows(state, BINDINGS_GAMEPAD, rows, n, max);
+                n = add_row(rows, n, max, note_row(BUILT_IN_NOTE));
+            }
+            break;
+        }
+        case SETTINGS_PAGE_KEYBOARD:
+            n = binding_rows(state, BINDINGS_KEYBOARD, rows, n, max);
+            n = add_row(rows, n, max, note_row(KEYBOARD_NOTE));
+            break;
+        case SETTINGS_PAGE_BINDING: {
+            char name[64];
+            if (state->pending.code >= 0)
+                key_name(state, state->pending.device, state->pending.code, name, sizeof(name));
+            else
+                snprintf(name, sizeof(name), "Choose" ELLIPSIS);
+            SettingsRow key = action_row("Key", SETTINGS_ACTION_CAPTURE, true);
+            snprintf(key.value, sizeof(key.value), "%s", name);
+            n = add_row(rows, n, max, key);
+            SettingsRow command = action_row("Command", SETTINGS_ACTION_BIND_COMMAND, true);
+            if (state->pending.command[0] != '\0')
+                setting_command_label(state->pending.command, command.value, sizeof(command.value));
+            else
+                snprintf(command.value, sizeof(command.value), "None");
+            n = add_row(rows, n, max, command);
+            if (state->pending.index < 0)
+                n = add_row(rows, n, max, action_row("Cancel", SETTINGS_ACTION_CANCEL, true));
+            else {
+                const char *why = refuse_remove(state);
+                n = add_row(rows, n, max, greyed(action_row("Remove", SETTINGS_ACTION_REMOVE_BINDING, true), why != NULL, why));
+            }
+            break;
+        }
+        case SETTINGS_PAGE_CAPTURE:
+            n = add_row(rows, n, max, note_row("Press the key or button" ELLIPSIS));
+            break;
+        case SETTINGS_PAGE_CONFIRM: {
+            char name[64];
+            key_name(state, state->pending.device, state->pending.captured, name, sizeof(name));
+            snprintf(state->confirm_note, sizeof(state->confirm_note), "Captured: %s", name);
+            n = add_row(rows, n, max, note_row(state->confirm_note));
+            n = add_row(rows, n, max, action_row("Keep", SETTINGS_ACTION_KEEP, true));
+            n = add_row(rows, n, max, action_row("Try again", SETTINGS_ACTION_TRY_AGAIN, true));
+            n = add_row(rows, n, max, action_row("Cancel", SETTINGS_ACTION_CANCEL, true));
             break;
         }
         case SETTINGS_PAGE_SAVE_FAILED:
@@ -1466,6 +1589,8 @@ static void push_page(SettingsState *state, SettingsPage page, int menu)
     top->page = page;
     top->menu = menu;
     top->entry_mode = settings_slot(state, SET_ID_BACKGROUND_MODE, -1)->value.number;
+    top->device = page == SETTINGS_PAGE_KEYBOARD ? BINDINGS_KEYBOARD
+                : page == SETTINGS_PAGE_GAMEPAD ? BINDINGS_GAMEPAD : state->stack[state->depth - 1].device;
     fix_cursor(state);
 }
 
@@ -1549,6 +1674,183 @@ static bool step_device(SettingsState *state, const SettingSlot *slot, int direc
     return true;
 }
 
+// A function to read a [Hotkeys] key's number as the save numbers new lines (next_key() in
+// config_save.c): "Hotkey12" is 12; 0 for any other key, or one too long to add to
+static long long hotkey_number(const char *key)
+{
+    const char *digits = key + 6;
+    if (strncmp(key, "Hotkey", 6) != 0 || strspn(digits, "0123456789") != strlen(digits) || strlen(digits) > 18)
+        return 0;
+    return strtoll(digits, NULL, 10);
+}
+
+// A function to say why config.ini could not hold the binding page's binding as a line, or NULL when
+// it could: a hotkey's "#<HEX>;<command>" or a control's command, under the key the save gives it. A
+// line loaded keeps its own key; a new hotkey is numbered one above the highest HotkeyN loaded, and
+// one more for each new hotkey (every one in the list counts, removed or not, which can only make the
+// key longer than the save's); a control's key is its label.
+static const char *refuse_line(const SettingsState *state)
+{
+    char value[BINDINGS_VALUE_MAX];
+    char key[64];
+    BindingsDevice device = (BindingsDevice) state->pending.device;
+    const Binding *binding = bindings_at(state->bindings, device, state->pending.index);
+    if (device == BINDINGS_GAMEPAD) {
+        snprintf(value, sizeof(value), "%s", state->pending.command);
+        snprintf(key, sizeof(key), "%s", bindings_label(state->pending.code));
+    }
+    else {
+        snprintf(value, sizeof(value), "#%X;%s", (unsigned int) state->pending.code, state->pending.command);
+        if (binding != NULL && binding->original[0] != '\0')
+            snprintf(key, sizeof(key), "%s", binding->key);
+        else {
+            long long highest = 0;
+            int added = binding == NULL ? 1 : 0;
+            for (int i = 0; i < bindings_count(state->bindings, device); i++) {
+                const Binding *other = bindings_at(state->bindings, device, i);
+                long long number = hotkey_number(other->key);
+                highest = number > highest ? number : highest;
+                added += other->original[0] == '\0' ? 1 : 0;
+            }
+            snprintf(key, sizeof(key), "Hotkey%lld", highest + added);
+        }
+    }
+    return inidoc_check(key, value);
+}
+
+// A function to commit the binding page's binding once it has a key and a command: refused with the
+// reason (the key's, the floor's, or a line config.ini could not hold), or set (added when new); a
+// change that takes a key's navigation away asks for the 10 s confirmation. Back to the list unless
+// refused.
+static SettingsEvent commit_binding(SettingsState *state)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    BindingsDevice device = (BindingsDevice) state->pending.device;
+    const char *why = bindings_refuse_key(state->bindings, device, state->pending.code, state->pending.command);
+    if (why == NULL)
+        why = bindings_refuse_change(state->bindings, device, state->pending.index, state->pending.code,
+                                     state->pending.command, false);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    why = refuse_line(state);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "config.ini cannot hold this binding: %s", why);
+        return event;
+    }
+    bool added = state->pending.index < 0;
+    if (!added)
+        state->undo.before = *bindings_at(state->bindings, device, state->pending.index);
+    int index = bindings_set(state->bindings, device, state->pending.index, state->pending.code, state->pending.command);
+    if (index < 0) {
+        snprintf(state->notice, sizeof(state->notice), "out of memory");
+        return event;
+    }
+    event.kind = SETTINGS_EVENT_BINDINGS;
+    event.confirm = bindings_takes_navigation(device, state->pending.code, state->pending.command);
+    event.code = state->pending.code;
+    event.device = (int) device;
+    state->undo.active = event.confirm;
+    state->undo.device = device;
+    state->undo.index = index;
+    state->undo.code = state->pending.code;
+    state->undo.added = added;
+    state->depth--;   // Back to the list
+    return event;
+}
+
+// A function to take a captured key or button: a refused one ends the capture with its reason; any
+// other goes to the confirm page
+SettingsEvent settings_captured(SettingsState *state, int code)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    if (state->stack[state->depth].page != SETTINGS_PAGE_CAPTURE)
+        return event;
+    state->depth--;
+    const char *why = bindings_refuse_key(state->bindings, (BindingsDevice) state->pending.device, code, "");
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        fix_cursor(state);
+        return event;
+    }
+    state->pending.captured = code;
+    push_page(state, SETTINGS_PAGE_CONFIRM, -1);
+    return event;
+}
+
+// A function to end a capture that caught nothing (a timeout), with the reason for the caption
+void settings_capture_ended(SettingsState *state, const char *why)
+{
+    if (state->stack[state->depth].page != SETTINGS_PAGE_CAPTURE)
+        return;
+    state->depth--;
+    snprintf(state->notice, sizeof(state->notice), "%s", why != NULL ? why : "");
+    fix_cursor(state);
+}
+
+// A function to set the binding page's command, chosen in the command picker; with a key already, it
+// commits the binding
+SettingsEvent settings_bind_command(SettingsState *state, const char *command)
+{
+    snprintf(state->pending.command, sizeof(state->pending.command), "%s", command);
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    if (state->pending.code >= 0 && command[0] != '\0')
+        event = commit_binding(state);
+    fix_cursor(state);
+    return event;
+}
+
+// A function to put back the change the 10 s were for, unconfirmed
+SettingsEvent settings_revert_binding(SettingsState *state)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_NONE;
+    if (!state->undo.active)
+        return event;
+    BindingsDevice device = (BindingsDevice) state->undo.device;
+    if (state->undo.added)
+        bindings_remove(state->bindings, device, state->undo.index);
+    else
+        bindings_set(state->bindings, device, state->undo.index, state->undo.before.code, state->undo.before.command);
+    state->undo.active = false;
+    event.kind = SETTINGS_EVENT_BINDINGS;
+    fix_cursor(state);
+    return event;
+}
+
+// A function to keep the change the 10 s were for: it was confirmed, so nothing goes back
+void settings_keep_binding(SettingsState *state)
+{
+    state->undo.active = false;
+}
+
+// A function to get the command the binding page shows, for the command picker's cursor
+const char *settings_binding_command(const SettingsState *state)
+{
+    return state->pending.command;
+}
+
+// A function to tell whether a binding's page may open: not while a change waits to be confirmed,
+// which a new change would leave nothing to put back to (the screen is told why)
+static bool binding_page_may_open(SettingsState *state)
+{
+    char name[64];
+    if (!state->undo.active)
+        return true;
+    key_name(state, state->undo.device, state->undo.code, name, sizeof(name));
+    snprintf(state->notice, sizeof(state->notice), "Press %s again to keep the last change first, or wait for it to go back", name);
+    return false;
+}
+
 // A function to act on one key of the remote
 SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
 {
@@ -1613,9 +1915,61 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
                 event.kind = SETTINGS_EVENT_PICK;
                 event.slot = row->slot;
             }
+            else if (row->kind == SETTINGS_ROW_BINDING) {
+                if (!binding_page_may_open(state))
+                    break;
+                const Binding *binding = bindings_at(state->bindings, (BindingsDevice) top->device, row->binding);
+                state->pending.device = top->device;
+                state->pending.index = row->binding;
+                state->pending.code = binding->code;
+                snprintf(state->pending.command, sizeof(state->pending.command), "%s", binding->command);
+                push_page(state, SETTINGS_PAGE_BINDING, -1);
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_ADD_BINDING) {
+                if (!binding_page_may_open(state))
+                    break;
+                state->pending.device = top->device;
+                state->pending.index = -1;
+                state->pending.code = -1;
+                state->pending.command[0] = '\0';
+                push_page(state, SETTINGS_PAGE_BINDING, -1);
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION &&
+                     (row->action == SETTINGS_ACTION_CAPTURE || row->action == SETTINGS_ACTION_TRY_AGAIN)) {
+                if (row->action == SETTINGS_ACTION_TRY_AGAIN)
+                    state->depth--;
+                push_page(state, SETTINGS_PAGE_CAPTURE, -1);
+                event.kind = SETTINGS_EVENT_CAPTURE;
+                event.device = state->pending.device;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_BIND_COMMAND)
+                event.kind = SETTINGS_EVENT_PICK_COMMAND;
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_KEEP) {
+                state->pending.code = state->pending.captured;
+                state->depth--;
+                event.kind = SETTINGS_EVENT_MOVED;
+                if (state->pending.command[0] != '\0')
+                    event = commit_binding(state);
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_CANCEL) {
+                state->depth--;
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_REMOVE_BINDING) {
+                if (!row->enabled)
+                    break;   // Greyed: its reason is on show
+                bindings_remove(state->bindings, (BindingsDevice) state->pending.device, state->pending.index);
+                state->depth--;
+                event.kind = SETTINGS_EVENT_BINDINGS;
+            }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_DISCARD) {
                 for (int i = 0; i < state->slot_count; i++)
                     state->slots[i].value = state->slots[i].entry;
+                if (state->bindings != NULL)
+                    bindings_discard(state->bindings);
+                state->undo.active = false;
                 event.kind = SETTINGS_EVENT_DISCARD;
             }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_RETRY)
@@ -1720,6 +2074,10 @@ void settings_path(const SettingsState *state, char *out, size_t size)
             case SETTINGS_PAGE_SCREENSAVER: name = "Screensaver"; break;
             case SETTINGS_PAGE_CONTROLS: name = "Controls"; break;
             case SETTINGS_PAGE_GAMEPAD: name = "Gamepad"; break;
+            case SETTINGS_PAGE_KEYBOARD: name = "Keyboard"; break;
+            case SETTINGS_PAGE_BINDING: name = "Binding"; break;
+            case SETTINGS_PAGE_CAPTURE: name = "Press a key"; break;
+            case SETTINGS_PAGE_CONFIRM: name = "Keep it?"; break;
             case SETTINGS_PAGE_SAVE_FAILED: name = "Couldn't save"; break;
             case SETTINGS_PAGE_TOP: break;
         }

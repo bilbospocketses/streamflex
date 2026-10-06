@@ -543,23 +543,9 @@ static void cleanup()
         free(tmp_menu);
     }
 
-    // Free hotkey linked list
-    Hotkey *tmp_hotkey = NULL;
-    for(Hotkey *i = hotkeys; i != NULL; i = i->next) {
-        free(tmp_hotkey);
-        free(i->cmd);
-        tmp_hotkey = i;
-    }
-    free(tmp_hotkey);
-
-    // Free gamepad control linked list
-    GamepadControl *tmp_gamepad = NULL;
-    for (GamepadControl *i = gamepad_controls; i != NULL; i = i->next) {
-        free(tmp_gamepad);
-        free(i->cmd);
-        tmp_gamepad = i;
-    }
-    free(tmp_gamepad);
+    // Free the hotkey and gamepad control linked lists
+    clear_hotkeys();
+    clear_gamepad_controls();
 }
 
 // A function to check whether the config binds a hotkey to a key
@@ -585,6 +571,10 @@ static void handle_keypress(SDL_Keysym *key, bool repeat)
 {
     if (config.debug)
         log_debug("Key %s (#%X) detected", SDL_GetKeyName(key->sym), key->sym);
+
+    // A capture takes every key, and the 10 s the key that confirms them, before any other meaning
+    if (settings_is_open() && settings_raw_key(key->sym, repeat))
+        return;
 
     // A held Menu key opens (or closes) settings once: its repeats would strobe them
     if (repeat && menu_key(key->sym))
@@ -1714,6 +1704,8 @@ static int test_pad_index = -1;
 static SDL_JoystickID test_swap[3] = { -1, -1, -1 };   // STREAMFLEX_TEST_PAD_SWAP's pads A, B and C
 static SDL_JoystickID test_plug = -1;   // STREAMFLEX_TEST_PAD_PLUG's pad, while it is plugged in
 static int test_swap_step = 0;
+static bool test_pad_file = false;      // STREAMFLEX_TEST_PAD's file was there last frame
+static int test_pad_frames = 0;         // Frames STREAMFLEX_TEST_PAD_FRAMES's press has left
 
 // A function only the headless harness builds: with STREAMFLEX_TEST_PAD set, it attaches the
 // virtual gamepad once the gamepad runs
@@ -1808,8 +1800,11 @@ static void test_pad_plug()
 }
 
 // A function only the headless harness builds, since it has no gamepad: with STREAMFLEX_TEST_PAD
-// set, it attaches a virtual one while the gamepad runs, and holds its Start button while the file
-// that names exists
+// set, it attaches a virtual one while the gamepad runs, and holds a button while the file that
+// names exists: the one STREAMFLEX_TEST_PAD_BUTTON names (SDL's name for it, "b"), else Start. A name
+// that is an axis's instead ("rightx") pushes that axis to its positive end. With
+// STREAMFLEX_TEST_PAD_FRAMES=N, the file's appearing holds it for N frames however long the file
+// stays, and the file must go before it presses again: a tap shorter than a script can time.
 static void test_pad_update()
 {
     test_pad_swap();
@@ -1818,8 +1813,25 @@ static void test_pad_update()
     if (held == NULL || !gamepad_on)
         return;
     test_pad_attach();
-    if (test_pad != NULL)
-        SDL_JoystickSetVirtualButton(test_pad, SDL_CONTROLLER_BUTTON_START, file_exists(held) ? SDL_PRESSED : SDL_RELEASED);
+    bool there = file_exists(held);
+    bool pressed = there;
+    const char *frames = getenv("STREAMFLEX_TEST_PAD_FRAMES");
+    if (frames != NULL) {
+        if (there && !test_pad_file)
+            test_pad_frames = atoi(frames);
+        pressed = test_pad_frames > 0;
+        if (test_pad_frames > 0)
+            test_pad_frames--;
+    }
+    test_pad_file = there;
+    const char *name = getenv("STREAMFLEX_TEST_PAD_BUTTON");
+    SDL_GameControllerButton button = name != NULL ? SDL_GameControllerGetButtonFromString(name) : SDL_CONTROLLER_BUTTON_START;
+    SDL_GameControllerAxis axis = button == SDL_CONTROLLER_BUTTON_INVALID ? SDL_GameControllerGetAxisFromString(name)
+                                                                        : SDL_CONTROLLER_AXIS_INVALID;
+    if (test_pad != NULL && button != SDL_CONTROLLER_BUTTON_INVALID)
+        SDL_JoystickSetVirtualButton(test_pad, button, pressed ? SDL_PRESSED : SDL_RELEASED);
+    else if (test_pad != NULL && axis != SDL_CONTROLLER_AXIS_INVALID)
+        SDL_JoystickSetVirtualAxis(test_pad, axis, pressed ? SDL_JOYSTICK_AXIS_MAX : 0);
 }
 
 // A function to let the virtual gamepads go before their subsystem stops
@@ -1913,11 +1925,33 @@ void reload_gamepad()
     start_gamepad();
 }
 
-// A function to poll the connected gamepad for commands
+// A function to find the first control held on any open pad, as a gamepad label's index (util.c's
+// table's order, which bindings.c shares); -1 for none
+int gamepad_pressed_label()
+{
+    for (int i = 0; i < gamepad_label_count(); i++) {
+        const struct gamepad_info *control = gamepad_label_info(i);
+        for (Gamepad *pad = gamepads; pad != NULL; pad = pad->next) {
+            if (pad->controller == NULL)
+                continue;
+            bool held = control->type == TYPE_BUTTON
+                        ? SDL_GameControllerGetButton(pad->controller, (SDL_GameControllerButton) control->index) != 0
+                        : (control->type == TYPE_AXIS_POS ? 1 : -1) * SDL_GameControllerGetAxis(pad->controller, (SDL_GameControllerAxis) control->index) > GAMEPAD_DEADZONE;
+            if (held)
+                return i;
+        }
+    }
+    return -1;
+}
+
+// A function to poll the connected gamepad for commands. A command can rebuild the controls under
+// this loop (the settings screen's bindings), freeing the one it is on: the loop then stops, for this
+// frame.
 static void poll_gamepad()
 {
     int value_multiplier; // Handles positive or negative axis
     bool pressed;
+    unsigned int version = gamepad_controls_version();
     for (GamepadControl *i = gamepad_controls; i != NULL; i = i->next) {
         pressed = false;
         for (Gamepad *gamepad = gamepads; gamepad != NULL; gamepad = gamepad->next) {
@@ -1954,12 +1988,14 @@ static void poll_gamepad()
         }
         else if (i->repeat == delay_period) {
             ticks.last_input = ticks.main;
+            i->repeat -= repeat_period;
 
             // :settings acts on the first press only: repeating it would strobe settings open and shut
             if (strcmp(i->cmd, SCMD_SETTINGS) != 0)
                 execute_command(i->cmd);
-            i->repeat -= repeat_period;
         }
+        if (gamepad_controls_version() != version)
+            return;
     }
 }
 
@@ -2312,7 +2348,12 @@ int main(int argc, char *argv[])
                     ticks.last_input = ticks.main;
                     handle_keypress(&event.key.keysym, event.key.repeat != 0);
                     break;
-                
+
+                case SDL_KEYUP:
+                    if (settings_is_open())
+                        settings_raw_release(event.key.keysym.sym);
+                    break;
+
                 case SDL_MOUSEBUTTONDOWN:
                     if (config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
                         ticks.last_input = ticks.main;
@@ -2376,7 +2417,8 @@ int main(int argc, char *argv[])
 
         // Post-event loop updates
         if (!(state.application_running || state.application_launching)) {
-            if (gamepads != NULL)
+            // A capture or the 10 s take the pad before its controls run
+            if (gamepads != NULL && !(settings_is_open() && settings_raw_pad(gamepad_pressed_label())))
                 poll_gamepad();
             if (background_shown == BACKGROUND_SLIDESHOW)
                 update_slideshow();

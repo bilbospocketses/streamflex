@@ -18,7 +18,6 @@
 #include "platform/platform.h"
 #include <ini.h>
 
-static void add_gamepad_control(const char *label, const char *cmd);
 static Menu *create_menu(const char *menu_name, size_t *num_menus);
 static bool gamepad_command_mapped(const char *cmd);
 static bool gamepad_control_mapped(const char *label);
@@ -485,7 +484,6 @@ void add_hotkey(const char *keycode, const char *cmd)
     char *p = (char*) keycode + 1;
 
     // Convert hex string to binary
-    static Hotkey *current_hotkey = NULL;
     SDL_Keycode code = (SDL_Keycode) strtol(p, NULL, 16);
 
     // Check if exit hotkey for Windows
@@ -496,86 +494,130 @@ void add_hotkey(const char *keycode, const char *cmd)
     }
 #endif
 
-    // Create first node if not initialized, else add to end of linked list
-    if (current_hotkey == NULL) {
-        hotkeys = malloc(sizeof(Hotkey));
-        current_hotkey = hotkeys;
-    }
+    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on
+    Hotkey *hotkey = malloc(sizeof(Hotkey));
+    hotkey->keycode = code;
+    hotkey->cmd = strdup(cmd);
+    hotkey->next = NULL;
+    if (hotkeys == NULL)
+        hotkeys = hotkey;
     else {
-        current_hotkey->next = malloc(sizeof(Hotkey));
-        current_hotkey = current_hotkey->next;
+        Hotkey *last = hotkeys;
+        while (last->next != NULL)
+            last = last->next;
+        last->next = hotkey;
     }
-    current_hotkey->keycode = code;
-    current_hotkey->cmd = strdup(cmd);
-    current_hotkey->next = NULL;
+}
+
+// The gamepad's control labels, each with its type and SDL index. bindings.c's LABELS repeats this
+// order: change both together.
+static const struct gamepad_info GAMEPAD_INFO[] = {
+    {SETTING_GAMEPAD_LSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTX},
+    {SETTING_GAMEPAD_LSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTX},
+    {SETTING_GAMEPAD_LSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTY},
+    {SETTING_GAMEPAD_LSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTY},
+    {SETTING_GAMEPAD_RSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTX},
+    {SETTING_GAMEPAD_RSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTX},
+    {SETTING_GAMEPAD_RSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTY},
+    {SETTING_GAMEPAD_RSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTY},
+    {SETTING_GAMEPAD_LTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERLEFT},
+    {SETTING_GAMEPAD_RTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},
+    {SETTING_GAMEPAD_BUTTON_A,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_A},
+    {SETTING_GAMEPAD_BUTTON_B,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_B},
+    {SETTING_GAMEPAD_BUTTON_X,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_X},
+    {SETTING_GAMEPAD_BUTTON_Y,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_Y},
+    {SETTING_GAMEPAD_BUTTON_BACK,           TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_BACK},
+    {SETTING_GAMEPAD_BUTTON_GUIDE,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_GUIDE},
+    {SETTING_GAMEPAD_BUTTON_START,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_START},
+    {SETTING_GAMEPAD_BUTTON_LEFT_STICK,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSTICK},
+    {SETTING_GAMEPAD_BUTTON_RIGHT_STICK,    TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSTICK},
+    {SETTING_GAMEPAD_BUTTON_LEFT_SHOULDER,  TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
+    {SETTING_GAMEPAD_BUTTON_RIGHT_SHOULDER, TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
+    {SETTING_GAMEPAD_BUTTON_DPAD_UP,        TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_UP},
+    {SETTING_GAMEPAD_BUTTON_DPAD_DOWN,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_DOWN},
+    {SETTING_GAMEPAD_BUTTON_DPAD_LEFT,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_LEFT},
+    {SETTING_GAMEPAD_BUTTON_DPAD_RIGHT,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_RIGHT}
+};
+
+// How many times the gamepad's controls were freed: poll_gamepad() stops reading a list a command
+// it ran rebuilt under it
+static unsigned int gamepad_controls_freed = 0;
+
+// A function to count the gamepad's control labels
+int gamepad_label_count(void)
+{
+    return (int) (sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]));
+}
+
+// A function to get a gamepad control label's type and SDL index
+const struct gamepad_info *gamepad_label_info(int index)
+{
+    return index >= 0 && index < gamepad_label_count() ? &GAMEPAD_INFO[index] : NULL;
 }
 
 // A function to add a gamepad control to the linked list
-static void add_gamepad_control(const char *label, const char *cmd)
+void add_gamepad_control(const char *label, const char *cmd)
 {
     if (cmd[0] == '\0')
         return;
-    
-    // Table of gamepad info
-    static const struct gamepad_info info[] = {
-        {SETTING_GAMEPAD_LSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTX},
-        {SETTING_GAMEPAD_LSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTX},
-        {SETTING_GAMEPAD_LSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTY},
-        {SETTING_GAMEPAD_LSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTY},
-        {SETTING_GAMEPAD_RSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTX},
-        {SETTING_GAMEPAD_RSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTX},
-        {SETTING_GAMEPAD_RSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTY},
-        {SETTING_GAMEPAD_RSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTY},
-        {SETTING_GAMEPAD_LTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERLEFT},
-        {SETTING_GAMEPAD_RTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},
-        {SETTING_GAMEPAD_BUTTON_A,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_A},
-        {SETTING_GAMEPAD_BUTTON_B,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_B},
-        {SETTING_GAMEPAD_BUTTON_X,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_X},
-        {SETTING_GAMEPAD_BUTTON_Y,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_Y},
-        {SETTING_GAMEPAD_BUTTON_BACK,           TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_BACK},
-        {SETTING_GAMEPAD_BUTTON_GUIDE,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_GUIDE},
-        {SETTING_GAMEPAD_BUTTON_START,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_START},
-        {SETTING_GAMEPAD_BUTTON_LEFT_STICK,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSTICK},
-        {SETTING_GAMEPAD_BUTTON_RIGHT_STICK,    TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSTICK},
-        {SETTING_GAMEPAD_BUTTON_LEFT_SHOULDER,  TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
-        {SETTING_GAMEPAD_BUTTON_RIGHT_SHOULDER, TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
-        {SETTING_GAMEPAD_BUTTON_DPAD_UP,        TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_UP},
-        {SETTING_GAMEPAD_BUTTON_DPAD_DOWN,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_DOWN},
-        {SETTING_GAMEPAD_BUTTON_DPAD_LEFT,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_LEFT},
-        {SETTING_GAMEPAD_BUTTON_DPAD_RIGHT,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_RIGHT}
-    };
 
     // Find correct gamepad info for label, return if none found
     size_t i;
-    for (i = 0; i < sizeof(info) / sizeof(info[0]); i++) {
-        if (MATCH(info[i].label, label))
+    for (i = 0; i < sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]); i++) {
+        if (MATCH(GAMEPAD_INFO[i].label, label))
             break;
     }
-    if (i == sizeof(info) / sizeof(info[0]))
+    if (i == sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]))
         return;
 
-    // Begin the linked list if none exists
-    static GamepadControl *current_gamepad_control = NULL;
-    if (current_gamepad_control == NULL) {
-        gamepad_controls = malloc(sizeof(GamepadControl));
-        current_gamepad_control = gamepad_controls;
-    }
-
-    // Add another node to the linked list
-    else {
-        current_gamepad_control->next = malloc(sizeof(GamepadControl));
-        current_gamepad_control = current_gamepad_control->next;
-    }
-
-    // Copy the parameters in the struct
-    *current_gamepad_control = (GamepadControl) { 
-        .type     = info[i].type,
-        .index    = info[i].index,
-        .label    = info[i].label,
+    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on
+    GamepadControl *control = malloc(sizeof(GamepadControl));
+    *control = (GamepadControl) {
+        .type     = GAMEPAD_INFO[i].type,
+        .index    = GAMEPAD_INFO[i].index,
+        .label    = GAMEPAD_INFO[i].label,
         .repeat   = 0,
         .next     = NULL
     };
-    current_gamepad_control->cmd = strdup(cmd);
+    control->cmd = strdup(cmd);
+    if (gamepad_controls == NULL)
+        gamepad_controls = control;
+    else {
+        GamepadControl *last = gamepad_controls;
+        while (last->next != NULL)
+            last = last->next;
+        last->next = control;
+    }
+}
+
+// A function to free every hotkey: at quit, and when settings rebuild the list
+void clear_hotkeys(void)
+{
+    while (hotkeys != NULL) {
+        Hotkey *next = hotkeys->next;
+        free(hotkeys->cmd);
+        free(hotkeys);
+        hotkeys = next;
+    }
+}
+
+// A function to free every gamepad control: at quit, and when settings rebuild the list
+void clear_gamepad_controls(void)
+{
+    while (gamepad_controls != NULL) {
+        GamepadControl *next = gamepad_controls->next;
+        free(gamepad_controls->cmd);
+        free(gamepad_controls);
+        gamepad_controls = next;
+    }
+    gamepad_controls_freed++;
+}
+
+// A function to tell how many times the gamepad's controls were freed, so a loop over them can tell
+// that a command it ran rebuilt them (the pointer it holds is then gone)
+unsigned int gamepad_controls_version(void)
+{
+    return gamepad_controls_freed;
 }
 
 // A function to check whether any gamepad control runs a command

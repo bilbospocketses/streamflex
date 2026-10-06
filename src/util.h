@@ -36,6 +36,12 @@ char *find_file(const char *file, int num_prefixes, const char **prefixes);
 void handle_arguments(int argc, char *argv[], char **config_file_path);
 void copy_string(char* dest, const char* string, size_t size);
 void add_hotkey(const char *keycode, const char *cmd);
+void add_gamepad_control(const char *label, const char *cmd);
+void clear_hotkeys(void);
+void clear_gamepad_controls(void);
+unsigned int gamepad_controls_version(void);   // Counts each clear_gamepad_controls()
+int gamepad_label_count(void);
+const struct gamepad_info *gamepad_label_info(int index);
 void random_array(int *array, int array_size);
 void clean_path(char *path);
 void parse_config_file(const char *config_file_path);

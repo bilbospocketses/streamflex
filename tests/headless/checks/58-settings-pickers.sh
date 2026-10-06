@@ -215,7 +215,7 @@ rm -f /tmp/pad-plug /tmp/pad-none
 cfg=$(writable_config f55-frame)
 # shellcheck disable=SC2046
 STREAMFLEX_TEST_PAD=/tmp/pad-none STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$cfg WAIT_FOR='Gamepad connected' \
-    run_keys f58-device Menu $(p58_downs 8) Return Return Down Return Down +p58_plug_in Down Return BackSpace BackSpace BackSpace
+    run_keys f58-device Menu $(p58_downs 8) Return Down Return Down Return Down +p58_plug_in Down Return BackSpace BackSpace BackSpace
 ok=1
 grep -qx 'DeviceIndex=1' "$cfg" && grep -q 'Settings: the pads changed, so the list was made again' "$out/f58-device.log" \
     && ! grep -q 'Settings: the command picker lists' "$out/f58-device.log" && ran_clean f58-device && ok=0
@@ -231,7 +231,7 @@ chmod 666 /tmp/pad-plug
 cfg=$(writable_config f58-device3)
 # shellcheck disable=SC2046
 STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$cfg WAIT_FOR='Test hook: pad plugged in' \
-    run_keys f58-unplug Menu $(p58_downs 8) Return Return Down Return Down Down +p58_pull_out Return BackSpace BackSpace BackSpace
+    run_keys f58-unplug Menu $(p58_downs 8) Return Down Return Down Return Down Down +p58_pull_out Return BackSpace BackSpace BackSpace
 log=$out/f58-unplug.log
 ok=1
 grep -q "Settings: the list's cursor reads Pad 3 (not connected)" "$log" \
@@ -250,7 +250,7 @@ chmod 666 /tmp/pad-plug
 cfg=$(writable_config f58-device3)
 # shellcheck disable=SC2046
 STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$cfg WAIT_FOR='Test hook: pad plugged in' \
-    run_keys f58-keeppin Menu $(p58_downs 8) Return Return Down Return Down +p58_pull_out Up Return BackSpace BackSpace BackSpace
+    run_keys f58-keeppin Menu $(p58_downs 8) Return Down Return Down Return Down +p58_pull_out Up Return BackSpace BackSpace BackSpace
 log=$out/f58-keeppin.log
 cursor=$(sed -n '/Test hook: pad unplugged/,$p' "$log" | grep -o "Settings: the list's cursor reads .*" | sed 's/.*reads //' | tr '\n' '|')
 ok=1
@@ -266,7 +266,7 @@ rm -f /tmp/pad-plug
 # when the pads change closes, and the keys go back to the page
 # shellcheck disable=SC2046
 STREAMFLEX_TEST_FAIL=pads STREAMFLEX_TEST_PAD_PLUG=/tmp/pad-plug CFG=$FX/f55-frame.ini \
-    run_keys f58-padfail Menu $(p58_downs 8) Return Return Down Return +p58_plug_in Down Menu
+    run_keys f58-padfail Menu $(p58_downs 8) Return Down Return Down Return +p58_plug_in Down Menu
 log=$out/f58-padfail.log
 ok=1
 grep -q 'Settings: the pads changed, and the list could not be made again: out of memory' "$log" \

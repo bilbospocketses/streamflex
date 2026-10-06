@@ -47,9 +47,11 @@ link_fileio(test_config_save)
 add_test(NAME config_save COMMAND test_config_save)
 
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
-# sizes through layout.c's parsers, and paths through fileio.c's helpers
+# sizes through layout.c's parsers, paths through fileio.c's helpers, and the key and gamepad
+# bindings through bindings.c's model (whose lines the tests parse with inidoc.c)
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
-  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_settings)
 add_test(NAME settings COMMAND test_settings)

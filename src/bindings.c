@@ -65,6 +65,13 @@ Bindings *bindings_create(bool windows, bool gamepad_on)
     return b;
 }
 
+// A function to follow the gamepad switched on or off while the lists are open: its list has a floor
+// only while it runs
+void bindings_set_gamepad_on(Bindings *b, bool gamepad_on)
+{
+    b->gamepad_on = gamepad_on;
+}
+
 // A function to free the model
 void bindings_free(Bindings *b)
 {

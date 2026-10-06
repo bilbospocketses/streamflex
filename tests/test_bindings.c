@@ -641,8 +641,22 @@ static void test_probation_more(void)
     CHECK(probation_expired(&p, 0x1710u));
 }
 
+// A function to test switching the gamepad's floor as the gamepad is switched on and off while the
+// lists are open: removing OK's only button is refused only while it runs
+static void test_gamepad_switched(void)
+{
+    Bindings *b = loaded(false, "", "ButtonA=:select");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_GAMEPAD, 0, 0, NULL, true), "That would leave no button for OK");
+    bindings_set_gamepad_on(b, false);
+    CHECK(bindings_refuse_change(b, BINDINGS_GAMEPAD, 0, 0, NULL, true) == NULL);
+    bindings_set_gamepad_on(b, true);
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_GAMEPAD, 0, 0, NULL, true), "That would leave no button for OK");
+    bindings_free(b);
+}
+
 int main(void)
 {
+    test_gamepad_switched();
     test_load();
     test_load_lines();
     test_lookups();

@@ -45,6 +45,7 @@ typedef struct {
 typedef struct Bindings Bindings;
 
 Bindings *bindings_create(bool windows, bool gamepad_on);
+void bindings_set_gamepad_on(Bindings *bindings, bool gamepad_on);
 void bindings_free(Bindings *bindings);
 bool bindings_load(Bindings *bindings, BindingsDevice device, const IniDocItem *items, int count);
 int bindings_count(const Bindings *bindings, BindingsDevice device);

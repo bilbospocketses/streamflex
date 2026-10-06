@@ -8,15 +8,36 @@
 #include "settings.h"
 #include "settings_pickers.h"
 #include "settings_fonts.h"
+#include "bindings.h"
 #include "listpick.h"
 #include "colourpick.h"
 #include "fileio.h"
 #include "test_hooks.h"
 #include "util.h"
 #include "debug.h"
+#ifdef _WIN32
+#include <SDL_syswm.h>
+#include "platform/platform.h"
+#endif
 
 extern Config config;
 extern SDL_Renderer *renderer;
+extern Hotkey *hotkeys;
+extern GamepadControl *gamepad_controls;
+
+// The keys bindings.c knows by value, checked against SDL's own
+SDL_COMPILE_TIME_ASSERT(key_return, BIND_KEY_RETURN == SDLK_RETURN);
+SDL_COMPILE_TIME_ASSERT(key_backspace, BIND_KEY_BACKSPACE == SDLK_BACKSPACE);
+SDL_COMPILE_TIME_ASSERT(key_left, BIND_KEY_LEFT == SDLK_LEFT);
+SDL_COMPILE_TIME_ASSERT(key_right, BIND_KEY_RIGHT == SDLK_RIGHT);
+SDL_COMPILE_TIME_ASSERT(key_up, BIND_KEY_UP == SDLK_UP);
+SDL_COMPILE_TIME_ASSERT(key_down, BIND_KEY_DOWN == SDLK_DOWN);
+SDL_COMPILE_TIME_ASSERT(key_application, BIND_KEY_APPLICATION == SDLK_APPLICATION);
+SDL_COMPILE_TIME_ASSERT(key_menu, BIND_KEY_MENU == SDLK_MENU);
+SDL_COMPILE_TIME_ASSERT(key_f1, BIND_KEY_F1 == SDLK_F1);
+SDL_COMPILE_TIME_ASSERT(key_f12, BIND_KEY_F12 == SDLK_F12);
+SDL_COMPILE_TIME_ASSERT(key_f13, BIND_KEY_F13 == SDLK_F13);
+SDL_COMPILE_TIME_ASSERT(key_f24, BIND_KEY_F24 == SDLK_F24);
 
 #define DOT " \xC2\xB7 "       // U+00B7 with a space either side
 #define ALPHA_MARK 230         // The outline round the swatch under the cursor
@@ -46,6 +67,19 @@ static SettingColor previewed;          // The colour the launcher shows while t
 
 static int loading_logged = -1;         // The count "Loading fonts... (N)" last logged
 
+static Capture capture;
+static int capture_device = -1;         // The device being captured from; -1 when no capture runs
+static int pad_held = -1;               // The pad's control held last frame, for its releases
+static bool pad_swallowed = false;      // A pad held as its capture ended: its controls wait until let go
+static int key_held = -1;               // The key last pressed and not yet let go: a capture's starting key
+static int keys_swallowed[2] = { -1, -1 }; // Keys held as a keyboard capture ended: they wait until let go
+static Probation probation;
+static int probation_device = BINDINGS_KEYBOARD;
+static char probation_command[BINDINGS_COMMAND_MAX];
+static bool picking_command = false;    // The list picker chooses a binding's command
+static unsigned int clock_now = 0;      // When the clocks last ran: the countdowns count from it, so they
+                                        // never show a time the clocks have not acted on yet
+
 // The special commands the command picker offers, in its order, after None
 static const char *const SPECIALS[] = {
     SCMD_LEFT, SCMD_RIGHT, SCMD_UP, SCMD_DOWN, SCMD_SELECT, SCMD_BACK, SCMD_HOME, SCMD_SETTINGS,
@@ -68,20 +102,28 @@ static void close_picker(void)
 {
     if (kind == PICKER_COLOUR)
         slot->value = original;
-    if (kind != PICKER_NONE)
+    if (kind != PICKER_NONE && slot != NULL)
         log_debug("Settings: closed the picker for [%s] %s", slot->def->section, slot->def->key);
+    else if (picking_command)
+        log_debug("Settings: closed the command picker for the binding");
     fonts_clear_samples();
     listpick_free(list);
     list = NULL;
     kind = PICKER_NONE;
     slot = NULL;
+    picking_command = false;
     note[0] = '\0';
 }
 
-// A function to let go of everything as settings close
+// A function to let go of everything as settings close: the picker, a capture and the 10 s
 void pickers_end(void)
 {
     close_picker();
+    capture_device = -1;
+    probation.active = false;
+    pad_swallowed = false;
+    key_held = -1;
+    keys_swallowed[0] = keys_swallowed[1] = -1;
 }
 
 // A function to tell whether a picker is open
@@ -143,20 +185,21 @@ static bool fill_commands(ListPick *to)
     return true;
 }
 
-// A function to fill a list for a menu, device, command or font setting; false when out of memory
-static bool fill_list(ListPick *to, const SettingSlot *s)
+// A function to fill a list for a menu, device, command or font setting (or a binding's command);
+// false when out of memory
+static bool fill_list(ListPick *to, SettingType type)
 {
     char text[LISTPICK_TEXT_MAX];
-    if (s->def->type == SET_TYPE_FONT)
+    if (type == SET_TYPE_FONT)
         return fonts_fill(to);
-    if (s->def->type == SET_TYPE_MENU) {
+    if (type == SET_TYPE_MENU) {
         for (int m = 0; m < host.menu_count; m++) {
             if (!listpick_add(to, host.menus[m]->name, host.menus[m]->name, true, NULL))
                 return false;
         }
         return true;
     }
-    if (s->def->type == SET_TYPE_DEVICE) {
+    if (type == SET_TYPE_DEVICE) {
         if (!listpick_add(to, "Any", "-1", true, NULL))
             return false;
         for (int i = 0; i < settings_pad_count(host.model); i++) {
@@ -186,7 +229,7 @@ static void list_value(const SettingSlot *s, char *out, size_t size)
 // NULL when out of memory,
 // whichever step ran out: a list short of rows, or without the file's value, would misstate it.
 // Each step can be made to fail by the harness (test_fail(), STREAMFLEX_TEST_FAIL).
-static ListPick *make_list(const SettingSlot *s, const char *at)
+static ListPick *make_list(SettingType type, const char *at)
 {
     char custom[LISTPICK_TEXT_MAX + 32];
     test_fail("list", true);
@@ -195,11 +238,11 @@ static ListPick *make_list(const SettingSlot *s, const char *at)
     if (made == NULL)
         return NULL;
     test_fail("rows", true);
-    bool filled = fill_list(made, s);
+    bool filled = fill_list(made, type);
     test_fail("rows", false);
-    if (s->def->type == SET_TYPE_DEVICE)
+    if (type == SET_TYPE_DEVICE)
         snprintf(custom, sizeof(custom), "Pad %s (not connected)", at);
-    else if (s->def->type == SET_TYPE_FONT) {
+    else if (type == SET_TYPE_FONT) {
         char name[LISTPICK_TEXT_MAX];
         fileio_base_name(fonts_value_path(at), name, sizeof(name));
         snprintf(custom, sizeof(custom), "Custom: %s", name);
@@ -222,7 +265,7 @@ static void open_list(SettingSlot *s)
 {
     char value[FONT_VALUE_MAX];
     list_value(s, value, sizeof(value));
-    list = make_list(s, value);
+    list = make_list(s->def->type, value);
     if (list == NULL) {
         log_error("Settings: the list cannot open: out of memory");
         return;
@@ -283,15 +326,15 @@ void pickers_open(SettingSlot *s)
 // pads that are gone.
 void pickers_pads_changed(void)
 {
-    if (kind != PICKER_LIST || slot->def->type != SET_TYPE_DEVICE)
-        return;
+    if (kind != PICKER_LIST || slot == NULL || slot->def->type != SET_TYPE_DEVICE)
+        return;   // No slot: a binding's command picker
     char was[LISTPICK_TEXT_MAX];
     char value[LISTPICK_TEXT_MAX];
     const ListPickRow *row = listpick_row(list, listpick_cursor(list));
     copy_string(was, row != NULL ? row->value : "", sizeof(was));
     list_value(slot, value, sizeof(value));
     test_fail("pads", true);
-    ListPick *made = make_list(slot, value);
+    ListPick *made = make_list(slot->def->type, value);
     test_fail("pads", false);
     if (made == NULL) {
         log_error("Settings: the pads changed, and the list could not be made again: out of memory");
@@ -312,7 +355,7 @@ static void fill_open_fonts(void)
     char value[FONT_VALUE_MAX];
     if (fonts_ready()) {
         list_value(slot, value, sizeof(value));
-        list = make_list(slot, value);
+        list = make_list(slot->def->type, value);
     }
     if (list == NULL) {
         log_error("Settings: the list cannot open: out of memory");
@@ -322,10 +365,263 @@ static void fill_open_fonts(void)
     forget_list_log();
 }
 
+// A function to name a key or button for the screen: a key by SDL's name ("Menu" for both of the
+// Menu key's codes), a pad's control by its label; "#<HEX>" for a key SDL cannot name
+void pickers_key_name(int device, int code, char *out, size_t size)
+{
+    if (device == BINDINGS_GAMEPAD) {
+        snprintf(out, size, "%s", bindings_label(code));
+        return;
+    }
+    if (code == BIND_KEY_APPLICATION || code == BIND_KEY_MENU) {
+        snprintf(out, size, "Menu");
+        return;
+    }
+    const char *name = SDL_GetKeyName((SDL_Keycode) code);
+    if (name != NULL && name[0] != '\0')
+        snprintf(out, size, "%s", name);
+    else
+        snprintf(out, size, "#%X", (unsigned int) code);
+}
+
+// A function to start capturing for a device. The key or pad control that started it (OK) is held
+// now: the key last pressed and not let go, or the first control held on a pad; its repeats and its
+// release are not captured.
+void pickers_capture(int device)
+{
+    int starting = device == BINDINGS_KEYBOARD ? key_held : gamepad_pressed_label();
+    capture_device = device;
+    capture_begin(&capture, SDL_GetTicks(), starting);
+    pad_held = device == BINDINGS_GAMEPAD ? starting : -1;
+    log_debug("Settings: capturing a %s", device == BINDINGS_KEYBOARD ? "key" : "button");
+}
+
+// A function to end a capture, with what it caught (`code`, -1 for nothing). Whatever is still held
+// as it ends (the key caught, and the starting key if not yet let go; on a pad, any control) waits
+// until let go, so its repeats never act on the page that comes next.
+static void end_capture(int code)
+{
+    if (capture_device == BINDINGS_KEYBOARD) {
+        keys_swallowed[0] = code;
+        keys_swallowed[1] = capture.starting_held ? capture.starting_code : -1;
+    }
+    else
+        pad_swallowed = true;
+    capture_device = -1;
+}
+
+// A function to hand a capture's end to the pages: the key caught
+static void captured(int code)
+{
+    char name[64];
+    pickers_key_name(capture_device, code, name, sizeof(name));
+    if (capture_device == BINDINGS_KEYBOARD)
+        log_debug("Settings: capture got %s (#%X)", name, (unsigned int) code);
+    else
+        log_debug("Settings: capture got %s", name);
+    end_capture(code);
+    SettingsEvent event = settings_captured(host.model, code);
+    host.event(&event);
+}
+
+// A function to start the 10 s for a change that took a key's navigation away
+void pickers_probation(int device, int code, const char *command)
+{
+    char name[64];
+    probation_begin(&probation, SDL_GetTicks(), code);
+    probation_device = device;
+    snprintf(probation_command, sizeof(probation_command), "%s", command);
+    pickers_key_name(device, code, name, sizeof(name));
+    log_debug("Settings: press %s again within 10 s to keep it", name);
+}
+
+// A function to put back the change the 10 s were for, saying why
+static void revert(const char *why)
+{
+    char name[64];
+    pickers_key_name(probation_device, probation.code, name, sizeof(name));
+    log_debug("Settings: the binding went back: %s %s", name, why);
+    SettingsEvent event = settings_revert_binding(host.model);
+    host.event(&event);
+}
+
+// A function to run the clocks: a capture that caught nothing in 5 s ends with the reason, and a
+// change not confirmed in 10 s goes back. Each frame they run first, before that frame's keys and pad
+// (probation_press() has no clock of its own).
+static void run_clocks(void)
+{
+    unsigned int now = SDL_GetTicks();
+    clock_now = now;
+    if (capture_expired(&capture, now)) {
+        end_capture(-1);
+        log_debug("Settings: the capture caught nothing in 5 s");
+        settings_capture_ended(host.model, "Nothing was pressed in 5 s");
+    }
+    if (probation_expired(&probation, now))
+        revert("was not pressed again within 10 s");
+}
+
+// A function to settle the 10 s as settings close: a change not yet confirmed goes back first
+void pickers_settle(void)
+{
+    if (!probation.active)
+        return;
+    probation.active = false;
+    revert("was not pressed again before settings closed");
+}
+
+// A function to end the 10 s without putting anything back: Discard put everything back already
+void pickers_end_probation(void)
+{
+    probation.active = false;
+}
+
+// A function to tell whether a capture or the 10 s are running, for the caption
+bool pickers_busy(void)
+{
+    return capture_device >= 0 || probation.active;
+}
+
+// A function to take a key while settings are open: during a keyboard capture every key is the
+// capture's (a pad's capture keeps them waiting); a key held as a capture ended waits until let go;
+// during the 10 s, the new key (pressed, not repeated) confirms them. True when the key was taken.
+bool pickers_raw_key(int code, bool repeat)
+{
+    char name[64];
+    run_clocks();
+    key_held = code;   // A repeat is of the key last pressed, which is this one already
+    if (capture_device == BINDINGS_KEYBOARD) {
+        if (capture_press(&capture, SDL_GetTicks(), code, repeat))
+            captured(code);
+        return true;
+    }
+    if (capture_device == BINDINGS_GAMEPAD)
+        return true;
+    if (code == keys_swallowed[0] || code == keys_swallowed[1])
+        return true;
+    if (!repeat && probation_press(&probation, code)) {
+        pickers_key_name(BINDINGS_KEYBOARD, code, name, sizeof(name));
+        log_debug("Settings: kept %s for %s", name, probation_command);
+        settings_keep_binding(host.model);
+        return true;
+    }
+    return false;
+}
+
+// A function to take a key's release while settings are open: a held key let go, and during a capture
+// the starting key's release
+void pickers_raw_release(int code)
+{
+    if (code == key_held)
+        key_held = -1;
+    if (code == keys_swallowed[0])
+        keys_swallowed[0] = -1;
+    if (code == keys_swallowed[1])
+        keys_swallowed[1] = -1;
+    if (capture_device == BINDINGS_KEYBOARD)
+        capture_release(&capture, code);
+}
+
+// A function to take the pad's state each frame (`label`, the first control held; -1 for none): during
+// a pad capture a newly held control is the capture's, and a keyboard capture keeps the pad waiting; a
+// pad held as its capture ended waits until every control is let go. True when the pad's input was
+// taken. (The 10 s are the keyboard's alone: bindings_takes_navigation() is false for the pad.)
+bool pickers_raw_pad(int label)
+{
+    run_clocks();
+    int was = pad_held;
+    pad_held = label;
+    if (capture_device == BINDINGS_GAMEPAD) {
+        // A control held on (the starting one) is ignored by the capture until let go; any other is
+        // caught on its first frame
+        if (was >= 0 && was != label)
+            capture_release(&capture, was);
+        if (label >= 0 && capture_press(&capture, SDL_GetTicks(), label, false))
+            captured(label);
+        return true;
+    }
+    if (capture_device == BINDINGS_KEYBOARD)
+        return true;
+    pad_swallowed = pad_swallowed && label >= 0;
+    return pad_swallowed;
+}
+
+// A function to rebuild the launcher's hotkeys and gamepad controls from the bindings, as they now are:
+// the exit hotkey let go and taken again on Windows (the first :exit on a key it can register, as the
+// model's floor assumes), the gamepad's defaults added again. A control held as they are rebuilt keeps
+// its count, so it does not press again.
+void apply_bindings(const Bindings *bindings)
+{
+    Uint32 repeats[BINDINGS_LABELS];
+    memset(repeats, 0, sizeof(repeats));
+    for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
+        int label = bindings_label_index(control->label);
+        if (label >= 0 && control->repeat > repeats[label])
+            repeats[label] = control->repeat;
+    }
+#ifdef _WIN32
+    clear_exit_hotkey();
+#endif
+    clear_hotkeys();
+    clear_gamepad_controls();
+    int keys = 0;
+    int controls = 0;
+    char code[16];
+    for (int i = 0; i < bindings_count(bindings, BINDINGS_KEYBOARD); i++) {
+        const Binding *b = bindings_at(bindings, BINDINGS_KEYBOARD, i);
+        if (b->removed)
+            continue;
+        snprintf(code, sizeof(code), "#%X", (unsigned int) b->code);
+        add_hotkey(code, b->command);
+        keys++;
+    }
+    for (int i = 0; i < bindings_count(bindings, BINDINGS_GAMEPAD); i++) {
+        const Binding *b = bindings_at(bindings, BINDINGS_GAMEPAD, i);
+        if (b->removed)
+            continue;
+        add_gamepad_control(bindings_label(b->code), b->command);
+        controls++;
+    }
+    if (gamepad_running())
+        add_default_gamepad_controls();
+    for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
+        int label = bindings_label_index(control->label);
+        if (label >= 0)
+            control->repeat = repeats[label];
+    }
+#ifdef _WIN32
+    if (has_exit_hotkey())
+        register_exit_hotkey();
+#endif
+    log_debug("Settings: the bindings now hold %i %s and %i controls", keys, keys == 1 ? "hotkey" : "hotkeys", controls);
+    if (config.debug) {
+        debug_hotkeys(hotkeys);
+        debug_gamepad(gamepad_controls);
+    }
+}
+
+// A function to open the command picker for the binding page's binding, with the cursor on its
+// command. Out of memory it does not open, and says so: the keys stay with the page.
+void pickers_open_binding_command(void)
+{
+    close_picker();
+    list = make_list(SET_TYPE_COMMAND, settings_binding_command(host.model));
+    if (list == NULL) {
+        log_error("Settings: the list cannot open: out of memory");
+        return;
+    }
+    picking_command = true;
+    log_debug("Settings: opened the command picker for the binding");
+    log_debug("Settings: the command picker lists %i rows", listpick_count(list));
+    forget_list_log();
+    kind = PICKER_LIST;
+}
+
 // A function to read more of the font files each frame (settings_fonts.c), and fill the font
-// picker, if it is open, on the frame the reading ends
+// picker, if it is open, on the frame the reading ends; and to run the capture's and the 10 s's clocks
 void pickers_tick(void)
 {
+    run_clocks();
     if (fonts_tick() && kind == PICKER_FONT)
         fill_open_fonts();
 }
@@ -420,6 +716,15 @@ static void list_command(const char *command)
     else
         key = LISTPICK_BACK;
     ListPickResult result = listpick_command(list, key, list_page);
+    if (result == LISTPICK_CHOSEN && picking_command) {
+        // A binding's command goes to the model, not to a slot; it is copied before the list goes
+        char chosen[LISTPICK_TEXT_MAX];
+        snprintf(chosen, sizeof(chosen), "%s", listpick_chosen(list));
+        close_picker();
+        SettingsEvent event = settings_bind_command(host.model, chosen);
+        host.event(&event);
+        return;
+    }
     if (result == LISTPICK_CANCELLED)
         close_picker();
     else if (result == LISTPICK_CHOSEN && kind == PICKER_FONT)
@@ -708,6 +1013,18 @@ const char *pickers_note(void)
         contrast_warning(slot->def->id, shown, warning, sizeof(warning));
         snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colourpick_name(index) : "Custom",
             shown.r, shown.g, shown.b, warning[0] != '\0' ? DOT : "", warning);
+    }
+    // When nothing else is said, a capture or the 10 s count down, from when the clocks last ran (this
+    // frame's, before its caption): a time at which they would have ended is never shown, so the
+    // count stops at 1 s
+    if (note[0] == '\0' && capture_device >= 0)
+        snprintf(note, sizeof(note), "Press the key or button" "\xE2\x80\xA6" " (%u s)",
+            ((unsigned int) BINDINGS_CAPTURE_MS - (clock_now - capture.started) + 999) / 1000);
+    else if (note[0] == '\0' && probation.active) {
+        char name[64];
+        pickers_key_name(probation_device, probation.code, name, sizeof(name));
+        snprintf(note, sizeof(note), "Press %s again within %u s to keep it", name,
+            ((unsigned int) BINDINGS_CONFIRM_MS - (clock_now - probation.started) + 999) / 1000);
     }
     return note;
 }

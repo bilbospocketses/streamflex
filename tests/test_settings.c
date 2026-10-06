@@ -3,6 +3,9 @@
 #include <string.h>
 #include "check.h"
 #include "settings.h"
+#include "bindings.h"
+#include "inidoc.h"
+#include "alloc.h"
 
 #define ARROW " \xE2\x80\xBA "   // U+203A with a space either side, between pages in the page path
 #define TIMES "\xC3\x97"         // U+00D7, the multiplication sign
@@ -1223,8 +1226,547 @@ static void test_row_steps_and_selectable(void)
     settings_free(state);
 }
 
+// A function to name keys in tests: "#<HEX>" for a key, the label for a pad's control
+static void test_namer(int device, int code, char *out, size_t size)
+{
+    if (device == BINDINGS_KEYBOARD)
+        snprintf(out, size, "#%X", (unsigned int) code);
+    else
+        snprintf(out, size, "%s", bindings_label(code));
+}
+
+// A function to give a model bindings loaded from hotkey lines
+static Bindings *with_bindings(SettingsState *state, const char *hotkeys)
+{
+    char text[512];
+    snprintf(text, sizeof(text), "[Hotkeys]\n%s\n", hotkeys);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    IniDocItem items[8];
+    Bindings *b = bindings_create(false, true);
+    CHECK(bindings_load(b, BINDINGS_KEYBOARD, items, inidoc_list(doc, "Hotkeys", NULL, items, 8)));
+    inidoc_free(doc);
+    settings_set_bindings(state, b, test_namer);
+    return b;
+}
+
+// A function to test adding a hotkey: Add binding, capture, Keep, then the command, which commits it
+static void test_add_binding(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:quit");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].label, "Add binding");
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_BINDING);
+    CHECK_STR(rows[1].label, "#4000003A");
+    CHECK_STR(rows[1].value, "Quit StreamFlex");
+    CHECK_INT(rows[count - 1].kind, SETTINGS_ROW_NOTE);
+
+    // Add binding: the page of a new binding, its key first
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_CAPTURE);
+    CHECK_INT(event.device, BINDINGS_KEYBOARD);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CAPTURE);
+
+    // A refused key ends the capture with its reason; a good one asks to keep it
+    settings_capture_ended(state, NULL);
+    settings_command(state, SETTINGS_OK);
+    event = settings_captured(state, BIND_KEY_LEFT);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK(strstr(settings_notice(state), "keep their own meaning") != NULL);
+    settings_command(state, SETTINGS_OK);
+    settings_captured(state, 0x4000003E);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CONFIRM);
+    CHECK_STR(row_labelled(state, rows, "Keep")->label, "Keep");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);   // Keep
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003E");
+
+    // The command commits the new binding
+    cursor_to(state, "Command");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_PICK_COMMAND);
+    event = settings_bind_command(state, ":home");
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK(!event.confirm);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 2);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":home");
+    CHECK(settings_any_changed(state));
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to test a change that takes Up's navigation away: allowed while another key goes up,
+// flagged for the 10 s, and reverted when it is not confirmed
+static void test_navigation_confirm(void)
+{
+    SettingsState *state = open_model();
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:up");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    settings_command(state, SETTINGS_OK);                    // Add binding
+    settings_command(state, SETTINGS_OK);                    // Key
+    settings_captured(state, BIND_KEY_UP);
+    settings_command(state, SETTINGS_OK);                    // Keep
+    SettingsEvent event = settings_bind_command(state, ":quit");
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK(event.confirm);
+    CHECK_INT(event.code, BIND_KEY_UP);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 2);
+    event = settings_revert_binding(state);
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK(bindings_at(b, BINDINGS_KEYBOARD, 1)->removed);
+    CHECK(!settings_any_changed(state));
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to test Remove: greyed with the floor's reason for the last way to a command, and
+// allowed otherwise
+static void test_remove_binding(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:quit");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    settings_command(state, SETTINGS_DOWN);                  // The binding
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    const SettingsRow *remove = row_labelled(state, rows, "Remove");
+    CHECK(remove != NULL && remove->enabled);
+    cursor_to(state, "Remove");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    CHECK(bindings_at(b, BINDINGS_KEYBOARD, 0)->removed);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);   // Add binding and the note
+
+    // Discard brings it back
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+    cursor_to(state, "Discard changes");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_DISCARD);
+    CHECK(!bindings_at(b, BINDINGS_KEYBOARD, 0)->removed);
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to give a model bindings loaded from lines of both sections, on Windows or not
+static Bindings *with_lines(SettingsState *state, const char *hotkeys, const char *controls, bool windows)
+{
+    char text[2048];
+    snprintf(text, sizeof(text), "[Hotkeys]\n%s\n[Gamepad]\n%s\n", hotkeys, controls);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    IniDocItem items[8];
+    Bindings *b = bindings_create(windows, true);
+    CHECK(bindings_load(b, BINDINGS_KEYBOARD, items, inidoc_list(doc, "Hotkeys", NULL, items, 8)));
+    CHECK(bindings_load(b, BINDINGS_GAMEPAD, items, inidoc_list(doc, "Gamepad", NULL, items, 8)));
+    inidoc_free(doc);
+    settings_set_bindings(state, b, test_namer);
+    return b;
+}
+
+// A function to make a command `length` bytes long, for the length of a line
+static const char *long_command(int length)
+{
+    static char text[512];
+    memset(text, 'x', (size_t) length);
+    text[length] = '\0';
+    return text;
+}
+
+// A function to take a new binding through its key, captured and kept, from its device's list
+static void new_binding(SettingsState *state, int code)
+{
+    cursor_to(state, "Add binding");
+    settings_command(state, SETTINGS_OK);                    // Add binding
+    cursor_to(state, "Key");
+    settings_command(state, SETTINGS_OK);                    // Key: the capture
+    settings_captured(state, code);
+    cursor_to(state, "Keep");
+    settings_command(state, SETTINGS_OK);
+}
+
+// A function to test the binding pages' rows and paths: the Keyboard row's count, the gamepad's
+// bindings on its page, a new binding's page with Cancel, the capture and confirm pages, Try again,
+// and Cancel on the confirm page
+static void test_binding_pages(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    Bindings *b = with_lines(state, "Hotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home", "ButtonY=:quit", false);
+    open_page(state, "Controls");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_INT(row_labelled(state, rows, "Keyboard")->kind, SETTINGS_ROW_LINK);
+    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "2 hotkeys");
+
+    // The gamepad's page: its own rows, then Add binding, its bindings and the built-in note
+    open_page(state, "Gamepad");
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_INT(count, 7);
+    CHECK(rows[3].kind == SETTINGS_ROW_NOTE && strstr(rows[3].note, "next start") != NULL);
+    CHECK_STR(rows[4].label, "Add binding");
+    CHECK_INT(rows[5].kind, SETTINGS_ROW_BINDING);
+    CHECK_STR(rows[5].label, "ButtonY");
+    CHECK_STR(rows[5].value, "Quit StreamFlex");
+    CHECK_INT(rows[5].binding, 0);
+    CHECK(rows[6].kind == SETTINGS_ROW_NOTE && strstr(rows[6].note, "built-in buttons") != NULL);
+
+    // A new binding's page: no key, no command (not those of the binding last open), and Cancel; its
+    // key is captured from the pad
+    open_page(state, "ButtonY");
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "Quit StreamFlex");
+    settings_command(state, SETTINGS_BACK);
+    cursor_to(state, "Add binding");
+    settings_command(state, SETTINGS_OK);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Gamepad" ARROW "Binding");
+    CHECK_STR(row_labelled(state, rows, "Key")->value, "Choose" ELLIPSIS);
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "None");
+    CHECK_INT(row_labelled(state, rows, "Command")->action, SETTINGS_ACTION_BIND_COMMAND);
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_CAPTURE);
+    CHECK_INT(event.device, BINDINGS_GAMEPAD);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Gamepad" ARROW "Binding" ARROW "Press a key");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 1);
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_NOTE);
+    settings_captured(state, 11);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Gamepad" ARROW "Binding" ARROW "Keep it?");
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].note, "Captured: ButtonB");
+
+    // Try again captures again in its place; Cancel on the confirm page keeps no key
+    cursor_to(state, "Try again");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_CAPTURE);
+    CHECK_INT(event.device, BINDINGS_GAMEPAD);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Gamepad" ARROW "Binding" ARROW "Press a key");
+    settings_captured(state, 12);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].note, "Captured: ButtonX");
+    cursor_to(state, "Cancel");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Key")->value, "Choose" ELLIPSIS);
+
+    // Cancel on a new binding's page goes back to the list, adding nothing
+    cursor_to(state, "Cancel");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_GAMEPAD);
+    CHECK_INT(bindings_count(b, BINDINGS_GAMEPAD), 1);
+
+    // The Keyboard row leaves removed hotkeys out of its count
+    settings_command(state, SETTINGS_BACK);
+    bindings_remove(b, BINDINGS_KEYBOARD, 1);
+    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "1 hotkey");
+    bindings_remove(b, BINDINGS_KEYBOARD, 0);
+    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "0 hotkeys");
+    open_page(state, "Keyboard");
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Keyboard");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK(strstr(rows[1].note, "keep their own meaning") != NULL);
+
+    // Changed bindings alone make Discard available
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+    CHECK(row_labelled(state, rows, "Discard changes")->enabled);
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to test editing a binding in place, a command with no key yet, a key whose command
+// comes later, and the 10 s for an existing binding put back as it was; and that a capture's end
+// outside the capture page changes nothing
+static void test_binding_edits(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:quit\nHotkey2=#4000003B;:up");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    CHECK_INT(settings_captured(state, 0x4000003E).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    settings_capture_ended(state, "Nothing was pressed in 5 s");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    CHECK_STR(settings_notice(state), "");
+
+    // An existing binding's page shows its key and command; a new command changes it in place
+    open_page(state, "#4000003A");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003A");
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "Quit StreamFlex");
+    CHECK_STR(settings_binding_command(state), ":quit");
+    SettingsEvent event = settings_bind_command(state, ":home");
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK(!event.confirm);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 2);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 0)->command, ":home");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+
+    // None commits nothing: the page waits for a command
+    open_page(state, "#4000003A");
+    CHECK_INT(settings_bind_command(state, "").kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "None");
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 0)->command, ":home");
+    settings_command(state, SETTINGS_BACK);
+
+    // A command chosen before the key waits for it; Keep then commits the two
+    cursor_to(state, "Add binding");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_bind_command(state, ":sleep").kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "Sleep");
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 2);
+    cursor_to(state, "Key");
+    settings_command(state, SETTINGS_OK);
+    settings_captured(state, 0x4000003E);
+    cursor_to(state, "Keep");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 3);
+    CHECK_INT(bindings_at(b, BINDINGS_KEYBOARD, 2)->code, 0x4000003E);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 2)->command, ":sleep");
+
+    // The new binding's own page offers Remove: a new line is not a line with no name
+    open_page(state, "#4000003E");
+    CHECK(row_labelled(state, rows, "Remove")->enabled);
+    settings_command(state, SETTINGS_BACK);
+
+    // A capture that ends with no reason leaves no notice
+    cursor_to(state, "Add binding");
+    settings_command(state, SETTINGS_OK);
+    settings_command(state, SETTINGS_OK);                    // Key
+    settings_capture_ended(state, NULL);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(settings_notice(state), "");
+    settings_command(state, SETTINGS_BACK);
+
+    // The :up hotkey moved to the Menu key takes its navigation away: unconfirmed, it goes back to
+    // F2, as it was, not removed
+    open_page(state, "#4000003B");
+    cursor_to(state, "Key");
+    settings_command(state, SETTINGS_OK);
+    settings_captured(state, BIND_KEY_APPLICATION);
+    cursor_to(state, "Keep");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK(event.confirm);
+    CHECK_INT(event.code, BIND_KEY_APPLICATION);
+    CHECK_INT(event.device, BINDINGS_KEYBOARD);
+    CHECK_INT(bindings_at(b, BINDINGS_KEYBOARD, 1)->code, BIND_KEY_APPLICATION);
+    CHECK_INT(settings_revert_binding(state).kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_INT(bindings_at(b, BINDINGS_KEYBOARD, 1)->code, 0x4000003B);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":up");
+    CHECK(!bindings_at(b, BINDINGS_KEYBOARD, 1)->removed);
+    CHECK_INT(settings_revert_binding(state).kind, SETTINGS_EVENT_NONE);   // Once
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to test the 10 s holding the pages: while a change waits to be confirmed, no binding's
+// page opens, and the screen says why; kept, they open again. Discard ends the 10 s too.
+static void test_binding_waits(void)
+{
+    SettingsState *state = open_model();
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:up");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    new_binding(state, BIND_KEY_UP);
+    CHECK(settings_bind_command(state, ":quit").confirm);
+    cursor_to(state, "Add binding");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+    CHECK(strstr(settings_notice(state), "Press #40000052 again to keep the last change first") != NULL);
+    cursor_to(state, "#4000003A");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_KEYBOARD);
+
+    // Kept: nothing goes back, and the pages open again
+    settings_keep_binding(state);
+    CHECK_INT(settings_revert_binding(state).kind, SETTINGS_EVENT_NONE);
+    CHECK(!bindings_at(b, BINDINGS_KEYBOARD, 1)->removed);
+    cursor_to(state, "Add binding");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    settings_command(state, SETTINGS_BACK);
+
+    // Another change waiting, then Discard: everything goes back, and nothing waits any more
+    new_binding(state, BIND_KEY_MENU);
+    CHECK(settings_bind_command(state, ":home").confirm);
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+    cursor_to(state, "Discard changes");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_DISCARD);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 1);
+    CHECK_INT(settings_revert_binding(state).kind, SETTINGS_EVENT_NONE);
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function to test the changes the pages refuse, each with its reason and nothing changed: the
+// floor's, a Windows exit hotkey off F1 to F24, a command config.ini cannot hold on one line, and a
+// Remove greyed by the floor or by a line with no name; and a binding the list has no room for
+static void test_binding_refusals(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    Bindings *b = with_bindings(state, "Hotkey1=#40000052;:quit\nHotkey2=#4000003A;:up");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    open_page(state, "#4000003A");                            // F1, the last way up
+    CHECK_INT(settings_bind_command(state, ":home").kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "That would leave no key for Up");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":up");
+    const SettingsRow *remove = row_labelled(state, rows, "Remove");
+    CHECK(!remove->enabled);
+    CHECK_STR(remove->why, "That would leave no key for Up");
+    cursor_to(state, "Remove");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK(!bindings_at(b, BINDINGS_KEYBOARD, 1)->removed);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    settings_free(state);
+    bindings_free(b);
+
+    // A [Hotkeys] line with no name runs, and is listed; removing it would change how the lines after
+    // it read, so Remove is greyed, but its command can change
+    state = open_model();
+    b = with_bindings(state, "=#4000003C;:home");
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    open_page(state, "#4000003C");
+    remove = row_labelled(state, rows, "Remove");
+    CHECK(!remove->enabled);
+    CHECK_STR(remove->why, "This line has no name in config.ini, so removing it would change how the lines after it read");
+    cursor_to(state, "Remove");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK(!bindings_at(b, BINDINGS_KEYBOARD, 0)->removed);
+    CHECK_INT(settings_bind_command(state, ":quit").kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 0)->command, ":quit");
+    settings_free(state);
+    bindings_free(b);
+
+    // The gamepad's floor greys the Remove of OK's only button
+    state = open_model();
+    b = with_lines(state, "", "ButtonA=:select", false);
+    open_page(state, "Controls");
+    open_page(state, "Gamepad");
+    open_page(state, "ButtonA");
+    CHECK_STR(row_labelled(state, rows, "Remove")->why, "That would leave no button for OK");
+    settings_free(state);
+    bindings_free(b);
+
+    // On Windows, the exit hotkey on F12 is refused when the command comes
+    state = open_model();
+    b = with_lines(state, "Hotkey1=#4000003A;:quit", "", true);
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    new_binding(state, BIND_KEY_F12);
+    CHECK_INT(settings_bind_command(state, ":exit").kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "The exit hotkey must be F1 to F24, but not F12");
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 1);
+    settings_free(state);
+    bindings_free(b);
+
+    // A line config.ini cannot hold: a new hotkey is numbered one above the highest HotkeyN (Hotkey99
+    // here: "Hotkey500x", "Hotkez150" and a number too long to read are not numbers), and one more for
+    // each new hotkey before it (Hotkey100); a loaded line keeps its own key; a control is its label
+    state = open_model();
+    b = with_lines(state, "Hotkey98=#4000003A;:quit\nHotkey500x=#4000003B;:home\nHotkey99999999999999999999=#4000003C;:sleep\n"
+                   "HotkeyLongName=#4000003D;:quit\nHotkez150=#40000041;:quit", "", false);
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    new_binding(state, 0x4000003E);                          // "Hotkey99=#4000003E;" is 19 bytes
+    CHECK_INT(settings_bind_command(state, long_command(181)).kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "config.ini cannot hold this binding: it is too long for one line of config.ini (199 bytes at most)");
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 5);
+    CHECK_INT(settings_bind_command(state, long_command(180)).kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_STR(settings_notice(state), "");                   // The refusal's reason goes with it
+    new_binding(state, 0x4000003F);                          // "Hotkey100=#4000003F;" is 20
+    CHECK_INT(settings_bind_command(state, long_command(180)).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_bind_command(state, long_command(179)).kind, SETTINGS_EVENT_BINDINGS);
+    open_page(state, "#4000003D");                            // "HotkeyLongName=#4000003D;" is 25
+    CHECK_INT(settings_bind_command(state, long_command(175)).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_bind_command(state, long_command(174)).kind, SETTINGS_EVENT_BINDINGS);
+    open_page(state, "#4000003A");
+    CHECK_INT(settings_bind_command(state, "kodi ;x").kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "config.ini cannot hold this binding: it has a semicolon after a space, which config.ini would read as a comment");
+    settings_command(state, SETTINGS_BACK);                  // The binding's page, then Keyboard
+    settings_command(state, SETTINGS_BACK);
+    open_page(state, "Gamepad");
+    new_binding(state, 13);                                // "ButtonY=" is 8
+    CHECK_INT(settings_bind_command(state, long_command(192)).kind, SETTINGS_EVENT_MOVED);
+    SettingsEvent event = settings_bind_command(state, long_command(191));
+    CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
+    CHECK_INT(event.device, BINDINGS_GAMEPAD);              // The change is the pad's
+    CHECK_STR(bindings_at(b, BINDINGS_GAMEPAD, 0)->key, "");
+    settings_free(state);
+    bindings_free(b);
+}
+
+// A function standing in for realloc that always fails
+static void *failing_realloc(void *memory, size_t size)
+{
+    (void) memory;
+    (void) size;
+    return NULL;
+}
+
+// A function standing in for free
+static void plain_free(void *memory)
+{
+    free(memory);
+}
+
+// A function to test a binding the list has no room for (out of memory): it says so, and nothing
+// changes; and keys named with no namer, as "#<HEX>"
+static void test_binding_no_room(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    Bindings *b = with_bindings(state, "Hotkey1=#4000003A;:quit\nHotkey2=#4000003B;:quit\nHotkey3=#4000003C;:quit\n"
+        "Hotkey4=#4000003D;:quit\nHotkey5=#4000003E;:quit\nHotkey6=#4000003F;:quit\nHotkey7=#40000040;:quit\n"
+        "Hotkey8=#40000041;:quit");
+    settings_set_bindings(state, b, NULL);
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    CHECK_STR(row_labelled(state, rows, "#4000003A")->value, "Quit StreamFlex");
+    new_binding(state, 0x40000042);
+    static const AllocHooks failing = { failing_realloc, plain_free };
+    alloc_set_hooks(&failing);
+    SettingsEvent event = settings_bind_command(state, ":home");
+    alloc_set_hooks(NULL);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "out of memory");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 8);
+    settings_free(state);
+    bindings_free(b);
+}
+
 int main(void)
 {
+    test_add_binding();
+    test_navigation_confirm();
+    test_remove_binding();
+    test_binding_pages();
+    test_binding_edits();
+    test_binding_waits();
+    test_binding_refusals();
+    test_binding_no_room();
     test_round_trips();
     test_rejects();
     test_steps();
