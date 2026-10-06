@@ -14,7 +14,6 @@
 #include "config_fields.h"
 #include "settings_screen.h"
 #include "settings_pickers.h"
-#include "colourpick.h"
 #include "config_save.h"
 #include "browser.h"
 #include "fileio.h"

@@ -39,6 +39,7 @@ static int shown_last = -1;
 static char shown_cursor[LISTPICK_TEXT_MAX]; // ...and the label of the row under its cursor
 static bool cells_logged = false;       // The colour picker's cells were logged since it opened
 static char custom_shown[8];            // The Custom row's colour last drawn, for the log
+static SettingColor previewed;          // The colour the launcher shows while the colour picker is open
 
 // The special commands the command picker offers, in its order, after None
 static const char *const SPECIALS[] = {
@@ -53,9 +54,14 @@ void pickers_begin(const PickerHost *given)
     kind = PICKER_NONE;
 }
 
-// A function to close the picker on show, if any
+// A function to close the picker on show, if any. No picker open means the slot holds the colour
+// the colour picker opened with: whatever the preview put in it goes, however the picker closes (a
+// choice is made from that original). It is not applied here: as settings close, the fonts and the
+// screen it would be drawn with may be gone, and a Back or Home applies it before closing.
 static void close_picker(void)
 {
+    if (kind == PICKER_COLOUR)
+        slot->value = original;
     if (kind != PICKER_NONE)
         log_debug("Settings: closed the picker for [%s] %s", slot->def->section, slot->def->key);
     listpick_free(list);
@@ -127,7 +133,6 @@ static bool fill_commands(ListPick *to)
                 return false;
         }
     }
-    log_debug("Settings: the command picker lists %i rows", listpick_count(to));
     return true;
 }
 
@@ -205,6 +210,8 @@ static void open_list(SettingSlot *s)
         log_error("Settings: the list cannot open: out of memory");
         return;
     }
+    if (s->def->type == SET_TYPE_COMMAND)
+        log_debug("Settings: the command picker lists %i rows", listpick_count(list));
     forget_list_log();
     kind = PICKER_LIST;
 }
@@ -221,6 +228,7 @@ void pickers_open(SettingSlot *s)
     original = s->value;
     if (type == SET_TYPE_COLOR) {
         colourpick_open(&colour, s->value.color);
+        previewed = s->value.color;
         cells_logged = false;
         custom_shown[0] = '\0';
         kind = PICKER_COLOUR;
@@ -258,16 +266,7 @@ void pickers_pads_changed(void)
     listpick_free(list);
     list = made;
     forget_list_log();
-    int target = -1;
-    for (int i = 0; i < listpick_count(list) && target < 0; i++) {
-        if (strcmp(listpick_row(list, i)->value, was) == 0)
-            target = i;
-    }
-    while (target >= 0 && listpick_cursor(list) != target) {
-        ListPickCommand toward = listpick_cursor(list) < target ? LISTPICK_DOWN : LISTPICK_UP;
-        if (listpick_command(list, toward, 1) != LISTPICK_MOVED)
-            break;
-    }
+    listpick_move_to(list, was);   // Else the cursor stays on the setting's value, where make_list() put it
     log_debug("Settings: the pads changed, so the list was made again");
 }
 
@@ -276,8 +275,7 @@ void pickers_pads_changed(void)
 static void choose(SettingValue value)
 {
     SettingSlot *s = slot;
-    s->value = original;   // The colour picker's preview changed it; the choice is made from the original
-    close_picker();
+    close_picker();   // It puts back the original the colour picker's preview changed: the choice is made from it
     SettingsEvent event = settings_choose_value(host.model, s, &value);
     if (event.kind == SETTINGS_EVENT_NONE)
         log_debug("Settings: [%s] %s is unchanged", s->def->section, s->def->key);
@@ -285,9 +283,14 @@ static void choose(SettingValue value)
         host.event(&event);
 }
 
-// A function to show a colour in the preview, live, without choosing it
+// A function to show a colour in the preview, live, without choosing it. A key that leaves the
+// colour as it is (a hex digit chosen, the editor opened or left) applies nothing: for the titles,
+// each apply is a reload.
 static void preview_colour(SettingColor shown)
 {
+    if (shown.r == previewed.r && shown.g == previewed.g && shown.b == previewed.b)
+        return;
+    previewed = shown;
     slot->value = original;
     slot->value.color = shown;
     host.apply(slot, true);
@@ -431,10 +434,16 @@ static void draw_colour(int x, int top, int bottom)
 {
     int pad = host.margin / 2;
     int cell = (host.column_width - 2 * pad) / COLOURPICK_COLUMNS;
+    // The swatches, the Custom row and the hex editor's row all end above the key hint, so a short,
+    // wide screen gets smaller swatches
+    int fits = (bottom - top - pad - 2 * host.row_height) / COLOURPICK_ROWS;
+    if (cell > fits)
+        cell = fits;
     int current = colourpick_find(colour.original);
     if (!cells_logged) {
         cells_logged = true;
-        log_debug("Settings: the colour picker draws %i px cells from %i,%i", cell, x + pad, top);
+        log_debug("Settings: the colour picker draws %i px cells from %i,%i, down to %i of %i", cell, x + pad, top,
+            top + COLOURPICK_ROWS * cell + pad + 2 * host.row_height, bottom);
     }
     for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
         SettingColor c = colourpick_swatch(i);

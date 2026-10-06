@@ -42,6 +42,7 @@ void listpick_free(ListPick *pick);
 bool listpick_add(ListPick *pick, const char *label, const char *value, bool enabled, const char *why);
 bool listpick_has(const ListPick *pick, const char *value);
 bool listpick_select(ListPick *pick, const char *value, const char *custom_row_label);
+bool listpick_move_to(ListPick *pick, const char *value);
 ListPickResult listpick_command(ListPick *pick, ListPickCommand command, int page_rows);
 int listpick_count(const ListPick *pick);
 const ListPickRow *listpick_row(const ListPick *pick, int index);

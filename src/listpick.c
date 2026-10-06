@@ -116,6 +116,17 @@ bool listpick_select(ListPick *pick, const char *value, const char *custom_row_l
     return insert_row(pick, 0, custom_row_label, value, true, NULL, true);
 }
 
+// A function to put the cursor on the row that gives a value, pinning and unpinning nothing (a
+// Custom row stays); false, with the cursor where it was, when no row but the Custom row gives it
+bool listpick_move_to(ListPick *pick, const char *value)
+{
+    int at = find(pick, value);
+    if (at < 0)
+        return false;
+    pick->cursor = at;
+    return true;
+}
+
 // A function to act on one key: move, page, choose or cancel
 ListPickResult listpick_command(ListPick *pick, ListPickCommand command, int page_rows)
 {

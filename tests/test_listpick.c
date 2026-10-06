@@ -95,6 +95,28 @@ static void test_custom(void)
     listpick_free(pick);
 }
 
+// A function to test moving the cursor to a value: a Custom row pinned before stays pinned, and a
+// value no row gives (the Custom row's own included) leaves the cursor where it was
+static void test_move_to(void)
+{
+    ListPick *pick = sample();
+    CHECK(listpick_select(pick, "retroarch -f", "Custom: retroarch -f"));
+    CHECK(listpick_move_to(pick, ":quit"));
+    CHECK_INT(listpick_cursor(pick), 4);
+    CHECK_INT(listpick_count(pick), 7);                      // The Custom row is still pinned
+    CHECK(listpick_row(pick, 0)->custom);
+    CHECK_STR(listpick_row(pick, 0)->value, "retroarch -f");
+    CHECK(!listpick_move_to(pick, "not listed"));
+    CHECK_INT(listpick_cursor(pick), 4);
+    CHECK(!listpick_move_to(pick, "retroarch -f"));          // The Custom row is not one of the rows
+    CHECK_INT(listpick_cursor(pick), 4);
+    CHECK(listpick_move_to(pick, ""));
+    CHECK_INT(listpick_cursor(pick), 1);
+    CHECK_INT(listpick_command(pick, LISTPICK_OK, 3), LISTPICK_CHOSEN);
+    CHECK_STR(listpick_chosen(pick), "");
+    listpick_free(pick);
+}
+
 // A function to test a picker that outgrows its first rows, as the command and font pickers do
 static void test_grow(void)
 {
@@ -145,6 +167,7 @@ int main(void)
     test_moves();
     test_choose();
     test_custom();
+    test_move_to();
     test_grow();
     test_empty();
     return check_report();
