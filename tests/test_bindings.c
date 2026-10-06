@@ -257,10 +257,14 @@ static void test_floor_keyboard(void)
     CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
     bindings_free(b);
 
-    // Windows registers an :exit hotkey with Windows instead (add_hotkey()): it takes no key, and
-    // hides no hotkey after it on its key. Elsewhere it is a hotkey like any other.
+    // Windows keeps an :exit hotkey out of the hotkey list (add_hotkey()), so it takes no key and hides
+    // no hotkey after it on its key. But the first :exit on a key Windows can register (F1-F11, F13-F24:
+    // keycode_convert.h) is registered system-wide (set_exit_hotkey(), register_exit_hotkey()): that key
+    // never reaches SDL, so no hotkey on it runs, before or after the :exit. Elsewhere :exit is a hotkey
+    // like any other.
     static const char *const exit_on_up = "Hotkey1=#40000052;:exit\nHotkey2=#4000003A;:up";
     static const char *const exit_first = "Hotkey1=#4000003A;:exit\nHotkey2=#4000003A;:up";
+    static const char *const exit_unregistered = "Hotkey1=#61;:exit\nHotkey2=#61;:up";
     b = loaded(true, exit_on_up, "");
     CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, 1, 0, NULL, true) == NULL);
     bindings_free(b);
@@ -268,11 +272,72 @@ static void test_floor_keyboard(void)
     CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, 1, 0, NULL, true), "That would leave no key for Up");
     bindings_free(b);
     b = loaded(true, exit_first, "");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false),
+              "That would leave no key for Up");
+    bindings_remove(b, BINDINGS_KEYBOARD, 0);                      // A removed :exit registers nothing
     CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
     bindings_free(b);
     b = loaded(false, exit_first, "");
     CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false),
               "That would leave no key for Up");
+    bindings_free(b);
+    b = loaded(true, exit_unregistered, "");                       // 'a' cannot be registered
+    CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
+    bindings_free(b);
+    b = loaded(false, exit_unregistered, "");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false),
+              "That would leave no key for Up");
+    bindings_free(b);
+
+    // The first :exit that can be registered is the one that is: an unregistrable one before it does not
+    // stand in its place
+    b = loaded(true, "Hotkey1=#61;:exit\nHotkey2=#4000003A;:exit\nHotkey3=#4000003A;:up", "");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false),
+              "That would leave no key for Up");
+    bindings_free(b);
+
+    // Of two :exit hotkeys Windows can register, the first is registered, and the second's key still runs
+    b = loaded(true, "Hotkey1=#4000003A;:exit\nHotkey2=#4000003B;:exit\nHotkey3=#4000003B;:up\n"
+                     "Hotkey4=#40000052;:home", "");
+    CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, 3, 0, NULL, true) == NULL);
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, 2, 0, NULL, true), "That would leave no key for Up");
+    bindings_free(b);
+
+    // The registered key swallows a hotkey listed before the :exit too; off Windows nothing is registered
+    static const char *const up_then_exit = "Hotkey1=#4000003A;:up\nHotkey2=#4000003A;:exit";
+    b = loaded(true, up_then_exit, "");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false),
+              "That would leave no key for Up");
+    bindings_free(b);
+    b = loaded(false, up_then_exit, "");
+    CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
+    bindings_free(b);
+
+    // F12 cannot be registered: an :exit on it registers nothing, and a hotkey on F12 still runs
+    b = loaded(true, "Hotkey1=#40000045;:exit\nHotkey2=#40000045;:up", "");
+    CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
+    bindings_free(b);
+
+    // A new :exit is weighed as registering its key
+    b = loaded(true, "Hotkey1=#40000052;:home\nHotkey2=#4000003B;:up", "");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, 0x4000003B, ":exit", false),
+              "That would leave no key for Up");
+    bindings_free(b);
+
+    // The keyboard's Left, Right, Return and Backspace are always there: a lone hotkey for their
+    // commands can go
+    static const char *const fixed[] = { ":left", ":right", ":select", ":back" };
+    for (int i = 0; i < 4; i++) {
+        char line[64];
+        snprintf(line, sizeof(line), "Hotkey1=#4000003A;%s", fixed[i]);
+        b = loaded(false, line, "");
+        CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, 0, 0, NULL, true) == NULL);
+        bindings_free(b);
+    }
+
+    // A command is read by its first word, as execute_command() reads it: ":up now" goes up
+    b = loaded(false, "Hotkey1=#4000003A;:up now", "");
+    CHECK(bindings_refuse_change(b, BINDINGS_KEYBOARD, -1, BIND_KEY_UP, ":quit", false) == NULL);
     bindings_free(b);
 
     // Both Menu keys taken in the file, and no hotkey for :settings: nothing for the floor to keep
@@ -318,6 +383,14 @@ static void test_floor_gamepad(void)
               "That would leave no button for Up");
     bindings_free(b);
 
+    // A control is read by its first word, as execute_command() reads it; a longer word is another command
+    b = loaded(false, "", "ButtonA=:select foo");
+    CHECK_STR(bindings_refuse_change(b, BINDINGS_GAMEPAD, 0, 0, NULL, true), "That would leave no button for OK");
+    bindings_free(b);
+    b = loaded(false, "", "ButtonA=:selectx");
+    CHECK(bindings_refuse_change(b, BINDINGS_GAMEPAD, 0, 0, NULL, true) == NULL);
+    bindings_free(b);
+
     // A control removed before still counts for nothing
     b = loaded(false, "", "ButtonA=:select\nButtonX=:select");
     bindings_remove(b, BINDINGS_GAMEPAD, 0);
@@ -344,6 +417,8 @@ static void test_takes_navigation(void)
     CHECK(bindings_takes_navigation(BINDINGS_KEYBOARD, BIND_KEY_APPLICATION, ":quit"));
     CHECK(!bindings_takes_navigation(BINDINGS_KEYBOARD, BIND_KEY_MENU, ":settings"));
     CHECK(!bindings_takes_navigation(BINDINGS_GAMEPAD, BIND_KEY_UP, ":quit"));          // Never on the gamepad
+    CHECK(!bindings_takes_navigation(BINDINGS_KEYBOARD, BIND_KEY_UP, ":up 2"));         // Its first word is :up
+    CHECK(bindings_takes_navigation(BINDINGS_KEYBOARD, BIND_KEY_UP, ":upper"));
 }
 
 // A function to test the edits a save gets: a change, a removal and an addition; a new binding that

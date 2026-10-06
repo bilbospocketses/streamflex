@@ -69,6 +69,9 @@ bool capture_press(Capture *capture, unsigned int now, int code, bool repeat);  
 void capture_release(Capture *capture, int code);
 bool capture_expired(Capture *capture, unsigned int now);                         // true: timed out now
 
+// The 10 s confirmation. probation_press() has no clock, so it would still confirm a press that comes
+// after the 10 s: each frame the caller polls probation_expired() FIRST, and only then feeds that
+// frame's presses to probation_press().
 typedef struct { bool active; unsigned int started; int code; } Probation;
 void probation_begin(Probation *probation, unsigned int now, int code);
 bool probation_press(Probation *probation, int code);                             // true: confirmed

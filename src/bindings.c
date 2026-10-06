@@ -181,14 +181,30 @@ const Binding *bindings_at(const Bindings *b, BindingsDevice device, int index)
     return index >= 0 && index < list->count ? &list->items[index] : NULL;
 }
 
+// A function to tell whether a command is a special command, read as execute_command() reads it: by
+// its first word, up to a space (":up now" is :up)
+static bool command_is(const char *command, const char *name)
+{
+    size_t length = strcspn(command, " ");
+    return strlen(name) == length && strncmp(command, name, length) == 0;
+}
+
 // A function to find a command among the floor's; -1 for another
 static int floor_index(const char *command)
 {
     for (int i = 0; i < FLOOR_COUNT; i++) {
-        if (strcmp(FLOOR[i], command) == 0)
+        if (command_is(command, FLOOR[i]))
             return i;
     }
     return -1;
+}
+
+// A function to tell whether Windows can register a key as the exit hotkey: the keys
+// platform/keycode_convert.h converts (F1-F11 and F13-F24), mirrored here because that table needs
+// SDL's and Windows' headers
+static bool registrable(int code)
+{
+    return (code >= BIND_KEY_F1 && code < BIND_KEY_F12) || (code >= BIND_KEY_F13 && code <= BIND_KEY_F24);
 }
 
 // A function to tell whether a keyboard key is one the dispatcher always takes first
@@ -206,8 +222,7 @@ const char *bindings_refuse_key(const Bindings *b, BindingsDevice device, int co
         return "This key has no code StreamFlex can store (a CEC remote's OK and Back arrive this way on Linux)";
     if (dispatcher_key(code))
         return "The arrows, OK and Back keep their own meaning, so a hotkey on them would never run";
-    bool function_key = (code >= BIND_KEY_F1 && code <= BIND_KEY_F12) || (code >= BIND_KEY_F13 && code <= BIND_KEY_F24);
-    if (b->windows && strcmp(command, ":exit") == 0 && (!function_key || code == BIND_KEY_F12))
+    if (b->windows && strcmp(command, ":exit") == 0 && !registrable(code))
         return "The exit hotkey must be F1 to F24, but not F12";
     return NULL;
 }
@@ -238,10 +253,30 @@ static bool first_on_key(const Bindings *b, const View *view, int i)
     return true;
 }
 
+// A function to find the key Windows registers as the exit hotkey: the first :exit (add_hotkey()'s exact
+// match) on a key it can register, since set_exit_hotkey() keeps the first it can convert; false off
+// Windows, or when there is none
+static bool registered_exit(const Bindings *b, const View *view, int *code)
+{
+    if (!b->windows)
+        return false;
+    for (int i = 0; i < view->count; i++) {
+        const Binding *binding = view_at(view, i);
+        if (!binding->removed && strcmp(binding->command, ":exit") == 0 && registrable(binding->code)) {
+            *code = binding->code;
+            return true;
+        }
+    }
+    return false;
+}
+
 // A function to count each floor command's ways in on the keyboard: the built-in keys (Up, Down and
-// the Menu keys give way to a hotkey on them), then every hotkey the dispatcher lets run
+// the Menu keys give way to a hotkey on them), then every hotkey the dispatcher lets run. On Windows
+// the exit hotkey's key is registered system-wide and never reaches SDL, so no hotkey on it runs.
 static void keyboard_counts(const Bindings *b, const View *view, int *counts)
 {
+    int exit_code = 0;
+    bool exit_registered = registered_exit(b, view, &exit_code);
     bool taken_up = false, taken_down = false, taken_application = false, taken_menu = false;
     for (int i = 0; i < view->count; i++) {
         const Binding *binding = view_at(view, i);
@@ -259,7 +294,8 @@ static void keyboard_counts(const Bindings *b, const View *view, int *counts)
     for (int i = 0; i < view->count; i++) {
         const Binding *binding = view_at(view, i);
         int f = floor_index(binding->command);
-        if (f >= 0 && listed_hotkey(b, binding) && !dispatcher_key(binding->code) && first_on_key(b, view, i))
+        if (f >= 0 && listed_hotkey(b, binding) && !dispatcher_key(binding->code) && first_on_key(b, view, i) &&
+            !(exit_registered && binding->code == exit_code))
             counts[f]++;
     }
 }
@@ -340,17 +376,17 @@ const char *bindings_refuse_change(const Bindings *b, BindingsDevice device, int
 }
 
 // A function to tell whether a keyboard binding takes a key's own navigation away: Up, Down or a
-// Menu key bound to anything but its own command
+// Menu key bound to anything but its own command (read by its first word, as the floor reads it)
 bool bindings_takes_navigation(BindingsDevice device, int code, const char *command)
 {
     if (device != BINDINGS_KEYBOARD)
         return false;
     if (code == BIND_KEY_UP)
-        return strcmp(command, ":up") != 0;
+        return !command_is(command, ":up");
     if (code == BIND_KEY_DOWN)
-        return strcmp(command, ":down") != 0;
+        return !command_is(command, ":down");
     if (code == BIND_KEY_APPLICATION || code == BIND_KEY_MENU)
-        return strcmp(command, ":settings") != 0;
+        return !command_is(command, ":settings");
     return false;
 }
 
