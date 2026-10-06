@@ -13,6 +13,7 @@
 #include "browser.h"
 #include "settings.h"
 #include "listpick.h"
+#include "fontlist.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -664,6 +665,50 @@ static void prove_listpick(void)
     report("the list picker");
 }
 
+// A function to prove that the font list fails cleanly: a face that could not be added is not
+// there, and nothing is left allocated
+static void prove_fontlist(void)
+{
+    for (int n = 1;; n++) {
+        arm(n);
+        FontList *list = fontlist_create();
+        bool added = list != NULL && fontlist_add(list, "/f/a.ttf", 0, "A", "Bold", false) &&
+                     fontlist_add(list, "/f/a.ttf", 1, "A", "Regular", false) &&
+                     fontlist_add(list, "/f/b.ttf", 0, "B", "Regular", true);
+        disarm();
+        if (list != NULL)
+            fontlist_finish(list);
+        CHECK_RUN(failed || (added && fontlist_count(list) == 2 && fontlist_face(list, 1) == 1), n);
+        fontlist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the font list");
+}
+
+// A function to prove that sorting the font list fails cleanly: out of memory, the families keep
+// the order they were found in, and each face still finds its family
+static void prove_fontlist_finish(void)
+{
+    for (int n = 1;; n++) {
+        FontList *list = fontlist_create();
+        CHECK(list != NULL && fontlist_add(list, "/f/b.ttf", 0, "B", "Regular", false) &&
+              fontlist_add(list, "/f/a.ttf", 0, "A", "Regular", false));
+        arm(n);
+        fontlist_finish(list);
+        disarm();
+        const char *first = failed ? "B" : "A";
+        CHECK_RUN(fontlist_count(list) == 2 && strcmp(fontlist_family(list, 0), first) == 0, n);
+        CHECK_RUN(fontlist_find(list, "/f/a.ttf", 0) == (failed ? 1 : 0), n);
+        fontlist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("sorting the font list");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -694,6 +739,8 @@ int main(void)
     prove_settings();
     prove_pads();
     prove_listpick();
+    prove_fontlist();
+    prove_fontlist_finish();
     alloc_set_hooks(NULL);
     return check_report();
 }

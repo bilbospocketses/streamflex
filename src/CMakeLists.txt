@@ -36,6 +36,10 @@ set(SOURCES
   listpick.h
   colourpick.c
   colourpick.h
+  fontlist.c
+  fontlist.h
+  fontscan.c
+  fontscan.h
   browser.c
   browser.h
   settings_screen.c
@@ -82,6 +86,7 @@ else ()
 	shell32
 	ole32
 	uuid
+	advapi32
   )
   target_include_directories(${EXECUTABLE_TITLE} PUBLIC ${INIH_INCLUDE_DIR} ${GETOPT_INCLUDE_DIR})
 endif ()

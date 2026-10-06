@@ -319,9 +319,8 @@ grep -q 'Settings: opened the picker for \[General\] StartupCmd' "$out/f58-quito
 result "pickers: quitting with a list open closes it cleanly (exit $(cat "$out/f58-quitopen.code"))" $ok
 
 # The contrast warning under an image, measured as it loads (blue.png, luminance 0.074): black
-# titles and a black clock read 2.5:1, on the row as well as in the picker. OK on Titles > Font
-# opens nothing yet (the font picker comes later).
-CFG=$FX/f58-image.ini run_keys f58-image Menu Down Down Down Return Down Down Return Down BackSpace \
+# titles and a black clock read 2.5:1, on the row as well as in the picker
+CFG=$FX/f58-image.ini run_keys f58-image Menu Down Down Down Return Down Down Down BackSpace \
     Down Down Down Return $(p58_downs 6) Menu
 log=$out/f58-image.log
 ok=1
@@ -330,7 +329,6 @@ grep -q 'Background: the image on show has a mean luminance of 0.074' "$log" \
        | grep -qF "Settings: the note under the preview says $P58_LOW" \
     && sed -n "/Settings: page Settings${ARROW}Clock\$/,/Settings closed/p" "$log" \
        | grep -qF "Settings: the note under the preview says $P58_LOW" \
-    && ! grep -q 'Settings: opened the picker for \[Titles\] Font' "$log" \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-image && ok=0
 result "pickers: black titles and clock over a blue image warn of 2.5:1 (exit $(cat "$out/f58-image.code"))" $ok
 grep -E 'Background: the image|Low contrast' "$log" | sed 's/^/      /'

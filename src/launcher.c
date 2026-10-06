@@ -17,6 +17,7 @@
 #include "clock.h"
 #include "config_fields.h"
 #include "settings_screen.h"
+#include "settings_pickers.h"
 #include "platform/platform.h"
 
 static void init_sdl(void);
@@ -461,6 +462,7 @@ static void init_sdl_ttf()
 static void cleanup()
 {
     settings_close_now();
+    pickers_quit();   // The font list kept for the session; a font scan's thread is waited for here, before SDL quits
 
     // Stop every feature while the renderer and SDL still run; the clock's stop also waits for
     // its thread

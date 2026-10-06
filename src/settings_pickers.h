@@ -1,5 +1,6 @@
-// The settings screen's pickers: the list picker (commands, the default menu, the device) and the
-// colour picker, drawn in the settings column in place of a page, and the contrast warning. The
+// The settings screen's pickers: the list picker (commands, the default menu, the device), the font
+// picker (a list picker of the installed font families, each drawn in its own face) and the colour
+// picker, drawn in the settings column in place of a page, and the contrast warning. The
 // screen hands them what they draw with and how to apply a value (PickerHost). launcher.h, which has
 // no include guard, must come first (Menu).
 #ifndef SETTINGS_PICKERS_H
@@ -17,6 +18,7 @@ typedef struct {
     int menu_count;
     void (*apply)(const SettingSlot *slot, bool refresh);          // Put a value into the launcher
     void (*event)(const SettingsEvent *event);                    // Hand an event to the pages
+    void (*quiet)(const SettingsEvent *event);                    // Log and store a change, without refreshing
     void (*text)(TTF_Font *font, const char *text, int x, int y, int max_width, Uint8 alpha, bool right);
     int (*row)(const SettingsRow *row, bool highlighted, int x, int y, int width, int note_room);
     TTF_Font *font_row;
@@ -37,5 +39,7 @@ void pickers_path(char *out, size_t size);
 const char *pickers_hint(void);
 const char *pickers_note(void);
 void contrast_warning(SettingId id, SettingColor color, char *out, size_t size);
+void pickers_tick(void);    // Each frame: read more faces while the fonts load
+void pickers_quit(void);    // At quit: the font list, kept for the session until then
 
 #endif

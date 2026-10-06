@@ -883,10 +883,9 @@ static void handle_event(const SettingsEvent *event)
             return;
         case SETTINGS_EVENT_PICK:
             // OK on a picker row opens its picker (settings_pickers.c): the colour picker for a
-            // colour, the list picker for the default menu, the device and a command. A font's row
-            // opens nothing until Task 10 adds the font picker. The mappings file (Task 15) is a
-            // browse row, which SETTINGS_EVENT_BROWSE opens. The rows that step still step with
-            // Left and Right.
+            // colour, the font picker for a font, the list picker for the default menu, the device
+            // and a command. The mappings file (Task 15) is a browse row, which
+            // SETTINGS_EVENT_BROWSE opens. The rows that step still step with Left and Right.
             pickers_open(event->slot);
             return;
         case SETTINGS_EVENT_MOVED:
@@ -1366,6 +1365,7 @@ void settings_draw(void)
     if (model == NULL)
         return;
     poll_decode(false);
+    pickers_tick();
 
     // The Menus list's cursor has rested: the preview follows it now
     if (preview_wanted != NULL && SDL_GetTicks() - preview_asked >= PREVIEW_REST_MS) {
@@ -1409,6 +1409,16 @@ void settings_draw(void)
     }
     draw_column(rows, count);
     present_frame();
+}
+
+// A function to log and store a change without refreshing: the font picker's face, which the
+// font's own change refreshes with it
+static void handle_quiet(const SettingsEvent *event)
+{
+    if (event->kind != SETTINGS_EVENT_CHANGED)
+        return;
+    log_change(event->slot, &event->before);
+    apply_slot(event->slot, false);
 }
 
 // A function to open settings over the menu on show
@@ -1463,7 +1473,7 @@ void settings_open(void)
     measure_layout();
     PickerHost host = {
         .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
-        .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
+        .quiet = handle_quiet, .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
         .row_height = row_height, .column_width = column_width, .margin = margin
     };
     pickers_begin(&host);
