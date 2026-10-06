@@ -1797,13 +1797,18 @@ void settings_capture_ended(SettingsState *state, const char *why)
 // commits the binding
 SettingsEvent settings_bind_command(SettingsState *state, const char *command)
 {
+    char before[BINDINGS_COMMAND_MAX];
+    snprintf(before, sizeof(before), "%s", state->pending.command);
     snprintf(state->pending.command, sizeof(state->pending.command), "%s", command);
     SettingsEvent event;
     memset(&event, 0, sizeof(event));
     event.kind = SETTINGS_EVENT_MOVED;
     state->notice[0] = '\0';
-    if (state->pending.code >= 0 && command[0] != '\0')
+    if (state->pending.code >= 0 && command[0] != '\0') {
         event = commit_binding(state);
+        if (event.kind != SETTINGS_EVENT_BINDINGS)   // Refused: the page shows the command it had
+            snprintf(state->pending.command, sizeof(state->pending.command), "%s", before);
+    }
     fix_cursor(state);
     return event;
 }
@@ -1947,11 +1952,15 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_BIND_COMMAND)
                 event.kind = SETTINGS_EVENT_PICK_COMMAND;
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_KEEP) {
+                int before = state->pending.code;
                 state->pending.code = state->pending.captured;
                 state->depth--;
                 event.kind = SETTINGS_EVENT_MOVED;
-                if (state->pending.command[0] != '\0')
+                if (state->pending.command[0] != '\0') {
                     event = commit_binding(state);
+                    if (event.kind != SETTINGS_EVENT_BINDINGS)   // Refused: the page shows the key it had
+                        state->pending.code = before;
+                }
             }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_CANCEL) {
                 state->depth--;

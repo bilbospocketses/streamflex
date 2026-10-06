@@ -464,3 +464,83 @@ for name in f62-revert f62-norepeat f62-capture f62-holdok; do
                                        END { exit bad }' || ok=1
 done
 result "bindings: the countdowns never show 0 s, nor more than their whole time" $ok
+
+# --- Fix round 1 ---
+
+# The 10 s over while the launcher is held up, and the pad's OK pressed on Add binding in that time:
+# the clocks run before the pad's first frame after, so the change has gone back and the binding page
+# opens (the pad is not told to keep the last change first)
+b62_stop_pad_a() { kill -STOP "$2"; sleep 11; : > /tmp/pad-a; kill -CONT "$2"; sleep 0.4; rm -f /tmp/pad-a; sleep 1.5; }
+rm -f /tmp/pad-a
+cfg=$(writable_config f62-uppad)
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
+    run_keys f62-padstop $TO_KEYBOARD Return Return Up Return Down Return $QUIT +b62_stop_pad_a \
+    BackSpace BackSpace BackSpace BackSpace
+log=$out/f62-padstop.log
+ok=1
+grep -q 'Settings: the binding went back: Up was not pressed again within 10 s' "$log" \
+    && sed -n '/Settings: the binding went back/,$p' "$log" \
+       | grep -qxF "Settings: page Settings${B62_ARROW}Controls${B62_ARROW}Keyboard${B62_ARROW}Binding" \
+    && ! grep -q 'keep the last change first' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f62-uppad.ini" "$cfg" && ran_clean f62-padstop && ok=0
+result "bindings: the pad read after the 10 s ended finds the change gone back (exit $(cat "$out/f62-padstop.code"))" $ok
+rm -f /tmp/pad-a
+
+# The pad's OK that starts a keyboard capture, held on past the key caught: it waits until let go, so
+# its repeat does not Keep what the capture caught
+b62_hold_a_capture_f5() { : > /tmp/pad-a; sleep 0.5; xdotool key F5; sleep 1.5; rm -f /tmp/pad-a; sleep 0.5; }
+rm -f /tmp/pad-a
+cfg=$(writable_config f62-padok)
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
+    run_keys f62-padholdkey $TO_KEYBOARD Return +b62_hold_a_capture_f5 BackSpace BackSpace Menu
+log=$out/f62-padholdkey.log
+ok=1
+grep -q 'Settings: capturing a key' "$log" && grep -q 'Settings: capture got F5 (#4000003E)' "$log" \
+    && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
+    && ! grep -q "Settings: the cursor's row reads Key: F5" "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-padholdkey && ok=0
+result "bindings: the pad's OK held through a keyboard capture does not Keep what it caught (exit $(cat "$out/f62-padholdkey.code"))" $ok
+rm -f /tmp/pad-a
+
+# The OK (Return) that starts a pad capture, held on past the button caught: its repeats wait until it
+# is let go, so they do not Keep what the capture caught
+b62_hold_return_pad_b() {
+    xdotool keydown Return; sleep 0.3
+    : > /tmp/pad-b; sleep 0.4; rm -f /tmp/pad-b
+    sleep 1.5; xdotool keyup Return; sleep 0.5
+}
+rm -f /tmp/pad-b
+cfg=$(writable_config f62-pad)
+STREAMFLEX_TEST_PAD=/tmp/pad-b STREAMFLEX_TEST_PAD_BUTTON=b WAIT_FOR='Gamepad connected' CFG=$cfg \
+    run_keys f62-keyholdpad $TO_GAMEPAD Down Down Down Return +b62_hold_return_pad_b BackSpace BackSpace Menu
+log=$out/f62-keyholdpad.log
+ok=1
+grep -q 'Settings: capturing a button' "$log" && grep -q 'Settings: capture got ButtonB' "$log" \
+    && [ "$(sed -n '/Settings: capture got ButtonB/,$p' "$log" | grep -c 'Key Return (#D) detected')" -gt 2 ] \
+    && ! grep -q "Settings: the cursor's row reads Key: ButtonB" "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-keyholdpad && ok=0
+result "bindings: OK held through a pad capture does not Keep what it caught (exit $(cat "$out/f62-keyholdpad.code"))" $ok
+rm -f /tmp/pad-b
+
+# The rebuilt lists out of memory (STREAMFLEX_TEST_FAIL=apply): each hotkey and control that cannot be
+# added is logged and left out, and the launcher runs on
+cfg=$(writable_config f62-padok)
+STREAMFLEX_TEST_FAIL=apply CFG=$cfg run_keys f62-applyfail $TO_KEYBOARD Return Return F5 Return Down Return $QUIT Menu
+log=$out/f62-applyfail.log
+ok=1
+grep -q 'Test hook: apply fails' "$log" && grep -q 'Could not add the hotkey #4000003E: out of memory' "$log" \
+    && grep -q 'Could not add the gamepad control ButtonA: out of memory' "$log" \
+    && grep -qx 'Hotkey1=#4000003E;:quit' "$cfg" && ran_clean f62-applyfail && ok=0
+result "bindings: hotkeys and controls that cannot be added out of memory are left out (exit $(cat "$out/f62-applyfail.code"))" $ok
+
+# A hotkey removed in settings whose line was removed by hand meanwhile: the save skips the removal and
+# says so, without the words about two lines on one key, which only a change written as a new line needs
+b62_remove_line() { sed '/^Hotkey1=/d' "$cfg" > "$out/f62-skipnote.edit"; cat "$out/f62-skipnote.edit" > "$cfg"; sleep 0.5; }
+cfg=$(writable_config f62-note)
+CFG=$cfg run_keys f62-skipnote $TO_KEYBOARD Down Return Down Down +b62_remove_line Return $SAVE
+ok=1
+grep -qxF "Settings: not saved as asked: 'Hotkey1=#4000003E;:home' is not there any more, so its removal is skipped" \
+    "$out/f62-skipnote.log" \
+    && ! grep -q 'Hotkey1=' "$cfg" && grep -qx 'Hotkey2=#4000003F;:home' "$cfg" && ran_clean f62-skipnote && ok=0
+result "bindings: a removal skipped is logged without the two-lines note (exit $(cat "$out/f62-skipnote.code"))" $ok
+grep 'Settings: not saved as asked' "$out/f62-skipnote.log" | sed 's/^/      /'

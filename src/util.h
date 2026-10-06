@@ -22,8 +22,7 @@
 #define DIV_ROUND_UP(a, b) ((a + (b - 1)) / b)
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-struct gamepad_info {
-    const char *label;
+struct gamepad_info {               // A gamepad control's type and SDL index; its label is bindings_label()'s
     int type;
     int index;
 };

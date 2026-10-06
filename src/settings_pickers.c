@@ -397,16 +397,20 @@ void pickers_capture(int device)
 }
 
 // A function to end a capture, with what it caught (`code`, -1 for nothing). Whatever is still held
-// as it ends (the key caught, and the starting key if not yet let go; on a pad, any control) waits
-// until let go, so its repeats never act on the page that comes next.
+// as it ends waits until let go, so its repeats never act on the page that comes next: the key caught
+// and the starting key if not yet let go, any pad control, and after a pad's capture the key held
+// down through it. The OK that started a capture may be on the other device.
 static void end_capture(int code)
 {
     if (capture_device == BINDINGS_KEYBOARD) {
         keys_swallowed[0] = code;
         keys_swallowed[1] = capture.starting_held ? capture.starting_code : -1;
+        pad_swallowed = true;   // A pad control held through the keyboard's capture
     }
-    else
+    else {
+        keys_swallowed[1] = key_held;   // A key held through the pad's capture
         pad_swallowed = true;
+    }
     capture_device = -1;
 }
 
@@ -567,6 +571,7 @@ void apply_bindings(const Bindings *bindings)
     int keys = 0;
     int controls = 0;
     char code[16];
+    test_fail("apply", true);   // The harness can make every addition run out of memory
     for (int i = 0; i < bindings_count(bindings, BINDINGS_KEYBOARD); i++) {
         const Binding *b = bindings_at(bindings, BINDINGS_KEYBOARD, i);
         if (b->removed)
@@ -584,6 +589,7 @@ void apply_bindings(const Bindings *bindings)
     }
     if (gamepad_running())
         add_default_gamepad_controls();
+    test_fail("apply", false);
     for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
         int label = bindings_label_index(control->label);
         if (label >= 0)

@@ -786,14 +786,18 @@ static void close_settings(void)
 
 // A function to log what the save could not make as asked (config_save's notes, one a line). A change
 // written as a new line beside a line changed by hand is not said to have taken effect: the first line
-// on a key or button is the one that runs.
+// on a key or button is the one that runs. That is said of those notes only (config_save.c words them
+// "... is written as a new line"), not of a removal skipped.
 static void log_save_notes(char *notes)
 {
     for (char *line = notes; line[0] != '\0';) {
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end = '\0';
-        log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
+        if (strstr(line, "written as a new line") != NULL)
+            log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
+        else
+            log_debug("Settings: not saved as asked: %s", line);
         if (end == NULL)
             break;
         line = end + 1;

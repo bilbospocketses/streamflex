@@ -15,6 +15,8 @@
 #include "settings.h"
 #include "config_fields.h"
 #include "debug.h"
+#include "alloc.h"
+#include "bindings.h"
 #include "platform/platform.h"
 #include <ini.h>
 
@@ -494,10 +496,18 @@ void add_hotkey(const char *keycode, const char *cmd)
     }
 #endif
 
-    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on
-    Hotkey *hotkey = malloc(sizeof(Hotkey));
+    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on.
+    // Out of memory the hotkey is left out, and the log says so.
+    Hotkey *hotkey = alloc_malloc(sizeof(Hotkey));
+    char *command = alloc_strdup(cmd);
+    if (hotkey == NULL || command == NULL) {
+        alloc_free(hotkey);
+        alloc_free(command);
+        log_error("Could not add the hotkey %s: out of memory", keycode);
+        return;
+    }
     hotkey->keycode = code;
-    hotkey->cmd = strdup(cmd);
+    hotkey->cmd = command;
     hotkey->next = NULL;
     if (hotkeys == NULL)
         hotkeys = hotkey;
@@ -509,35 +519,37 @@ void add_hotkey(const char *keycode, const char *cmd)
     }
 }
 
-// The gamepad's control labels, each with its type and SDL index. bindings.c's LABELS repeats this
-// order: change both together.
+// The gamepad's controls, each with its type and SDL index, in the order of bindings.c's labels: the
+// label of entry i is bindings_label(i), the one list of labels both read, so they cannot drift apart.
+// The table must hold one entry per label, which the assert below holds it to; each row names its label.
 static const struct gamepad_info GAMEPAD_INFO[] = {
-    {SETTING_GAMEPAD_LSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTX},
-    {SETTING_GAMEPAD_LSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTX},
-    {SETTING_GAMEPAD_LSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTY},
-    {SETTING_GAMEPAD_LSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTY},
-    {SETTING_GAMEPAD_RSTICK_XM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTX},
-    {SETTING_GAMEPAD_RSTICK_XP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTX},
-    {SETTING_GAMEPAD_RSTICK_YM,             TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTY},
-    {SETTING_GAMEPAD_RSTICK_YP,             TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTY},
-    {SETTING_GAMEPAD_LTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERLEFT},
-    {SETTING_GAMEPAD_RTRIGGER,              TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},
-    {SETTING_GAMEPAD_BUTTON_A,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_A},
-    {SETTING_GAMEPAD_BUTTON_B,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_B},
-    {SETTING_GAMEPAD_BUTTON_X,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_X},
-    {SETTING_GAMEPAD_BUTTON_Y,              TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_Y},
-    {SETTING_GAMEPAD_BUTTON_BACK,           TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_BACK},
-    {SETTING_GAMEPAD_BUTTON_GUIDE,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_GUIDE},
-    {SETTING_GAMEPAD_BUTTON_START,          TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_START},
-    {SETTING_GAMEPAD_BUTTON_LEFT_STICK,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSTICK},
-    {SETTING_GAMEPAD_BUTTON_RIGHT_STICK,    TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSTICK},
-    {SETTING_GAMEPAD_BUTTON_LEFT_SHOULDER,  TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
-    {SETTING_GAMEPAD_BUTTON_RIGHT_SHOULDER, TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
-    {SETTING_GAMEPAD_BUTTON_DPAD_UP,        TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_UP},
-    {SETTING_GAMEPAD_BUTTON_DPAD_DOWN,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_DOWN},
-    {SETTING_GAMEPAD_BUTTON_DPAD_LEFT,      TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_LEFT},
-    {SETTING_GAMEPAD_BUTTON_DPAD_RIGHT,     TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_RIGHT}
+    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTX},               // LStickX-
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTX},               // LStickX+
+    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTY},               // LStickY-
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTY},               // LStickY+
+    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTX},              // RStickX-
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTX},              // RStickX+
+    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTY},              // RStickY-
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTY},              // RStickY+
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERLEFT},         // LTrigger
+    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},        // RTrigger
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_A},                 // ButtonA
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_B},                 // ButtonB
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_X},                 // ButtonX
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_Y},                 // ButtonY
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_BACK},              // ButtonBack
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_GUIDE},             // ButtonGuide
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_START},             // ButtonStart
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSTICK},         // ButtonLeftStick
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSTICK},        // ButtonRightStick
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSHOULDER},      // ButtonLeftShoulder
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},     // ButtonRightShoulder
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_UP},           // ButtonDPadUp
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_DOWN},         // ButtonDPadDown
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_LEFT},         // ButtonDPadLeft
+    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_RIGHT}         // ButtonDPadRight
 };
+SDL_COMPILE_TIME_ASSERT(gamepad_info_labels, sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]) == BINDINGS_LABELS);
 
 // How many times the gamepad's controls were freed: poll_gamepad() stops reading a list a command
 // it ran rebuilt under it
@@ -562,24 +574,28 @@ void add_gamepad_control(const char *label, const char *cmd)
         return;
 
     // Find correct gamepad info for label, return if none found
-    size_t i;
-    for (i = 0; i < sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]); i++) {
-        if (MATCH(GAMEPAD_INFO[i].label, label))
-            break;
-    }
-    if (i == sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]))
+    int i = bindings_label_index(label);
+    if (i < 0)
         return;
 
-    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on
-    GamepadControl *control = malloc(sizeof(GamepadControl));
+    // Add to the end of the list, found each time: settings rebuild the list, so no tail pointer lives on.
+    // Out of memory the control is left out, and the log says so.
+    GamepadControl *control = alloc_malloc(sizeof(GamepadControl));
+    char *command = alloc_strdup(cmd);
+    if (control == NULL || command == NULL) {
+        alloc_free(control);
+        alloc_free(command);
+        log_error("Could not add the gamepad control %s: out of memory", label);
+        return;
+    }
     *control = (GamepadControl) {
         .type     = GAMEPAD_INFO[i].type,
         .index    = GAMEPAD_INFO[i].index,
-        .label    = GAMEPAD_INFO[i].label,
+        .label    = bindings_label(i),
         .repeat   = 0,
         .next     = NULL
     };
-    control->cmd = strdup(cmd);
+    control->cmd = command;
     if (gamepad_controls == NULL)
         gamepad_controls = control;
     else {

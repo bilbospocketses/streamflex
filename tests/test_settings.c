@@ -1631,6 +1631,8 @@ static void test_binding_refusals(void)
     CHECK_STR(settings_notice(state), "That would leave no key for Up");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
     CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":up");
+    CHECK_STR(settings_binding_command(state), ":up");       // The page keeps its command, not the refused one
+    CHECK_STR(row_labelled(state, rows, "Command")->value, "Up");
     const SettingsRow *remove = row_labelled(state, rows, "Remove");
     CHECK(!remove->enabled);
     CHECK_STR(remove->why, "That would leave no key for Up");
@@ -1678,6 +1680,24 @@ static void test_binding_refusals(void)
     CHECK_INT(settings_bind_command(state, ":exit").kind, SETTINGS_EVENT_MOVED);
     CHECK_STR(settings_notice(state), "The exit hotkey must be F1 to F24, but not F12");
     CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 1);
+    settings_free(state);
+    bindings_free(b);
+
+    // On Windows, F12 kept for an exit hotkey is refused at Keep: its page keeps the key it had
+    state = open_model();
+    b = with_lines(state, "Hotkey1=#4000003A;:exit\nHotkey2=#4000003B;:quit", "", true);
+    open_page(state, "Controls");
+    open_page(state, "Keyboard");
+    open_page(state, "#4000003A");
+    cursor_to(state, "Key");
+    settings_command(state, SETTINGS_OK);                    // Key: the capture
+    settings_captured(state, BIND_KEY_F12);
+    cursor_to(state, "Keep");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "The exit hotkey must be F1 to F24, but not F12");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
+    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003A");
+    CHECK_INT(bindings_at(b, BINDINGS_KEYBOARD, 0)->code, 0x4000003A);
     settings_free(state);
     bindings_free(b);
 
