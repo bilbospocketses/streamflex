@@ -84,15 +84,15 @@ echo "      the Custom row read: ${custom:-nothing}"
 # The preview is applied only when the colour it shows changes: in the hex editor, Right, Right and
 # Left choose a digit and leave the colour as it is, and so do opening the editor and leaving it
 # (Up on the second digit then shows #010000, which proves the digit moved). What was last previewed
-# is forgotten as the picker opens again: Lime, the last colour previewed before Back, is previewed
-# again when the cursor reaches it in the picker opened anew.
+# is forgotten as the picker opens again: Teal, the last colour previewed before Back, is previewed
+# again by the first Down in the picker opened anew.
 # shellcheck disable=SC2046
 CFG=$FX/f60-colour.ini run_keys f58-digits Menu Down Return Down Return $(p58_downs 4) Return Right Right Left Up \
-    BackSpace Up BackSpace Return $(p58_downs 3) BackSpace BackSpace BackSpace
+    BackSpace Up Up Up BackSpace Return Down BackSpace BackSpace BackSpace
 log=$out/f58-digits.log
 previews=$(grep -o 'Settings: previewing #[0-9A-F]*' "$log" | sed 's/.* //' | tr '\n' ' ')
 ok=1
-[ "$previews" = '#07606C #808080 #80C040 #000000 #010000 #80C040 #07606C #808080 #80C040 ' ] \
+[ "$previews" = '#07606C #808080 #80C040 #000000 #010000 #80C040 #808080 #07606C #07606C ' ] \
     && [ "$(grep -c 'Settings: the colour picker put \[Background\] Color back' "$log")" = 2 ] \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-digits && ok=0
 result "pickers: a key that leaves the previewed colour as it is applies nothing (exit $(cat "$out/f58-digits.code"))" $ok
