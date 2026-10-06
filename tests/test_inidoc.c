@@ -673,6 +673,20 @@ static void test_list_set_edges(void)
     CHECK_STR(written(doc), "[Gamepad]\n=y\n  ButtonA=:a\n");
     inidoc_free(doc);
 
+    // The other way round: a key with continuation lines renamed to an empty name would let them go,
+    // each an empty-named key of its own (a binding more), so it is refused
+    doc = parse("[S]\nA=1\n  :c\n");
+    CHECK(!inidoc_list_set(doc, 1, "", "1"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), "[S]\nA=1\n  :c\n");
+    inidoc_free(doc);
+
+    // The line keeps its own ending: here none, in a CRLF file
+    doc = parse("[Gamepad]\r\nButtonA=:select\r\nButtonA=:up");
+    CHECK(inidoc_list_set(doc, 2, "ButtonA", ":down"));
+    CHECK_STR(written(doc), "[Gamepad]\r\nButtonA=:select\r\nButtonA=:down");
+    inidoc_free(doc);
+
     // An indented line that starts with '#' or ';' is a comment to inih, not a continuation, so
     // another key may take the line before it
     doc = parse("[Hotkeys]\nHotkey1=#4000003A;:quit\n  #40000045;:home\n");
@@ -723,13 +737,36 @@ static void test_list_remove_edges(void)
 {
     IniDoc *doc = parse("[Gamepad]\nButtonA=:a\n=x\n  :b\n");
     CHECK(!inidoc_list_remove(doc, 2));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");   // Listed, but never removable: say why
     CHECK_STR(written(doc), "[Gamepad]\nButtonA=:a\n=x\n  :b\n");
+    CHECK(inidoc_list_remove(doc, 1));
+    CHECK_STR(inidoc_why(doc), "");                             // The refusal before it is not kept
     inidoc_free(doc);
 
     doc = parse("[Gamepad]\nButtonA=:a\n  ButtonB=:b\n");
     CHECK(!inidoc_list_remove(doc, 0));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
     CHECK(!inidoc_list_remove(doc, 2));
     CHECK_STR(written(doc), "[Gamepad]\nButtonA=:a\n  ButtonB=:b\n");
+    inidoc_free(doc);
+}
+
+// A function to test that a key holding a line break is refused, by every edit: written out, it
+// would split into two lines, and the second could be read as a key or as another key's continuation
+static void test_key_line_break(void)
+{
+    static const char *const text = "[Gamepad]\nButtonA=:select\n";
+    IniDoc *doc = parse(text);
+    CHECK(!inidoc_list_add(doc, "Gamepad", "a\nb", ":x"));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_list_add(doc, "Gamepad", "a\r", ":x"));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_list_set(doc, 1, "a\nb", ":x"));              // A rename
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_set(doc, "Gamepad", "a\n  b", ":x", INIDOC_AFTER_LAST_KEY));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK_STR(written(doc), text);
+    CHECK_STR(inidoc_check_in(doc, "Gamepad", "a\rb", ":x"), "it contains a line break");
     inidoc_free(doc);
 }
 
@@ -758,5 +795,6 @@ int main(void)
     test_list_set_edges();
     test_list_add_edges();
     test_list_remove_edges();
+    test_key_line_break();
     return check_report();
 }

@@ -42,7 +42,7 @@ IniDoc *inidoc_parse(const char *text, size_t length);
 char *inidoc_serialize(const IniDoc *doc, size_t *length);
 const char *inidoc_get(const IniDoc *doc, const char *section, const char *key);
 bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *value, IniDocPlacement placement);
-const char *inidoc_why(const IniDoc *doc);   // Why the last set or add (list mode's too) failed; "" when it succeeded
+const char *inidoc_why(const IniDoc *doc);   // Why the last set, add or list-mode remove failed; "" when it succeeded
 bool inidoc_remove(IniDoc *doc, const char *section, const char *key);
 const char *inidoc_check(const char *key, const char *value);
 const char *inidoc_check_in(const IniDoc *doc, const char *section, const char *key, const char *value);

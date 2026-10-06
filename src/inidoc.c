@@ -32,7 +32,7 @@ struct IniDoc {
     int capacity;
     bool bom;            // The file started with a UTF-8 byte order mark
     const char *eol;     // The ending new lines get: the file's first one, else "\n"
-    const char *why;     // Why the last set or add (list mode's too) failed; "" after one that succeeded
+    const char *why;     // Why the last set, add or list-mode remove failed; "" after one that succeeded
 };
 
 static const char *const EOL_LF = "\n";
@@ -441,11 +441,11 @@ const char *inidoc_get(const IniDoc *doc, const char *section, const char *key)
 }
 
 // A function to say why `key=value` cannot be written so that inih reads it back unchanged,
-// or NULL when it can
+// or NULL when it can. A line break in either would split the line in two when written out.
 const char *inidoc_check(const char *key, const char *value)
 {
     size_t length = strlen(value);
-    if (strchr(value, '\n') != NULL || strchr(value, '\r') != NULL)
+    if (strchr(value, '\n') != NULL || strchr(value, '\r') != NULL || strchr(key, '\n') != NULL || strchr(key, '\r') != NULL)
         return "it contains a line break";
     if (length > 0 && (is_space(value[0]) || is_space(value[length - 1])))
         return "it starts or ends with a space, which config.ini would drop";
@@ -468,12 +468,14 @@ static bool refuse(IniDoc *doc, const char *why)
 }
 
 // A function to say why a key's line would be too long with a new value in place of its old one,
-// or NULL when it would fit. When the key and value fit (inidoc_check), what the line keeps around
-// them is what does not: its comment, or its spacing.
-static const char *too_long_in_line(const Line *line, size_t value_length)
+// or NULL when it would fit. `head` is how many bytes the line will have before the value: its own
+// (line->value_start) when the key stays, or "key=" when list mode writes another key. When the key
+// and value fit (inidoc_check), what the line keeps around them is what does not: its comment, or
+// its spacing.
+static const char *too_long_in_line(const Line *line, size_t head, size_t value_length)
 {
     size_t tail = line->value_start + line->value_length;
-    if (line->value_start + value_length + (line->length - tail) <= INIDOC_MAX_LINE)
+    if (head + value_length + (line->length - tail) <= INIDOC_MAX_LINE)
         return NULL;
     return memchr(line->text + tail, ';', line->length - tail) != NULL ? TOO_LONG_WITH_COMMENT : TOO_LONG_WITH_SPACING;
 }
@@ -488,7 +490,7 @@ static bool replace_value(IniDoc *doc, int i, const char *section, const char *k
     size_t tail = line->value_start + line->value_length;
     size_t value_length = strlen(value);
     size_t new_length = head + value_length + (line->length - tail);
-    const char *too_long = too_long_in_line(line, value_length);
+    const char *too_long = too_long_in_line(line, head, value_length);
     if (too_long != NULL)
         return refuse(doc, too_long);
     Line updated = *line;   // Keeps the line ending; read_line() replaces the name and value
@@ -623,7 +625,7 @@ bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *v
     return ok;
 }
 
-// A function to say why the last inidoc_set() failed; "" when it succeeded
+// A function to say why the last set, add or list-mode remove failed; "" when it succeeded
 const char *inidoc_why(const IniDoc *doc)
 {
     return doc->why;
@@ -640,7 +642,7 @@ const char *inidoc_check_in(const IniDoc *doc, const char *section, const char *
         return reason;
     int i = find_key(doc, section, key);
     if (i >= 0)
-        return too_long_in_line(&doc->lines[i], strlen(value));
+        return too_long_in_line(&doc->lines[i], doc->lines[i].value_start, strlen(value));
     if (find_header(doc, section) < 0 && strlen(section) + 2 > INIDOC_MAX_LINE)
         return SECTION_TOO_LONG;
     return NULL;
@@ -730,14 +732,17 @@ bool inidoc_list_set(IniDoc *doc, int line, const char *key, const char *value)
         return refuse(doc, reason);
     Line *old = &doc->lines[line];
     bool same_key = strcmp(old->name, key) == 0;
+    // Needed beside the read-back below, which cannot see this case: renamed to an empty name, the
+    // key ends its continuation lines (inih empties prev_name), and each becomes a key of its own
     if (!same_key && has_continuations(doc, line))
         return refuse(doc, NO_SAFE_PLACE);
     size_t tail = old->value_start + old->value_length;
     size_t head = same_key ? old->value_start : strlen(key) + 1;
     size_t value_length = strlen(value);
     size_t new_length = head + value_length + (old->length - tail);
-    if (new_length > INIDOC_MAX_LINE)
-        return refuse(doc, memchr(old->text + tail, ';', old->length - tail) != NULL ? TOO_LONG_WITH_COMMENT : TOO_LONG_WITH_SPACING);
+    const char *too_long = too_long_in_line(old, head, value_length);
+    if (too_long != NULL)
+        return refuse(doc, too_long);
     Line updated = *old;   // Keeps the line ending; read_line() replaces the name and value
     updated.text = alloc_malloc(new_length + 1);
     if (updated.text == NULL)
@@ -830,11 +835,16 @@ bool inidoc_list_add(IniDoc *doc, const char *section, const char *key, const ch
 }
 
 // A function to remove one line of a list section, with its continuation lines, so none is left for
-// inih to read as the value of the key before it
+// inih to read as the value of the key before it. A key with an empty name is refused, as
+// inidoc_remove() refuses it: the indented lines after it are keys of their own, and with it gone
+// they would become the key before it's continuations. inidoc_why() says why a remove failed.
 bool inidoc_list_remove(IniDoc *doc, int line)
 {
-    if (line < 0 || line >= doc->count || doc->lines[line].kind != LINE_KEY || doc->lines[line].name[0] == '\0')
-        return false;
+    doc->why = "";
+    if (line < 0 || line >= doc->count || doc->lines[line].kind != LINE_KEY)
+        return refuse(doc, NOT_A_KEY);
+    if (doc->lines[line].name[0] == '\0')
+        return refuse(doc, NO_SAFE_PLACE);
     remove_continuations(doc, line);
     remove_line(doc, line);
     return true;
