@@ -137,8 +137,8 @@ $runShard = {
 }
 
 # A function to merge a pass whose shards have all ended, and print its line. The pass is good
-# only when merge.py said so in words ("complete" and "0 failed") and by its exit code: a merge
-# that never ran says neither.
+# only when merge.py said so in words ("complete" and "0 failed") and by its exit code, and every
+# shard's container exited 0: a merge that never ran says neither.
 function Merge-Pass($pass) {
     $logs = @($pass.Shards.Log)
     $lines = @(& $python.Source $merge --leg $pass.Label @logs 2>&1 | ForEach-Object { "$_" })
@@ -146,7 +146,8 @@ function Merge-Pass($pass) {
     Set-Content -Path "$OutDir/$($pass.Label).merged.log" -Value $lines -Encoding utf8NoBOM
     $summary = $lines | Where-Object { $_ -like "$($pass.Label): * PASS, *" } | Select-Object -Last 1
     $failed = $lines | Where-Object { $_ -match '^\d+ failed$' } | Select-Object -Last 1
-    $pass.Ok = $code -eq 0 -and $summary -like '*, complete' -and $failed -eq '0 failed'
+    $exits = @($pass.Shards | Where-Object { $_.Rc -isnot [int] -or $_.Rc -ne 0 })
+    $pass.Ok = $code -eq 0 -and $summary -like '*, complete' -and $failed -eq '0 failed' -and -not $exits
     $started = @($pass.Shards | Where-Object Start)
     $times = ($pass.Shards | ForEach-Object {
         if ($_.Start) { "s$($_.K) $(Span ($_.End - $_.Start))" } else { "s$($_.K) not started" }
@@ -155,6 +156,7 @@ function Merge-Pass($pass) {
     if ($started) { $wall = Span ((@($started.End | Sort-Object)[-1]) - (@($started.Start | Sort-Object)[0])) }
     if (-not $summary) { $summary = "$($pass.Label): merge.py gave no result (exit $code)" }
     $pass.Line = "{0}; {1}; wall {2} ({3})" -f $summary, ($failed ?? 'no count'), $wall, $times
+    if ($exits) { $pass.Line += '; exits: ' + (($exits | ForEach-Object { "s$($_.K) $($_.Rc)" }) -join ', ') }
     Say $pass.Line
 }
 
@@ -202,7 +204,7 @@ try {
         }
         foreach ($s in @($running)) {
             if ($s.Job.State -notin 'Completed', 'Failed', 'Stopped') { continue }
-            $s.End = Get-Date
+            $s.End = $s.Job.PSEndTime ?? (Get-Date)
             $s.Rc = @(Receive-Job $s.Job -ErrorAction SilentlyContinue) | Select-Object -Last 1
             if ($null -eq $s.Rc) { $s.Rc = "lost ($($s.Job.State))" }
             Remove-Job $s.Job

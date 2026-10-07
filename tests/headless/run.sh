@@ -57,9 +57,9 @@ rm -rf "$out"; mkdir -p "$out"
 rm -rf /work; mkdir -p /work
 tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out -cf - . | tar -C /work -xf -
 
-# Seconds each check file took in the full passes of 2026-10-07 (the mean of t15f3's four, after
-# the build). They only balance the shards: a check file missing here counts as 60 s, and a
-# stale time makes the shards uneven, never a check lost or run twice.
+# Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
+# passes at 8c37db5, after the build). They only balance the shards: a check file missing here
+# counts as 60 s, and a stale time makes the shards uneven, never a check lost or run twice.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
