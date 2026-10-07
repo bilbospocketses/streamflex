@@ -5,6 +5,9 @@
 # helpers take their strings as written, a pixel probe must have points to read, the checks run
 # with nullglob off, and a listed leak is a failure
 
+# Every shard runs this file (run.sh <label> [leaks] K/N): a shard is a run of its own, so it
+# proves the helpers it relies on itself.
+
 # Stand-in launchers, run as the test user as the real one is
 mkdir -p /tmp/harness
 cat > /tmp/harness/slow-start << EOF
