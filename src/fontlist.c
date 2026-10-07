@@ -44,6 +44,30 @@ static int compare_names(const char *a, const char *b)
     return fileio_lower(*a) - fileio_lower(*b);
 }
 
+// A function to tell a font file by its extension: TrueType or OpenType, single or a collection
+bool fontlist_is_font_name(const char *name)
+{
+    static const char *const extensions[] = { ".ttf", ".otf", ".ttc", ".otc" };
+    size_t length = strlen(name);
+    for (size_t i = 0; i < sizeof(extensions) / sizeof(extensions[0]); i++) {
+        if (length <= 4)
+            continue;
+        size_t k = 0;
+        while (k < 4 && fileio_lower(name[length - 4 + k]) == extensions[i][k])
+            k++;
+        if (k == 4)
+            return true;
+    }
+    return false;
+}
+
+// A function to tell a listed entry the font scan takes: a regular file (never a pipe, socket or
+// device, whose read could wait for good) with a font's extension
+bool fontlist_is_font_file(const FileioEntry *entry)
+{
+    return entry->is_file && fontlist_is_font_name(entry->name);
+}
+
 // A function to make an empty list; NULL when out of memory
 FontList *fontlist_create(void)
 {

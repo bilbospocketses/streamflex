@@ -145,64 +145,70 @@ ran_clean f60-running && grep -q 'Settings: nothing changed' "$out/f60-running.l
 result "settings: switching modes while a slideshow runs frees its fade cleanly (exit $(cat "$out/f60-running.code"))" $ok
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
 
-# A function to stand in for a slow disk under the named pipe PIPE. Opening a pipe to read it
-# waits until something opens it to write, so a read of it waits until this function answers
-# (and then fails at once: SDL_image cannot use a file it cannot seek in). It answers the
-# slideshow's first image, read on the main thread as the launcher starts, at once. Then it
-# answers nothing until the file RELEASE exists, which holds the slideshow's loader thread in its
-# read of PIPE (and writes HELD once that thread is running), and after that everything at once.
-hold_pipe() {
-    local pipe=$1 held=$2 release=$3
-    until grep -q 'Background set up' "$LOG" 2> /dev/null; do
-        python3 -c 'import os, sys; os.close(os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK))' "$pipe" 2> /dev/null
-        sleep 0.1
-    done
-    until [ -e "$release" ]; do
-        grep -q '^Slideshow' /proc/[0-9]*/task/*/comm 2> /dev/null && : > "$held"
-        sleep 0.2
-    done
-    while :; do exec 3> "$pipe"; exec 3>&-; done
-}
-# Functions for +keys: wait up to 30 s for hold_pipe to hold the loader thread, and release it
-loader_held() { local i; for i in $(seq 150); do [ -e /tmp/loader-held ] && return; sleep 0.2; done; }
-release_loader() { : > /tmp/loader-release; }
+# The slideshow's loader thread is held back before its read by the test hook
+# STREAMFLEX_TEST_SLIDESHOW_DELAY_MS (in the harness's build only), as a slow disk would hold it.
+# Functions for +keys: wait up to 30 s for the loader thread to be running, and then tell whether
+# it still is at a later moment. Each writes its file only when the thread is there.
+loader_running() { grep -q '^Slideshow' /proc/[0-9]*/task/*/comm 2> /dev/null; }
+loader_held() { local i; for i in $(seq 150); do loader_running && { : > /tmp/loader-held; return; }; sleep 0.2; done; }
+still_held() { loader_running && : > /tmp/loader-still-held; }
 
-# Stepping the mode while the slideshow's loader thread is still reading the next image. In
-# ~/loading, a.png is a picture and b.png a pipe that hold_pipe answers. Whichever the shuffle
-# puts first, only a.png loads as the launcher starts, so the loader's first read is b.png, and
-# it is held until after the step. The step must wait for the thread and drop the image it read
-# (a.png again, once b.png fails), before any fade began.
-rm -rf "$TESTER_HOME/loading" /tmp/loader-held /tmp/loader-release "$LOG"
+# Stepping the mode while the slideshow's loader thread is still loading the next image. The hook
+# holds it for 8 s from its start (the first change, 5 s in), and the step comes about 3 s into
+# that, the thread still running then. The step must wait for the thread and drop the image it read,
+# before any fade began. ~/loading also holds c.png, a pipe named like an image that nothing writes:
+# a scan that took it would hold the launcher, or this loader, in its read for good.
+rm -rf "$TESTER_HOME/loading" /tmp/loader-held /tmp/loader-still-held "$LOG"
 mkdir -p "$TESTER_HOME/loading"
 cp "$TESTER_HOME/Pictures/red.png" "$TESTER_HOME/loading/a.png"
-mkfifo "$TESTER_HOME/loading/b.png"
+cp "$TESTER_HOME/Pictures/blue.png" "$TESTER_HOME/loading/b.png"
+mkfifo "$TESTER_HOME/loading/c.png"
 chown -R tester:tester "$TESTER_HOME/loading"
-hold_pipe "$TESTER_HOME/loading/b.png" /tmp/loader-held /tmp/loader-release &
-holder=$!
-UNTIL='Settings: nothing changed' run_keys f60-loading +loader_held Menu Down Return Right +release_loader Left BackSpace BackSpace
-kill "$holder"; wait "$holder" 2> /dev/null
+STREAMFLEX_TEST_SLIDESHOW_DELAY_MS=8000 UNTIL='Settings: nothing changed' \
+    run_keys f60-loading +loader_held Menu Down Return +still_held Right Left BackSpace BackSpace
 ok=1
-[ -e /tmp/loader-held ] && ran_clean f60-loading \
+[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && ran_clean f60-loading \
+    && grep -q 'Found 2 images in directory /home/tester/loading' "$out/f60-loading.log" \
     && ! precedes "$out/f60-loading.log" 'Slideshow: fading in the next image' 'Settings: [Background] Mode Slideshow -> Transparent' \
     && in_range "$out/f60-loading.log" 'Settings: [Background] Mode Slideshow -> Transparent' \
         'Background set up' 'Slideshow: dropped the fade in progress' \
     && ok=0
 result "settings: switching modes while the slideshow loads its next image drops that image (exit $(cat "$out/f60-loading.code"))" $ok
-[ -e /tmp/loader-held ] || echo "      the loader thread was never held on b.png"
+[ -e /tmp/loader-held ] || echo "      the loader thread never ran"
+[ -e /tmp/loader-held ] && [ ! -e /tmp/loader-still-held ] && echo "      the loader thread was done before the step"
 
-# Quitting while the loader thread is held the same way: quit waits for the thread, then frees
-# the image it read (a.png again, once b.png fails) and says so. The leak pass finds one left.
-quit_while_held() { kill -TERM "$2"; sleep 1; : > /tmp/loader-release; }
-rm -f /tmp/loader-held /tmp/loader-release "$LOG"
-hold_pipe "$TESTER_HOME/loading/b.png" /tmp/loader-held /tmp/loader-release &
-holder=$!
-CFG=$FX/f60-loading.ini run_keys f61-quit +loader_held +quit_while_held
-kill "$holder"; wait "$holder" 2> /dev/null
+# Quitting while the loader thread is held the same way (4 s, inside the 10 s stop_run waits after
+# TERM): quit waits for the thread, then frees the image it read and says so. The leak pass finds
+# none left.
+quit_while_held() { still_held; kill -TERM "$2"; sleep 1; }
+rm -f /tmp/loader-held /tmp/loader-still-held "$LOG"
+STREAMFLEX_TEST_SLIDESHOW_DELAY_MS=4000 CFG=$FX/f60-loading.ini run_keys f61-quit +loader_held +quit_while_held
 ok=1
-[ -e /tmp/loader-held ] && ran_clean f61-quit \
+[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && ran_clean f61-quit \
     && sed -n '/Quitting program/,$p' "$out/f61-quit.log" | grep -q 'Slideshow: dropped the fade in progress' && ok=0
 result "quitting while the slideshow loads its next image frees that image (exit $(cat "$out/f61-quit.code"))" $ok
-[ -e /tmp/loader-held ] || echo "      the loader thread was never held on b.png"
+[ -e /tmp/loader-held ] || echo "      the loader thread never ran"
+[ -e /tmp/loader-held ] && [ ! -e /tmp/loader-still-held ] && echo "      the loader thread was done before the quit"
+
+# A slideshow folder with a pipe named like an image (~/loading/c.png, which nothing writes) starts,
+# changes its picture and quits: the scan leaves the pipe out, so no read of it ever waits
+UNTIL='Slideshow: fading in the next image' CFG=$FX/f60-loading.ini run_keys f60-pipeshow
+ok=1
+ran_clean f60-pipeshow && grep -q 'Found 2 images in directory /home/tester/loading' "$out/f60-pipeshow.log" \
+    && grep -q 'Background set up: Slideshow' "$out/f60-pipeshow.log" && ok=0
+result "a slideshow folder holding a pipe named like an image leaves it out, and never waits on it (exit $(cat "$out/f60-pipeshow.code"))" $ok
+grep -E 'images in directory|slideshow directory' "$out/f60-pipeshow.log" | sed 's/^/      /'
+
+# The Image browser in the same folder: it opens on a.png, and Down twice reaches only b.png, the
+# last row, since the pipe is not listed. Highlighting the pipe would start a decode that waits on
+# it for good, and closing the screen would wait on that.
+run_keys f60-pipebrowse Menu Down Return Down Return Down Down Menu
+ok=1
+grep -q 'Settings: the preview shows /home/tester/loading/b.png' "$out/f60-pipebrowse.log" \
+    && ! grep -q 'loading/c.png' "$out/f60-pipebrowse.log" \
+    && grep -q 'Settings: nothing changed' "$out/f60-pipebrowse.log" && ran_clean f60-pipebrowse && ok=0
+result "settings: the Image browser leaves out a pipe named like an image (exit $(cat "$out/f60-pipebrowse.code"))" $ok
+grep -E 'Settings: (browsing|the preview shows|could not open)' "$out/f60-pipebrowse.log" | sed 's/^/      /'
 
 # The Folder row shows the folder's name and its image count: counted when the page opens (the
 # running slideshow's Pictures) and again when a folder is chosen in the browser

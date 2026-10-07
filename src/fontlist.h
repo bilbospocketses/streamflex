@@ -5,8 +5,12 @@
 #define FONTLIST_H
 
 #include <stdbool.h>
+#include "fileio.h"
 
 typedef struct FontList FontList;
+
+bool fontlist_is_font_name(const char *name);             // A font's extension, whatever its case
+bool fontlist_is_font_file(const FileioEntry *entry);     // A regular file with a font's extension
 
 FontList *fontlist_create(void);
 void fontlist_free(FontList *list);

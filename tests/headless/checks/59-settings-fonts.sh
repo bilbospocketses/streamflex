@@ -102,7 +102,9 @@ python3 "$HERE/make_fonts.py" blank "$F59/faces/noupper.ttf" NoUpper a0
 python3 "$HERE/make_fonts.py" blank "$F59/faces/nolower.ttf" NoLower A0
 python3 "$HERE/make_fonts.py" blank "$F59/faces/nodigit.ttf" NoDigit Aa
 python3 "$HERE/make_fonts.py" blank "$F59/faces/nameless.ttf" - Aa0
-mkdir -p "$F59/collections" "$F59/fakedir/1/2/3/4/5/6/7/8/fake.ttf"
+mkdir -p "$F59/collections" "$F59/fakedir/1/2/3/4/5/6/7/8/fake.ttf" "$F59/pipe"
+cp /work/assets/fonts/Inter-Regular.ttf "$F59/pipe/p.ttf"
+mkfifo "$F59/pipe/x.ttf"
 python3 "$HERE/make_fonts.py" blank "$F59/half.ttf" Half Aa0
 python3 "$HERE/make_fonts.py" ttc "$F59/collections/half.ttc" "$F59/half.ttf" -
 python3 "$HERE/make_fonts.py" blank "$F59/many.ttf" Many Aa0
@@ -260,11 +262,13 @@ echo "      DejaVu Sans drawn $drew times, Rob000 not drawn $lost times"
 #   family name opens but lists no family, and one with all of them does (Blank);
 # - collections: a collection whose second face does not open lists its first (Half), and one of
 #   65 faces is read to its 64th (Many) and no further (Last);
-# - fakedir: a folder named like a font file, 8 deep, is not a file
+# - fakedir: a folder named like a font file, 8 deep, is not a file;
+# - pipe: a pipe named like a font file (x.ttf, which nothing writes) is not a file, so it is never
+#   read: a read of it would hold the font list for good
 for scan in 'ext:ext:9 families in 11 files' 'hidden:hidden:7 families in 8 files' \
             'depth:depth:7 families in 8 files' 'twice:twice:7 families in 8 files' \
             'faces:faces:8 families in 13 files' 'collections:collections:9 families in 9 files' \
-            'fakedir:fakedir:7 families in 7 files'; do
+            'fakedir:fakedir:7 families in 7 files' 'pipe:pipe:7 families in 8 files'; do
     IFS=: read -r name dirs found <<< "$scan"
     case $name in
         twice) dirs="$F59/twice/:$F59/twice::/nonexistent" ;;

@@ -2,6 +2,10 @@
 #include <string.h>
 #include "check.h"
 #include "fontlist.h"
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 // A function to find a family's place by name
 static int family(const FontList *list, const char *name)
@@ -118,11 +122,68 @@ static void test_add_after_finish(void)
     fontlist_free(list);
 }
 
+// A function to test which listed entries the font scan takes: a regular file with a font's
+// extension in any case; never a folder, a pipe (whose read would hold the font list for good) or a
+// file with another extension
+static void test_font_files(void)
+{
+    FileioEntry font = { .name = "DejaVuSans.TTF", .is_dir = false, .is_file = true, .hidden = false };
+    FileioEntry collection = { .name = "Noto.ttc", .is_dir = false, .is_file = true, .hidden = false };
+    FileioEntry folder = { .name = "fonts.ttf", .is_dir = true, .is_file = false, .hidden = false };
+    FileioEntry pipe = { .name = "feed.ttf", .is_dir = false, .is_file = false, .hidden = false };
+    FileioEntry notes = { .name = "notes.txt", .is_dir = false, .is_file = true, .hidden = false };
+    CHECK(fontlist_is_font_file(&font));
+    CHECK(fontlist_is_font_file(&collection));
+    CHECK(!fontlist_is_font_file(&folder));
+    CHECK(!fontlist_is_font_file(&pipe));
+    CHECK(!fontlist_is_font_file(&notes));
+    CHECK(fontlist_is_font_name("a.otf"));
+    CHECK(fontlist_is_font_name("a.OTC"));
+    CHECK(!fontlist_is_font_name(".ttf"));
+    CHECK(!fontlist_is_font_name("a.woff"));
+}
+
+#ifndef _WIN32
+// The real folder the next test lists, relative to the folder CTest runs the test in
+#define PIPES "fontlist-fixture"
+
+// A function to test the font scan's rule on a real folder: a pipe named x.ttf is listed by
+// fileio_list() and left out, while the font file beside it is taken
+static void test_font_files_leave_out_a_real_pipe(void)
+{
+    unlink(PIPES "/x.ttf");
+    unlink(PIPES "/y.ttf");
+    rmdir(PIPES);
+    CHECK(mkdir(PIPES, 0755) == 0);
+    CHECK(mkfifo(PIPES "/x.ttf", 0644) == 0);
+    CHECK(fileio_write_all(PIPES "/y.ttf", "x", 1));
+    FileioEntry *entries = NULL;
+    int count = fileio_list(PIPES, &entries);
+    CHECK_INT(count, 2);
+    int taken = 0;
+    for (int i = 0; i < count; i++) {
+        if (fontlist_is_font_file(&entries[i])) {
+            taken++;
+            CHECK_STR(entries[i].name, "y.ttf");
+        }
+    }
+    CHECK_INT(taken, 1);
+    fileio_free_list(entries, count > 0 ? count : 0);
+    unlink(PIPES "/x.ttf");
+    unlink(PIPES "/y.ttf");
+    rmdir(PIPES);
+}
+#endif
+
 int main(void)
 {
     test_families();
     test_empty();
     test_rules();
     test_add_after_finish();
+    test_font_files();
+#ifndef _WIN32
+    test_font_files_leave_out_a_real_pipe();
+#endif
     return check_report();
 }

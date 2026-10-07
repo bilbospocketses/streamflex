@@ -11,6 +11,7 @@
 #include "image.h"
 #include "chroma.h"
 #include "colourpick.h"
+#include "fileio.h"
 #include "util.h"
 #include "debug.h"
 #include <ini.h>
@@ -162,6 +163,13 @@ SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transitio
 int load_next_slideshow_background_async(void *data)
 {
     Slideshow *slideshow = (Slideshow*) data;
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: it holds the loader back before its read, as a slow
+    // disk would, so a mode step or a quit can land while the loader is still running
+    const char *delay = getenv("STREAMFLEX_TEST_SLIDESHOW_DELAY_MS");
+    if (delay != NULL)
+        SDL_Delay((Uint32) atoi(delay));
+#endif
     slideshow->transition_surface = load_next_slideshow_background(slideshow, true);
     slideshow->transition_luminance = slideshow->transition_surface != NULL
                                       ? surface_luminance(slideshow->transition_surface) : -1.0;
@@ -192,13 +200,18 @@ double surface_luminance(SDL_Surface *surface)
     return luminance;
 }
 
-// A function to load a texture from a file, measuring its mean luminance when asked (NULL: not)
+// A function to load a texture from a file, measuring its mean luminance when asked (NULL: not). A
+// path that is not a regular file (a pipe, say, whose read would wait for good) is never opened.
 SDL_Texture *load_texture_measured(const char *path, double *luminance)
 {
     if (luminance != NULL)
         *luminance = -1.0;
     if (path == NULL)
         return NULL;
+    if (!fileio_is_file(path)) {
+        log_error("Could not load image %s\n%s", path, fileio_last_error());
+        return NULL;
+    }
     SDL_Surface *surface = IMG_Load(path);
     if (surface == NULL) {
         log_error("Could not load image %s\n%s", path, IMG_GetError());
@@ -341,9 +354,14 @@ SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect)
     return rasterize(buffer, w, h, rect, "An SVG image");
 }
 
-// A function to rasterize an SVG file; pass -1 for w or h to keep the aspect ratio
+// A function to rasterize an SVG file; pass -1 for w or h to keep the aspect ratio. A path that is
+// not a regular file is never opened.
 SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect)
 {
+    if (!fileio_is_file(path)) {
+        log_error("Could not load image %s\n%s", path, fileio_last_error());
+        return NULL;
+    }
     char *buffer = SDL_LoadFile(path, NULL);
     if (buffer == NULL) {
         log_error("Could not load image %s\n%s", path, SDL_GetError());
@@ -356,7 +374,7 @@ SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *r
 
 // A function to load a menu icon. SVGs are rasterized at the button size so they stay sharp
 // at any size; other formats load at their own size and the renderer scales them. Either way its
-// pixels are kept off the chroma key.
+// pixels are kept off the chroma key. A path that is not a regular file is never opened.
 SDL_Texture *load_icon(const char *path, int size)
 {
     if (path == NULL)
@@ -364,6 +382,10 @@ SDL_Texture *load_icon(const char *path, int size)
     size_t length = strlen(path);
     if (length > 4 && SDL_strcasecmp(path + length - 4, ".svg") == 0)
         return rasterize_svg_from_file(path, size, -1, NULL);
+    if (!fileio_is_file(path)) {
+        log_error("Could not load image %s\n%s", path, fileio_last_error());
+        return NULL;
+    }
     SDL_Surface *surface = IMG_Load(path);
     if (surface == NULL) {
         log_error("Could not load image %s\n%s", path, IMG_GetError());

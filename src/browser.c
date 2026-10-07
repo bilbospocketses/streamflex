@@ -70,12 +70,13 @@ bool browser_is_image(const char *name)
     return false;
 }
 
-// A function to tell a listed file that counts as an image: not a folder, not hidden, and with an
-// image's extension, whatever its case. The browser, the Folder row's count and both platforms'
-// slideshow scans all use it, so they agree on every folder.
+// A function to tell a listed file that counts as an image: a regular file (never a pipe, socket or
+// device, whose read could wait for good), not hidden, and with an image's extension, whatever its
+// case. The browser, the Folder row's count and both platforms' slideshow scans all use it, so they
+// agree on every folder.
 bool browser_is_image_file(const FileioEntry *entry)
 {
-    return !entry->is_dir && !entry->hidden && browser_is_image(entry->name);
+    return entry->is_file && !entry->hidden && browser_is_image(entry->name);
 }
 
 // A function to tell a root, which has no parent: "/", "C:", "C:\" or "\\server\share"
@@ -220,9 +221,9 @@ static const char *why_not(const Browser *browser, const char *path)
     return why;
 }
 
-// A function to show a folder: folders first, then images (in file mode, every regular file: never
-// a pipe or device, which reading at the next start could wait on for good), each sorted by name,
-// hidden files left out; in folder mode "Use this folder" comes first. A path too long to
+// A function to show a folder: folders first, then images (in file mode, every file), each sorted by
+// name, hidden files left out. Only regular files are listed: never a pipe or device, which a read
+// could wait on for good. In folder mode "Use this folder" comes first. A path too long to
 // choose is shown, and refused with the reason. When the folder cannot be listed, or memory runs
 // out, what was on show is left as it was.
 static LoadResult load_folder(Browser *browser, const char *folder, const char *selected)

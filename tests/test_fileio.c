@@ -152,6 +152,13 @@ static void test_non_ascii_round_trip(void)
     CHECK(found_file);
     CHECK(found_dir);
     fileio_free_list(entries, count);
+
+    // A path to a regular file is one; a folder is not, nor is a path to nothing, each with the reason
+    CHECK(fileio_is_file(DIR "/" CAFE));
+    CHECK(!fileio_is_file(DIR "/deeper"));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(!fileio_is_file(DIR "/no-such-file.png"));
+    CHECK_STR(fileio_last_error(), "not found");
 }
 
 // A function to test copy, replace and remove
@@ -774,6 +781,18 @@ static void test_list_regular_files(void)
                 printf("    pass %d: %s is_file %d\n", pass, names[i], (int) entry->is_file);
         }
         fileio_free_list(entries, count);
+    }
+
+    // A path, as an image or icon setting names one, is a regular file by the same rule
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        char path[256];
+        snprintf(path, sizeof(path), "%s/%s", DIR "/regular", names[i]);
+        bool is_file = fileio_is_file(path);
+        CHECK(is_file == regular[i]);
+        if (is_file != regular[i])
+            printf("    path %s: fileio_is_file %d\n", names[i], (int) is_file);
+        if (!is_file)   // A dead link leads nowhere, so it is not found; the rest are found and refused
+            CHECK_STR(fileio_last_error(), strcmp(names[i], "dead") == 0 ? "not found" : "not a regular file");
     }
 }
 

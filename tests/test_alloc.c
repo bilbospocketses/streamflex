@@ -482,7 +482,7 @@ static int fake_list(const char *folder, FileioEntry **entries, void *context)
         }
         if (is_dir)
             name[length - 1] = '\0';
-        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = is_dir, .hidden = name[0] == '.' };
+        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = is_dir, .is_file = !is_dir, .hidden = name[0] == '.' };
     }
     return count;
 }

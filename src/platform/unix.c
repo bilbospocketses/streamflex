@@ -189,7 +189,8 @@ bool start_process(char *cmd, bool application)
 }
 
 // A function to scan the slideshow directory for image files, by the rule the settings' folder
-// browser uses (browser_is_image_file): any case of extension, hidden files left out. It lists the
+// browser uses (browser_is_image_file): regular files only, so a pipe named like an image never holds
+// the launcher in its read; any case of extension; hidden files left out. It lists the
 // folder as the browser does (fileio_list), so a link onto a network mount is never followed, and
 // an entry the file system gives no kind for costs at most one lookup of the entry itself.
 void scan_slideshow_directory(Slideshow *slideshow, const char *directory)

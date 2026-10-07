@@ -321,6 +321,41 @@ bool fileio_is_dir(const char *path)
 #endif
 }
 
+// A function to tell whether a path is a regular file, or a link to one: never a folder, pipe, socket
+// or device, whose read could wait for good. On Windows, anything that is not a folder: its folders
+// hold only files and folders, as fileio_list() finds. When not, it says why.
+bool fileio_is_file(const char *path)
+{
+#ifdef _WIN32
+    wchar_t *wide = to_wide(path);
+    if (wide == NULL)
+        return false;
+    DWORD attributes = GetFileAttributesW(wide);
+    DWORD code = GetLastError();
+    alloc_free(wide);
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        set_windows_error(code);
+        return false;
+    }
+    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+        set_error("not a regular file");
+        return false;
+    }
+    return true;
+#else
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        set_errno_error(errno);
+        return false;
+    }
+    if (!S_ISREG(info.st_mode)) {
+        set_error("not a regular file");
+        return false;
+    }
+    return true;
+#endif
+}
+
 // A function to tell whether an existing file can be opened for writing
 bool fileio_is_writable(const char *path)
 {

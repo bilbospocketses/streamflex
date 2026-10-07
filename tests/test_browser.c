@@ -27,7 +27,9 @@ static const struct {
     { "C:", "Users/" },
     { "/orphan/child", "a.png" },
     { "/nas", "far.png" },
-    { "/home/me/pads", "old.txt|feed=|sub/|game.png=|a.txt" }
+    { "/home/me/pads", "old.txt|feed=|sub/|game.png=|a.txt" },
+    { "/home/me/piped", "a.png=|b.png" },
+    { "/home/me/pipeonly", "a.png=" }
 };
 
 // A function to list a pretend folder, the way fileio_list() lists a real one
@@ -268,21 +270,24 @@ static void test_is_image(void)
 }
 
 // A function to test the rule every image scan uses (the browser, the Folder row's count and both
-// platforms' slideshows): a file with an image's extension in any case, never a folder or a hidden file
+// platforms' slideshows): a regular file with an image's extension in any case, never a folder, a
+// hidden file, or a pipe, socket or device named like an image
 static void test_is_image_file(void)
 {
-    FileioEntry camera = { .name = "DSC_0001.JPG", .is_dir = false, .hidden = false };
-    FileioEntry mixed = { .name = "Beach.Png", .is_dir = false, .hidden = false };
-    FileioEntry apple_double = { .name = "._DSC_0001.JPG", .is_dir = false, .hidden = true };
-    FileioEntry hidden_attribute = { .name = "thumb.jpg", .is_dir = false, .hidden = true };
-    FileioEntry folder = { .name = "Holiday.jpg", .is_dir = true, .hidden = false };
-    FileioEntry notes = { .name = "notes.txt", .is_dir = false, .hidden = false };
+    FileioEntry camera = { .name = "DSC_0001.JPG", .is_dir = false, .is_file = true, .hidden = false };
+    FileioEntry mixed = { .name = "Beach.Png", .is_dir = false, .is_file = true, .hidden = false };
+    FileioEntry apple_double = { .name = "._DSC_0001.JPG", .is_dir = false, .is_file = true, .hidden = true };
+    FileioEntry hidden_attribute = { .name = "thumb.jpg", .is_dir = false, .is_file = true, .hidden = true };
+    FileioEntry folder = { .name = "Holiday.jpg", .is_dir = true, .is_file = false, .hidden = false };
+    FileioEntry notes = { .name = "notes.txt", .is_dir = false, .is_file = true, .hidden = false };
+    FileioEntry pipe = { .name = "feed.png", .is_dir = false, .is_file = false, .hidden = false };
     CHECK(browser_is_image_file(&camera));
     CHECK(browser_is_image_file(&mixed));
     CHECK(!browser_is_image_file(&apple_double));
     CHECK(!browser_is_image_file(&hidden_attribute));
     CHECK(!browser_is_image_file(&folder));
     CHECK(!browser_is_image_file(&notes));
+    CHECK(!browser_is_image_file(&pipe));
 }
 
 // A function to test a Windows path written with forward slashes ("C:/Users/me/Pictures/trip.png"):
@@ -521,8 +526,7 @@ static void test_file_mode_refusals_and_row_kinds(void)
 }
 
 // A function to test that file mode lists only regular files: a pipe is left out, even one named as
-// an image (a read of it at the next start could wait for good); image mode is as it was, going by
-// the name alone
+// an image (a read of it at the next start could wait for good); image mode leaves it out too
 static void test_file_mode_lists_only_regular_files(void)
 {
     Browser *browser = browser_open(BROWSER_FILE, "/home/me/pads/old.txt", PLACES, 3, fake_list, NULL, NULL, NULL);
@@ -534,8 +538,29 @@ static void test_file_mode_lists_only_regular_files(void)
     browser_free(browser);
 
     browser = browser_open(BROWSER_IMAGE, "/home/me/pads", PLACES, 3, fake_list, NULL, NULL, NULL);
-    CHECK_INT(browser_row_count(browser), 2);
-    CHECK_STR(browser_row(browser, 1)->name, "game.png");
+    CHECK_INT(browser_row_count(browser), 1);
+    CHECK_STR(browser_row(browser, 0)->name, "sub");
+    browser_free(browser);
+}
+
+// A function to test that image mode, a folder's preview and folder mode's count take only regular
+// files as images: a pipe named a.png (first by name) is left out, and the picture beside it is not.
+// Highlighting the pipe would have its decode wait for good, and the screen with it.
+static void test_images_are_regular_files(void)
+{
+    Browser *browser = browser_open(BROWSER_IMAGE, "/home/me/piped/b.png", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row_count(browser), 1);
+    CHECK_STR(browser_row(browser, 0)->name, "b.png");
+    CHECK_INT(browser_cursor(browser), 0);
+    browser_free(browser);
+
+    browser = browser_open(BROWSER_FOLDER, "/home/me/piped", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row(browser, 0)->kind, BROWSER_ROW_USE_FOLDER);
+    CHECK_INT(browser_row(browser, 0)->image_count, 1);
+    char out[BROWSER_PATH_MAX] = "";
+    CHECK(browser_first_image(browser, "/home/me/piped", out, sizeof(out)));
+    CHECK_STR(out, "/home/me/piped/b.png");
+    CHECK(!browser_first_image(browser, "/home/me/pipeonly", out, sizeof(out)));
     browser_free(browser);
 }
 
@@ -562,5 +587,6 @@ int main(void)
     test_file_mode();
     test_file_mode_refusals_and_row_kinds();
     test_file_mode_lists_only_regular_files();
+    test_images_are_regular_files();
     return check_report();
 }

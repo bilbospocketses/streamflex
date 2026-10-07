@@ -75,3 +75,20 @@ ran_clean f30-vanish \
     && grep -q "Could not load any image from slideshow directory /home/tester/vanish" "$out/f30-vanish.log" && ok=0
 result "a running slideshow whose pictures vanish falls back to the colour (exit $(cat "$out/f30-vanish.code"))" $ok
 grep -m2 -E 'runtime error|AddressSanitizer' "$out/f30-vanish.err" | sed 's/^/      /'
+
+# Pipes that nothing writes, named as the background image and as two icons (a raster one and an
+# SVG): a read of any would wait for good, so none is opened. Each is refused as a file that will
+# not load is, with its path in the log, and the launcher starts and quits by itself.
+rm -rf "$TESTER_HOME/pipes"
+mkdir -p "$TESTER_HOME/pipes"
+mkfifo "$TESTER_HOME/pipes/bg.png" "$TESTER_HOME/pipes/icon.png" "$TESTER_HOME/pipes/icon.svg"
+chown -R tester:tester "$TESTER_HOME/pipes"
+run_quick f30-pipes
+ok=1
+ran_clean f30-pipes && grep -q "Couldn't load background image" "$out/f30-pipes.log" \
+    && grep -A1 'Could not load image /home/tester/pipes/bg.png' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && grep -A1 'Could not load image /home/tester/pipes/icon.png' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && grep -A1 'Could not load image /home/tester/pipes/icon.svg' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && ok=0
+result "a pipe named as the background image or an icon is never opened, and the launcher starts (exit $(cat "$out/f30-pipes.code"))" $ok
+grep -A1 'Could not load image' "$out/f30-pipes.log" | sed 's/^/      /'

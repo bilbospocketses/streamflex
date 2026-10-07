@@ -3,6 +3,7 @@
 #include <string.h>
 #include <SDL.h>
 #include "fontscan.h"
+#include "fontlist.h"
 #include "fileio.h"
 #include "alloc.h"
 #include "test_hooks.h"
@@ -27,23 +28,6 @@ struct FontScan {
     bool failed;            // A file could not be added (out of memory): the list is short
     bool fail_adds;         // Harness only: every add fails as out of memory would (set before the thread starts)
 };
-
-// A function to tell a font file by its extension: TrueType or OpenType, single or a collection
-static bool is_font_file(const char *name)
-{
-    static const char *const extensions[] = { ".ttf", ".otf", ".ttc", ".otc" };
-    size_t length = strlen(name);
-    for (size_t i = 0; i < sizeof(extensions) / sizeof(extensions[0]); i++) {
-        if (length <= 4)
-            continue;
-        size_t k = 0;
-        while (k < 4 && fileio_lower(name[length - 4 + k]) == extensions[i][k])
-            k++;
-        if (k == 4)
-            return true;
-    }
-    return false;
-}
 
 // A function to make room for one more file; false when out of memory
 static bool grow_files(FontScan *scan)
@@ -82,8 +66,9 @@ static void add_file(FontScan *scan, const char *path, bool bundled)
     scan->count++;
 }
 
-// A function to list the font files in a folder and the folders under it. A folder that cannot be
-// listed is skipped, and so is anything hidden.
+// A function to list the font files in a folder and the folders under it: regular files only, so a
+// pipe named like a font never holds the font list in its read. A folder that cannot be listed is
+// skipped, and so is anything hidden.
 static void scan_folder(FontScan *scan, const char *folder, bool bundled, int depth)
 {
     FileioEntry *entries = NULL;
@@ -97,7 +82,7 @@ static void scan_folder(FontScan *scan, const char *folder, bool bundled, int de
         snprintf(path, sizeof(path), "%s%s%s", folder, slash ? "" : SEPARATOR, entries[i].name);
         if (entries[i].is_dir && depth < MAX_DEPTH)
             scan_folder(scan, path, bundled, depth + 1);
-        else if (!entries[i].is_dir && is_font_file(entries[i].name))
+        else if (fontlist_is_font_file(&entries[i]))
             add_file(scan, path, bundled);
     }
     fileio_free_list(entries, count > 0 ? count : 0);
@@ -131,7 +116,7 @@ static void scan_registry(FontScan *scan, HKEY root, const char *fonts_folder)
         if (result != ERROR_SUCCESS || type != REG_SZ)
             continue;
         data[data_size / sizeof(wchar_t)] = L'\0';
-        if (!to_utf8(data, file, (int) sizeof(file)) || !is_font_file(file))
+        if (!to_utf8(data, file, (int) sizeof(file)) || !fontlist_is_font_name(file))
             continue;
         bool full = (file[0] != '\0' && file[1] == ':') || (file[0] == '\\' && file[1] == '\\');
         if (full)

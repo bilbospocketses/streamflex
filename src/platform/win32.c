@@ -190,7 +190,8 @@ bool start_process(char *cmd, bool application)
 }
 
 // A function to scan the slideshow directory for image files, by the rule the settings' folder
-// browser uses (browser_is_image_file): any case of extension, hidden files left out
+// browser uses (browser_is_image_file): regular files only (here every file a folder lists), any
+// case of extension, hidden files left out
 void scan_slideshow_directory(Slideshow *slideshow, const char *directory)
 {
     FileioEntry *entries = NULL;

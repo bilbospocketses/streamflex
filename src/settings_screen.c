@@ -106,7 +106,7 @@ static int shown_last = -1;
 static int shown_count = -1;
 
 static Browser *browser = NULL;          // The folder browser, while it is open
-static SettingSlot *browser_slot = NULL; // The Image or Folder setting it chooses for
+static SettingSlot *browser_slot = NULL; // The setting it chooses for: Image, Folder or Mappings file
 static BrowserMode browser_mode = BROWSER_IMAGE;   // The mode it was opened in
 static int browser_first = 0;            // Its first row on show
 static int browser_page = 1;             // How many of its rows fit: Left and Right move this far
@@ -706,8 +706,8 @@ static void close_browser(void)
     want_preview_image("");
 }
 
-// A function to count a folder's images as the browser does (files with an image's extension,
-// hidden ones left out); -1 when it cannot be listed
+// A function to count a folder's images as the browser does (regular files with an image's
+// extension, hidden ones left out); -1 when it cannot be listed
 static int count_images(const char *folder)
 {
     FileioEntry *entries = NULL;
