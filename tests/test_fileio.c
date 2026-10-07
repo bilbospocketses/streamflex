@@ -159,6 +159,14 @@ static void test_non_ascii_round_trip(void)
     CHECK_STR(fileio_last_error(), "not a regular file");
     CHECK(!fileio_is_file(DIR "/no-such-file.png"));
     CHECK_STR(fileio_last_error(), "not found");
+
+    // Only what is there and is not a regular file is refused: a path to nothing is left for its open
+    // to report
+    CHECK(!fileio_not_a_file(DIR "/" CAFE));
+    CHECK(fileio_not_a_file(DIR "/deeper"));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(!fileio_not_a_file(DIR "/no-such-file.png"));
+    CHECK_STR(fileio_last_error(), "not found");
 }
 
 // A function to test copy, replace and remove
@@ -456,6 +464,48 @@ static void test_wide(void)
     free(wide);
     CHECK(fileio_wide("bad \xC3") == NULL);   // A lead byte with nothing after it
     CHECK(strstr(fileio_last_error(), "UTF-8") != NULL);
+}
+
+#define TEST_PIPE "\\\\.\\pipe\\streamflex-test-fileio"
+
+// A function to test that only a file on a disk is a regular file. The null device by both its
+// names, the console and a named pipe are there and are refused, the pipe both while it listens and
+// once its one instance is taken; none of them is waited on. nul.png in a folder is a regular file
+// where Windows makes it a file there (Windows 11), and refused where it is the null device.
+static void test_devices_and_pipes(void)
+{
+    static const char *const devices[] = { "NUL", "\\\\.\\NUL", "CON" };
+    for (size_t i = 0; i < sizeof(devices) / sizeof(devices[0]); i++) {
+        CHECK(!fileio_is_file(devices[i]));
+        CHECK_STR(fileio_last_error(), "not a regular file");
+        CHECK(fileio_not_a_file(devices[i]));
+        CHECK_STR(fileio_last_error(), "not a regular file");
+    }
+
+    // The first look connects to the listening instance, and holds it until the pipe disconnects
+    // it, so the second finds every instance taken
+    HANDLE pipe = CreateNamedPipeW(L"\\\\.\\pipe\\streamflex-test-fileio", PIPE_ACCESS_INBOUND,
+                                   PIPE_TYPE_BYTE | PIPE_WAIT, 1, 0, 0, 0, NULL);
+    CHECK(pipe != INVALID_HANDLE_VALUE);
+    DWORD start = GetTickCount();
+    CHECK(!fileio_is_file(TEST_PIPE));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(fileio_not_a_file(TEST_PIPE));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(GetTickCount() - start < 1000);
+    CloseHandle(pipe);
+    CHECK(!fileio_not_a_file(TEST_PIPE));   // Gone with its last instance: nothing there
+    CHECK_STR(fileio_last_error(), "not found");
+
+    // Whether nul.png is a file here, the folder's own listing says
+    CHECK(fileio_write_all(DIR "/nul.png", "x", 1));
+    FileioEntry *entries = NULL;
+    int count = fileio_list(DIR, &entries);
+    bool listed = find_entry(entries, count, "nul.png") != NULL;
+    fileio_free_list(entries, count);
+    printf("nul.png in a folder is %s here\n", listed ? "a file" : "the null device");
+    CHECK(fileio_is_file(DIR "/nul.png") == listed);
+    CHECK(fileio_not_a_file(DIR "/nul.png") == !listed);
 }
 
 // A function to test that folders are made on a share ("\\server\share\..."), whose server and
@@ -793,6 +843,11 @@ static void test_list_regular_files(void)
             printf("    path %s: fileio_is_file %d\n", names[i], (int) is_file);
         if (!is_file)   // A dead link leads nowhere, so it is not found; the rest are found and refused
             CHECK_STR(fileio_last_error(), strcmp(names[i], "dead") == 0 ? "not found" : "not a regular file");
+        // Refused only when something is there: not a regular file, and not a dead link
+        bool refused = fileio_not_a_file(path);
+        CHECK(refused == (!regular[i] && strcmp(names[i], "dead") != 0));
+        if (refused != (!regular[i] && strcmp(names[i], "dead") != 0))
+            printf("    path %s: fileio_not_a_file %d\n", names[i], (int) refused);
     }
 }
 
@@ -1063,6 +1118,7 @@ int main(void)
     test_replace_waits_for_a_held_file();
     test_replace_keeps_a_hidden_target_hidden();
     test_wide();
+    test_devices_and_pipes();
     test_make_dirs_on_a_share();
     test_places_keep_the_process_error_mode();
 #endif

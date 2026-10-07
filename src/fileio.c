@@ -321,39 +321,75 @@ bool fileio_is_dir(const char *path)
 #endif
 }
 
-// A function to tell whether a path is a regular file, or a link to one: never a folder, pipe, socket
-// or device, whose read could wait for good. On Windows, anything that is not a folder: its folders
-// hold only files and folders, as fileio_list() finds. When not, it says why.
-bool fileio_is_file(const char *path)
+// What is at a path: a regular file, something else that is there, or nothing that could be found
+typedef enum {
+    PATH_FILE,      // A regular file, or a link to one
+    PATH_OTHER,     // There, and not a regular file: a folder, pipe, socket or device ("not a regular file")
+    PATH_UNKNOWN    // Not found, or not looked at; the reason says which
+} PathKind;
+
+// A function to find what is at a path. On Windows the path is opened with no data access and the
+// handle asked what it is: only a file on a disk is a regular file. Names alone cannot say: which
+// are devices (NUL, CON, COM1, and on older versions nul.png) differs between versions, and the
+// \\.\ and \\?\ prefixes reach devices and pipes by any name. An open with no data access reads
+// nothing, so it never waits on a pipe or a device: a listening pipe is connected to and let go at
+// once, and one whose every instance is taken says so (ERROR_PIPE_BUSY). The console (CON) refuses
+// an open with no data access (ERROR_INVALID_PARAMETER). Both are there, and neither is a file.
+static PathKind path_kind(const char *path)
 {
 #ifdef _WIN32
     wchar_t *wide = to_wide(path);
     if (wide == NULL)
-        return false;
-    DWORD attributes = GetFileAttributesW(wide);
+        return PATH_UNKNOWN;
+    HANDLE handle = CreateFileW(wide, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
     DWORD code = GetLastError();
     alloc_free(wide);
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (code == ERROR_PIPE_BUSY || code == ERROR_INVALID_PARAMETER) {
+            set_error("not a regular file");
+            return PATH_OTHER;
+        }
         set_windows_error(code);
-        return false;
+        return PATH_UNKNOWN;
     }
-    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+    // A raw volume (\\.\C:) is on a disk too, but has no file information
+    BY_HANDLE_FILE_INFORMATION info;
+    bool regular = GetFileType(handle) == FILE_TYPE_DISK && GetFileInformationByHandle(handle, &info)
+                   && (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+    CloseHandle(handle);
+    if (!regular) {
         set_error("not a regular file");
-        return false;
+        return PATH_OTHER;
     }
-    return true;
+    return PATH_FILE;
 #else
     struct stat info;
     if (stat(path, &info) != 0) {
         set_errno_error(errno);
-        return false;
+        return PATH_UNKNOWN;
     }
     if (!S_ISREG(info.st_mode)) {
         set_error("not a regular file");
-        return false;
+        return PATH_OTHER;
     }
-    return true;
+    return PATH_FILE;
 #endif
+}
+
+// A function to tell whether a path is a regular file, or a link to one: never a folder, pipe, socket
+// or device, whose read could wait for good. When not, it says why.
+bool fileio_is_file(const char *path)
+{
+    return path_kind(path) == PATH_FILE;
+}
+
+// A function to tell whether something is at a path that is not a regular file, and so must not be
+// opened; when so, it says why. A path with nothing there is not refused, so what opens it next can
+// say in its own words why it could not.
+bool fileio_not_a_file(const char *path)
+{
+    return path_kind(path) == PATH_OTHER;
 }
 
 // A function to tell whether an existing file can be opened for writing

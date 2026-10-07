@@ -24,7 +24,8 @@ FILE *fileio_open(const char *path, const char *mode);
 bool fileio_exists(const char *path);    // exists and can be read
 bool fileio_present(const char *path);   // exists, whether or not it can be read
 bool fileio_is_dir(const char *path);
-bool fileio_is_file(const char *path);   // A regular file, or a link to one; on Windows, not a folder
+bool fileio_is_file(const char *path);   // A regular file, or a link to one; on Windows, a file on a disk
+bool fileio_not_a_file(const char *path);   // Something is there, and it is not a regular file
 bool fileio_is_writable(const char *path);
 char *fileio_read_all(const char *path, size_t *length);
 bool fileio_write_all(const char *path, const char *data, size_t length);

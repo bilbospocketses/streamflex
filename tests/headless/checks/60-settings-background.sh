@@ -146,28 +146,32 @@ result "settings: switching modes while a slideshow runs frees its fade cleanly 
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
 
 # The slideshow's loader thread is held back before its read by the test hook
-# STREAMFLEX_TEST_SLIDESHOW_DELAY_MS (in the harness's build only), as a slow disk would hold it.
-# Functions for +keys: wait up to 30 s for the loader thread to be running, and then tell whether
-# it still is at a later moment. Each writes its file only when the thread is there.
+# STREAMFLEX_TEST_SLIDESHOW_HOLD (in the harness's build only), as a slow disk would hold it, until
+# the file the hook names exists: the check makes that file once it has looked. Functions for +keys:
+# wait up to 30 s for the loader thread to be running, tell whether it still is at a later moment,
+# and let the loader go, telling whether it was still held a second after the step or the quit was
+# sent. Each writes its file only when the thread is there.
+LOADER_RELEASE=/tmp/loader-release
 loader_running() { grep -q '^Slideshow' /proc/[0-9]*/task/*/comm 2> /dev/null; }
 loader_held() { local i; for i in $(seq 150); do loader_running && { : > /tmp/loader-held; return; }; sleep 0.2; done; }
 still_held() { loader_running && : > /tmp/loader-still-held; }
+release_loader() { loader_running && : > /tmp/loader-held-at-release; : > "$LOADER_RELEASE"; sleep 1; }
 
 # Stepping the mode while the slideshow's loader thread is still loading the next image. The hook
-# holds it for 8 s from its start (the first change, 5 s in), and the step comes about 3 s into
-# that, the thread still running then. The step must wait for the thread and drop the image it read,
-# before any fade began. ~/loading also holds c.png, a pipe named like an image that nothing writes:
-# a scan that took it would hold the launcher, or this loader, in its read for good.
-rm -rf "$TESTER_HOME/loading" /tmp/loader-held /tmp/loader-still-held "$LOG"
+# holds it from its start (the first change, 5 s in) until the step has been sent, the thread
+# still running then; the step waits for it. Once let go, the loader's image must be dropped, before
+# any fade began. ~/loading also holds c.png, a pipe named like an image that nothing writes: a scan
+# that took it would hold the launcher, or this loader, in its read for good.
+rm -rf "$TESTER_HOME/loading" /tmp/loader-held /tmp/loader-still-held /tmp/loader-held-at-release "$LOADER_RELEASE" "$LOG"
 mkdir -p "$TESTER_HOME/loading"
 cp "$TESTER_HOME/Pictures/red.png" "$TESTER_HOME/loading/a.png"
 cp "$TESTER_HOME/Pictures/blue.png" "$TESTER_HOME/loading/b.png"
 mkfifo "$TESTER_HOME/loading/c.png"
 chown -R tester:tester "$TESTER_HOME/loading"
-STREAMFLEX_TEST_SLIDESHOW_DELAY_MS=8000 UNTIL='Settings: nothing changed' \
-    run_keys f60-loading +loader_held Menu Down Return +still_held Right Left BackSpace BackSpace
+STREAMFLEX_TEST_SLIDESHOW_HOLD=$LOADER_RELEASE UNTIL='Settings: nothing changed' \
+    run_keys f60-loading +loader_held Menu Down Return +still_held Right +release_loader Left BackSpace BackSpace
 ok=1
-[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && ran_clean f60-loading \
+[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && [ -e /tmp/loader-held-at-release ] && ran_clean f60-loading \
     && grep -q 'Found 2 images in directory /home/tester/loading' "$out/f60-loading.log" \
     && ! precedes "$out/f60-loading.log" 'Slideshow: fading in the next image' 'Settings: [Background] Mode Slideshow -> Transparent' \
     && in_range "$out/f60-loading.log" 'Settings: [Background] Mode Slideshow -> Transparent' \
@@ -176,19 +180,20 @@ ok=1
 result "settings: switching modes while the slideshow loads its next image drops that image (exit $(cat "$out/f60-loading.code"))" $ok
 [ -e /tmp/loader-held ] || echo "      the loader thread never ran"
 [ -e /tmp/loader-held ] && [ ! -e /tmp/loader-still-held ] && echo "      the loader thread was done before the step"
+[ -e /tmp/loader-still-held ] && [ ! -e /tmp/loader-held-at-release ] && echo "      the loader thread was done before it was let go"
 
-# Quitting while the loader thread is held the same way (4 s, inside the 10 s stop_run waits after
-# TERM): quit waits for the thread, then frees the image it read and says so. The leak pass finds
-# none left.
-quit_while_held() { still_held; kill -TERM "$2"; sleep 1; }
-rm -f /tmp/loader-held /tmp/loader-still-held "$LOG"
-STREAMFLEX_TEST_SLIDESHOW_DELAY_MS=4000 CFG=$FX/f60-loading.ini run_keys f61-quit +loader_held +quit_while_held
+# Quitting while the loader thread is held the same way: quit waits for the thread, which is let go
+# a second after TERM, then frees the image it read and says so. The leak pass finds none left.
+quit_while_held() { still_held; kill -TERM "$2"; sleep 1; release_loader; }
+rm -f /tmp/loader-held /tmp/loader-still-held /tmp/loader-held-at-release "$LOADER_RELEASE" "$LOG"
+STREAMFLEX_TEST_SLIDESHOW_HOLD=$LOADER_RELEASE CFG=$FX/f60-loading.ini run_keys f61-quit +loader_held +quit_while_held
 ok=1
-[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && ran_clean f61-quit \
+[ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && [ -e /tmp/loader-held-at-release ] && ran_clean f61-quit \
     && sed -n '/Quitting program/,$p' "$out/f61-quit.log" | grep -q 'Slideshow: dropped the fade in progress' && ok=0
 result "quitting while the slideshow loads its next image frees that image (exit $(cat "$out/f61-quit.code"))" $ok
 [ -e /tmp/loader-held ] || echo "      the loader thread never ran"
 [ -e /tmp/loader-held ] && [ ! -e /tmp/loader-still-held ] && echo "      the loader thread was done before the quit"
+[ -e /tmp/loader-still-held ] && [ ! -e /tmp/loader-held-at-release ] && echo "      the loader thread was done before it was let go"
 
 # A slideshow folder with a pipe named like an image (~/loading/c.png, which nothing writes) starts,
 # changes its picture and quits: the scan leaves the pipe out, so no read of it ever waits

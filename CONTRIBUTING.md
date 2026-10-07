@@ -27,13 +27,26 @@ A second argument to `run.sh` picks the mode:
 
 The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. It adds test-only hooks, environment variables a check sets to force what no config or input can reach; normal builds contain none of them:
 
+- `STREAMFLEX_TEST_CLOCK_DELAY_MS=<ms>`: each clock render on the clock's thread waits that long first, and the clock renders every second and logs each render it starts on its thread, so a check can act while one is in flight.
+- `STREAMFLEX_TEST_CLOCK_THREAD_FAIL`: the clock's render thread fails to start, so each render runs on the main thread instead.
 - `STREAMFLEX_TEST_DECODE_DELAY_MS=<ms>`: the settings preview waits that long before decoding an image, so a check can press a key during the decode.
-- `STREAMFLEX_TEST_PAD=<file>`: attaches a virtual gamepad, since Xvfb has none, and holds its Start button while `<file>` exists. It does nothing when the gamepad is turned off.
-- `STREAMFLEX_TEST_NO_RENDER_TARGETS`: settings draw as they would on a renderer without render targets.
-- `STREAMFLEX_TEST_FAIL_TITLE_SIZE=<pt>`: the title font fails to open at that size.
+- `STREAMFLEX_TEST_FAIL=<step>`: that step runs as if memory had run out: the settings screen's `places`, `browser`, `command` and `bindings`; the pickers' `list`, `rows`, `select`, `pads` and `apply`; the font picker's `fontlist`, `fontscan`, `fontfolder`, `faces` and `sample`. With `keep` the saved file's permissions cannot be kept, with `fontthread` the font list's thread does not start, and with `fontadd` that thread cannot add a file.
 - `STREAMFLEX_TEST_FAIL_SHRINK_STEP`: every step down in Shrink mode fails to open its font.
+- `STREAMFLEX_TEST_FAIL_TITLE_SIZE=<pt>`: the title font fails to open at that size.
+- `STREAMFLEX_TEST_FONT_DELAY_MS=<ms>`: the font list's thread waits that long after reading the bundled folder, as a slow disk would, so a check can act while the list loads.
+- `STREAMFLEX_TEST_FONT_DIRS=<dir>[:<dir>...]`: the font list reads these folders, after the bundled one, in place of the system's and the user's.
+- `STREAMFLEX_TEST_FRAME_REPORT_MS=<ms>`: once that long has passed, the log says how many frames were shown and how many of them waited out the FPS limit.
+- `STREAMFLEX_TEST_NO_LUMINANCE`: an image's brightness cannot be measured, as when its conversion fails, so the contrast warning has no reading for it.
 - `STREAMFLEX_TEST_NO_MESSAGE_BOX`: a fatal error quits without its message box, which some SDLs show and wait on.
-- `STREAMFLEX_TEST_FAIL=places|browser|command|keep`: that step of the settings screen (finding the browser's places, opening the browser, a browser command) runs as if memory had run out, or for `keep`, as if the saved file's permissions could not be kept.
+- `STREAMFLEX_TEST_NO_RENDER_TARGETS`: settings draw as they would on a renderer without render targets.
+- `STREAMFLEX_TEST_PAD=<file>`: attaches a virtual gamepad, since Xvfb has none, and holds its Start button while `<file>` exists. It does nothing when the gamepad is turned off.
+- `STREAMFLEX_TEST_PAD_BUTTON=<name>`: the virtual gamepad holds this button, by SDL's name for it (`b`), instead of Start; an axis's name (`rightx`) pushes that axis to its positive end.
+- `STREAMFLEX_TEST_PAD_FRAMES=<n>`: each time the virtual gamepad's file appears, its button is held for `n` frames however long the file stays: a tap shorter than a script can time.
+- `STREAMFLEX_TEST_PAD_PLUG=<file>`: another virtual gamepad is plugged in while `<file>` exists and pulled out when it goes, as a pad is plugged in or out by hand at any moment.
+- `STREAMFLEX_TEST_PAD_SWAP`: virtual gamepads are attached and detached, one step a frame, so one arrives at another's old device index with an instance id of its own; then a launch and a return close every pad and open each again.
+- `STREAMFLEX_TEST_RELOAD_FONTS`: the title and clock fonts are opened a second time as they start, as a reload does, so the leak pass shows whether the font each replaces is closed.
+- `STREAMFLEX_TEST_SLIDESHOW_HOLD=<file>`: the slideshow's loader thread waits before its read until `<file>` exists (a minute at most), as a slow disk would hold it, so a check can step the mode or quit while it loads and let it go when it has looked.
+- `STREAMFLEX_TEST_VSYNC_REFUSED[=off]`: the renderer reports the VSync it was asked for as refused; with `off`, it reports VSync kept on when it is not wanted.
 
 The hook build also logs how many paragraphs the settings screen measured while it was open, so a check can catch a note measured again in every frame. The helpers checks share (`run_keys`, `ran_clean`, `in_range`, `precedes`, `look`, `stop_run` and others) live in `run.sh`.
 
@@ -43,7 +56,7 @@ Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps 
 
 ```
 src/                 Launcher core (launcher.c, layout.c, library.c, image.c, clock.c, util.c, utf8.c, debug.c) and the settings screen (settings_screen.c, settings.c, browser.c, inidoc.c, config_save.c, fileio.c)
-                     test_hooks.c: the harness's STREAMFLEX_TEST_FAIL hook, built into every build but compiled to no code unless STREAMFLEX_TEST_HOOKS is defined; the other hooks sit inline in image.c, launcher.c and settings_screen.c
+                     test_hooks.c: the harness's STREAMFLEX_TEST_FAIL hook, built into every build but compiled to no code unless STREAMFLEX_TEST_HOOKS is defined; the other hooks sit inline in clock.c, fontscan.c, image.c, launcher.c and settings_screen.c
 src/platform/        Windows and Linux platform layers
 src/external/        Vendored third-party sources (nanosvg): where each came from, and every local change, in its README
 config/              Default config template, packaging and platform templates (PKGBUILD, .desktop, manifest, icon)

@@ -23,8 +23,9 @@ grep -qE '^Fonts: found 7 families in 9 files, skipped 1 \([0-9]+ ms\)$' "$log" 
 result "fonts: the picker lists the fonts by family and saves the one chosen (exit $(cat "$out/f59-fonts.code"))" $ok
 grep -E '^(Fonts:|Titles: opened)' "$log" | sed 's/^/      /'
 
-# A config whose font file has gone: the picker still opens, the titles use the bundled font, and
-# the config's value stays as it was
+# A config whose font file has gone: the picker still opens, the titles use the bundled font, the
+# log gives SDL's own reason (the file is opened all the same: only something there that is not a
+# regular file is refused before the open), and the config's value stays as it was
 mkdir -p "$TESTER_HOME/cfg"
 cfg=$TESTER_HOME/cfg/f59-gone.ini
 printf '[General]\nDefaultMenu=Main\n\n[Titles]\nFont=%s/fonts/gone.ttf\n\n[Main]\nEntry1=One;apps;:quit\n' "$TESTER_HOME" > "$cfg"
@@ -32,6 +33,8 @@ chown tester:tester "$cfg"
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg run_keys f59-gone Menu Down Down Down Return Down Down Return +wait_fonts Menu
 ok=1
 grep -q "Could not open the font $TESTER_HOME/fonts/gone.ttf (face 0), using the default font" "$out/f59-gone.log" \
+    && grep -A1 -F "Could not open the font $TESTER_HOME/fonts/gone.ttf (face 0)" "$out/f59-gone.log" \
+        | grep -qF "Couldn't open $TESTER_HOME/fonts/gone.ttf" \
     && grep -q 'Fonts: found' "$out/f59-gone.log" && grep -q "Font=$TESTER_HOME/fonts/gone.ttf" "$cfg" \
     && grep -q 'Settings: nothing changed' "$out/f59-gone.log" && ran_clean f59-gone && ok=0
 result "fonts: a font file that is gone falls back, and the picker still opens (exit $(cat "$out/f59-gone.code"))" $ok
@@ -321,6 +324,76 @@ grep -qE '^Fonts: found 1 families in 2 files, skipped 1 \(' "$log" && [ "$reads
     && ran_clean f59-nobundle && ok=0
 result "fonts: an install with no bundled folder lists the others and pins its own font (exit $(cat "$out/f59-nobundle.code"))" $ok
 echo "      the cursor read: ${reads:-nothing}"
+
+# Pipes that nothing writes, as each font file StreamFlex opens: an open of any would wait for good,
+# so none is opened. Each goes the way a missing font goes there, with its path and the reason in the
+# log, and the launcher never waits on it:
+# - pipeabs: the titles' font, by its full path: the titles use the bundled font;
+# - piperel: the titles' font, by a path the launcher's own folder holds (the second path tried);
+# - pipedefault: the bundled font, with no font configured: the launcher stops, as without it;
+# - pipesettings: the bundled font again, which settings take as missing: they open in the titles'
+#   font;
+# - pipeswap: the titles' font becomes a pipe while the launcher runs, so settings, with no bundled
+#   font to use, cannot open, as when that file has gone.
+rm -rf /opt/sf59-pipes /opt/sf59-pipebundle "$F59/pipes"
+mkdir -p /opt/sf59-pipes/f59rel /opt/sf59-pipebundle "$F59/pipes"
+cp /work/build/streamflex /opt/sf59-pipes/ && cp -r /work/build/assets /opt/sf59-pipes/
+cp /work/build/streamflex /opt/sf59-pipebundle/ && cp -r /work/build/assets /opt/sf59-pipebundle/
+rm -f /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf
+mkfifo /opt/sf59-pipes/f59rel/x.ttf /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf "$F59/pipes/x.ttf"
+cp /work/assets/fonts/Inter-Regular.ttf "$F59/pipes/t.ttf"
+chown -R tester:tester /opt/sf59-pipes /opt/sf59-pipebundle "$F59/pipes"
+PIPED_BUNDLE=/opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf
+# A function to tell whether a log has the line FIRST with the line SECOND straight after it
+f59_then() { grep -A1 -xF -- "$2" "$1" | sed -n 2p | grep -qxF -- "$3"; }
+
+cfg=$(f59_config f59-pipeabs "[General]\nDefaultMenu=Main\nStartupCmd=:quit\n\n[Titles]\nFont=$F59/pipes/x.ttf\n$F59_MAIN")
+CFG=$cfg run_quick f59-pipeabs
+log=$out/f59-pipeabs.log
+ok=1
+f59_then "$log" "Could not open the font $F59/pipes/x.ttf (face 0), using the default font" 'not a regular file' \
+    && grep -qxF 'Title font: /work/build/assets/fonts/OpenSans-Regular.ttf (face 0)' "$log" && ran_clean f59-pipeabs && ok=0
+result "fonts: a pipe as the titles' font is never opened, and the titles use the bundled font (exit $(cat "$out/f59-pipeabs.code"))" $ok
+
+cfg=$(f59_config f59-piperel "[General]\nDefaultMenu=Main\nStartupCmd=:quit\n\n[Titles]\nFont=f59rel/x.ttf\n$F59_MAIN")
+exe=/opt/sf59-pipes/streamflex CFG=$cfg run_quick f59-piperel
+log=$out/f59-piperel.log
+ok=1
+f59_then "$log" 'Could not open the font f59rel/x.ttf (face 0), using the default font' 'not a regular file' \
+    && grep -qxF 'Title font: /opt/sf59-pipes/assets/fonts/OpenSans-Regular.ttf (face 0)' "$log" && ran_clean f59-piperel && ok=0
+result "fonts: a pipe as the titles' font in the launcher's folder is never opened (exit $(cat "$out/f59-piperel.code"))" $ok
+
+cfg=$(f59_config f59-pipedefault "[General]\nDefaultMenu=Main\nStartupCmd=:quit\n$F59_MAIN")
+STREAMFLEX_TEST_NO_MESSAGE_BOX=1 exe=/opt/sf59-pipebundle/streamflex CFG=$cfg run_quick f59-pipedefault
+log=$out/f59-pipedefault.log
+ok=1
+f59_then "$log" "Could not open the default font $PIPED_BUNDLE" 'not a regular file' \
+    && grep -qxF 'Could not load default font' "$log" && ran_clean f59-pipedefault 1 && ok=0
+result "fonts: a pipe as the bundled font is never opened, and the launcher stops as without it (exit $(cat "$out/f59-pipedefault.code"))" $ok
+
+cfg=$(f59_config f59-pipesettings "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=$BUNDLED/DejaVuSans.ttf\n$F59_MAIN")
+exe=/opt/sf59-pipebundle/streamflex CFG=$cfg UNTIL="Settings opened over menu 'Main'" run_keys f59-pipesettings Menu
+log=$out/f59-pipesettings.log
+ok=1
+f59_then "$log" "Settings: the font $PIPED_BUNDLE is not a regular file" \
+        "Settings: the font OpenSans-Regular.ttf is missing, so they use $BUNDLED/DejaVuSans.ttf" \
+    && grep -q "Settings opened over menu 'Main'" "$log" && ran_clean f59-pipesettings && ok=0
+result "fonts: settings take a pipe as the bundled font as missing, and open in the titles' font (exit $(cat "$out/f59-pipesettings.code"))" $ok
+grep 'Settings' "$log" | head -4 | sed 's/^/      /'
+
+# A function for a +key: the titles' font file becomes a pipe. Settings must refuse it before the
+# run ends (UNTIL): an open that waited on it would be cut short by stop_run's TERM, and then fail
+# as if it had been refused.
+f59_swap() { rm -f "$F59/pipes/t.ttf" && mkfifo "$F59/pipes/t.ttf" && chown tester:tester "$F59/pipes/t.ttf"; }
+cfg=$(f59_config f59-pipeswap "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=$F59/pipes/t.ttf\n$F59_MAIN")
+exe=/opt/sf59-pipebundle/streamflex CFG=$cfg UNTIL='Settings cannot open' run_keys f59-pipeswap +f59_swap Menu
+log=$out/f59-pipeswap.log
+ok=1
+grep -qxF "Title font: $F59/pipes/t.ttf (face 0)" "$log" \
+    && f59_then "$log" "Settings cannot open: could not open the font $F59/pipes/t.ttf" 'not a regular file' \
+    && ! grep -q "Settings opened over" "$log" && ran_clean f59-pipeswap && ok=0
+result "fonts: settings never open the titles' font once it is a pipe (exit $(cat "$out/f59-pipeswap.code"))" $ok
+grep 'Settings' "$log" | head -4 | sed 's/^/      /'
 
 # A font list that cannot be made, take its rows or pin the font in use does not open, whether its
 # files were read with the picker open (it closes) or before (it refuses); the keys go back to the

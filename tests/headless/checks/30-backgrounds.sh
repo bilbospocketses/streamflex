@@ -14,6 +14,23 @@ ran_clean f30-missing && grep -q "Couldn't load background image" "$out/f30-miss
     && grep -A2 'Background ===' "$out/f30-missing.log" | grep -qE 'Mode:\s+Image$' && ok=0
 result "a missing image falls back to the colour, and the setting stays Image (exit $(cat "$out/f30-missing.code"))" $ok
 
+# A missing image, as the background and as either kind of icon, is still opened, so SDL gives its
+# own reason on the line after the path, never the words of the check made before the open, which
+# refuses only something there that is not a regular file. SDL's words differ between its versions
+# and its loaders (an SVG's is SDL_LoadFile's), except for the background's.
+sdl_reason() {
+    local reason
+    reason=$(grep -A1 -xF "Could not load image $2" "$out/$1.log" | sed -n 2p)
+    [ -n "$reason" ] && [ "$reason" != 'not found' ] && [ "$reason" != 'not a regular file' ]
+}
+ok=1
+sdl_reason f30-missing /home/tester/Pictures/missing.png && sdl_reason f30-missing /home/tester/Pictures/missing-icon.png \
+    && sdl_reason f30-missing /home/tester/Pictures/missing-icon.svg \
+    && grep -A1 -xF 'Could not load image /home/tester/Pictures/missing.png' "$out/f30-missing.log" \
+        | grep -qF "Couldn't open /home/tester/Pictures/missing.png" && ok=0
+result "a missing image or icon logs SDL's own reason (exit $(cat "$out/f30-missing.code"))" $ok
+grep -A1 'Could not load image' "$out/f30-missing.log" | sed 's/^/      /'
+
 run_quick f30-slideshow
 ok=1
 ran_clean f30-slideshow && grep -q "Found 3 images in directory /home/tester/Pictures" "$out/f30-slideshow.log" \
@@ -81,7 +98,7 @@ grep -m2 -E 'runtime error|AddressSanitizer' "$out/f30-vanish.err" | sed 's/^/  
 # not load is, with its path in the log, and the launcher starts and quits by itself.
 rm -rf "$TESTER_HOME/pipes"
 mkdir -p "$TESTER_HOME/pipes"
-mkfifo "$TESTER_HOME/pipes/bg.png" "$TESTER_HOME/pipes/icon.png" "$TESTER_HOME/pipes/icon.svg"
+mkfifo "$TESTER_HOME/pipes/bg.png" "$TESTER_HOME/pipes/icon.png" "$TESTER_HOME/pipes/icon.svg" "$TESTER_HOME/pipes/kodi.png"
 chown -R tester:tester "$TESTER_HOME/pipes"
 run_quick f30-pipes
 ok=1
@@ -92,3 +109,11 @@ ran_clean f30-pipes && grep -q "Couldn't load background image" "$out/f30-pipes.
     && ok=0
 result "a pipe named as the background image or an icon is never opened, and the launcher starts (exit $(cat "$out/f30-pipes.code"))" $ok
 grep -A1 'Could not load image' "$out/f30-pipes.log" | sed 's/^/      /'
+
+# A pipe named as one of the icons older versions shipped (kodi.png) is rescued from the library, as
+# a missing one is, rather than refused
+ok=1
+grep -qF "Entry 'Legacy' in menu 'Main': '/home/tester/pipes/kodi.png' is not a file; using the library icon 'kodi'" "$out/f30-pipes.log" \
+    && ! grep -q 'Could not load image /home/tester/pipes/kodi.png' "$out/f30-pipes.log" && ran_clean f30-pipes && ok=0
+result "a pipe named as a legacy icon gets the library's icon (exit $(cat "$out/f30-pipes.code"))" $ok
+grep -F "'Legacy'" "$out/f30-pipes.log" | sed 's/^/      /'

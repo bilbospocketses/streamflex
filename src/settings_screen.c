@@ -403,10 +403,17 @@ static void log_change(const SettingSlot *slot, const SettingValue *before)
 
 // A function to open the screen's own fonts: the bundled default, sized from the screen height.
 // An install without it still opens settings, in a font the launcher has already opened: the
-// file the titles opened.
+// file the titles opened. A bundled font that is there but is not a regular file (a pipe, say, whose
+// read would wait for good) is taken as missing, and whichever file is used is opened only if it is
+// still a regular file.
 static bool open_fonts(void)
 {
     char *bundled = find_default_font(FILENAME_DEFAULT_FONT);
+    if (bundled != NULL && fileio_not_a_file(bundled)) {
+        log_error("Settings: the font %s is %s", bundled, fileio_last_error());
+        free(bundled);
+        bundled = NULL;
+    }
     const char *path = bundled;
     if (path == NULL) {
         path = title_info.font_path;
@@ -417,9 +424,9 @@ static bool open_fonts(void)
         log_error("Settings: the font %s is missing, so they use %s", FILENAME_DEFAULT_FONT, path);
     }
     float height = (float) geo.screen_height;
-    font_header = TTF_OpenFont(path, max_int(8, (int) (HEADER_FONT_RATIO * height)));
-    font_row = TTF_OpenFont(path, max_int(8, (int) (ROW_FONT_RATIO * height)));
-    font_small = TTF_OpenFont(path, max_int(8, (int) (SMALL_FONT_RATIO * height)));
+    font_header = open_font_file(path, max_int(8, (int) (HEADER_FONT_RATIO * height)), 0);
+    font_row = open_font_file(path, max_int(8, (int) (ROW_FONT_RATIO * height)), 0);
+    font_small = open_font_file(path, max_int(8, (int) (SMALL_FONT_RATIO * height)), 0);
     if (font_header == NULL || font_row == NULL || font_small == NULL)
         log_error("Settings cannot open: could not open the font %s\n%s", path, TTF_GetError());
     free(bundled);

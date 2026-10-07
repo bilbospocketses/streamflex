@@ -734,8 +734,9 @@ static void library_warning(const char *message)
 }
 
 // A function to point every entry that names a library icon at its file. It also rescues a missing
-// file that the library can stand in for (see library_rescue): a path to one of the seven icons older
-// versions shipped, or a name typed with capitals or stray spaces. Both use the library icon and log a note.
+// file, or a path to something that is not a regular file, that the library can stand in for (see
+// library_rescue): a path to one of the seven icons older versions shipped, or a name typed with
+// capitals or stray spaces. Both use the library icon and log a note.
 void resolve_library_icons(void)
 {
     library_set_warn(library_warning);
@@ -780,7 +781,9 @@ void resolve_library_icons(void)
                     path = library_lookup(LIBRARY_FALLBACK_ICON);
                 }
             }
-            else if (!file_exists(e->icon_path)) {
+            // A path to something that is not a regular file (a pipe, say) is never opened, so it is
+            // rescued as a missing one is
+            else if (!file_exists(e->icon_path) || !fileio_is_file(e->icon_path)) {
                 const char *name = NULL;
                 path = library_rescue(e->icon_path, &name);
                 if (path != NULL)

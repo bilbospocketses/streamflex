@@ -164,11 +164,13 @@ int load_next_slideshow_background_async(void *data)
 {
     Slideshow *slideshow = (Slideshow*) data;
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: it holds the loader back before its read, as a slow
-    // disk would, so a mode step or a quit can land while the loader is still running
-    const char *delay = getenv("STREAMFLEX_TEST_SLIDESHOW_DELAY_MS");
-    if (delay != NULL)
-        SDL_Delay((Uint32) atoi(delay));
+    // Only the headless harness builds this: STREAMFLEX_TEST_SLIDESHOW_HOLD holds the loader back
+    // before its read, as a slow disk would, until the file it names exists, so a mode step or a quit
+    // lands while the loader is still running and the check lets it go when it has looked. A check
+    // that never lets it go is not waited on for more than a minute.
+    const char *hold = getenv("STREAMFLEX_TEST_SLIDESHOW_HOLD");
+    for (int waited = 0; hold != NULL && waited < 60000 && !fileio_present(hold); waited += 50)
+        SDL_Delay(50);
 #endif
     slideshow->transition_surface = load_next_slideshow_background(slideshow, true);
     slideshow->transition_luminance = slideshow->transition_surface != NULL
@@ -201,14 +203,15 @@ double surface_luminance(SDL_Surface *surface)
 }
 
 // A function to load a texture from a file, measuring its mean luminance when asked (NULL: not). A
-// path that is not a regular file (a pipe, say, whose read would wait for good) is never opened.
+// path to something that is not a regular file (a pipe, say, whose read would wait for good) is never
+// opened; a path to nothing is, so SDL says why it failed.
 SDL_Texture *load_texture_measured(const char *path, double *luminance)
 {
     if (luminance != NULL)
         *luminance = -1.0;
     if (path == NULL)
         return NULL;
-    if (!fileio_is_file(path)) {
+    if (fileio_not_a_file(path)) {
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
@@ -354,11 +357,11 @@ SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect)
     return rasterize(buffer, w, h, rect, "An SVG image");
 }
 
-// A function to rasterize an SVG file; pass -1 for w or h to keep the aspect ratio. A path that is
-// not a regular file is never opened.
+// A function to rasterize an SVG file; pass -1 for w or h to keep the aspect ratio. A path to
+// something that is not a regular file is never opened.
 SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect)
 {
-    if (!fileio_is_file(path)) {
+    if (fileio_not_a_file(path)) {
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
@@ -374,7 +377,7 @@ SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *r
 
 // A function to load a menu icon. SVGs are rasterized at the button size so they stay sharp
 // at any size; other formats load at their own size and the renderer scales them. Either way its
-// pixels are kept off the chroma key. A path that is not a regular file is never opened.
+// pixels are kept off the chroma key. A path to something that is not a regular file is never opened.
 SDL_Texture *load_icon(const char *path, int size)
 {
     if (path == NULL)
@@ -382,7 +385,7 @@ SDL_Texture *load_icon(const char *path, int size)
     size_t length = strlen(path);
     if (length > 4 && SDL_strcasecmp(path + length - 4, ".svg") == 0)
         return rasterize_svg_from_file(path, size, -1, NULL);
-    if (!fileio_is_file(path)) {
+    if (fileio_not_a_file(path)) {
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
@@ -626,6 +629,18 @@ char *find_default_font(const char *font)
     return find_file(font, 2, prefixes);
 }
 
+// A function to open a font file at a size and face. A path to something that is not a regular file
+// (a pipe, say, whose read would wait for good) is never opened: it fails as a missing file does,
+// and TTF_GetError() says why.
+TTF_Font *open_font_file(const char *path, int size, int face)
+{
+    if (fileio_not_a_file(path)) {
+        TTF_SetError("%s", fileio_last_error());
+        return NULL;
+    }
+    return TTF_OpenFontIndex(path, size, face);
+}
+
 // A function to open a text's font: the configured file and face (a relative path is also tried
 // beside the executable), else the bundled font. The configured path is never changed: what was
 // opened is kept in info->font_path, and a failure says so in the log. A font the TextInfo still
@@ -640,7 +655,7 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
     info->font = NULL;
     info->font_face = 0;
     if (configured != NULL) {
-        info->font = TTF_OpenFontIndex(configured, info->font_size, face);
+        info->font = open_font_file(configured, info->font_size, face);
         if (info->font != NULL)
             info->font_path = strdup(configured);
 
@@ -649,7 +664,7 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
         else if (config.exe_path != NULL && is_relative_path(configured)) {
             char exe_font_path[MAX_PATH_CHARS + 1];
             join_paths(exe_font_path, sizeof(exe_font_path), 2, config.exe_path, configured);
-            info->font = TTF_OpenFontIndex(exe_font_path, info->font_size, face);
+            info->font = open_font_file(exe_font_path, info->font_size, face);
             if (info->font != NULL)
                 info->font_path = strdup(exe_font_path);
         }
@@ -660,8 +675,11 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
     }
     if (info->font == NULL) {
         char *default_font_path = find_default_font(default_font);
-        if (default_font_path != NULL)
-            info->font = TTF_OpenFont(default_font_path, info->font_size);
+        if (default_font_path != NULL) {
+            info->font = open_font_file(default_font_path, info->font_size, 0);
+            if (info->font == NULL)
+                log_error("Could not open the default font %s\n%s", default_font_path, TTF_GetError());
+        }
         if (info->font == NULL) {
             free(default_font_path);
             log_fatal("Could not load default font");
