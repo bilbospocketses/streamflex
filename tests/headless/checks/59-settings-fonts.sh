@@ -330,8 +330,10 @@ echo "      the cursor read: ${reads:-nothing}"
 # log, and the launcher never waits on it:
 # - pipeabs: the titles' font, by its full path: the titles use the bundled font;
 # - piperel: the titles' font, by a path the launcher's own folder holds (the second path tried);
-# - pipedefault: the bundled font, with no font configured: the launcher stops, as without it;
-# - pipesettings: the bundled font again, which settings take as missing: they open in the titles'
+# - pipedefault: a bundled font with no font configured, the clock's: the launcher stops, as
+#   without it. The clock's is used because it opens after the window: a stop before the window
+#   leaves SDL3's display data unfreed (sdl2-compat's X11, Fedora), which the leak pass counts;
+# - pipesettings: the titles' bundled font, which settings take as missing: they open in the titles'
 #   font;
 # - pipeswap: the titles' font becomes a pipe while the launcher runs, so settings, with no bundled
 #   font to use, cannot open, as when that file has gone.
@@ -339,8 +341,9 @@ rm -rf /opt/sf59-pipes /opt/sf59-pipebundle "$F59/pipes"
 mkdir -p /opt/sf59-pipes/f59rel /opt/sf59-pipebundle "$F59/pipes"
 cp /work/build/streamflex /opt/sf59-pipes/ && cp -r /work/build/assets /opt/sf59-pipes/
 cp /work/build/streamflex /opt/sf59-pipebundle/ && cp -r /work/build/assets /opt/sf59-pipebundle/
-rm -f /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf
-mkfifo /opt/sf59-pipes/f59rel/x.ttf /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf "$F59/pipes/x.ttf"
+rm -f /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf /opt/sf59-pipebundle/assets/fonts/SourceSansPro-Regular.ttf
+mkfifo /opt/sf59-pipes/f59rel/x.ttf /opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf \
+       /opt/sf59-pipebundle/assets/fonts/SourceSansPro-Regular.ttf "$F59/pipes/x.ttf"
 cp /work/assets/fonts/Inter-Regular.ttf "$F59/pipes/t.ttf"
 chown -R tester:tester /opt/sf59-pipes /opt/sf59-pipebundle "$F59/pipes"
 PIPED_BUNDLE=/opt/sf59-pipebundle/assets/fonts/OpenSans-Regular.ttf
@@ -363,13 +366,13 @@ f59_then "$log" 'Could not open the font f59rel/x.ttf (face 0), using the defaul
     && grep -qxF 'Title font: /opt/sf59-pipes/assets/fonts/OpenSans-Regular.ttf (face 0)' "$log" && ran_clean f59-piperel && ok=0
 result "fonts: a pipe as the titles' font in the launcher's folder is never opened (exit $(cat "$out/f59-piperel.code"))" $ok
 
-cfg=$(f59_config f59-pipedefault "[General]\nDefaultMenu=Main\nStartupCmd=:quit\n$F59_MAIN")
+cfg=$(f59_config f59-pipedefault "[General]\nDefaultMenu=Main\nStartupCmd=:quit\n\n[Titles]\nFont=$BUNDLED/DejaVuSans.ttf\n\n[Clock]\nEnabled=true\n$F59_MAIN")
 STREAMFLEX_TEST_NO_MESSAGE_BOX=1 exe=/opt/sf59-pipebundle/streamflex CFG=$cfg run_quick f59-pipedefault
 log=$out/f59-pipedefault.log
 ok=1
-f59_then "$log" "Could not open the default font $PIPED_BUNDLE" 'not a regular file' \
+f59_then "$log" 'Could not open the default font /opt/sf59-pipebundle/assets/fonts/SourceSansPro-Regular.ttf' 'not a regular file' \
     && grep -qxF 'Could not load default font' "$log" && ran_clean f59-pipedefault 1 && ok=0
-result "fonts: a pipe as the bundled font is never opened, and the launcher stops as without it (exit $(cat "$out/f59-pipedefault.code"))" $ok
+result "fonts: a pipe as the clock's bundled font is never opened, and the launcher stops as without it (exit $(cat "$out/f59-pipedefault.code"))" $ok
 
 cfg=$(f59_config f59-pipesettings "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=$BUNDLED/DejaVuSans.ttf\n$F59_MAIN")
 exe=/opt/sf59-pipebundle/streamflex CFG=$cfg UNTIL="Settings opened over menu 'Main'" run_keys f59-pipesettings Menu
