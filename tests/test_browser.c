@@ -467,6 +467,55 @@ static void test_network_places_are_not_opened_unasked(void)
     browser_free(browser);
 }
 
+// A function to test file mode: every file that is not hidden, after the folders, whatever its kind;
+// opened at a file, its folder with it highlighted; OK on a file chooses it
+static void test_file_mode(void)
+{
+    Browser *browser = browser_open(BROWSER_FILE, "/home/me/Pictures/notes.txt", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK(browser != NULL);
+    CHECK_STR(browser_folder(browser), "/home/me/Pictures");
+    CHECK_INT(browser_row_count(browser), 6);
+    CHECK_INT(browser_row(browser, 0)->kind, BROWSER_ROW_FOLDER);
+    CHECK_STR(browser_row(browser, 0)->name, "Autumn");
+    CHECK_STR(browser_row(browser, 1)->name, "Birthdays");
+    CHECK_INT(browser_row(browser, 2)->kind, BROWSER_ROW_FILE);
+    CHECK_STR(browser_row(browser, 2)->name, "apple.webp");
+    CHECK_STR(browser_row(browser, 4)->name, "notes.txt");        // Not an image, and listed
+    CHECK_STR(browser_row(browser, 5)->name, "zebra.png");        // .hidden.png is left out
+    CHECK_INT(browser_cursor(browser), 4);
+    CHECK_INT(browser_command(browser, BROWSER_DOWN, 5), BROWSER_MOVED);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 5), BROWSER_CHOSEN);
+    CHECK_STR(browser_chosen(browser), "/home/me/Pictures/zebra.png");
+    browser_free(browser);
+}
+
+// A function to test what file mode shares with image mode, and what it does not: a file config.ini
+// cannot hold is shown, refused with the reason; image rows stay images in image and folder mode,
+// chosen only in image mode
+static void test_file_mode_refusals_and_row_kinds(void)
+{
+    Browser *browser = browser_open(BROWSER_FILE, "/home/me/Pictures/notes.txt", PLACES, 3, fake_list, fake_check, NULL, NULL);
+    const BrowserRow *row = browser_row(browser, 5);
+    CHECK_STR(row->name, "zebra.png");
+    CHECK_INT(row->kind, BROWSER_ROW_FILE);
+    CHECK(!row->enabled);
+    CHECK(row->why != NULL && strstr(row->why, "too long") != NULL);
+    CHECK(browser_row(browser, 4)->enabled);
+    CHECK(browser_row(browser, 4)->why == NULL);
+    browser_free(browser);
+
+    browser = browser_open(BROWSER_IMAGE, "/home/me/Pictures/zebra.png", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row(browser, 2)->kind, BROWSER_ROW_IMAGE);
+    CHECK(browser_row(browser, 2)->enabled);
+    browser_free(browser);
+
+    browser = browser_open(BROWSER_FOLDER, "/home/me/Pictures", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row_count(browser), 6);   // Use this folder, two folders and three images: no notes.txt
+    CHECK_INT(browser_row(browser, 3)->kind, BROWSER_ROW_IMAGE);
+    CHECK(!browser_row(browser, 3)->enabled);
+    browser_free(browser);
+}
+
 int main(void)
 {
     test_rows_and_start();
@@ -487,5 +536,7 @@ int main(void)
     test_page_rows_below_one();
     test_start_with_a_trailing_separator();
     test_network_places_are_not_opened_unasked();
+    test_file_mode();
+    test_file_mode_refusals_and_row_kinds();
     return check_report();
 }

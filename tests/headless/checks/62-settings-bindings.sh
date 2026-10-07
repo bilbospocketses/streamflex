@@ -544,3 +544,24 @@ grep -qxF "Settings: not saved as asked: 'Hotkey1=#4000003E;:home' is not there 
     && ! grep -q 'Hotkey1=' "$cfg" && grep -qx 'Hotkey2=#4000003F;:home' "$cfg" && ran_clean f62-skipnote && ok=0
 result "bindings: a removal skipped is logged without the two-lines note (exit $(cat "$out/f62-skipnote.code"))" $ok
 grep 'Settings: not saved as asked' "$out/f62-skipnote.log" | sed 's/^/      /'
+
+# Both kinds of note in one save: Hotkey1 changed in settings and by hand, Hotkey2 removed in settings
+# and by hand. Each line carries the words its own kind needs, and only those: the two-lines note
+# goes by the kind the save gives each note, so it reaches the change's line and not the removal's.
+b62_mixed_edit() {
+    sed -e 's/^\(Hotkey1=#4000003E;:home\)$/\1 ; edited by hand/' -e '/^Hotkey2=/d' "$cfg" > "$out/f62-mixnote.edit"
+    cat "$out/f62-mixnote.edit" > "$cfg"
+    sleep 0.5
+}
+cfg=$(writable_config f62-note)
+CFG=$cfg run_keys f62-mixnote $TO_KEYBOARD Down Return Down Return Down Down Return Down Return Down Down Return \
+    +b62_mixed_edit $SAVE
+ok=1
+grep -qxF "Settings: not saved as asked: 'Hotkey1=#4000003E;:home' changed meanwhile, so its change is written as a new line; where two lines bind one key or button, the first in the file is the one that runs" \
+    "$out/f62-mixnote.log" \
+    && grep -qxF "Settings: not saved as asked: 'Hotkey2=#4000003F;:home' is not there any more, so its removal is skipped" \
+       "$out/f62-mixnote.log" \
+    && grep -qx 'Hotkey1=#4000003E;:home ; edited by hand' "$cfg" && grep -qx 'Hotkey2=#4000003E;:quit' "$cfg" \
+    && ran_clean f62-mixnote && ok=0
+result "bindings: a change and a removal both made by hand meanwhile each get their own words (exit $(cat "$out/f62-mixnote.code"))" $ok
+grep 'Settings: not saved as asked' "$out/f62-mixnote.log" | sed 's/^/      /'

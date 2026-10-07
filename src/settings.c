@@ -2010,7 +2010,8 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
     return event;
 }
 
-// A function to set a path chosen in the folder browser
+// A function to set a path chosen in the folder browser; a change that waits for the next start
+// (the mappings file) says so in the caption
 SettingsEvent settings_choose(SettingsState *state, SettingSlot *slot, const char *path)
 {
     SettingsEvent event;
@@ -2023,6 +2024,8 @@ SettingsEvent settings_choose(SettingsState *state, SettingSlot *slot, const cha
     snprintf(slot->value.text, SETTING_TEXT_MAX, "%s", path);
     event.kind = SETTINGS_EVENT_CHANGED;
     event.slot = slot;
+    if (slot->def->flags & SET_FLAG_NEXT_START)
+        snprintf(state->notice, sizeof(state->notice), "This applies at next start");
     return event;
 }
 

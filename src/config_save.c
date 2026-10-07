@@ -107,13 +107,24 @@ static bool keep_backup(ConfigSaveResult *result)
     return true;
 }
 
-// A function to add a note to the notes, one per line; one that does not fit is cut short
-static void add_note(char *notes, size_t size, const char *format, const char *line)
+// The notes a save gathers, each line with its kind; they reach the result only when it succeeds
+typedef struct {
+    char text[CONFIG_SAVE_NOTES_SIZE];
+    ConfigNoteKind kinds[CONFIG_SAVE_NOTES_SIZE / 2];
+    int count;
+} SaveNotes;
+
+// A function to add a note of a kind to the notes, one per line; one that does not fit is cut short,
+// and one with no room left at all adds no line, and so no kind
+static void add_note(SaveNotes *notes, ConfigNoteKind kind, const char *format, const char *line)
 {
-    size_t used = strlen(notes);
+    size_t size = sizeof(notes->text);
+    size_t used = strlen(notes->text);
     if (used > 0 && used + 1 < size)
-        notes[used++] = '\n';
-    snprintf(notes + used, size - used, format, line);
+        notes->text[used++] = '\n';
+    if (used + 1 < size)
+        notes->kinds[notes->count++] = kind;
+    snprintf(notes->text + used, size - used, format, line);
 }
 
 // A function to list a section's key lines into new memory (caller frees); NULL when out of memory.
@@ -200,7 +211,7 @@ static bool add_list_line(IniDoc *doc, const ConfigListEdit *edit, ConfigSaveRes
 // takes its change as a new line, and its removal is skipped; both say so in `notes`. A removal
 // inidoc refuses (a key with an empty name) fails the save with its reason, as a line that cannot be
 // written does.
-static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count, char *notes, size_t notes_size,
+static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count, SaveNotes *notes,
                              ConfigSaveResult *result)
 {
     for (int i = 0; i < count; i++) {
@@ -210,7 +221,8 @@ static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count
         int line = inidoc_find_line(doc, edit->section, edit->original);
         if (edit->op == CONFIG_LIST_REMOVE) {
             if (line < 0)
-                add_note(notes, notes_size, "'%s' is not there any more, so its removal is skipped", edit->original);
+                add_note(notes, CONFIG_NOTE_REMOVAL_SKIPPED, "'%s' is not there any more, so its removal is skipped",
+                         edit->original);
             else if (!inidoc_list_remove(doc, line)) {
                 snprintf(result->why, sizeof(result->why), "the line '%s' in [%s] cannot be removed: %s", edit->original,
                     edit->section, inidoc_why(doc));
@@ -219,7 +231,8 @@ static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count
             continue;
         }
         if (line < 0) {
-            add_note(notes, notes_size, "'%s' changed meanwhile, so its change is written as a new line", edit->original);
+            add_note(notes, CONFIG_NOTE_CHANGED_MEANWHILE, "'%s' changed meanwhile, so its change is written as a new line",
+                     edit->original);
             if (!add_list_line(doc, edit, result))
                 return false;
             continue;
@@ -263,7 +276,8 @@ bool config_save_all(const char *loaded, const char *system_prefix, const char *
                      ConfigSaveResult *result)
 {
     memset(result, 0, sizeof(*result));
-    char notes[sizeof(result->notes)] = "";
+    SaveNotes notes;
+    memset(&notes, 0, sizeof(notes));
     char source[CONFIG_SAVE_PATH_MAX];
     if (!fileio_real_path(loaded, source, sizeof(source))) {
         snprintf(result->path, sizeof(result->path), "%s", loaded);
@@ -295,7 +309,7 @@ bool config_save_all(const char *loaded, const char *system_prefix, const char *
         return false;
     }
     if (!apply_edits(doc, edits, count, result) ||
-        !apply_list_edits(doc, lists, list_count, notes, sizeof(notes), result)) {
+        !apply_list_edits(doc, lists, list_count, &notes, result)) {
         inidoc_free(doc);
         return false;
     }
@@ -330,7 +344,9 @@ bool config_save_all(const char *loaded, const char *system_prefix, const char *
         fileio_remove(temporary);
     else {
         snprintf(result->warning, sizeof(result->warning), "%s", fileio_last_warning());
-        snprintf(result->notes, sizeof(result->notes), "%s", notes);
+        snprintf(result->notes, sizeof(result->notes), "%s", notes.text);
+        memcpy(result->note_kinds, notes.kinds, sizeof(result->note_kinds));
+        result->note_count = notes.count;
     }
     alloc_free(output);
     return ok;

@@ -503,6 +503,7 @@ static void test_list_edits(void)
     CHECK(holds(CONFIG, "[General]\nDefaultMenu=Main\n\n[Hotkeys]\nHotkey1=#4000003A;:settings\nHotkey2=#4000003C;:back\n"
                         "Hotkey3=#4000003D;:up\n; end\n\n[Main]\nEntry1=One;apps;:quit\n"));
     CHECK_STR(result.notes, "");
+    CHECK_INT(result.note_count, 0);
 }
 
 // A function to test list edits after a hand edit made while settings were open (Review Focus 4).
@@ -524,6 +525,10 @@ static void test_list_edits_after_hand_edit(void)
                         "Hotkey7=#40000040;:sleep\nHotkey8=#4000003B;:up\nHotkey9=#4000003D;:down\n"));
     CHECK(strstr(result.notes, "'Hotkey2=#4000003B;:home' changed meanwhile, so its change is written as a new line") != NULL);
     CHECK(strstr(result.notes, "'Hotkey3=#4000003C;:quit' is not there any more, so its removal is skipped") != NULL);
+    CHECK_INT(result.note_count, 2);   // Each line with its kind, in order: the change, then the removal
+    CHECK_INT(result.note_kinds[0], CONFIG_NOTE_CHANGED_MEANWHILE);
+    CHECK_INT(result.note_kinds[1], CONFIG_NOTE_REMOVAL_SKIPPED);
+    CHECK(strncmp(result.notes, "'Hotkey2=", 9) == 0);
 
     // A gamepad control keeps its label, with no number; a line that cannot be written fails the
     // whole save, and nothing is written
@@ -619,6 +624,7 @@ static void test_list_edit_edges(void)
     CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &gone, 1, &result));
     CHECK(strstr(result.why, "the Hotkey2 value in [Hotkeys] cannot be written: ") != NULL);
     CHECK_STR(result.notes, "");
+    CHECK_INT(result.note_count, 0);
     CHECK(holds(CONFIG, hotkeys));
 
     // A key with an empty name cannot be removed: the indented line after it would join Hotkey1
@@ -645,6 +651,9 @@ static void test_list_notes(void)
     CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, two, 2, &result));
     CHECK_STR(result.notes, "'Hotkey3=#4000003C;:quit' is not there any more, so its removal is skipped\n"
                             "'Hotkey4=#4000003D;:quit' is not there any more, so its removal is skipped");
+    CHECK_INT(result.note_count, 2);
+    CHECK_INT(result.note_kinds[0], CONFIG_NOTE_REMOVAL_SKIPPED);
+    CHECK_INT(result.note_kinds[1], CONFIG_NOTE_REMOVAL_SKIPPED);
 
     // Six notes of about 230 bytes each overrun the 1024 bytes
     char gone[180];
@@ -658,6 +667,27 @@ static void test_list_notes(void)
     CHECK(result.notes[sizeof(result.notes) - 1] == '\0');
     CHECK_INT((int) strlen(result.notes), (int) sizeof(result.notes) - 1);
     CHECK(strncmp(result.notes, "'ggg", 4) == 0);
+    CHECK_INT(result.note_count, 5);   // Four whole and one cut short; the sixth found no room, and has no line
+
+    // Two notes that leave one byte, which the third's line break takes: the third has no line either
+    const size_t skipped = strlen("'' is not there any more, so its removal is skipped");
+    static char first[700];
+    static char second[700];
+    size_t second_length = (sizeof(result.notes) - 2) - 1 - 2 * skipped - 300;
+    memset(first, 'f', 300);
+    first[300] = '\0';
+    memset(second, 's', second_length);
+    second[second_length] = '\0';
+    ConfigListEdit edge[] = {
+        { CONFIG_LIST_REMOVE, "Hotkeys", first, NULL, false, NULL },
+        { CONFIG_LIST_REMOVE, "Hotkeys", second, NULL, false, NULL },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey9=#40000001;:quit", NULL, false, NULL }
+    };
+    reset(CONFIG, hotkeys);
+    CHECK(config_save_all(CONFIG, NULL, NULL, NULL, 0, edge, 3, &result));
+    CHECK_INT((int) strlen(result.notes), (int) sizeof(result.notes) - 1);
+    CHECK(result.notes[sizeof(result.notes) - 2] == '\n');
+    CHECK_INT(result.note_count, 2);
 
     reset(CONFIG, hotkeys);
     CHECK(fileio_make_dirs(CONFIG ".bak.tmp"));   // A folder in the way: the backup cannot be written
@@ -665,6 +695,7 @@ static void test_list_notes(void)
     CHECK(!config_save_all(CONFIG, NULL, NULL, NULL, 0, &changed, 1, &result));
     CHECK(strstr(result.why, "could not write the backup") != NULL);
     CHECK_STR(result.notes, "");
+    CHECK_INT(result.note_count, 0);
     CHECK(holds(CONFIG, hotkeys));
     remove_folder(CONFIG ".bak.tmp");
 }

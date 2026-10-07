@@ -1,8 +1,8 @@
-// The folder browser behind the settings screen's Image and Folder rows: a folder's rows, a cursor,
-// and moving between folders and the places it can start from. It lists folders through a function
-// it is given, so the tests hand it a pretend file system; paths in either style ("/home/me",
-// "C:\Users\me", "\\server\share") work on any platform. Pure: no SDL, no globals; memory comes
-// from alloc.h.
+// The folder browser behind the settings screen's Image, Folder and Mappings file rows: a folder's
+// rows, a cursor, and moving between folders and the places it can start from. It lists folders
+// through a function it is given, so the tests hand it a pretend file system; paths in either style
+// ("/home/me", "C:\Users\me", "\\server\share") work on any platform. Pure: no SDL, no globals;
+// memory comes from alloc.h.
 #ifndef BROWSER_H
 #define BROWSER_H
 
@@ -14,14 +14,16 @@
 
 typedef enum {
     BROWSER_IMAGE,   // Choosing one image
-    BROWSER_FOLDER   // Choosing a folder of images (a slideshow)
+    BROWSER_FOLDER,  // Choosing a folder of images (a slideshow)
+    BROWSER_FILE     // Choosing one file of any kind
 } BrowserMode;
 
 typedef enum {
     BROWSER_ROW_PLACE,
     BROWSER_ROW_USE_FOLDER,
     BROWSER_ROW_FOLDER,
-    BROWSER_ROW_IMAGE
+    BROWSER_ROW_IMAGE,
+    BROWSER_ROW_FILE
 } BrowserRowKind;
 
 typedef struct {

@@ -630,7 +630,8 @@ static const char *check_path(const char *path, void *context)
     return inidoc_check_in(browser_doc, section_of(slot), slot->def->key, path);
 }
 
-// A function to preview what the browser's cursor is on: an image, or a folder's first image
+// A function to preview what the browser's cursor is on: an image, or a folder's first image; any
+// other file (file mode's) previews nothing, so the real background shows
 static void preview_highlighted(void)
 {
     const BrowserRow *row = browser_row(browser, browser_cursor(browser));
@@ -648,7 +649,7 @@ static void log_browsing(void)
     log_debug("Settings: browsing %s", browser_folder(browser) != NULL ? browser_folder(browser) : "the places");
 }
 
-// A function to open the folder browser for an Image or Folder setting, at its current path
+// A function to open the folder browser for an Image, Folder or Mappings file setting, at its current path
 static void open_browser(SettingSlot *slot)
 {
     FileioPlace *places = NULL;
@@ -669,7 +670,8 @@ static void open_browser(SettingSlot *slot)
     char *text = fileio_read_all(config.config_path, &length);
     browser_doc = text != NULL ? inidoc_parse(text, length) : NULL;
     alloc_free(text);
-    BrowserMode mode = slot->def->id == SET_ID_BACKGROUND_IMAGE ? BROWSER_IMAGE : BROWSER_FOLDER;
+    BrowserMode mode = slot->def->id == SET_ID_BACKGROUND_IMAGE ? BROWSER_IMAGE
+                     : slot->def->id == SET_ID_GAMEPAD_MAPPINGS ? BROWSER_FILE : BROWSER_FOLDER;
     const char *why = "out of memory";
     test_fail("browser", true);
     browser = list != NULL ? browser_open(mode, slot->value.text, list, count, list_folder, check_path, slot, &why) : NULL;
@@ -689,7 +691,7 @@ static void open_browser(SettingSlot *slot)
     preview_highlighted();
 }
 
-// A function to close the folder browser, back to the Background page
+// A function to close the folder browser, back to the page it opened from (Background, or Gamepad)
 static void close_browser(void)
 {
     browser_free(browser);
@@ -786,15 +788,16 @@ static void close_settings(void)
 
 // A function to log what the save could not make as asked (config_save's notes, one a line). A change
 // written as a new line beside a line changed by hand is not said to have taken effect: the first line
-// on a key or button is the one that runs. That is said of those notes only (config_save.c words them
-// "... is written as a new line"), not of a removal skipped.
-static void log_save_notes(char *notes)
+// on a key or button is the one that runs. That is said of those notes only, by the kind config_save
+// gives each line, not of a removal skipped.
+static void log_save_notes(ConfigSaveResult *result)
 {
-    for (char *line = notes; line[0] != '\0';) {
+    int index = 0;
+    for (char *line = result->notes; line[0] != '\0';) {
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end = '\0';
-        if (strstr(line, "written as a new line") != NULL)
+        if (result->note_kinds[index++] == CONFIG_NOTE_CHANGED_MEANWHILE)
             log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
         else
             log_debug("Settings: not saved as asked: %s", line);
@@ -866,7 +869,7 @@ static bool save_changes(void)
             result.backup[0] != '\0' ? result.backup : "none");
         if (result.warning[0] != '\0')
             log_error("Settings saved to %s, but %s", result.path, result.warning);
-        log_save_notes(result.notes);
+        log_save_notes(&result);
         if (strcmp(result.path, config.config_path) != 0) {
             free(config.config_path);
             config.config_path = strdup(result.path);

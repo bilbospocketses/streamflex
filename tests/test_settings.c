@@ -1777,6 +1777,36 @@ static void test_binding_no_room(void)
     bindings_free(b);
 }
 
+// A function to test that a setting that applies at next start says so when it changes
+static void test_next_start(void)
+{
+    SettingsState *state = open_model();
+    SettingSlot *slot = settings_slot(state, SET_ID_GAMEPAD_MAPPINGS, -1);
+    CHECK_INT(settings_choose(state, slot, "/pads/new.txt").kind, SETTINGS_EVENT_CHANGED);
+    CHECK_STR(settings_notice(state), "This applies at next start");
+    CHECK_INT(settings_choose(state, settings_slot(state, SET_ID_BACKGROUND_IMAGE, -1), "/a.png").kind, SETTINGS_EVENT_CHANGED);
+    CHECK_STR(settings_notice(state), "");
+    settings_free(state);
+}
+
+// A function to test that the next-start notice comes only with a change: the same file chosen again,
+// or a path too long to keep, changes nothing and says nothing
+static void test_next_start_only_on_a_change(void)
+{
+    SettingsState *state = open_model();
+    SettingSlot *slot = settings_slot(state, SET_ID_GAMEPAD_MAPPINGS, -1);
+    CHECK_INT(settings_choose(state, slot, "/pads/new.txt").kind, SETTINGS_EVENT_CHANGED);
+    CHECK_INT(settings_choose(state, slot, "/pads/new.txt").kind, SETTINGS_EVENT_NONE);
+    CHECK_STR(settings_notice(state), "");
+    char long_path[SETTING_TEXT_MAX + 8];
+    memset(long_path, 'p', sizeof(long_path) - 1);
+    long_path[sizeof(long_path) - 1] = '\0';
+    CHECK_INT(settings_choose(state, slot, long_path).kind, SETTINGS_EVENT_NONE);
+    CHECK_STR(settings_notice(state), "");
+    CHECK_STR(slot->value.text, "/pads/new.txt");
+    settings_free(state);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -1809,6 +1839,8 @@ int main(void)
     test_find();
     test_fallbacks();
     test_row_steps_and_selectable();
+    test_next_start();
+    test_next_start_only_on_a_change();
     return check_report();
 }
 

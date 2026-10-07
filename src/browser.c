@@ -220,10 +220,10 @@ static const char *why_not(const Browser *browser, const char *path)
     return why;
 }
 
-// A function to show a folder: folders first, then images, each sorted by name, hidden files left
-// out; in folder mode "Use this folder" comes first. A path too long to choose is shown, and refused
-// with the reason. When the folder cannot be listed, or memory runs out, what was on show is left
-// as it was.
+// A function to show a folder: folders first, then images (in file mode, every file), each sorted by
+// name, hidden files left out; in folder mode "Use this folder" comes first. A path too long to
+// choose is shown, and refused with the reason. When the folder cannot be listed, or memory runs
+// out, what was on show is left as it was.
 static LoadResult load_folder(Browser *browser, const char *folder, const char *selected)
 {
     FileioEntry *entries = NULL;
@@ -241,7 +241,7 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
             continue;
         if (entries[i].is_dir)
             folders[folder_count++] = &entries[i];
-        else if (browser_is_image_file(&entries[i]))
+        else if (browser->mode == BROWSER_FILE || browser_is_image_file(&entries[i]))
             images[image_count++] = &entries[i];
     }
     BrowserRow *rows = NULL;
@@ -262,8 +262,10 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
         ok = add_row(rows, &row_count, BROWSER_ROW_FOLDER, folders[i]->name, join_path(copy, folders[i]->name), true, NULL);
     for (int i = 0; ok && i < image_count; i++) {
         char *path = join_path(copy, images[i]->name);
-        const char *why = path != NULL && browser->mode == BROWSER_IMAGE ? why_not(browser, path) : NULL;
-        ok = add_row(rows, &row_count, BROWSER_ROW_IMAGE, images[i]->name, path, browser->mode == BROWSER_IMAGE && why == NULL, why);
+        bool choosable = browser->mode == BROWSER_IMAGE || browser->mode == BROWSER_FILE;
+        const char *why = path != NULL && choosable ? why_not(browser, path) : NULL;
+        ok = add_row(rows, &row_count, browser->mode == BROWSER_FILE ? BROWSER_ROW_FILE : BROWSER_ROW_IMAGE,
+                     images[i]->name, path, choosable && why == NULL, why);
     }
     alloc_free(folders);
     alloc_free(images);
@@ -283,11 +285,12 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
     return LOAD_DONE;
 }
 
-// A function to open the browser: at `start` (an image opens its folder with the image highlighted),
-// else at the first place that can be listed (Pictures, then Home, ...) and is not on a network
-// share, which could keep the browser waiting on the network, else at the places. NULL when out of
-// memory (the reason goes in *why), rather than a browser opened somewhere other than asked. A folder
-// whose list function fails (out of memory there included) cannot be listed, and the next place is tried.
+// A function to open the browser: at `start` (an image, or in file mode any start, opens its folder
+// with it highlighted), else at the first place that can be listed (Pictures, then Home, ...) and is
+// not on a network share, which could keep the browser waiting on the network, else at the places.
+// NULL when out of memory (the reason goes in *why), rather than a browser opened somewhere other
+// than asked. A folder whose list function fails (out of memory there included) cannot be listed,
+// and the next place is tried.
 Browser *browser_open(BrowserMode mode, const char *start, const BrowserPlace *places, int place_count,
                       BrowserList list, BrowserCheck check, void *context, const char **why)
 {
@@ -329,7 +332,7 @@ Browser *browser_open(BrowserMode mode, const char *start, const BrowserPlace *p
         size_t length = strlen(folder);
         while (length > 1 && fileio_is_separator(folder[length - 1]) && !is_root(folder, length))
             folder[--length] = '\0';
-        if (mode == BROWSER_IMAGE && browser_is_image(folder)) {
+        if ((mode == BROWSER_IMAGE && browser_is_image(folder)) || mode == BROWSER_FILE) {
             char *parent = alloc_malloc(length + 1);
             ok = parent != NULL;
             if (ok && browser_parent(folder, parent, length + 1))

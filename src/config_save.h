@@ -8,6 +8,7 @@
 #include "inidoc.h"
 
 #define CONFIG_SAVE_PATH_MAX 1024
+#define CONFIG_SAVE_NOTES_SIZE 1024
 
 typedef struct {
     const char *section;
@@ -35,14 +36,23 @@ typedef struct {
     const char *value;      // SET, ADD
 } ConfigListEdit;
 
+// What a note says of a list edit the save could not make as asked
+typedef enum {
+    CONFIG_NOTE_CHANGED_MEANWHILE,   // Its line changed by hand meanwhile: the change is written as a new line
+    CONFIG_NOTE_REMOVAL_SKIPPED      // Its line is gone: the removal is skipped
+} ConfigNoteKind;
+
 typedef struct {
     char path[CONFIG_SAVE_PATH_MAX];    // The file written, or that could not be
     char backup[CONFIG_SAVE_PATH_MAX];  // Its backup; "" when there was no file to back up
     char why[512];                      // Why the save failed, in a few words
     char warning[160];                  // What a save that succeeded could not keep, such as the file's
                                         // permissions; "" when nothing
-    char notes[1024];                   // One line per list edit that could not be made as asked; "" when
+    char notes[CONFIG_SAVE_NOTES_SIZE]; // One line per list edit that could not be made as asked; "" when
                                         // none, and always "" after a save that failed (nothing was made)
+    ConfigNoteKind note_kinds[CONFIG_SAVE_NOTES_SIZE / 2];   // Each line of `notes`' kind, in order (a
+                                                             // line takes 2 bytes at least, with its break)
+    int note_count;                     // The lines in `notes`: a note cut off whole at its end has none
 } ConfigSaveResult;
 
 bool config_save(const char *loaded, const char *system_prefix, const char *user_config,
