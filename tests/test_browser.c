@@ -4,7 +4,8 @@
 #include "check.h"
 #include "browser.h"
 
-// A pretend file system: each folder's names, '|' between them; a trailing '/' marks a folder
+// A pretend file system: each folder's names, '|' between them; a trailing '/' marks a folder, and a
+// trailing '=' something that is neither a folder nor a regular file (a pipe, a socket, a device)
 static const struct {
     const char *folder;
     const char *names;
@@ -25,7 +26,8 @@ static const struct {
     { "C:/Users/me/Pictures", "trip.png|x.jpg" },
     { "C:", "Users/" },
     { "/orphan/child", "a.png" },
-    { "/nas", "far.png" }
+    { "/nas", "far.png" },
+    { "/home/me/pads", "old.txt|feed=|sub/|game.png=|a.txt" }
 };
 
 // A function to list a pretend folder, the way fileio_list() lists a real one
@@ -45,12 +47,14 @@ static int fake_list(const char *folder, FileioEntry **entries, void *context)
             const char *end = strchr(p, '|');
             size_t length = end != NULL ? (size_t) (end - p) : strlen(p);
             bool is_dir = length > 0 && p[length - 1] == '/';
-            size_t name_length = is_dir ? length - 1 : length;
+            bool special = length > 0 && p[length - 1] == '=';
+            size_t name_length = is_dir || special ? length - 1 : length;
             char *name = malloc(name_length + 1);
             memcpy(name, p, name_length);
             name[name_length] = '\0';
             if (count < names)
-                (*entries)[count++] = (FileioEntry) { .name = name, .is_dir = is_dir, .hidden = name[0] == '.' };
+                (*entries)[count++] = (FileioEntry) { .name = name, .is_dir = is_dir, .is_file = !is_dir && !special,
+                                                      .hidden = name[0] == '.' };
             else
                 free(name);
             p += length;
@@ -338,7 +342,7 @@ static int deep_list(const char *folder, FileioEntry **entries, void *context)
         size_t size = strlen(names[i]) + 1;
         char *name = malloc(size);
         memcpy(name, names[i], size);
-        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = dirs[i], .hidden = false };
+        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = dirs[i], .is_file = !dirs[i], .hidden = false };
     }
     return count;
 }
@@ -516,6 +520,25 @@ static void test_file_mode_refusals_and_row_kinds(void)
     browser_free(browser);
 }
 
+// A function to test that file mode lists only regular files: a pipe is left out, even one named as
+// an image (a read of it at the next start could wait for good); image mode is as it was, going by
+// the name alone
+static void test_file_mode_lists_only_regular_files(void)
+{
+    Browser *browser = browser_open(BROWSER_FILE, "/home/me/pads/old.txt", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row_count(browser), 3);
+    CHECK_STR(browser_row(browser, 0)->name, "sub");
+    CHECK_STR(browser_row(browser, 1)->name, "a.txt");
+    CHECK_STR(browser_row(browser, 2)->name, "old.txt");
+    CHECK_INT(browser_cursor(browser), 2);
+    browser_free(browser);
+
+    browser = browser_open(BROWSER_IMAGE, "/home/me/pads", PLACES, 3, fake_list, NULL, NULL, NULL);
+    CHECK_INT(browser_row_count(browser), 2);
+    CHECK_STR(browser_row(browser, 1)->name, "game.png");
+    browser_free(browser);
+}
+
 int main(void)
 {
     test_rows_and_start();
@@ -538,5 +561,6 @@ int main(void)
     test_network_places_are_not_opened_unasked();
     test_file_mode();
     test_file_mode_refusals_and_row_kinds();
+    test_file_mode_lists_only_regular_files();
     return check_report();
 }

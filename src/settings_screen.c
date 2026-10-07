@@ -107,6 +107,7 @@ static int shown_count = -1;
 
 static Browser *browser = NULL;          // The folder browser, while it is open
 static SettingSlot *browser_slot = NULL; // The Image or Folder setting it chooses for
+static BrowserMode browser_mode = BROWSER_IMAGE;   // The mode it was opened in
 static int browser_first = 0;            // Its first row on show
 static int browser_page = 1;             // How many of its rows fit: Left and Right move this far
 static char browser_note[128] = "";      // Why the last OK did nothing, for the caption
@@ -630,15 +631,17 @@ static const char *check_path(const char *path, void *context)
     return inidoc_check_in(browser_doc, section_of(slot), slot->def->key, path);
 }
 
-// A function to preview what the browser's cursor is on: an image, or a folder's first image; any
-// other file (file mode's) previews nothing, so the real background shows
+// A function to preview what the browser's cursor is on: an image, or a folder's first image. File
+// mode (a mappings file) previews nothing, not even a folder's first image, so the real background
+// shows.
 static void preview_highlighted(void)
 {
     const BrowserRow *row = browser_row(browser, browser_cursor(browser));
     char path[BROWSER_PATH_MAX] = "";
     if (row != NULL && row->kind == BROWSER_ROW_IMAGE)
         copy_string(path, row->path, sizeof(path));
-    else if (row != NULL && (row->kind == BROWSER_ROW_FOLDER || row->kind == BROWSER_ROW_USE_FOLDER))
+    else if (row != NULL && browser_mode != BROWSER_FILE &&
+             (row->kind == BROWSER_ROW_FOLDER || row->kind == BROWSER_ROW_USE_FOLDER))
         browser_first_image(browser, row->path, path, sizeof(path));
     want_preview_image(path);
 }
@@ -685,6 +688,7 @@ static void open_browser(SettingSlot *slot)
         return;
     }
     browser_slot = slot;
+    browser_mode = mode;
     browser_first = 0;
     browser_note[0] = '\0';
     log_browsing();
@@ -793,11 +797,12 @@ static void close_settings(void)
 static void log_save_notes(ConfigSaveResult *result)
 {
     int index = 0;
-    for (char *line = result->notes; line[0] != '\0';) {
+    for (char *line = result->notes; line[0] != '\0'; index++) {
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end = '\0';
-        if (result->note_kinds[index++] == CONFIG_NOTE_CHANGED_MEANWHILE)
+        // A line past the kinds config_save gave (none can be, by how it counts) gets no words
+        if (index < result->note_count && result->note_kinds[index] == CONFIG_NOTE_CHANGED_MEANWHILE)
             log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
         else
             log_debug("Settings: not saved as asked: %s", line);
@@ -943,7 +948,7 @@ static void handle_event(const SettingsEvent *event)
         case SETTINGS_EVENT_PICK:
             // OK on a picker row opens its picker (settings_pickers.c): the colour picker for a
             // colour, the font picker for a font, the list picker for the default menu, the device
-            // and a command. The mappings file (Task 15) is a browse row, which
+            // and a command. The mappings file is a browse row, which
             // SETTINGS_EVENT_BROWSE opens. The rows that step still step with Left and Right.
             pickers_open(event->slot);
             return;
@@ -1030,7 +1035,9 @@ static void handle_browser_command(const char *command)
                 poll_decode(true);
             }
         }
-        if (strcmp(chosen, broken_path) == 0) {
+        // Only an image must open: a mappings file that is also an image which failed to decode is
+        // still a file
+        if (browser_slot->def->id == SET_ID_BACKGROUND_IMAGE && strcmp(chosen, broken_path) == 0) {
             snprintf(browser_note, sizeof(browser_note), "%s", CANNOT_OPEN);
             log_debug("Settings: %s: %s", browser_note, chosen);
             return;

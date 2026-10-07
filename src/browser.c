@@ -220,8 +220,9 @@ static const char *why_not(const Browser *browser, const char *path)
     return why;
 }
 
-// A function to show a folder: folders first, then images (in file mode, every file), each sorted by
-// name, hidden files left out; in folder mode "Use this folder" comes first. A path too long to
+// A function to show a folder: folders first, then images (in file mode, every regular file: never
+// a pipe or device, which reading at the next start could wait on for good), each sorted by name,
+// hidden files left out; in folder mode "Use this folder" comes first. A path too long to
 // choose is shown, and refused with the reason. When the folder cannot be listed, or memory runs
 // out, what was on show is left as it was.
 static LoadResult load_folder(Browser *browser, const char *folder, const char *selected)
@@ -241,7 +242,7 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
             continue;
         if (entries[i].is_dir)
             folders[folder_count++] = &entries[i];
-        else if (browser->mode == BROWSER_FILE || browser_is_image_file(&entries[i]))
+        else if (browser->mode == BROWSER_FILE ? entries[i].is_file : browser_is_image_file(&entries[i]))
             images[image_count++] = &entries[i];
     }
     BrowserRow *rows = NULL;

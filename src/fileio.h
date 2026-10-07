@@ -15,6 +15,8 @@
 typedef struct {
     char *name;   // UTF-8 name of the file or folder, without its folder
     bool is_dir;
+    bool is_file; // A regular file, or a link to one: never a pipe, socket or device, which a read can
+                  // wait on for good. Windows lists only files and folders: every entry not a folder.
     bool hidden;  // Windows: the hidden or system attribute; elsewhere: the name starts with '.'
 } FileioEntry;
 

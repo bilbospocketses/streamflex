@@ -879,7 +879,8 @@ static bool link_leads_to_network(const char *link)
 
 // A function to add one entry to a growing list, which takes over `name`; false when out of memory,
 // with the reason set and the list as it was
-static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *name, bool is_dir, bool hidden)
+static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *name, bool is_dir, bool is_file,
+                      bool hidden)
 {
     if (name == NULL)
         return false;
@@ -894,7 +895,7 @@ static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *na
         *entries = bigger;
         *capacity = grown;
     }
-    (*entries)[*count] = (FileioEntry) { .name = name, .is_dir = is_dir, .hidden = hidden };
+    (*entries)[*count] = (FileioEntry) { .name = name, .is_dir = is_dir, .is_file = is_file, .hidden = hidden };
     (*count)++;
     return true;
 }
@@ -932,8 +933,8 @@ int fileio_list(const char *folder, FileioEntry **entries)
     }
     while (ok) {
         if (wcscmp(data.cFileName, L".") != 0 && wcscmp(data.cFileName, L"..") != 0) {
-            ok = add_entry(entries, &count, &capacity, to_utf8(data.cFileName),
-                           (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0,
+            bool is_dir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            ok = add_entry(entries, &count, &capacity, to_utf8(data.cFileName), is_dir, !is_dir,
                            (data.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0);
             if (!ok)
                 break;
@@ -1002,6 +1003,7 @@ int fileio_list(const char *folder, FileioEntry **entries)
         // beyond it.
         unsigned char kind = fault == FILEIO_FAULT_NO_KIND ? (unsigned char) DT_UNKNOWN : entry->d_type;
         bool is_dir = kind == DT_DIR;
+        bool is_file = kind == DT_REG;
         if (kind == DT_LNK || kind == DT_UNKNOWN) {
             size_t size = folder_length + strlen(entry->d_name) + 2;
             char *full = alloc_malloc(size);
@@ -1028,15 +1030,20 @@ int fileio_list(const char *folder, FileioEntry **entries)
             else if (kind == DT_UNKNOWN && lstat(full, &info) == 0) {
                 link = S_ISLNK(info.st_mode);
                 is_dir = S_ISDIR(info.st_mode);
+                is_file = S_ISREG(info.st_mode);
             }
-            if (link)
-                is_dir = link_leads_to_network(full) || (stat(full, &info) == 0 && S_ISDIR(info.st_mode));
+            if (link) {
+                bool network = link_leads_to_network(full);
+                bool found = !network && stat(full, &info) == 0;
+                is_dir = network || (found && S_ISDIR(info.st_mode));
+                is_file = found && S_ISREG(info.st_mode);
+            }
             alloc_free(full);
         }
         char *name = alloc_strdup(entry->d_name);
         if (name == NULL)
             set_error("out of memory");
-        ok = add_entry(entries, &count, &capacity, name, is_dir, entry->d_name[0] == '.');
+        ok = add_entry(entries, &count, &capacity, name, is_dir, is_file, entry->d_name[0] == '.');
     }
     closedir(dir);
 #endif

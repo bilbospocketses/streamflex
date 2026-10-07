@@ -143,9 +143,9 @@ static void test_non_ascii_round_trip(void)
     int count = fileio_list(DIR, &entries);
     bool found_file = false, found_dir = false;
     for (int i = 0; i < count; i++) {
-        if (strcmp(entries[i].name, CAFE) == 0 && !entries[i].is_dir)
+        if (strcmp(entries[i].name, CAFE) == 0 && !entries[i].is_dir && entries[i].is_file)
             found_file = true;
-        if (strcmp(entries[i].name, "deeper") == 0 && entries[i].is_dir)
+        if (strcmp(entries[i].name, "deeper") == 0 && entries[i].is_dir && !entries[i].is_file)
             found_dir = true;
         CHECK(strcmp(entries[i].name, ".") != 0 && strcmp(entries[i].name, "..") != 0);
     }
@@ -746,6 +746,37 @@ static void test_list_kinds(void)
     chmod(DIR "/kinds", 0755);
 }
 
+// A function to test which entries are regular files: a file and a link to one are; a folder, a
+// pipe, a link to a device, a link to a folder and a link to nothing are not. The same where the
+// listing gives no entry's kind, so each entry is looked at itself.
+static void test_list_regular_files(void)
+{
+    CHECK(fileio_make_dirs(DIR "/regular/folder"));
+    CHECK(fileio_write_all(DIR "/regular/file.txt", "x", 1));
+    CHECK(mkfifo(DIR "/regular/pipe", 0644) == 0);
+    CHECK(symlink("file.txt", DIR "/regular/to-file") == 0);
+    CHECK(symlink("/dev/null", DIR "/regular/to-device") == 0);
+    CHECK(symlink("folder", DIR "/regular/to-folder") == 0);
+    CHECK(symlink("/streamflex-no-such-file", DIR "/regular/dead") == 0);
+    static const char *const names[] = { "file.txt", "to-file", "folder", "pipe", "to-device", "to-folder", "dead" };
+    static const bool regular[] = { true, true, false, false, false, false, false };
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 1)
+            fileio_set_fault(FILEIO_FAULT_NO_KIND, 0, 0);
+        FileioEntry *entries = NULL;
+        int count = fileio_list(DIR "/regular", &entries);
+        fileio_set_fault(FILEIO_FAULT_NONE, 0, 0);
+        CHECK_INT(count, 7);
+        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+            const FileioEntry *entry = find_entry(entries, count, names[i]);
+            CHECK(entry != NULL && entry->is_file == regular[i]);
+            if (entry != NULL && entry->is_file != regular[i])
+                printf("    pass %d: %s is_file %d\n", pass, names[i], (int) entry->is_file);
+        }
+        fileio_free_list(entries, count);
+    }
+}
+
 // A function to test that, where the listing gives no entry's kind, an entry that a network file
 // system is mounted on is a folder without being looked at (on a dead hard NFS mount a lookup never
 // returns), found from the mount table by the folder's real path; a file beside it is still looked
@@ -1022,6 +1053,7 @@ int main(void)
     test_places_under_the_user_folder();
     test_places_under_a_fuse_mount();
     test_list_kinds();
+    test_list_regular_files();
     test_list_a_network_mount_in_the_folder();
     test_list_many_network_mounts_in_the_folder();
     test_places_pictures();
