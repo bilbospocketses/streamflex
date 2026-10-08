@@ -121,7 +121,6 @@ Config config = {
     .highlight_fill_color.r           = DEFAULT_HIGHLIGHT_FILL_COLOR_R,
     .highlight_fill_color.g           = DEFAULT_HIGHLIGHT_FILL_COLOR_G,
     .highlight_fill_color.b           = DEFAULT_HIGHLIGHT_FILL_COLOR_B,
-    .highlight_fill_color.a           = DEFAULT_HIGHLIGHT_FILL_COLOR_A,
     .highlight_outline_color.r        = DEFAULT_HIGHLIGHT_OUTLINE_COLOR_R,
     .highlight_outline_color.g        = DEFAULT_HIGHLIGHT_OUTLINE_COLOR_G,
     .highlight_outline_color.b        = DEFAULT_HIGHLIGHT_OUTLINE_COLOR_B,
