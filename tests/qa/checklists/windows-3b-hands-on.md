@@ -10,7 +10,7 @@ These steps also use the function keys and the Menu key:
 
 | Name here | VK | Notes |
 |---|---|---|
-| F5, F6, F7, F9, F12 | `VK_F5` (0x74), `VK_F6` (0x75), `VK_F7` (0x76), `VK_F9` (0x78), `VK_F12` (0x7B) | |
+| F5, F6, F9, F12 | `VK_F5` (0x74), `VK_F6` (0x75), `VK_F9` (0x78), `VK_F12` (0x7B) | |
 | Menu | `VK_APPS` (0x5D), scan code 0x5D, `KEYEVENTF_EXTENDEDKEY` | **Not `VK_MENU`: that is the Alt key** |
 
 Two things differ from 3a:

@@ -79,7 +79,7 @@ VSync and the FPS limit take effect at once, with no restart.
 
 #### The Background page
 - *Mode* ([Mode](#mode)): *Colour*, *Image*, *Slideshow* or *Transparent*. The rows under it follow the mode:
-  - Colour: *Colour* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [colour picker](#the-colour-picker). A colour of your own is shown as *Custom #RRGGBB*.
+  - Colour: *Colour* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [colour picker](#the-colour-picker). Every colour row names its colour as the colour picker does: by the swatch's name, such as *White*, when it is one of the picker's 24 swatches, and as *Custom #RRGGBB* when it is not.
   - Image: *Image* ([Image](#image)), chosen in the [folder browser](#the-folder-browser).
   - Slideshow: *Folder* ([SlideshowDirectory](#slideshowdirectory)), chosen in the folder browser; *Change every* ([SlideshowImageDuration](#slideshowimageduration)): 5, 10, 15 or 30 seconds, or 1, 2, 5, 10, 30 or 60 minutes; and *Fade* ([SlideshowTransitionTime](#slideshowtransitiontime)): 0 to 3 seconds, in steps of 0.5.
   - Transparent: a note that the desktop shows through, and *See-through colour* ([ChromaKeyColor](#chromakeycolor)).
@@ -183,7 +183,7 @@ The colour picker shows 24 swatches, six across and four down:
 
 Below them is a *Custom #RRGGBB* row, for any other colour. The swatch of the colour you have now is marked.
 - **The arrows** move between the swatches, and down onto the Custom row. The preview shows the colour under the cursor as you move, and the note under the preview names it.
-- **OK** on a swatch chooses it. On the Custom row, OK opens the hex editor, which starts at the colour you have now: **Left and Right** choose a digit, **Up and Down** change it (past F it goes back to 0), **OK** keeps the colour, and **Back** leaves the editor without choosing.
+- **OK** on a swatch chooses it. On the Custom row, OK opens the hex editor, which starts at the colour you have now: **Left and Right** choose a digit, **Up and Down** change it, wrapping between F and 0 either way, **OK** keeps the colour, and **Back** leaves the editor without choosing.
 - **Back** closes the picker without choosing, and puts the colour back as it was when the picker opened.
 
 #### The contrast warning
@@ -293,7 +293,7 @@ Default: true
 ##### FPSLimit
 When `VSync` is set to false, this setting defines the maximum number of frames per second that StreamFlex will render. The minimum is 10, and the maximum is the same as the refresh rate of your monitor. The file may hold a whole number from 10 to 1000; any other value is ignored, and the log says so. A limit above your monitor's refresh rate leaves VSync on, as no `FPSLimit` at all does (*Off* on the settings screen).
 
-Both `VSync` and `FPSLimit` take effect at once when the settings screen changes them. If the renderer refuses to turn VSync on, or off, StreamFlex paces each frame itself and writes an error line to the log: `The renderer refused VSync: each frame is paced to <N> ms instead`.
+Both `VSync` and `FPSLimit` take effect at once when the settings screen changes them. If the renderer refuses to turn VSync on, or off, StreamFlex paces each frame itself and writes an error line to the log: `The renderer refused VSync: each frame is paced to <N> ms instead` when VSync stays off, and `The renderer would not turn VSync off: each frame is still paced to <N> ms` when it stays on.
 
 Default: none (Off)
 
@@ -456,7 +456,7 @@ Defines whether or not application titles are enabled. This setting is a boolean
 Default: true
 
 ##### Font
-Defines the font to use for the titles of the menu entries. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc`). StreamFlex ships with a handful of libre fonts. The settings screen's [font picker](#the-font-picker) lists the fonts installed.
+Defines the font to use for the titles of the menu entries. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc` or `.otc`). StreamFlex ships with a handful of libre fonts. The settings screen's [font picker](#the-font-picker) lists the fonts installed.
 
 `FontFace` picks a face inside a font collection (`.ttc`), counted from 0. Absent means 0. A config moved to another machine whose font is not there falls back to the bundled font, as its image paths do.
 
@@ -551,7 +551,7 @@ Defines the outline opacity of the highlight cursor. Must be a percent value, wh
 Default: 100%
 
 ##### CornerRadius
-Defines the corner radius of the highlight cursor, in pixels. A value of 0 will yield a plain rectangle. Increasing the value will yield a rounded rectangle with increasingly round corners. The value of `HighlightOutlineSize` must be 0, otherwise this setting will be ignored.
+Defines the corner radius of the highlight cursor, in pixels. A value of 0 will yield a plain rectangle. Increasing the value will yield a rounded rectangle with increasingly round corners. The highlight's [OutlineSize](#outlinesize) must be 0, otherwise this setting will be ignored.
 
 Default: 0
 
@@ -738,7 +738,7 @@ Defines which side of the screen the clock text should align to. Possible values
 Default: Left
 
 #### Font
-Defines the font to use for the clock text. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc`). The settings screen's [font picker](#the-font-picker) lists the fonts installed.
+Defines the font to use for the clock text. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc` or `.otc`). The settings screen's [font picker](#the-font-picker) lists the fonts installed.
 
 `FontFace` picks a face inside a font collection (`.ttc`), counted from 0. Absent means 0. A config moved to another machine whose font is not there falls back to the bundled font, as its image paths do.
 
@@ -860,7 +860,7 @@ Defines whether or not gamepad controls are enabled. This setting is a boolean "
 Default: true
 
 #### DeviceIndex
-Defines the device index of the gamepad in SDL. If this value is negative, any gamepad may be used to control the launcher.
+Defines the device index of the gamepad in SDL: -1, or 0 to 15. -1 lets any gamepad control the launcher; any other value is ignored, and the log says so.
 
 Default: -1
 

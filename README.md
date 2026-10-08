@@ -92,7 +92,7 @@ The keyboard arrow keys move the highlight cursor: left and right along a row, a
 StreamFlex does not feature built-in decoding of IR or CEC signals. If you plan to use a TV remote to control the device, it is assumed that these signals are decoded by the OS or another program and mapped to keyboard presses, which can then be received by StreamFlex.
 
 #### Gamepads
-Gamepad controls are built-in to the program, and are enabled by default: the gamepad controls should "Just Work" for most users. To turn them off, open your configuration file and, under the "Gamepad" section, set "Enabled" to false, or turn them off on the settings screen's Controls page. If your gamepad is not recognized automatically, or you want to change the default controls, see the [gamepad controls documentation](docs/configuration.md#gamepad-controls).
+Gamepad controls are built-in to the program, and are enabled by default: the gamepad controls should "Just Work" for most users. To turn them off, open your configuration file and, under the "Gamepad" section, set "Enabled" to false, or turn them off on the settings screen, under Controls › Gamepad. If your gamepad is not recognized automatically, or you want to change the default controls, see the [gamepad controls documentation](docs/configuration.md#gamepad-controls).
 
 ### Debugging
 StreamFlex has a debug mode which may be enabled as follows:
