@@ -57,7 +57,7 @@ $unknown = @($Legs | Where-Object { $_ -notin 'plain', 'fedora', 'leaks', 'fedor
 if ($unknown -or -not $Legs) { throw "unknown pass '$($unknown -join ', ')': give plain, fedora, leaks or fedora-leaks" }
 $Repo = (Resolve-Path -LiteralPath $Repo).Path -replace '\\', '/'
 if (-not $OutDir) { $OutDir = "$Repo/headless-out" }
-New-Item -ItemType Directory -Force -LiteralPath $OutDir | Out-Null
+New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path -replace '\\', '/'
 $merge = "$PSScriptRoot/merge.py"
 $cpuSets = '0-2', '3-5', '6-8', '9-11', '12-14', '15-17', '18-20', '21-23'
