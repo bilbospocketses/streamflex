@@ -437,11 +437,17 @@ result "bindings: the Menu key is named Menu (exit $(cat "$out/f62-menu.code"))"
 
 # The pad's OK held on a binding's Command row: its first press opens the command picker, and its
 # repeat chooses there, which rebuilds the controls the launcher is reading the pad through, on a
-# repeat this time: the held count is taken down before the command runs, so nothing freed is written
-b62_hold_a_repeat() { : > /tmp/pad-a; sleep 2; rm -f /tmp/pad-a; sleep 6.5; }
+# repeat this time: the held count is taken down before the command runs, so nothing freed is written.
+# The repeat comes on a count of frames (31 of 16 ms), not of seconds, so OK is held for 40 frames
+# however slowly they run (STREAMFLEX_TEST_PAD_FRAMES), and the rebuild's line is waited for. The
+# repeats after it open the binding and start a capture, which runs out in 5 s, as before.
+b62_hold_a_repeat() {
+    : > /tmp/pad-a; wait_line 'Settings: the bindings now hold 0 hotkeys and 2 controls' "$2"
+    rm -f /tmp/pad-a; sleep 6.5
+}
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
-STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=40 WAIT_FOR='Gamepad connected' CFG=$cfg \
     run_keys f62-padrepeat $TO_GAMEPAD Down Down Down Down Down Return Down +b62_hold_a_repeat Menu
 log=$out/f62-padrepeat.log
 ok=1
