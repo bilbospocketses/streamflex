@@ -26,6 +26,7 @@ extern Config config;
 extern SDL_SysWMinfo wm_info;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
+static wchar_t self_path[32768];   // The program a restart starts, found before anything is torn down
 
 
 // A function to determine if a file exists on the filesystem
@@ -259,6 +260,67 @@ void scmd_sleep()
             return;
     }
     SetSuspendState(FALSE, FALSE, FALSE);
+}
+
+// A function to put Windows' own words for an error code into a buffer, as UTF-8
+static void windows_error_text(DWORD code, char *out, size_t size)
+{
+    wchar_t text[256];
+    DWORD length = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, code, 0, text,
+                                  (DWORD) (sizeof(text) / sizeof(text[0])), NULL);
+    while (length > 0 && (text[length - 1] == L'\r' || text[length - 1] == L'\n' || text[length - 1] == L' '))
+        length--;
+    text[length] = L'\0';
+    if (length == 0 || WideCharToMultiByte(CP_UTF8, 0, text, -1, out, (int) size, NULL, NULL) == 0)
+        snprintf(out, size, "Windows error %lu", (unsigned long) code);
+}
+
+// A function to find this program for a restart to start again, before anything is torn down: the
+// file Windows started it from. False, logged, when Windows cannot say.
+bool find_self(const char *argv0)
+{
+    UNUSED(argv0);
+    DWORD size = (DWORD) (sizeof(self_path) / sizeof(self_path[0]));
+    DWORD length = GetModuleFileNameW(NULL, self_path, size);
+    if (length == 0 || length >= size) {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_error("Cannot restart StreamFlex: Windows cannot say where its program is: %s", why);
+        return false;
+    }
+    return true;
+}
+
+// A function to start a fresh copy of the program find_self() found, with the command line this one
+// was started with and --restarted after it (unless it has it already, from a restart before); false,
+// logged, when it could not start. The arguments are Windows' own command line, never rebuilt.
+bool start_self(char **argv)
+{
+    UNUSED(argv);
+    const wchar_t *given = GetCommandLineW();
+    const wchar_t *flag = config.restarted ? L"" : L" --restarted";
+    size_t size = wcslen(given) + wcslen(flag) + 1;
+    wchar_t *line = malloc(size * sizeof(wchar_t));   // CreateProcessW may write to it
+    if (line == NULL) {
+        log_error("Could not restart StreamFlex: out of memory");
+        return false;
+    }
+    wcscpy_s(line, size, given);
+    wcscat_s(line, size, flag);
+    STARTUPINFOW startup = { .cb = (DWORD) sizeof(STARTUPINFOW) };
+    PROCESS_INFORMATION process;
+    BOOL started = CreateProcessW(self_path, line, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &process);
+    DWORD code = GetLastError();
+    free(line);
+    if (!started) {
+        char why[256];
+        windows_error_text(code, why, sizeof(why));
+        log_error("Could not restart StreamFlex: it did not start: %s", why);
+        return false;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
 }
 
 // A function to get the shutdown privilege from Windows

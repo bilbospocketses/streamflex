@@ -18,6 +18,14 @@
 
 static int init_log(void);
 
+// On Linux the log is closed on exec ("e", O_CLOEXEC): a restart keeps it open to its end, for its
+// own lines, and the program that takes the process over opens it again
+#ifdef __unix__
+#define LOG_EXEC_CLOSES "e"
+#else
+#define LOG_EXEC_CLOSES ""
+#endif
+
 extern Config config;
 extern FILE *log_file;
 extern Effective eff;
@@ -46,9 +54,9 @@ static int init_log()
     join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
 #endif
 
-    // Open log
+    // Open log; a restart's fresh copy goes on with the log the restart wrote to
     if (log_file == NULL)
-        log_file = fileio_open(log_file_path, "wb");
+        log_file = fileio_open(log_file_path, config.restarted ? "ab" LOG_EXEC_CLOSES : "wb" LOG_EXEC_CLOSES);
     if (log_file == NULL) {
 #ifdef __unix__
         printf("Failed to create log file");

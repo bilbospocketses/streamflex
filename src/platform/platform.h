@@ -13,6 +13,8 @@ bool start_process(char *cmd, bool application);
 void scmd_shutdown(void);
 void scmd_restart(void);
 void scmd_sleep(void);
+bool find_self(const char *argv0);   // A restart: before anything is torn down; false, logged, when not found
+bool start_self(char **argv);        // A restart: after the teardown; false, logged, when it could not start
 
 // Linux-specific function prototypes
 #ifdef __unix__

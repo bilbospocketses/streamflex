@@ -74,6 +74,7 @@ static Menu **menus = NULL;           // The launcher's menus, in the model's or
 static int menu_count = 0;
 static Menu *origin = NULL;           // The menu settings opened over
 static bool go_home = false;          // Go to the default menu after closing (:home)
+static char restart_names[256];       // What the restart prompt offers to apply: "the mappings file"
 static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the renderer has no targets
 static TTF_Font *font_header = NULL;
 static TTF_Font *font_row = NULL;
@@ -895,15 +896,22 @@ static bool save_changes(void)
     return false;
 }
 
-// A function to save and close; nothing is written when nothing changed
+// A function to save and close; nothing is written when nothing changed. A save that wrote a setting
+// that applies at next start asks first whether to restart StreamFlex now.
 static void save_and_close(void)
 {
     if (!settings_any_changed(model)) {
         log_debug("Settings: nothing changed");
         close_settings();
     }
-    else if (save_changes())
-        close_settings();
+    else if (save_changes()) {
+        if (settings_next_start(model, restart_names, sizeof(restart_names)) == 0)
+            close_settings();
+        else {
+            log_debug("Settings: asking to restart StreamFlex to apply %s", restart_names);
+            settings_show_restart(model, restart_names);
+        }
+    }
 }
 
 // A function to act on what a key did in the model
@@ -950,6 +958,14 @@ static void handle_event(const SettingsEvent *event)
             return;
         case SETTINGS_EVENT_LEAVE:
             log_debug("Settings: leaving without saving");
+            close_settings();
+            return;
+        case SETTINGS_EVENT_RESTART:
+            restart_streamflex(restart_names);   // Comes back only when the program cannot be found
+            close_settings();
+            return;
+        case SETTINGS_EVENT_CLOSE_SAVED:
+            log_debug("Settings: no restart now, so %s waits for the next start", restart_names);
             close_settings();
             return;
         case SETTINGS_EVENT_PICK:

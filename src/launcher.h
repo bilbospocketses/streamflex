@@ -291,6 +291,7 @@ typedef struct {
     int gamepad_device;
     char *gamepad_mappings_file;
     bool debug;
+    bool restarted;           // Started by a restart (--restarted): no StartupCmd, and the log goes on
     char *exe_path;
     char *config_path; // The file the settings were read from
     Menu *first_menu;
@@ -317,6 +318,7 @@ typedef struct {
 void quit_slideshow(void);
 void set_draw_color(void);
 void quit(int status);
+void restart_streamflex(const char *names);   // Comes back only when the program cannot be found to start again
 void print_version(FILE *stream);
 int compute_menu_layout(const Menu *menu, LayoutGeometry *geometry, char *why, size_t why_size);
 void describe_titles(const LayoutGeometry *geometry, char *out, size_t size);

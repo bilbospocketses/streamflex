@@ -42,7 +42,7 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 - `STREAMFLEX_TEST_CLOCK_DELAY_MS=<ms>`: each clock render on the clock's thread waits that long first, and the clock renders every second and logs each render it starts on its thread, so a check can act while one is in flight.
 - `STREAMFLEX_TEST_CLOCK_THREAD_FAIL`: the clock's render thread fails to start, so each render runs on the main thread instead.
 - `STREAMFLEX_TEST_DECODE_DELAY_MS=<ms>`: the settings preview waits that long before decoding an image, so a check can press a key during the decode.
-- `STREAMFLEX_TEST_FAIL=<step>`: that step runs as if memory had run out: the settings screen's `places`, `browser`, `command` and `bindings`; the pickers' `list`, `rows`, `select`, `pads` and `apply`; the font picker's `fontlist`, `fontscan`, `fontfolder`, `faces` and `sample`. With `keep` the saved file's permissions cannot be kept, with `fontthread` the font list's thread does not start, and with `fontadd` that thread cannot add a file.
+- `STREAMFLEX_TEST_FAIL=<step>`: that step runs as if memory had run out: the settings screen's `places`, `browser`, `command` and `bindings`; the pickers' `list`, `rows`, `select`, `pads` and `apply`; the font picker's `fontlist`, `fontscan`, `fontfolder`, `faces` and `sample`; and `restart`, the copy of the arguments a restart starts with, made as StreamFlex starts. With `keep` the saved file's permissions cannot be kept, with `fontthread` the font list's thread does not start, and with `fontadd` that thread cannot add a file.
 - `STREAMFLEX_TEST_FAIL_SHRINK_STEP`: every step down in Shrink mode fails to open its font.
 - `STREAMFLEX_TEST_FAIL_TITLE_SIZE=<pt>`: the title font fails to open at that size.
 - `STREAMFLEX_TEST_FONT_DELAY_MS=<ms>`: the font list's thread waits that long after reading the bundled folder, as a slow disk would, so a check can act while the list loads.
@@ -57,6 +57,7 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 - `STREAMFLEX_TEST_PAD_PLUG=<file>`: another virtual gamepad is plugged in while `<file>` exists and pulled out when it goes, as a pad is plugged in or out by hand at any moment.
 - `STREAMFLEX_TEST_PAD_SWAP`: virtual gamepads are attached and detached, one step a frame, so one arrives at another's old device index with an instance id of its own; then a launch and a return close every pad and open each again.
 - `STREAMFLEX_TEST_RELOAD_FONTS`: the title and clock fonts are opened a second time as they start, as a reload does, so the leak pass shows whether the font each replaces is closed.
+- `STREAMFLEX_TEST_RESTART_SELF=<path>`: a restart (Linux) looks for the program at `<path>` in place of `/proc/self/exe`: a missing path makes it go by `argv[0]`, and a file that is not a program makes its `execv` fail after the teardown.
 - `STREAMFLEX_TEST_SLIDESHOW_HOLD=<file>`: the slideshow's loader thread waits before its read until `<file>` exists (a minute at most), as a slow disk would hold it, so a check can step the mode or quit while it loads and let it go when it has looked.
 - `STREAMFLEX_TEST_VSYNC_REFUSED[=off]`: the renderer reports the VSync it was asked for as refused; with `off`, it reports VSync kept on when it is not wanted.
 

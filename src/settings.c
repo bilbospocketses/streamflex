@@ -932,6 +932,7 @@ struct SettingsState {
         Binding before;
     } undo;
     char confirm_note[96];       // The confirm page's "Captured: ..."
+    char restart_note[320];      // The restart page's question
 };
 
 // A function to start the model over the launcher's menus; the caller then sets every entry value
@@ -1535,6 +1536,11 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, action_row("Try again", SETTINGS_ACTION_RETRY, true));
             n = add_row(rows, n, max, action_row("Leave without saving", SETTINGS_ACTION_LEAVE, true));
             break;
+        case SETTINGS_PAGE_RESTART:
+            n = add_row(rows, n, max, note_row(state->restart_note));
+            n = add_row(rows, n, max, action_row("Yes", SETTINGS_ACTION_RESTART, true));
+            n = add_row(rows, n, max, action_row("No", SETTINGS_ACTION_NO_RESTART, true));
+            break;
     }
     return n < max ? n : max;
 }
@@ -1868,6 +1874,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
     PageRef *top = &state->stack[state->depth];
     SettingsRow *row = top->cursor >= 0 && top->cursor < count ? &rows[top->cursor] : NULL;
     bool failure_page = top->page == SETTINGS_PAGE_SAVE_FAILED;
+    bool restart_page = top->page == SETTINGS_PAGE_RESTART;   // Saved already: Back is No
 
     switch (command) {
         case SETTINGS_UP:
@@ -1985,8 +1992,16 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
                 event.kind = SETTINGS_EVENT_RETRY;
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_LEAVE)
                 event.kind = SETTINGS_EVENT_LEAVE;
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_RESTART)
+                event.kind = SETTINGS_EVENT_RESTART;
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_NO_RESTART)
+                event.kind = SETTINGS_EVENT_CLOSE_SAVED;
             break;
         case SETTINGS_BACK:
+            if (restart_page) {
+                event.kind = SETTINGS_EVENT_CLOSE_SAVED;
+                break;
+            }
             if (state->depth == 0) {
                 event.kind = SETTINGS_EVENT_CLOSE;
                 break;
@@ -1999,7 +2014,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             break;
         case SETTINGS_HOME:
         case SETTINGS_CLOSE:
-            if (failure_page)
+            if (failure_page || restart_page)
                 break;
             if (top->page == SETTINGS_PAGE_BACKGROUND)
                 event = leave_background(state);
@@ -2055,6 +2070,64 @@ void settings_show_save_failed(SettingsState *state, const char *message)
         fix_cursor(state);
 }
 
+// A function to name a setting as the restart prompt does: "the" and its label, whose first letter
+// is lower-cased unless the second is a capital too ("Mappings file" is "the mappings file", "VSync"
+// stays "the VSync"). Every label in the table has a letter at least.
+void settings_restart_name(const char *label, char *out, size_t size)
+{
+    bool capital = label[0] >= 'A' && label[0] <= 'Z';
+    bool acronym = capital && label[1] >= 'A' && label[1] <= 'Z';
+    char first = capital && !acronym ? (char) (label[0] - 'A' + 'a') : label[0];
+    snprintf(out, size, "the %c%s", first, label + 1);
+}
+
+// A function to join names as a sentence lists them: "A", "A and B", "A, B and C"; "" for none
+void settings_join_names(const char *const *names, int count, char *out, size_t size)
+{
+    out[0] = '\0';
+    for (int i = 0; i < count; i++) {
+        size_t used = strlen(out);
+        snprintf(out + used, size - used, "%s%s", i == 0 ? "" : i == count - 1 ? " and " : ", ", names[i]);
+    }
+}
+
+// A function to name, joined, the settings a save writes that apply at next start (SET_FLAG_NEXT_START),
+// each name once. A setting counts by the save's own test, a value that differs from the one settings
+// opened with, so one changed and then changed back does not. Returns how many it names; 0 for none.
+int settings_next_start(const SettingsState *state, char *out, size_t size)
+{
+    char names[SET_ID_COUNT][64];   // Never more names than settings: a per-menu one names itself alike for every menu
+    const char *list[SET_ID_COUNT];
+    int count = 0;
+    for (int i = 0; i < state->slot_count; i++) {
+        const SettingSlot *slot = &state->slots[i];
+        if (!(slot->def->flags & SET_FLAG_NEXT_START) || !settings_changed(slot))
+            continue;
+        char name[sizeof(names[0])];
+        settings_restart_name(slot->def->label, name, sizeof(name));
+        bool named = false;
+        for (int k = 0; k < count && !named; k++)
+            named = strcmp(list[k], name) == 0;
+        if (!named) {
+            snprintf(names[count], sizeof(names[count]), "%s", name);
+            list[count] = names[count];
+            count++;
+        }
+    }
+    settings_join_names(list, count, out, size);
+    return count;
+}
+
+// A function to ask, once the save is done, whether to restart StreamFlex now to apply the settings
+// named: Yes, or No (Back too), with the cursor on Yes. Settings close either way, so the page
+// replaces the ones open.
+void settings_show_restart(SettingsState *state, const char *names)
+{
+    snprintf(state->restart_note, sizeof(state->restart_note), "Restart StreamFlex now to apply %s?", names);
+    state->depth = 0;
+    push_page(state, SETTINGS_PAGE_RESTART, -1);
+}
+
 // A function to get the cursor on the page on show
 int settings_cursor(const SettingsState *state)
 {
@@ -2091,6 +2164,7 @@ void settings_path(const SettingsState *state, char *out, size_t size)
             case SETTINGS_PAGE_CAPTURE: name = "Press a key"; break;
             case SETTINGS_PAGE_CONFIRM: name = "Keep it?"; break;
             case SETTINGS_PAGE_SAVE_FAILED: name = "Couldn't save"; break;
+            case SETTINGS_PAGE_RESTART: name = "Restart?"; break;
             case SETTINGS_PAGE_TOP: break;
         }
         size_t used = strlen(out);

@@ -1807,6 +1807,109 @@ static void test_next_start_only_on_a_change(void)
     settings_free(state);
 }
 
+// A function to test the restart prompt's words: a setting's name, and the names of none, one, two
+// and three settings joined
+static void test_restart_words(void)
+{
+    static const char *const names[] = { "the mappings file", "the VSync", "the rows" };
+    char out[256];
+    settings_restart_name("Mappings file", out, sizeof(out));
+    CHECK_STR(out, "the mappings file");
+    settings_restart_name("VSync", out, sizeof(out));   // A capital pair stays as it is
+    CHECK_STR(out, "the VSync");
+    settings_restart_name("rows", out, sizeof(out));
+    CHECK_STR(out, "the rows");
+    settings_join_names(names, 0, out, sizeof(out));
+    CHECK_STR(out, "");
+    settings_join_names(names, 1, out, sizeof(out));
+    CHECK_STR(out, "the mappings file");
+    settings_join_names(names, 2, out, sizeof(out));
+    CHECK_STR(out, "the mappings file and the VSync");
+    settings_join_names(names, 3, out, sizeof(out));
+    CHECK_STR(out, "the mappings file, the VSync and the rows");
+}
+
+// A function to test which changes the restart prompt names: a change to a setting that applies at
+// next start counts, any other does not, nor one changed back before the save. A setting given the
+// flag later is named with no other code: two here, VSync and one per-menu setting changed for both
+// menus, which is named once.
+static void test_restart_tracking(void)
+{
+    SettingsState *state = open_model();
+    char names[256];
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 0);
+    CHECK_STR(names, "");
+    settings_choose(state, settings_slot(state, SET_ID_BACKGROUND_IMAGE, -1), "/a.png");
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 0);
+    SettingSlot *mappings = settings_slot(state, SET_ID_GAMEPAD_MAPPINGS, -1);
+    CHECK_INT(settings_choose(state, mappings, "/pads/new.txt").kind, SETTINGS_EVENT_CHANGED);
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 1);
+    CHECK_STR(names, "the mappings file");
+    CHECK_INT(settings_choose(state, mappings, mappings->entry.text).kind, SETTINGS_EVENT_CHANGED);
+    CHECK(!settings_changed(mappings));
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 0);
+    CHECK_STR(names, "");
+
+    SettingDef vsync = *setting_def(SET_ID_VSYNC);
+    SettingDef rows = *setting_def(SET_ID_MENU_ROWS);
+    vsync.flags |= SET_FLAG_NEXT_START;
+    rows.flags |= SET_FLAG_NEXT_START;
+    SettingSlot *vsync_slot = settings_slot(state, SET_ID_VSYNC, -1);
+    vsync_slot->def = &vsync;
+    vsync_slot->value.number = !vsync_slot->entry.number;
+    settings_choose(state, mappings, "/pads/new.txt");
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 2);
+    CHECK_STR(names, "the VSync and the mappings file");
+    for (int menu = 0; menu < 2; menu++) {
+        SettingSlot *slot = settings_slot(state, SET_ID_MENU_ROWS, menu);
+        slot->def = &rows;
+        slot->value = parsed(SET_ID_MENU_ROWS, menu == 0 ? "5" : "6");
+        CHECK(settings_changed(slot));
+    }
+    CHECK_INT(settings_next_start(state, names, sizeof(names)), 3);
+    CHECK_STR(names, "the VSync, the mappings file and the rows");
+    settings_free(state);
+}
+
+// A function to test the restart page: it replaces the pages open, asks its question with Yes under
+// the cursor, Up and Down move between Yes and No, OK chooses, Back is No, and the keys that close
+// settings, and Left and Right, do nothing there
+static void test_restart_page(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    settings_command(state, SETTINGS_DOWN);
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_BACKGROUND);
+    settings_show_restart(state, "the mappings file");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_RESTART);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Restart?");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_NOTE);
+    CHECK_STR(rows[0].note, "Restart StreamFlex now to apply the mappings file?");
+    CHECK_STR(rows[1].label, "Yes");
+    CHECK_STR(rows[2].label, "No");
+    CHECK_INT(settings_cursor(state), 1);
+    CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_command(state, SETTINGS_CLOSE).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_command(state, SETTINGS_RIGHT).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_command(state, SETTINGS_UP).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_cursor(state), 1);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_RESTART);
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_cursor(state), 2);
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_CLOSE_SAVED);
+    CHECK_INT(settings_command(state, SETTINGS_UP).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_cursor(state), 1);
+    CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_CLOSE_SAVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_RESTART);   // The screen closes settings, not the model
+    settings_free(state);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -1841,6 +1944,9 @@ int main(void)
     test_row_steps_and_selectable();
     test_next_start();
     test_next_start_only_on_a_change();
+    test_restart_words();
+    test_restart_tracking();
+    test_restart_page();
     return check_report();
 }
 

@@ -55,6 +55,7 @@ void handle_arguments(int argc, char *argv[], char **config_file_path)
             { "version",      no_argument,       NULL, 'v' },
             { "config",       required_argument, NULL, 'c' },
             { "debug",        no_argument,       NULL, 'd' },
+            { "restarted",    no_argument,       NULL, 'r' },   // Internal: a restart's fresh copy
             { 0, 0, 0, 0 }
         };
     
@@ -77,6 +78,10 @@ void handle_arguments(int argc, char *argv[], char **config_file_path)
 
                 case 'd':
                     config.debug = true;
+                    break;
+
+                case 'r':
+                    config.restarted = true;
                     break;
             }
         }

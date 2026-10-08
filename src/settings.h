@@ -209,7 +209,8 @@ typedef enum {
     SETTINGS_PAGE_BINDING,       // One binding: its key or button, its command, Remove
     SETTINGS_PAGE_CAPTURE,       // Press the key or button
     SETTINGS_PAGE_CONFIRM,       // Keep the key captured, try again, or cancel
-    SETTINGS_PAGE_SAVE_FAILED
+    SETTINGS_PAGE_SAVE_FAILED,
+    SETTINGS_PAGE_RESTART        // Saved: restart StreamFlex now to apply what waits for the next start?
 } SettingsPage;
 
 typedef enum {
@@ -234,7 +235,9 @@ typedef enum {
     SETTINGS_ACTION_REMOVE_BINDING,
     SETTINGS_ACTION_KEEP,
     SETTINGS_ACTION_TRY_AGAIN,
-    SETTINGS_ACTION_CANCEL
+    SETTINGS_ACTION_CANCEL,
+    SETTINGS_ACTION_RESTART,
+    SETTINGS_ACTION_NO_RESTART
 } SettingsAction;
 
 typedef struct {
@@ -277,7 +280,9 @@ typedef enum {
     SETTINGS_EVENT_LEAVE,        // Close without saving
     SETTINGS_EVENT_CAPTURE,      // Start capturing a key or button for the binding page's device
     SETTINGS_EVENT_PICK_COMMAND, // Open the command picker for the binding page's binding
-    SETTINGS_EVENT_BINDINGS      // The binding lists changed: apply them; with `confirm`, start the 10 s for `code`
+    SETTINGS_EVENT_BINDINGS,     // The binding lists changed: apply them; with `confirm`, start the 10 s for `code`
+    SETTINGS_EVENT_RESTART,      // Saved: restart StreamFlex now
+    SETTINGS_EVENT_CLOSE_SAVED   // Saved: close, with no restart and nothing saved again
 } SettingsEventKind;
 
 typedef struct {
@@ -328,6 +333,12 @@ void settings_set_pads(SettingsState *state, const char *const *names, int count
 int settings_pad_count(const SettingsState *state);
 const char *settings_pad_name(const SettingsState *state, int index);
 void settings_show_save_failed(SettingsState *state, const char *message);
+// The restart prompt, after a save that wrote a setting that applies at next start: its names, as
+// the prompt words them ("the mappings file", "the A and the B", "the A, the B and the C")
+void settings_restart_name(const char *label, char *out, size_t size);
+void settings_join_names(const char *const *names, int count, char *out, size_t size);
+int settings_next_start(const SettingsState *state, char *out, size_t size);
+void settings_show_restart(SettingsState *state, const char *names);
 // The key and gamepad bindings, while settings are open (NULL: no binding pages), and a way to name
 // keys and buttons (NULL: "#<HEX>"). The caller owns the bindings and frees them after the model.
 void settings_set_bindings(SettingsState *state, Bindings *bindings, SettingsKeyNamer namer);

@@ -19,6 +19,8 @@
 #include "settings_screen.h"
 #include "settings_pickers.h"
 #include "platform/platform.h"
+#include "alloc.h"
+#include "test_hooks.h"
 
 static void init_sdl(void);
 static void init_sdl_image(void);
@@ -76,6 +78,7 @@ static void disconnect_gamepad(int id, bool disconnect, bool remove);
 static int gamepad_device_index(const Gamepad *gamepad);
 static void open_controller(Gamepad *gamepad, bool raise_error);
 static void cleanup(void);
+static void close_log(void);
 
 // Initialize default settings
 Config config = {
@@ -155,6 +158,7 @@ Config config = {
     .gamepad_mappings_file            = NULL,
     .on_launch                        = ON_LAUNCH_BLANK,
     .debug                            = false,
+    .restarted                        = false,
     .exe_path                         = NULL,
     .first_menu                       = NULL,
     .num_menus                        = 0,
@@ -207,6 +211,8 @@ SDL_Thread *clock_thread              = NULL;
 SDL_Event event;
 SDL_SysWMinfo wm_info;
 SDL_DisplayMode display_mode;
+static char **start_argv              = NULL; // The arguments StreamFlex was started with, as main() had them,
+                                              // and --restarted after them for a restart; NULL-terminated
 TextInfo title_info;
 static TTF_Font *fixed_title_font = NULL; // The title font at the fixed FontSize
 Ticks ticks;
@@ -503,15 +509,10 @@ static void cleanup()
     TTF_Quit();
     quit_svg();
 
-    // Close log file if open; a log on stderr (no home folder) is not ours to close
-    if (log_file != NULL && log_file != stderr)
-        fclose(log_file);
-
     // Free dynamically allocated memory
     free(config.default_menu);
     free(config.background_image);
     free(config.title_font_path);
-    free(config.exe_path);
     free(config.config_path);
     free(config.slideshow_directory);
     free(config.clock_font_path);
@@ -1894,8 +1895,11 @@ static void start_gamepad()
 #endif
     if (!mappings_loaded && config.gamepad_mappings_file != NULL) {
         mappings_loaded = true;
-        if (SDL_GameControllerAddMappingsFromFile(config.gamepad_mappings_file) < 0)
+        int added = SDL_GameControllerAddMappingsFromFile(config.gamepad_mappings_file);
+        if (added < 0)
             log_error("Could not load gamepad mappings from %s\n%s", config.gamepad_mappings_file, SDL_GetError());
+        else
+            log_debug("Gamepad mappings loaded from %s (%i added)", config.gamepad_mappings_file, added);
     }
     add_default_gamepad_controls();
     connect_present_pads();
@@ -2239,7 +2243,48 @@ void quit(int status)
         config.quit_cmd = NULL;   // cleanup() frees it too
     }
     cleanup();
+    close_log();
+    free(config.exe_path);   // The log's folder on Windows, so it goes after the log
+    alloc_free(start_argv);
     exit(status);
+}
+
+// A function to close the log file if it is open; a log on stderr (no home folder) is not ours to close
+static void close_log()
+{
+    if (log_file != NULL && log_file != stderr)
+        fclose(log_file);
+    log_file = NULL;
+}
+
+// A function to restart StreamFlex, to apply the settings named (as the restart prompt words them)
+// that wait for the next start. A restart is not a quit: QuitCmd does not run, and the fresh copy,
+// started with --restarted, runs no StartupCmd. The program is found before anything is torn down,
+// and when it cannot be, this comes back with the reason logged and StreamFlex running on. Then
+// everything quit() tears down goes but the log, which says what became of the start: on Linux the
+// program takes this process's place (exec), on Windows a fresh copy starts once this one's window
+// and :exit hotkey are gone, and this one ends. A start that fails ends StreamFlex with an error,
+// to be started by hand.
+void restart_streamflex(const char *names)
+{
+    if (start_argv == NULL) {
+        log_error("Cannot restart StreamFlex: there was no memory to keep its arguments when it started");
+        return;
+    }
+    if (!find_self(start_argv[0]))
+        return;
+    log_debug("Restarting StreamFlex to apply %s", names);
+#ifdef _WIN32
+    clear_exit_hotkey();
+#endif
+    cleanup();
+    if (log_file != NULL)
+        fflush(log_file);   // Before the fresh copy goes on with the log
+    bool started = start_self(start_argv);
+    close_log();
+    free(config.exe_path);
+    alloc_free(start_argv);
+    exit(started ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 // A function to print the version and other info to command line
@@ -2262,8 +2307,17 @@ int main(int argc, char *argv[])
     config.exe_path = SDL_GetBasePath();
     config_apply_defaults();
 
+    // Keep the arguments as they are now, before getopt reorders them, for a restart to start with
+    test_fail("restart", true);
+    start_argv = alloc_calloc((size_t) argc + 2, sizeof(char*));
+    test_fail("restart", false);
+    for (int i = 0; start_argv != NULL && i < argc; i++)
+        start_argv[i] = argv[i];
+
     // Handle command line arguments, find config file
     handle_arguments(argc, argv, &config_file_path);
+    if (start_argv != NULL && !config.restarted)
+        start_argv[argc] = "--restarted";
 
     // Parse config file for settings and menu entries
     parse_config_file(config_file_path);
@@ -2327,8 +2381,10 @@ int main(int argc, char *argv[])
     if (error)
         log_fatal("Could not load default menu %s", config.default_menu);
 
-    // Execute startup command
-    if (config.startup_cmd != NULL)
+    // Execute startup command; a restart's fresh copy runs none, as the start before it ran it
+    if (config.startup_cmd != NULL && config.restarted)
+        log_debug("Restarted, so the StartupCmd does not run again");
+    else if (config.startup_cmd != NULL)
         execute_command(config.startup_cmd);
     
     // Main program loop
