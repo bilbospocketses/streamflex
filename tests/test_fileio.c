@@ -497,13 +497,15 @@ static void test_devices_and_pipes(void)
     CHECK(!fileio_not_a_file(TEST_PIPE));   // Gone with its last instance: nothing there
     CHECK_STR(fileio_last_error(), "not found");
 
-    // Whether nul.png is a file here, the folder's own listing says
-    CHECK(fileio_write_all(DIR "/nul.png", "x", 1));
+    // Whether nul.png is a file here, the folder's own listing says. Where it is the null device
+    // the write fails, so the write is held to the listing as the looks at the path are.
+    bool wrote = fileio_write_all(DIR "/nul.png", "x", 1);
     FileioEntry *entries = NULL;
     int count = fileio_list(DIR, &entries);
     bool listed = find_entry(entries, count, "nul.png") != NULL;
     fileio_free_list(entries, count);
     printf("nul.png in a folder is %s here\n", listed ? "a file" : "the null device");
+    CHECK(wrote == listed);
     CHECK(fileio_is_file(DIR "/nul.png") == listed);
     CHECK(fileio_not_a_file(DIR "/nul.png") == !listed);
 }
