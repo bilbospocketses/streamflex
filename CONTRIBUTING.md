@@ -66,7 +66,7 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 
 The hook build also logs how many paragraphs the settings screen measured while it was open, so a check can catch a note measured again in every frame. The helpers checks share (`run_keys`, `ran_clean`, `in_range`, `precedes`, `look`, `stop_run` and others) live in `run.sh`.
 
-Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps each check's output and log, and the launcher's exit code, under `headless-out/<label>/` (which the harness leaves out of the source it builds). Locally a pass on one container takes about 50 minutes, the leak pass the longest, and the four passes through `run-shards.ps1` in 2 shards each, on 8 containers, about 25 to 30 minutes; scrollfail takes about 15 seconds. On GitHub each Headless job, which runs all three, takes about 16 minutes.
+Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps each check's output and log, and the launcher's exit code, under `headless-out/<label>/` (which the harness leaves out of the source it builds). Locally a pass on one container takes about 50 minutes, the leak pass the longest, and the four passes through `run-shards.ps1` in 2 shards each, on 8 containers, about 25 to 30 minutes; scrollfail, its build included, takes about 6 seconds on 6 CPUs. On GitHub each Headless job, which runs all three, takes about 16 minutes.
 
 ## Project Structure
 
