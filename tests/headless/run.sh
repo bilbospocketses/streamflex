@@ -62,14 +62,16 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
     --exclude=./design --exclude=./branding --exclude=./.github -cf - . | tar -C /work -xf -
 
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
-# passes at 8c37db5, after the build). They only balance the shards: a check file missing here
-# counts as 60 s, and a stale time makes the shards uneven, never a check lost or run twice.
+# passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
+# at 9550682. They only balance the shards: a check file missing here counts as 60 s, and a stale
+# time makes the shards uneven, never a check lost or run twice.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
     [50-settings.sh]=203 [55-settings-pages.sh]=231 [58-settings-pickers.sh]=506
     [59-settings-fonts.sh]=416 [60-settings-background.sh]=180 [62-settings-bindings.sh]=1069
-    [63-settings-mappings.sh]=70 [65-settings-reasons.sh]=49 [70-chroma.sh]=2
+    [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
+    [70-chroma.sh]=2
 )
 
 # A function to plan the shards and print the plan. A check file with a line "# Every shard runs
