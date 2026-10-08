@@ -66,7 +66,7 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 
 The hook build also logs how many paragraphs the settings screen measured while it was open, so a check can catch a note measured again in every frame. The helpers checks share (`run_keys`, `ran_clean`, `in_range`, `precedes`, `look`, `stop_run` and others) live in `run.sh`.
 
-Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps each check's output and log, and the launcher's exit code, under `headless-out/<label>/` (which the harness leaves out of the source it builds). Locally a pass on one container takes about 50 minutes, the leak pass the longest, and the four passes through `run-shards.ps1` in 2 shards each, on 8 containers, about 25 to 30 minutes; scrollfail, its build included, takes about 6 seconds on 6 CPUs. On GitHub each Headless job, which runs all three, takes about 16 minutes.
+Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps each check's output and log, and the launcher's exit code, under `headless-out/<label>/` (which the harness leaves out of the source it builds). Locally a pass on one container takes about 50 minutes, the leak pass the longest, and the four passes through `run-shards.ps1` in 2 shards each, on 8 containers, about 25 to 30 minutes; scrollfail, its build included, takes about 6 seconds on 6 CPUs. On GitHub the passes run in 2 shards as well: for Debian and for Fedora, the plain pass and the leak pass each run as two Headless jobs, one per shard (`run.sh <label> K/2` or `run.sh <label> leaks K/2`), each keeping its console, and scrollfail runs in the job of each distro's plain shard 1, after the shard. A merge job for each distro and pass then runs `merge.py` over that pass's two consoles, and fails as it does locally. `build-and-test` fails unless every shard and every merge passed.
 
 ## Project Structure
 
@@ -93,7 +93,7 @@ Vendored code in `src/external/` is taken from the latest upstream and evaluated
 `master` is **PR-gated**. Direct pushes are blocked by a branch ruleset; every change goes branch → PR → required checks green → squash-merge.
 
 **Required status checks** (all must be green before merge, and the branch must be up to date with `master`):
-- `build-and-test` — the gate job in `build.yml`; passes only when the Windows, Debian, Raspberry Pi, and Arch Linux builds, the `Icon library` check and the `Headless (Debian)` and `Headless (Fedora)` checks (two legs of the `headless` job) all succeed.
+- `build-and-test` — the gate job in `build.yml`; passes only when the Windows, Debian, Raspberry Pi, and Arch Linux builds, the `Icon library` check, the eight `Headless (<distro>, <pass> K/2)` shard jobs of the `headless` job and the four `Headless (<distro>, <pass>)` merges of the `headless_merge` job all succeed.
 - `CodeQL` — code scanning via CodeQL default setup (C/C++ and GitHub Actions). It is required as the single `CodeQL` result rather than the per-language `Analyze (...)` jobs, so PRs where those jobs don't run are not blocked forever.
 - `Scorecard analysis` — OpenSSF supply-chain scoring from `scorecard.yml`.
 
