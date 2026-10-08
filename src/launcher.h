@@ -349,4 +349,7 @@ void apply_os_screensaver(void);
 void apply_default_menu(void);  // Points :home at config.default_menu
 bool gamepad_running(void);
 bool gamepad_connected(void);                  // A pad is open to read
+#ifdef STREAMFLEX_TEST_HOOKS
+Uint32 test_pad_repeat_delay(void);            // The frames a held pad control waits before it repeats
+#endif
 int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none

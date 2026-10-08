@@ -64,6 +64,11 @@ B62_ARROW=$(printf ' \xE2\x80\xBA ')
 B62_ELLIPSIS=$(printf '\xE2\x80\xA6')
 RIGHT_MARK=$(printf '\xE2\x80\xBA')
 TO_GAMEPAD="Menu Down Down Down Down Down Down Down Down Return Down Return"   # Controls, then Gamepad
+# A pad control's repeats come on a count of frames (31 of 16 ms), not of seconds, so a hold that must
+# outlast them waits for the test hook's line saying settings took it for that many frames: during a
+# capture, or waiting to be let go after one
+B62_HELD_CAPTURE='Test hook: pad ButtonA held while settings took it (the capture)'
+B62_HELD_LET_GO='Test hook: pad ButtonA held while settings took it (waiting to be let go)'
 
 # The pages as f62-bind's run drew them: the confirm page was on show as the capture ended (logged
 # by the frame, since no key moved there), and the binding's Command row carries the › marker
@@ -204,9 +209,9 @@ ok=1
 result "bindings: the pad's OK on Remove rebuilds its controls safely, pressing once (exit $(cat "$out/f62-padok.code"))" $ok
 echo "      ButtonA came $(grep -c 'Gamepad ButtonA detected' "$out/f62-padok.log") times"
 
-# A pad's button captured while held (A, OK here) does not press on the confirm page until let go;
-# pressed again once let go, it does (Keep)
-b62_hold_a() { : > /tmp/pad-a; sleep 1.5; rm -f /tmp/pad-a; sleep 1; }
+# A pad's button captured while held (A, OK here) does not press on the confirm page until let go,
+# held past its repeat's delay; pressed again once let go, it does (Keep)
+b62_hold_a() { : > /tmp/pad-a; wait_line "$B62_HELD_LET_GO" "$2"; rm -f /tmp/pad-a; sleep 1; }
 b62_tap_a_keep() { : > /tmp/pad-a; sleep 0.3; rm -f /tmp/pad-a; sleep 1; }
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
@@ -215,7 +220,8 @@ STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad co
     BackSpace BackSpace BackSpace BackSpace
 log=$out/f62-padheld.log
 ok=1
-grep -q 'Settings: capture got ButtonA' "$log" && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
+grep -q 'Settings: capture got ButtonA' "$log" && grep -qF "$B62_HELD_LET_GO" "$log" \
+    && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
     && grep -q "Settings: the cursor's row reads Key: ButtonA" "$log" \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-padheld && ok=0
 result "bindings: a pad's button held through its capture does not press until let go (exit $(cat "$out/f62-padheld.code"))" $ok
@@ -334,18 +340,22 @@ grep -q 'Settings: capture got F8 (#40000041)' "$log" && [ "$(grep -c 'Settings:
 result "bindings: a hotkey for OK starts a capture as OK does (exit $(cat "$out/f62-hotkeyok.code"))" $ok
 grep 'Settings: capture got' "$log" | sed 's/^/      /'
 
-# The pad's OK (A) starting a pad capture, held: it is not caught while held, the keys wait while the
-# pad captures (two Backs do nothing), and A pressed again once let go is caught
-b62_hold_a_start() { : > /tmp/pad-a; sleep 0.6; rm -f /tmp/pad-a; sleep 0.4; }
+# The pad's OK (A) starting a pad capture, held past its repeat's delay: it is not caught while held,
+# the keys wait while the pad captures (two Backs do nothing), and A pressed again once let go is
+# caught. The capture listens for 30 s here (STREAMFLEX_TEST_CAPTURE_SECONDS), so a slow runner's 31
+# frames fit inside it; the tap ends it, so it takes no longer.
+b62_hold_a_start() { : > /tmp/pad-a; wait_line "$B62_HELD_CAPTURE" "$2"; rm -f /tmp/pad-a; sleep 0.4; }
 b62_tap_a() { : > /tmp/pad-a; sleep 0.3; rm -f /tmp/pad-a; sleep 0.7; }
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
-STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
-    run_keys f62-padstart $TO_GAMEPAD Down Down Down Return +b62_hold_a_start BackSpace BackSpace +b62_tap_a \
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_CAPTURE_SECONDS=30 WAIT_FOR='Gamepad connected' \
+    CFG=$cfg run_keys f62-padstart $TO_GAMEPAD Down Down Down Return +b62_hold_a_start BackSpace BackSpace +b62_tap_a \
     BackSpace BackSpace BackSpace BackSpace BackSpace
 log=$out/f62-padstart.log
 ok=1
-grep -q 'Settings: capture got ButtonA' "$log" && precedes "$log" ' (#8) detected' 'Settings: capture got ButtonA' \
+grep -q 'Test hook: the capture listens for 30 s' "$log" \
+    && precedes "$log" "$B62_HELD_CAPTURE" 'Settings: capture got ButtonA' \
+    && precedes "$log" ' (#8) detected' 'Settings: capture got ButtonA' \
     && ! sed -n '/Settings: capturing a button/,/Settings: capture got ButtonA/p' "$log" \
          | grep -qxF "Settings: page Settings${B62_ARROW}Controls${B62_ARROW}Gamepad" \
     && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
@@ -492,16 +502,19 @@ grep -q 'Settings: the binding went back: Up was not pressed again within 10 s' 
 result "bindings: the pad read after the 10 s ended finds the change gone back (exit $(cat "$out/f62-padstop.code"))" $ok
 rm -f /tmp/pad-a
 
-# The pad's OK that starts a keyboard capture, held on past the key caught: it waits until let go, so
-# its repeat does not Keep what the capture caught
-b62_hold_a_capture_f5() { : > /tmp/pad-a; sleep 0.5; xdotool key F5; sleep 1.5; rm -f /tmp/pad-a; sleep 0.5; }
+# The pad's OK that starts a keyboard capture, held on past the key caught and past its repeat's delay:
+# it waits until let go, so its repeat does not Keep what the capture caught
+b62_hold_a_capture_f5() {
+    : > /tmp/pad-a; wait_line 'Settings: capturing a key' "$2"; xdotool key F5
+    wait_line "$B62_HELD_LET_GO" "$2"; rm -f /tmp/pad-a; sleep 0.5
+}
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
 STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
     run_keys f62-padholdkey $TO_KEYBOARD Return +b62_hold_a_capture_f5 BackSpace BackSpace Menu
 log=$out/f62-padholdkey.log
 ok=1
-grep -q 'Settings: capturing a key' "$log" && grep -q 'Settings: capture got F5 (#4000003E)' "$log" \
+grep -q 'Settings: capturing a key' "$log" && precedes "$log" 'Settings: capture got F5 (#4000003E)' "$B62_HELD_LET_GO" \
     && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
     && ! grep -q "Settings: the cursor's row reads Key: F5" "$log" \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-padholdkey && ok=0

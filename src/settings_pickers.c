@@ -403,6 +403,15 @@ void pickers_capture(int device)
     int starting = device == BINDINGS_KEYBOARD ? key_held : gamepad_pressed_label();
     capture_device = device;
     capture_begin(&capture, SDL_GetTicks(), starting);
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_CAPTURE_SECONDS=<s> listens that long
+    // instead of 5 s, so a held control can run past the repeat's delay on a slow runner
+    const char *seconds = getenv("STREAMFLEX_TEST_CAPTURE_SECONDS");
+    if (seconds != NULL && atoi(seconds) > 0) {
+        capture.window = (unsigned int) atoi(seconds) * 1000u;
+        log_debug("Test hook: the capture listens for %s s", seconds);
+    }
+#endif
     pad_held = device == BINDINGS_GAMEPAD ? starting : -1;
     log_debug("Settings: capturing a %s", device == BINDINGS_KEYBOARD ? "key" : "button");
 }
@@ -537,6 +546,29 @@ void pickers_raw_release(int code)
         capture_release(&capture, code);
 }
 
+#ifdef STREAMFLEX_TEST_HOOKS
+// A function only the headless harness builds: it counts the frames on which settings take one held pad
+// control for one reason (`taken`; TAKEN_NONE when not taken), and logs when the count reaches the
+// repeat's delay, the frame the control would have repeated on had the launcher's controls had it
+enum { TAKEN_NONE, TAKEN_CAPTURE, TAKEN_SWALLOWED };
+static void test_pad_taken(int label, int taken)
+{
+    static const char *const reasons[] = { "", "the capture", "waiting to be let go" };
+    static int last_label = -1;
+    static int last_taken = TAKEN_NONE;
+    static Uint32 frames = 0;
+    if (taken == TAKEN_NONE || label < 0 || label != last_label || taken != last_taken)
+        frames = 0;
+    last_label = label;
+    last_taken = taken;
+    if (taken != TAKEN_NONE && label >= 0 && ++frames == test_pad_repeat_delay())
+        log_debug("Test hook: pad %s held while settings took it (%s): %u frames, the repeat's delay",
+            bindings_label(label), reasons[taken], (unsigned int) frames);
+}
+#else
+#define test_pad_taken(label, taken)
+#endif
+
 // A function to take the pad's state each frame (`label`, the first control held; -1 for none): during
 // a pad capture a newly held control is the capture's, and a keyboard capture keeps the pad waiting; a
 // pad held as its capture ended waits until every control is let go. True when the pad's input was
@@ -553,11 +585,15 @@ bool pickers_raw_pad(int label)
             capture_release(&capture, was);
         if (label >= 0 && capture_press(&capture, SDL_GetTicks(), label, false))
             captured(label);
+        test_pad_taken(label, TAKEN_CAPTURE);
         return true;
     }
-    if (capture_device == BINDINGS_KEYBOARD)
+    if (capture_device == BINDINGS_KEYBOARD) {
+        test_pad_taken(label, TAKEN_CAPTURE);
         return true;
+    }
     pad_swallowed = pad_swallowed && label >= 0;
+    test_pad_taken(label, pad_swallowed ? TAKEN_SWALLOWED : TAKEN_NONE);
     return pad_swallowed;
 }
 
@@ -1036,7 +1072,7 @@ const char *pickers_note(void)
     // count stops at 1 s
     if (note[0] == '\0' && capture_device >= 0)
         snprintf(note, sizeof(note), "Press the key or button" "\xE2\x80\xA6" " (%u s)",
-            ((unsigned int) BINDINGS_CAPTURE_MS - (clock_now - capture.started) + 999) / 1000);
+            (capture.window - (clock_now - capture.started) + 999) / 1000);
     else if (note[0] == '\0' && probation.active) {
         char name[64];
         pickers_key_name(probation_device, probation.code, name, sizeof(name));

@@ -504,6 +504,7 @@ void capture_begin(Capture *capture, unsigned int now, int starting_code)
 {
     capture->state = CAPTURE_LISTENING;
     capture->started = now;
+    capture->window = BINDINGS_CAPTURE_MS;
     capture->starting_code = starting_code;
     capture->starting_held = true;
     capture->code = BIND_KEY_UNKNOWN;
@@ -512,7 +513,7 @@ void capture_begin(Capture *capture, unsigned int now, int starting_code)
 // A function to take a press while capturing; true when it is the one captured
 bool capture_press(Capture *capture, unsigned int now, int code, bool repeat)
 {
-    if (capture->state != CAPTURE_LISTENING || now - capture->started >= BINDINGS_CAPTURE_MS)
+    if (capture->state != CAPTURE_LISTENING || now - capture->started >= capture->window)
         return false;
     if (code == capture->starting_code && (capture->starting_held || repeat))
         return false;
@@ -531,7 +532,7 @@ void capture_release(Capture *capture, int code)
 // A function to tell, once, that 5 s passed with nothing captured
 bool capture_expired(Capture *capture, unsigned int now)
 {
-    if (capture->state != CAPTURE_LISTENING || now - capture->started < BINDINGS_CAPTURE_MS)
+    if (capture->state != CAPTURE_LISTENING || now - capture->started < capture->window)
         return false;
     capture->state = CAPTURE_TIMED_OUT;
     return true;

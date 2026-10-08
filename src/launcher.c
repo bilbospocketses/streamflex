@@ -1858,6 +1858,14 @@ static void test_pad_stop()
 }
 #endif
 
+#ifdef STREAMFLEX_TEST_HOOKS
+// A function only the headless harness builds: the frames a held pad control waits before it repeats
+Uint32 test_pad_repeat_delay()
+{
+    return delay_period;
+}
+#endif
+
 // A function to tell whether the gamepad subsystem is running
 bool gamepad_running()
 {
@@ -2003,6 +2011,9 @@ static void poll_gamepad()
         // At the delay or past it: a repeat that changed the frame timing can shorten the delay under it
         else if (i->repeat >= delay_period) {
             ticks.last_input = ticks.main;
+#ifdef STREAMFLEX_TEST_HOOKS
+            log_debug("Test hook: pad %s repeated", i->label);   // Only the headless harness builds this
+#endif
             i->repeat -= repeat_period;
 
             // :settings acts on the first press only: repeating it would strobe settings open and shut

@@ -64,7 +64,8 @@ int bindings_edits(const Bindings *bindings, BindingsDevice device, ConfigListEd
                    char (*values)[BINDINGS_VALUE_MAX], int max);
 
 typedef enum { CAPTURE_IDLE, CAPTURE_LISTENING, CAPTURE_CAPTURED, CAPTURE_TIMED_OUT } CaptureState;
-typedef struct { CaptureState state; unsigned int started; int starting_code; bool starting_held; int code; } Capture;
+// window: the milliseconds it listens, BINDINGS_CAPTURE_MS from capture_begin()
+typedef struct { CaptureState state; unsigned int started; unsigned int window; int starting_code; bool starting_held; int code; } Capture;
 void capture_begin(Capture *capture, unsigned int now, int starting_code);
 bool capture_press(Capture *capture, unsigned int now, int code, bool repeat);    // true: captured
 void capture_release(Capture *capture, int code);
