@@ -470,7 +470,8 @@ static void test_background_page(void)
     event = settings_command(state, SETTINGS_OK);
     CHECK_INT(event.kind, SETTINGS_EVENT_BROWSE);
     CHECK(event.slot == settings_slot(state, SET_ID_BACKGROUND_IMAGE, -1));
-    SettingSlot *image = settings_slot(state, SET_ID_BACKGROUND_IMAGE, -1);   // Never NULL, as event.slot may be
+    // Never NULL, as event.slot may be
+    SettingSlot *image = settings_slot(state, SET_ID_BACKGROUND_IMAGE, -1);
     CHECK_INT(settings_choose(state, image, "/pics/a.png").kind, SETTINGS_EVENT_CHANGED);
     CHECK_INT(settings_choose(state, image, "/pics/a.png").kind, SETTINGS_EVENT_NONE);
     CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_MOVED);

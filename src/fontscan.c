@@ -195,10 +195,10 @@ static int scan_thread(void *data)
 }
 
 // A function to start listing the font files on a thread; NULL when it cannot start (out of memory,
-// a list without the bundled folder would leave the bundled fonts out)
-// The harness can fail the bundled folder's copy (STREAMFLEX_TEST_FAIL=fontfolder), the thread's start
-// (fontthread) and every file's add (fontadd); each is decided here, on the main thread, so nothing
-// changes under the thread's feet.
+// a list without the bundled folder would leave the bundled fonts out). The harness can fail the
+// bundled folder's copy (STREAMFLEX_TEST_FAIL=fontfolder), the thread's start (fontthread) and every
+// file's add (fontadd); each is decided here, on the main thread, so nothing changes under the
+// thread's feet.
 FontScan *fontscan_start(const char *bundled_folder)
 {
     FontScan *scan = alloc_calloc(1, sizeof(FontScan));

@@ -2,7 +2,7 @@
 // Fonts registry keys (the machine's and the user's), on Linux the system and user font folders,
 // searched folder by folder; and the bundled fonts' folder first on both. The thread only lists
 // files: SDL_ttf's one FreeType library must not open fonts on two threads at once, so the main
-// thread reads the faces (settings_pickers.c).
+// thread reads the faces (settings_fonts.c).
 #ifndef FONTSCAN_H
 #define FONTSCAN_H
 

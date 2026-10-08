@@ -11,6 +11,7 @@
 #define COLOURPICK_COLUMNS 6
 #define COLOURPICK_ROWS 4
 #define COLOURPICK_SWATCHES 24
+#define COLOURPICK_PRESETS 10            // The first ten swatches: 3a's presets, which Left and Right step
 #define COLOURPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
 #define COLOURPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
 

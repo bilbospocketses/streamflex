@@ -4,8 +4,7 @@
 
 #define SAMPLES 64   // The most points across and down an image's mean luminance reads
 
-// The swatches, row by row: 3a's ten presets, four neutrals, then ten accents. The first ten must
-// equal settings.c's PRESETS, in order, names and colours.
+// The swatches, row by row: 3a's ten presets (COLOURPICK_PRESETS), four neutrals, then ten accents
 static const struct {
     const char *name;
     SettingColor color;

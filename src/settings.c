@@ -31,23 +31,6 @@ static const char *const DATE_LABELS[] = { "Sep 28", "28 Sep", "Auto" };
 #define MODE_IMAGE 1
 #define MODE_SLIDESHOW 2
 
-// The colour presets. colourpick.c's first ten swatches repeat these, in order: change both together.
-static const struct {
-    const char *name;
-    SettingColor color;
-} PRESETS[] = {
-    { "Black",    { 0x00, 0x00, 0x00 } },
-    { "Charcoal", { 0x1E, 0x1E, 0x1E } },
-    { "Graphite", { 0x33, 0x38, 0x3D } },
-    { "Slate",    { 0x2E, 0x34, 0x40 } },
-    { "Midnight", { 0x12, 0x1A, 0x2E } },
-    { "Navy",     { 0x0B, 0x1F, 0x3A } },
-    { "Teal",     { 0x07, 0x60, 0x6C } },
-    { "Forest",   { 0x1E, 0x3B, 0x2F } },
-    { "Plum",     { 0x3B, 0x1F, 0x3A } },
-    { "Burgundy", { 0x4A, 0x15, 0x20 } }
-};
-
 static const int ICON_STEPS[] = { 64, 96, 128, 160, 192, 256, 320, 384, 512, 768, 1024 };
 static const int SECOND_STEPS[] = { 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600 };
 static const int MILLI_STEPS[] = { 0, 500, 1000, 1500, 2000, 2500, 3000 };
@@ -596,8 +579,9 @@ typedef struct {
 // A function to find a colour among the presets; -1 when it is not one
 static int preset_index(SettingColor color)
 {
-    for (int i = 0; i < LENGTH(PRESETS); i++) {
-        if (PRESETS[i].color.r == color.r && PRESETS[i].color.g == color.g && PRESETS[i].color.b == color.b)
+    for (int i = 0; i < COLOURPICK_PRESETS; i++) {
+        SettingColor preset = colourpick_swatch(i);
+        if (preset.r == color.r && preset.g == color.g && preset.b == color.b)
             return i;
     }
     return -1;
@@ -714,9 +698,9 @@ static int build_candidates(const SettingDef *def, const SettingValue *current, 
                 add_candidate(def, list, &count, number_candidate(TITLE_STEPS[i], true));
             break;
         case SET_TYPE_COLOR:
-            for (int i = 0; i < LENGTH(PRESETS); i++) {
+            for (int i = 0; i < COLOURPICK_PRESETS; i++) {
                 Candidate c = number_candidate(0, false);
-                c.color = PRESETS[i].color;
+                c.color = colourpick_swatch(i);
                 add_candidate(def, list, &count, c);
             }
             break;
@@ -1554,12 +1538,6 @@ bool settings_row_selectable(const SettingsRow *row)
     return row->kind != SETTINGS_ROW_DIVIDER && row->kind != SETTINGS_ROW_NOTE && (row->enabled || row->why != NULL);
 }
 
-// A function to tell whether the cursor may rest on a row
-static bool selectable(const SettingsRow *row)
-{
-    return settings_row_selectable(row);
-}
-
 // A function to keep the cursor on a row it may rest on, since the rows under it can change
 static void fix_cursor(SettingsState *state)
 {
@@ -1570,16 +1548,16 @@ static void fix_cursor(SettingsState *state)
         top->cursor = count - 1;
     if (top->cursor < 0)
         top->cursor = 0;
-    if (count == 0 || selectable(&rows[top->cursor]))
+    if (count == 0 || settings_row_selectable(&rows[top->cursor]))
         return;
     for (int i = top->cursor; i < count; i++) {
-        if (selectable(&rows[i])) {
+        if (settings_row_selectable(&rows[i])) {
             top->cursor = i;
             return;
         }
     }
     for (int i = top->cursor; i >= 0; i--) {
-        if (selectable(&rows[i])) {
+        if (settings_row_selectable(&rows[i])) {
             top->cursor = i;
             return;
         }
@@ -1883,7 +1861,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
         case SETTINGS_DOWN: {
             int step = command == SETTINGS_UP ? -1 : 1;
             for (int i = top->cursor + step; i >= 0 && i < count; i += step) {
-                if (selectable(&rows[i])) {
+                if (settings_row_selectable(&rows[i])) {
                     top->cursor = i;
                     event.kind = SETTINGS_EVENT_MOVED;
                     break;
@@ -1913,7 +1891,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             }
             break;
         case SETTINGS_OK:
-            if (row == NULL || !selectable(row))
+            if (row == NULL || !settings_row_selectable(row))
                 break;
             if (!row->enabled && row->kind != SETTINGS_ROW_ACTION)
                 break;
