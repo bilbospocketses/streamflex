@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.2
 <#
 .SYNOPSIS
     Run a set of headless passes, each split into shards on containers of their own, and merge
@@ -47,14 +47,18 @@ param(
     [int] $MemoryWaitMinutes = 15
 )
 $ErrorActionPreference = 'Stop'
+# A native command's exit code is read where it is run, never thrown: merge.py's exit 1 for one
+# failing pass, thrown, would end the script and stop the other passes' shards (a profile can
+# turn this on for the whole session)
+$PSNativeCommandUseErrorActionPreference = $false
 
 $Legs = @($Legs -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
 $unknown = @($Legs | Where-Object { $_ -notin 'plain', 'fedora', 'leaks', 'fedora-leaks' })
 if ($unknown -or -not $Legs) { throw "unknown pass '$($unknown -join ', ')': give plain, fedora, leaks or fedora-leaks" }
-$Repo = (Resolve-Path $Repo).Path -replace '\\', '/'
+$Repo = (Resolve-Path -LiteralPath $Repo).Path -replace '\\', '/'
 if (-not $OutDir) { $OutDir = "$Repo/headless-out" }
-New-Item -ItemType Directory -Force $OutDir | Out-Null
-$OutDir = (Resolve-Path $OutDir).Path -replace '\\', '/'
+New-Item -ItemType Directory -Force -LiteralPath $OutDir | Out-Null
+$OutDir = (Resolve-Path -LiteralPath $OutDir).Path -replace '\\', '/'
 $merge = "$PSScriptRoot/merge.py"
 $cpuSets = '0-2', '3-5', '6-8', '9-11', '12-14', '15-17', '18-20', '21-23'
 
@@ -143,7 +147,7 @@ function Merge-Pass($pass) {
     $logs = @($pass.Shards.Log)
     $lines = @(& $python.Source $merge --leg $pass.Label @logs 2>&1 | ForEach-Object { "$_" })
     $code = $LASTEXITCODE
-    Set-Content -Path "$OutDir/$($pass.Label).merged.log" -Value $lines -Encoding utf8NoBOM
+    Set-Content -LiteralPath "$OutDir/$($pass.Label).merged.log" -Value $lines -Encoding utf8NoBOM
     $summary = $lines | Where-Object { $_ -like "$($pass.Label): * PASS, *" } | Select-Object -Last 1
     $failed = $lines | Where-Object { $_ -match '^\d+ failed$' } | Select-Object -Last 1
     $exits = @($pass.Shards | Where-Object { $_.Rc -isnot [int] -or $_.Rc -ne 0 })
@@ -179,7 +183,7 @@ try {
                     while ($pending.Count) {
                         $s = $pending.Dequeue()
                         $why = 'not started: only {0:N1} GB of host RAM was free after {1} minutes' -f $gb, $MemoryWaitMinutes
-                        Set-Content -Path $s.Log -Value $why -Encoding utf8NoBOM
+                        Set-Content -LiteralPath $s.Log -Value $why -Encoding utf8NoBOM
                         Say "$($s.Label) $why"
                         $s.Rc = 'not started'
                         if (-not @($s.Pass.Shards | Where-Object { $null -eq $_.Rc })) { Merge-Pass $s.Pass }

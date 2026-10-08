@@ -53,10 +53,16 @@ ok=1
 result "settings: Show titles off and on opens the title font again, live" $ok
 echo "      the title font opened $opened times"
 
-# A greyed row's reason shows under the preview: the FPS limit while VSync is on
+# A greyed row's reason shows under the preview: the FPS limit while VSync is on. A run of its own,
+# whose cursor rests on the row: the tour's keys come 100 ms apart, and a slow host draws no frame
+# while the cursor is there, so the note is never logged. VSync is on in the file, so no notice is
+# up to take the note's place.
+CFG=$FX/f55-why.ini UNTIL='Settings: the note under the preview says Used only while VSync is off' \
+    run_keys f55-why Menu Return Down Down Down Down Down Down
 ok=1
-grep -q 'Settings: the note under the preview says Used only while VSync is off' "$log" && ok=0
-result "settings: a greyed row says why under the preview" $ok
+grep -q 'Settings: the note under the preview says Used only while VSync is off' "$out/f55-why.log" \
+    && ran_clean f55-why && ok=0
+result "settings: a greyed row says why under the preview (exit $(cat "$out/f55-why.code"))" $ok
 
 # The clock switched off while its render thread is at work (the harness build's
 # STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits

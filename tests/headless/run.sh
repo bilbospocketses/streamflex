@@ -53,9 +53,13 @@ out=/out/$label
 rm -rf "$out"; mkdir -p "$out"
 
 # Build a copy of the source, without the Windows build tree (vcpkg, several GB), .git, or the
-# output of an earlier run that CONTRIBUTING's command keeps in the repo
+# output of an earlier run that CONTRIBUTING's command keeps in the repo. Folders the build and
+# the checks never read are left out too: .superpowers (notes that change while a set runs),
+# design, branding and .github. A shard's digest is of this copy, so a change in them between
+# two shards' starts does not part their trees.
 rm -rf /work; mkdir -p /work
-tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out -cf - . | tar -C /work -xf -
+tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclude=./.superpowers \
+    --exclude=./design --exclude=./branding --exclude=./.github -cf - . | tar -C /work -xf -
 
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
 # passes at 8c37db5, after the build). They only balance the shards: a check file missing here
