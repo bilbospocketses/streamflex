@@ -264,6 +264,44 @@ jobs:
           .venv/bin/python -m unittest discover -s branding/library -p "test_*.py" -v
           .venv/bin/python branding/library/check-library.py
 
+  # The unit tests again, built with AddressSanitizer and UBSan and the extra warnings, as the
+  # local unit leg (CONTRIBUTING.md) runs them: the Linux job's Release build has no sanitizer, so
+  # a test that reads before an array or a freed slot passes there when the memory happens to
+  # read as expected. It runs in the Debian headless image, as `tester` (root ignores the file
+  # permissions some tests rely on), with address randomization off (setarch -R), which GCC 12's
+  # ASan needs and Docker's default seccomp profile refuses. A compiler warning in our code, a
+  # failed test or a sanitizer report (UBSan halts on its first) fails it.
+  unit_sanitizers:
+    name: Unit tests (ASan, UBSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test image
+        run: docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
+
+      - name: Build and run the unit tests
+        run: |
+          docker run --rm -i --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+            streamflex-test-debian bash -s <<'EOF'
+          set -u
+          rm -rf /work; mkdir -p /work
+          tar -C /src --exclude=./build --exclude=./.git -cf - . | tar -C /work -xf -
+          chown -R tester /work
+          flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          su tester -c "cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='$flags' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DEXTRA_WARNINGS=ON" > /tmp/configure.log 2>&1 \
+            || { echo "::error::CMake configure failed"; cat /tmp/configure.log; exit 2; }
+          su tester -c "cmake --build /work/build -j$(nproc)" > /tmp/build.log 2>&1 \
+            || { echo "::error::The build failed"; cat /tmp/build.log; exit 2; }
+          ours=$(grep -iE 'warning:' /tmp/build.log | grep -vE '^g?make(\[[0-9]+\])?: ' | grep -v '^/work/src/external/')
+          if [ -n "$ours" ]; then echo "::error::Compiler warnings outside src/external"; echo "$ours"; exit 1; fi
+          su tester -c "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 setarch $(uname -m) -R ctest --test-dir /work/build --output-on-failure"
+          EOF
+
   # What only a running launcher shows: the settings screen, key handling and startup paths,
   # driven by key presses under a virtual display (tests/headless). It runs in its own container
   # because the harness turns off address randomization for ASan (setarch -R), which Docker's
@@ -280,8 +318,10 @@ jobs:
     name: Headless (${{ matrix.distro }}, ${{ matrix.pass }} ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     # A backstop for a hang the harness helpers' own timeouts miss (GitHub's default is 6 hours).
-    # A shard took 25 to 28 minutes locally on 3 CPUs (2026-10-08), with its own build; this is
-    # about twice that, for the image build, scrollfail and a slower runner
+    # A shard took 25 to 28 minutes locally on 3 CPUs (2026-10-08), with its own build. On GitHub
+    # (run 37801014279) the plain shards took about 26 minutes and the leak shards about 27 to 30,
+    # all in parallel, image build and scrollfail included; 60 minutes is about twice the measured
+    # GitHub shard
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -395,12 +435,13 @@ jobs:
           python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
 
   # Single required status check for the master branch ruleset. It passes only when every
-  # platform build, the icon library check, every headless shard and every merge succeeded;
+  # platform build, the icon library check, the sanitized unit tests, every headless shard and
+  # every merge succeeded;
   # `if: always()` makes it report a failure (rather than being skipped) when a job fails or is
   # cancelled.
   build-and-test:
     runs-on: ubuntu-24.04
-    needs: [build_windows, build_linux, build_rpi, build_arch, library_check, headless, headless_merge]
+    needs: [build_windows, build_linux, build_rpi, build_arch, library_check, unit_sanitizers, headless, headless_merge]
     if: always()
     steps:
       - name: Check platform builds
@@ -440,7 +481,7 @@ jobs:
       # The packages only: each package's artifact is named "<platform> build", and the headless
       # shard consoles are artifacts of this run too
       - name: Download packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "* build"
           path: dist
