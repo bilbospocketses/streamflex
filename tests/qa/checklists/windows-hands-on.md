@@ -1,6 +1,6 @@
 # StreamFlex 3a hands-on check: Windows 11
 
-This is the Windows half of Task 13's hands-on check for the settings screen (sub-project 3a). It is run by the qa-harness session in its Windows 11 guest, against the PR's CI **Windows build** zip. It covers the 9 steps of `task-13-brief.md` Step 4, and it adds checks for the Batch C fixes of the final fix wave:
+This is the Windows half of the hands-on check for the settings screen of sub-project 3a. It is run in a Windows 11 guest, by hand or by a QA harness, against the PR's CI **Windows build** zip. It covers the nine hands-on steps of the 3a plan (each heading's "brief step"), and it adds checks for the fixes of 3a's final fix wave (Batch C):
 
 - **Imp 1:** a held Start button, or a held Menu key, opens settings once.
 - **Imp 2:** one image rule everywhere: upper-case extensions count, and hidden files do not.
@@ -8,7 +8,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
 - **Refusals and focus:** settings do not open while an application is launching or running (#116), and gamepad input is ignored while StreamFlex is not the focused window.
 - **Display details:** the Menus list's preview follows the cursor only after it rests about 300 ms, and a title too long for its button is cut and never runs past it.
 - **The zip carries no DLL:** it has no `vcruntime140.dll`, so a guest with no Visual C++ runtime starts StreamFlex.
-- **The real transparent window** (progress.md, Task 9's note): with Mode set to Transparent, the actual window turns see-through, and turns solid again when Mode is set back.
+- **The real transparent window**, which no headless check can show: with Mode set to Transparent, the actual window turns see-through, and turns solid again when Mode is set back.
 
 ## How to read and run each step
 
@@ -73,7 +73,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
    Expected listing: `BLEU.JPG`, `caché.png` (Hidden), `notes.txt`, `rouge.png` and `VERT.PNG`. StreamFlex must show and count **3 images**: BLEU.JPG, rouge.png and VERT.PNG.
 5. **Connect the ViGEm Xbox 360 pad before StreamFlex starts.**
 6. **Start `C:\StreamFlex\streamflex.exe -d`** (the `-d` matters: the `Video:` line in step 7 is written only at debug level) in the interactive desktop session, from `C:\StreamFlex`. **Frame** `W0-home.png`.
-7. **Expected in the log:** `Video: SDL's windows driver, the <renderer> renderer` (record the renderer name), `Video driver:  windows`, `Resolution:` with the guest's resolution, `Gamepad connected with device index 0`, a `Gamepad Mapping:` block, `Loading menu 'Main'`, and `Gained keyboard focus`. The screen shows Main's four buttons (Kodi, Plex, Steam, System) on black. If `Gamepad connected` is missing, stop: the pad is not reaching SDL. That is a setup fault, not a verdict.
+7. **Expected in the log:** `Video: SDL's windows driver, the <renderer> renderer` (record the renderer name), `Video driver:  windows`, `Resolution:` with the guest's resolution, `Gamepad connected with device index 0, instance id <N>` and then `Gamepad opened at device index 0, instance id <N>` (the same N), a `Gamepad Mapping:` block, `Loading menu 'Main'`, and `Gained keyboard focus`. The screen shows Main's four buttons (Kodi, Plex, Steam, System) on black. If `Gamepad connected` is missing, stop: the pad is not reaching SDL. That is a setup fault, not a verdict.
 
 ## W1. Start opens settings (brief step 1)
 
@@ -222,7 +222,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
   - The log holds `Background set up: Slideshow`.
   - Copy the log to `logs\W7.log`.
 
-## W7b. The real transparent window (Task 9's note in progress.md)
+## W7b. The real transparent window
 
 - **Inputs:**
   1. Pad **Start**, **A** (Background), **D-pad Right** (Mode goes from *Slideshow* to *Transparent*).

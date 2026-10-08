@@ -1,6 +1,6 @@
 # StreamFlex 3a hands-on check: Ubuntu 26.04 GNOME/Wayland
 
-This is the Linux half of Task 13's hands-on check for the settings screen (sub-project 3a). The qa-harness session runs it in its Ubuntu 26.04 guest (base v2, GDM autologin as `qa`), against the PR's CI **Debian build** `.deb`. It covers the nine items in `fix-wave.md` § "Task 13 addition":
+This is the Linux half of the hands-on check for the settings screen of sub-project 3a. It is run in an Ubuntu 26.04 guest (GDM autologin as `qa`), by hand or by a QA harness, against the PR's CI **Debian build** `.deb`. It covers the nine items the 3a plan set for Linux:
 
 1. install the `.deb`, with its dependencies resolved;
 2. launch from the app menu;
@@ -64,7 +64,7 @@ Into `/root/sf-qa/` (as root):
 
 ## U0. Record the unknowns, then set up (no verdict)
 
-1. As root: `bash /root/sf-qa/ubuntu-guest.sh facts`. Keep the whole output; it answers `fix-wave.md`'s unknowns:
+1. As root: `bash /root/sf-qa/ubuntu-guest.sh facts`. Keep the whole output; it records what is not known about the guest in advance:
    - the GPU and its DRM driver (virgl or llvmpipe/simpledrm);
    - the connected output and its mode, which is the screen resolution;
    - the session type (it must be `wayland`);
@@ -146,7 +146,7 @@ This deletes `~/.config/streamflex` and the kept logs, so each pass starts from 
 - **Expected:**
   - The log, from a `-d` run, names the pass's driver: `Video: SDL's wayland driver, the <renderer> renderer` in pass A, `Video: SDL's x11 driver, the <renderer> renderer` in pass B (record the renderer), and `Video driver:  wayland` or `x11` as before. The `Video:` line is debug-level: without `-d` it is absent.
   - `Resolution:` matches the output's mode from U0.
-  - The log also holds `Config file found: /usr/share/streamflex/config.ini`, `Gamepad connected with device index 0`, `Loading menu 'Main'` and `Gained keyboard focus`.
+  - The log also holds `Config file found: /usr/share/streamflex/config.ini`, `Gamepad connected with device index 0, instance id <N>` and then `Gamepad opened at device index 0, instance id <N>` (the same N), `Loading menu 'Main'` and `Gained keyboard focus`.
   - The frame shows StreamFlex over the **whole** screen: no GNOME top bar, no clock, no window title bar or border. Every pixel in the top 40 rows is (0,0,0), including across the middle where GNOME's clock would be.
 - Record the resolution, the driver, the renderer and the `Refresh rate:` line.
 
