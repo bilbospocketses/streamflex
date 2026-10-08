@@ -7,6 +7,7 @@
 #include "fileio.h"
 #include "inidoc.h"
 #include "alloc.h"
+#include "colourpick.h"
 #include <launcher_config.h>
 
 #define ARROW " \xE2\x80\xBA "   // U+203A with a space either side, between the pages in the page path
@@ -822,9 +823,10 @@ void setting_describe(const SettingDef *def, const SettingValue *value, const Se
                                       ? def->labels[value->number] : "?");
             break;
         case SET_TYPE_COLOR: {
-            int preset = preset_index(value->color);
-            if (preset >= 0)
-                snprintf(out, size, "%s", PRESETS[preset].name);
+            // Named as the colour picker names it: any of its swatches, not only the presets
+            int swatch = colourpick_find(value->color);
+            if (swatch >= 0)
+                snprintf(out, size, "%s", colourpick_name(swatch));
             else
                 snprintf(out, size, "Custom #%02X%02X%02X", value->color.r, value->color.g, value->color.b);
             break;

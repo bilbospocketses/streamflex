@@ -47,13 +47,17 @@ link_fileio(test_config_save)
 add_test(NAME config_save COMMAND test_config_save)
 
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
-# sizes through layout.c's parsers, paths through fileio.c's helpers, and the key and gamepad
-# bindings through bindings.c's model (whose lines the tests parse with inidoc.c)
+# sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
+# through bindings.c's model (whose lines the tests parse with inidoc.c), and names a colour through
+# colourpick.c's swatches (whose contrast maths needs libm)
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
-  "${PROJECT_SOURCE_DIR}/src/inidoc.c")
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colourpick.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_settings)
+if (UNIX)
+  target_link_libraries(test_settings m)
+endif ()
 add_test(NAME settings COMMAND test_settings)
 
 # Unit tests for deriving the values the launcher draws with from the configured ones (pure)
@@ -95,12 +99,16 @@ link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
+# (colourpick.c allocates nothing; settings.c names colours through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
-  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c")
+  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colourpick.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
+if (UNIX)
+  target_link_libraries(test_alloc m)
+endif ()
 add_test(NAME alloc COMMAND test_alloc)
 
 # A function to link inih the way the launcher does

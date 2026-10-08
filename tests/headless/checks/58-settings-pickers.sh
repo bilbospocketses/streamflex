@@ -359,7 +359,7 @@ ok=1
 sed -n '/Settings: \[Background\] Mode Color -> Image/q; p' "$log" \
        | grep -qF 'Settings: the note under the preview says Low contrast: 1.9:1 against the background' \
     && sed -n '/Settings: \[Background\] Mode Slideshow -> Transparent/,$p' "$log" \
-       | grep -qF "Settings: the cursor's row reads Colour: $LEFT_MARK Custom #FFFFFF $RIGHT_MARK" \
+       | grep -qF "Settings: the cursor's row reads Colour: $LEFT_MARK White $RIGHT_MARK" \
     && ! sed -n '/Settings: \[Background\] Mode Slideshow -> Transparent/,$p' "$log" | grep -q 'Low contrast' \
     && grep -qx 'Mode=Transparent' "$cfg" && ran_clean f58-overlay && ok=0
 result "pickers: the overlay counts in the contrast, and a transparent background warns of nothing (exit $(cat "$out/f58-overlay.code"))" $ok

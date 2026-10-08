@@ -167,6 +167,20 @@ static void test_steps(void)
     value = stepped(SET_ID_BACKGROUND_COLOR, black, &black, 1, 20);
     CHECK_STR(formatted(SET_ID_BACKGROUND_COLOR, &value), "#4A1520");
 
+    // A swatch that is not a preset (the titles' default white) steps as a custom colour does: first,
+    // then the presets in order, and back to it
+    SettingValue white = parsed(SET_ID_TITLE_COLOR, "#FFFFFF");
+    value = stepped(SET_ID_TITLE_COLOR, white, &white, -1, 1);
+    CHECK_STR(formatted(SET_ID_TITLE_COLOR, &value), "#FFFFFF");
+    value = stepped(SET_ID_TITLE_COLOR, white, &white, 1, 1);
+    CHECK_STR(formatted(SET_ID_TITLE_COLOR, &value), "#000000");
+    value = stepped(SET_ID_TITLE_COLOR, value, &white, 1, 1);
+    CHECK_STR(formatted(SET_ID_TITLE_COLOR, &value), "#1E1E1E");
+    value = stepped(SET_ID_TITLE_COLOR, value, &white, 1, 20);
+    CHECK_STR(formatted(SET_ID_TITLE_COLOR, &value), "#4A1520");
+    value = stepped(SET_ID_TITLE_COLOR, value, &white, -1, 20);
+    CHECK_STR(formatted(SET_ID_TITLE_COLOR, &value), "#FFFFFF");
+
     // Title size: a fixed size from the file, then Small, Medium and Large
     SettingValue fixed = parsed(SET_ID_TITLE_SIZE, "36");
     value = stepped(SET_ID_TITLE_SIZE, fixed, &fixed, 1, 1);
@@ -212,6 +226,15 @@ static void test_descriptions(void)
     CHECK_STR(described(SET_ID_BACKGROUND_COLOR, &value, NULL), "Charcoal");
     value = parsed(SET_ID_BACKGROUND_COLOR, "#123456");
     CHECK_STR(described(SET_ID_BACKGROUND_COLOR, &value, NULL), "Custom #123456");
+    // A colour row names any of the colour picker's swatches, as the picker does, not only the presets
+    value = parsed(SET_ID_TITLE_COLOR, "#FFFFFF");
+    CHECK_STR(described(SET_ID_TITLE_COLOR, &value, NULL), "White");
+    value = parsed(SET_ID_CLOCK_COLOR, "#D04890");
+    CHECK_STR(described(SET_ID_CLOCK_COLOR, &value, NULL), "Pink");
+    value = parsed(SET_ID_TITLE_COLOR, "#4A1520");
+    CHECK_STR(described(SET_ID_TITLE_COLOR, &value, NULL), "Burgundy");
+    value = parsed(SET_ID_TITLE_COLOR, "#FFD700");
+    CHECK_STR(described(SET_ID_TITLE_COLOR, &value, NULL), "Custom #FFD700");
     value = parsed(SET_ID_BACKGROUND_IMAGE, "C:\\Pics\\sunset.jpg");
     CHECK_STR(described(SET_ID_BACKGROUND_IMAGE, &value, NULL), "sunset.jpg");
     value = parsed(SET_ID_SLIDESHOW_DIRECTORY, "/home/me/Pictures/");
