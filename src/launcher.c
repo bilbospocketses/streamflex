@@ -79,6 +79,7 @@ static int gamepad_device_index(const Gamepad *gamepad);
 static void open_controller(Gamepad *gamepad, bool raise_error);
 static void cleanup(void);
 static void close_log(void);
+static void release_last(void);
 
 // Initialize default settings
 Config config = {
@@ -2243,9 +2244,7 @@ void quit(int status)
         config.quit_cmd = NULL;   // cleanup() frees it too
     }
     cleanup();
-    close_log();
-    free(config.exe_path);   // The log's folder on Windows, so it goes after the log
-    alloc_free(start_argv);
+    release_last();
     exit(status);
 }
 
@@ -2255,6 +2254,14 @@ static void close_log()
     if (log_file != NULL && log_file != stderr)
         fclose(log_file);
     log_file = NULL;
+}
+
+// A function to release what cleanup() leaves, the last thing quit() and a restart do before they exit
+static void release_last(void)
+{
+    close_log();
+    free(config.exe_path);   // The log's folder on Windows, so it goes after the log
+    alloc_free(start_argv);
 }
 
 // A function to restart StreamFlex, to apply the settings named (as the restart prompt words them)
@@ -2281,9 +2288,7 @@ void restart_streamflex(const char *names)
     if (log_file != NULL)
         fflush(log_file);   // Before the fresh copy goes on with the log
     bool started = start_self(start_argv);
-    close_log();
-    free(config.exe_path);
-    alloc_free(start_argv);
+    release_last();
     exit(started ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
