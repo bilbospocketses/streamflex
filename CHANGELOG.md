@@ -15,14 +15,18 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 - **A command picker** for the startup and quit commands and for bindings: the special commands, every submenu, and every command the menus already run.
 - **Key and gamepad bindings:** add, change and remove hotkeys and gamepad controls from the remote. Capture a key or button, and keep it. The arrows, OK and Back always keep their meaning. Taking Up, Down or the Menu key over must be confirmed within 10 seconds, or it goes back. While a change waits for that, no binding's page opens.
 - **Restart now?** After a save that wrote a setting that applies at next start (the gamepad's mappings file), settings offer to restart StreamFlex: Yes, under the cursor, or No (Back too). A restart runs no `QuitCmd`, and the restarted copy no `StartupCmd`. The gamepad's mappings file is chosen in the folder browser, which lists every file for it.
+- A gamepad capture needs a pad to capture from: with the gamepad off, or on with no pad connected, *Key* says why (*Turn the gamepad on to capture a button*, *No gamepad is connected*) instead of waiting 5 seconds for a press that cannot come.
+- A held D-pad or stick keeps repeating on *FPS limit* or *VSync* when a step changes the frame timing under it.
 - The debug log (`-d`) says when a binding's line was changed or removed by hand while settings were open, and adds, for a change written as a new line, that the first line on a key or button is the one that runs.
 - Headless tests for every page, every picker, the bindings (check 62), the mappings file (63) and the restart (64). The harness sends function keys through `tests/headless/key.py`, since Fedora's keymap makes `xdotool` hold Alt down for them. `tests/headless/run-shards.ps1` runs the four passes in shards on 8 containers, and `merge.py` adds each pass's shards up into one result.
+- CI also runs the unit tests built with AddressSanitizer and UBSan, in the Debian headless image, as part of the required `build-and-test` gate.
 
 ### Changed
 - **The Linux SDL2 minimum is now 2.0.18,** for switching VSync without a restart.
 - **The built-in highlight fill is one step less opaque** (alpha `0x3F`, not `0x40`), which is what `FillOpacity=25%` has always given.
 - **Invalid config values are logged and ignored,** as `Invalid <key> value '<value>' in [<section>], ignoring it`, and the default is kept. `IconSpacing=40px` is no longer read as 40.
 - A percentage setting may have up to two decimals (`12.5%`).
+- CI runs each headless pass in two shards, one job each, merged per pass by `merge.py`.
 - The configuration guide's Transparent section says that icons are kept clear of the chroma key color, and that text and configured colors are not, so those are what the key must avoid.
 - The research for a later sub-project, a 10-foot overlay for the DRM streaming sites in a real browser, is in `design/research/overlay/`.
 
