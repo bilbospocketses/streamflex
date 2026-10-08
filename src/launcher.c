@@ -1864,6 +1864,16 @@ bool gamepad_running()
     return gamepad_on;
 }
 
+// A function to tell whether a pad is open to read, as a pad's capture needs
+bool gamepad_connected()
+{
+    for (Gamepad *pad = gamepads; pad != NULL; pad = pad->next) {
+        if (pad->controller != NULL)
+            return true;
+    }
+    return false;
+}
+
 // A function to open every game controller present that the Device setting allows, by listing them.
 // Starting the subsystem also queues a connect event for each, which then finds the pad open already.
 static void connect_present_pads()
@@ -1990,7 +2000,8 @@ static void poll_gamepad()
             ticks.last_input = ticks.main;
             execute_command(i->cmd);
         }
-        else if (i->repeat == delay_period) {
+        // At the delay or past it: a repeat that changed the frame timing can shorten the delay under it
+        else if (i->repeat >= delay_period) {
             ticks.last_input = ticks.main;
             i->repeat -= repeat_period;
 

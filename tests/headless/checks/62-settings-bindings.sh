@@ -571,3 +571,24 @@ grep -qxF "Settings: not saved as asked: 'Hotkey1=#4000003E;:home' changed meanw
     && ran_clean f62-mixnote && ok=0
 result "bindings: a change and a removal both made by hand meanwhile each get their own words (exit $(cat "$out/f62-mixnote.code"))" $ok
 grep 'Settings: not saved as asked' "$out/f62-mixnote.log" | sed 's/^/      /'
+
+# --- Final review fix wave ---
+
+# A pad's capture with no pad to capture from is refused with the reason, and starts nothing: the
+# gamepad off, then on with no pad connected (no virtual pad). The binding page stays as it was, and
+# its command picker still opens.
+for name in f62-capoff f62-capnopad; do
+    case $name in
+        f62-capoff) fixture=f62-padoff why='Turn the gamepad on to capture a button' ;;
+        *) fixture=f62-pad why='No gamepad is connected' ;;
+    esac
+    CFG=$FX/$fixture.ini run_keys $name $TO_GAMEPAD Down Down Down Return Return Down Return BackSpace Menu
+    log=$out/$name.log
+    ok=1
+    grep -qxF "Settings: the capture cannot start: $why" "$log" \
+        && grep -qxF "Settings: the note under the preview says $why" "$log" \
+        && ! grep -q 'Settings: capturing a' "$log" \
+        && sed -n '/Settings: the capture cannot start/,$p' "$log" | grep -q 'Settings: opened the command picker for the binding' \
+        && grep -q 'Settings: nothing changed' "$log" && ran_clean $name && ok=0
+    result "bindings: a pad's capture with no pad to capture from says why, and starts nothing ($name, exit $(cat "$out/$name.code"))" $ok
+done

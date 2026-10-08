@@ -95,6 +95,26 @@ grep -q 'Frame timing: FPS limit 30, 33 ms a frame' "$out/f55-frame.log" \
 result "settings: VSync and the FPS limit apply live and save (exit $(cat "$out/f55-frame.code"))" $ok
 grep -E 'Frame timing|VSync' "$out/f55-frame.log" | sed 's/^/      /'
 
+# The pad's D-pad Left held on the FPS limit from 75: its first press steps to 60, and its first
+# repeat (31 frames of 16 ms) to 30, whose 33 ms frames make the repeat's delay 15 frames, which the
+# held count has passed already; the repeats go on all the same, on to Off. Left is held for 40
+# frames however slowly they run (STREAMFLEX_TEST_PAD_FRAMES), and the step to Off is waited for.
+p55_hold_left() {
+    : > /tmp/pad-left; wait_line 'Settings: [General] FPSLimit 30 -> ' "$2"
+    rm -f /tmp/pad-left; sleep 0.5
+}
+rm -f /tmp/pad-left
+STREAMFLEX_TEST_PAD=/tmp/pad-left STREAMFLEX_TEST_PAD_BUTTON=dpleft STREAMFLEX_TEST_PAD_FRAMES=40 WAIT_FOR='Gamepad connected' \
+    CFG=$FX/f55-padfps.ini run_keys f55-padfps Menu Return Down Down Down Down Down Down +p55_hold_left Menu
+log=$out/f55-padfps.log
+ok=1
+precedes "$log" 'Settings: [General] FPSLimit 75 -> 60' 'Settings: [General] FPSLimit 60 -> 30' \
+    && precedes "$log" 'Settings: [General] FPSLimit 60 -> 30' 'Settings: [General] FPSLimit 30 -> ' \
+    && [ "$(grep -c 'Gamepad ButtonDPadLeft detected' "$log")" = 1 ] && ran_clean f55-padfps && ok=0
+result "settings: a held pad's repeats go on past a step that shortens their delay (exit $(cat "$out/f55-padfps.code"))" $ok
+grep -E 'FPSLimit|Frame timing' "$log" | sed 's/^/      /'
+rm -f /tmp/pad-left
+
 # The default menu changed to Games: :home (a Home hotkey) closes settings to Games, and it saves
 cfg=$(writable_config f55-default)
 CFG=$cfg run_keys f55-default Menu Return Right Home
