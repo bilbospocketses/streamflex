@@ -19,6 +19,8 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 - A held D-pad or stick keeps repeating on *FPS limit* or *VSync* when a step changes the frame timing under it, at its usual pace.
 - On Windows, the copy a restart starts comes to the front with the keyboard: the copy before it hands it the foreground. Its command line is the original one with `--restarted` after one space.
 - The font picker starts on the bundled font, with no *Custom* row, when the config names it by a relative path, as the Windows config does (`.\assets\fonts\...`).
+- Choosing a family in the font picker writes its regular face when that face is named *Book*, *Roman* or *Normal* (DejaVu's and URW's fonts on Linux), not its bold or oblique one; with no regular face, its upright, normal-weight one.
+- On Linux, a restarted StreamFlex keeps its process name, `streamflex`, so `pgrep`, `pkill` and `ps` find it: starting again through `/proc/self/exe` had named it `exe`.
 - The hex editor's key hint fits the settings column at 1280 x 720 and 1280 x 800: *Arrows edit the digits · OK keeps · Back returns*.
 - A row's value may use the room its label leaves, so a binding's command reads in full beside a short key name (*F9*, *Close the app on show*).
 - The debug log's list of hotkeys (`-d`) includes the Windows exit hotkey, and the frame timing line says when VSync is off with no FPS limit set, so frames keep the display's rate.
