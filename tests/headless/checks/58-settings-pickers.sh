@@ -173,6 +173,19 @@ for p58_size in 1280x720 1280x800; do
         && [ -n "${p58_column:-}" ] && [ "$p58_wide" -le "$p58_column" ] && ran_clean "$name" && ok=0
     result "pickers: at $p58_size the top page's key hint fits the column (exit $(cat "$out/$name.code"))" $ok
     echo "      $(grep -o 'Settings: the key hint reads .*' "$log" | head -1): ${line:-no width logged}"
+    # The folder browser's, as it opens from Background > Image (Mode turned to Image first): the
+    # first hint logged after it says where it is browsing
+    name=f58-browse$p58_size
+    CFG=$FX/f60-colour.ini run_keys_at "$p58_size" "$name" Menu Down Return Right Down Return
+    log=$out/$name.log
+    p58_browsing=$(sed -n '/^Settings: browsing /,$p' "$log")
+    line=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' <<< "$p58_browsing" | head -1)
+    read -r p58_wide p58_column <<< "$(sed 's/.* is \([0-9]*\) px wide, in a column \([0-9]*\) px wide/\1 \2/' <<< "$line")"
+    ok=1
+    grep -qx "Resolution: *$p58_size" "$log" && grep -m1 'Settings: the key hint reads ' <<< "$p58_browsing" | grep -qF 'Back goes up' \
+        && [ -n "${p58_column:-}" ] && [ "$p58_wide" -le "$p58_column" ] && ran_clean "$name" && ok=0
+    result "pickers: at $p58_size the folder browser's key hint fits the column (exit $(cat "$out/$name.code"))" $ok
+    echo "      $(grep -o 'Settings: the key hint reads .*' <<< "$p58_browsing" | head -1): ${line:-no width logged}"
 done
 
 # Home (a hotkey for :home in these fixtures) and the settings key close the picker before they
