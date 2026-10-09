@@ -2008,13 +2008,14 @@ static void poll_gamepad()
             ticks.last_input = ticks.main;
             execute_command(i->cmd);
         }
-        // At the delay or past it: a repeat that changed the frame timing can shorten the delay under it
+        // At the delay or past it: a repeat that changed the frame timing can shorten the delay under
+        // it, and the count then comes back to the delay, so the repeats keep their interval
         else if (i->repeat >= delay_period) {
             ticks.last_input = ticks.main;
 #ifdef STREAMFLEX_TEST_HOOKS
             log_debug("Test hook: pad %s repeated", i->label);   // Only the headless harness builds this
 #endif
-            i->repeat -= repeat_period;
+            i->repeat = derive_repeated_count(i->repeat, delay_period, repeat_period);
 
             // :settings acts on the first press only: repeating it would strobe settings open and shut
             if (strcmp(i->cmd, SCMD_SETTINGS) != 0)

@@ -81,5 +81,6 @@ typedef struct Effective {
 
 int derive_alpha(int hundredths);
 void derive_settings(const DeriveInput *in, Effective *out);
+unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval);
 
 #endif

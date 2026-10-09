@@ -286,8 +286,33 @@ static void test_title_padding_one_of_two(void)
     CHECK_INT(eff.title_padding_pct, 0);
 }
 
+// A function to test a held gamepad control's count after a repeat: at a fixed rate one interval short
+// of the delay; past a delay that a change of frame timing shortened, back to it, so the repeats keep
+// their interval rather than coming on every frame
+static void test_repeated_count(void)
+{
+    CHECK_INT((int) derive_repeated_count(31, 31, 1), 30);   // 60 Hz: 500 ms, then every frame
+    CHECK_INT((int) derive_repeated_count(62, 62, 3), 59);   // 120 fps: every 3 frames
+    CHECK_INT((int) derive_repeated_count(5, 5, 1), 4);      // 10 fps, the slowest frame time
+    CHECK_INT((int) derive_repeated_count(3, 5, 1), 2);      // A count short of the delay keeps its place
+    CHECK_INT((int) derive_repeated_count(1, 1, 3), 0);      // An interval past the count stops at 0
+    // 240 Hz to 120 fps while held: the count is 119 after a repeat at 240 Hz's delay (125, interval
+    // 6); with the delay 62 and the interval 3, the next 30 frames repeat on every third
+    unsigned int count = 119;
+    int repeats = 0;
+    for (int frame = 0; frame < 30; frame++) {
+        count++;
+        if (count >= 62) {
+            repeats++;
+            count = derive_repeated_count(count, 62, 3);
+        }
+    }
+    CHECK_INT(repeats, 10);
+}
+
 int main(void)
 {
+    test_repeated_count();
     test_defaults();
     test_twice();
     test_clamps_restore();

@@ -84,3 +84,13 @@ void derive_settings(const DeriveInput *in, Effective *out)
     out->clock_shadow_color = with_alpha(in->clock_shadow_color, clock_alpha * DERIVE_SHADOW_ALPHA_PERCENT / 100);
     out->screensaver_alpha = derive_alpha(in->screensaver_intensity);
 }
+
+// A function to work out a held gamepad control's count of frames once it has repeated: one interval
+// short of the delay, so the next repeat comes one interval later. A count past the delay (a change of
+// frame timing shortened the delay under a held control) comes back to it, rather than repeating on
+// every frame until it falls under the delay.
+unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval)
+{
+    unsigned int from = count < delay ? count : delay;
+    return from > interval ? from - interval : 0;
+}
