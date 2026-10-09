@@ -324,7 +324,7 @@ STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/f59-sym CFG=$cfg UNTIL='Settings saved' \
 log=$out/f59-symbols.log
 ok=1
 grep -qE '^Fonts: found 11 families in 11 files, skipped 0 \(' "$log" \
-    && [ "$(f59_count "Settings: the font picker draws Dingy in the settings' font: its face is symbols" "$log")" = 1 ] \
+    && [ "$(f59_count "Settings: the font picker draws Dingy in the settings' font: its face lacks common punctuation" "$log")" = 1 ] \
     && grep -q "Settings: the font picker draws Halfa in the settings' font" "$log" \
     && grep -q "Settings: the font picker draws Halfb in the settings' font" "$log" \
     && ! grep -qE 'Settings: the font picker drew (Dingy|Halfa|Halfb)' "$log" \

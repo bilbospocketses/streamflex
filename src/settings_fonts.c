@@ -96,17 +96,20 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
     SDL_Surface *surface = NULL;
 
     // A symbol font's name is drawn in the settings' font, not in its own symbols. A face counts as
-    // symbols when it has no glyph for U+2019 (the right single quote) or U+2013 (the en dash). Its
-    // own name's letters cannot tell: Linux's D050000L and Standard Symbols PS map ASCII, every letter
-    // of their names included, to dingbats and Greek in a Unicode cmap, with no symbol cmap and no
-    // symbol code page, so they pass any check of the name's glyphs. They map Latin-1 (e acute, sharp
-    // s) to symbols too, but not these two, which every text font measured has (the 7 bundled fonts,
-    // URW's 33 others, DejaVu, Arial). The cost: a Latin font with ASCII alone draws its name in the
-    // settings' font. Its titles, once chosen, still use its own face. Windows' symbol fonts
-    // (Wingdings, Symbol) map no "Aa0", so read_font_file() never lists them.
+    // lacking common punctuation when it has no glyph for U+2019 (the right single quote) or U+2013
+    // (the en dash). Its own name's letters cannot tell: Linux's D050000L and Standard Symbols PS map
+    // ASCII, every letter of their names included, to dingbats and Greek in a Unicode cmap, with no
+    // symbol cmap and no symbol code page, so they pass any check of the name's glyphs. They map
+    // Latin-1 (e acute, sharp s) to symbols too, but not these two, which every text font measured
+    // has (the 7 bundled fonts, URW's 33 others, DejaVu, Arial). The rule also catches faces that are
+    // not symbol fonts but have no Latin punctuation, measured as Windows' CJK Ext-B and Ext-G faces
+    // and Linux's Noto Sans Math, Noto Sans Symbols and Noto Traditional Nushu, whose names then draw
+    // in the settings' font as well: readable, by design. The cost: a Latin font with ASCII alone
+    // draws its name in the settings' font. Its titles, once chosen, still use its own face.
+    // Windows' symbol fonts (Wingdings, Symbol) map no "Aa0", so read_font_file() never lists them.
     if (font != NULL && (!TTF_GlyphIsProvided(font, 0x2019) || !TTF_GlyphIsProvided(font, 0x2013))) {
         TTF_CloseFont(font);
-        log_debug("Settings: the font picker draws %s in the settings' font: its face is symbols (no U+2019 or U+2013)", name);
+        log_debug("Settings: the font picker draws %s in the settings' font: its face lacks common punctuation (no U+2019 or U+2013)", name);
         return NULL;
     }
     if (font != NULL) {
