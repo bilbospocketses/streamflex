@@ -18,13 +18,13 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 - A gamepad capture needs a pad to capture from: with the gamepad off, or on with no pad connected, *Key* says why (*Turn the gamepad on to capture a button*, *No gamepad is connected*) once for each press, instead of waiting 5 seconds for a press that cannot come.
 - A held D-pad or stick keeps repeating on *FPS limit* or *VSync* when a step changes the frame timing under it, at its usual pace.
 - On Windows, the copy a restart starts comes to the front with the keyboard: the copy before it hands it the foreground. Its command line is the original one with `--restarted` after one space.
-- The font picker starts on the bundled font, with no *Custom* row, when the config names it by a relative path, as the Windows config does (`.\assets\fonts\...`). OK on that row changes nothing, so the file keeps its relative path.
+- The font picker starts on the bundled font, with no *Custom* row, when the config names it by a relative path, as the Windows config does (`.\assets\fonts\...`). OK on that row changes nothing, so the file keeps its relative path. When the configured font file is gone, the picker starts on the bundled font the titles fell back to, and OK there writes that font, so the dead path leaves the config.
 - The font picker names a symbol font's family (one with no glyph for U+2019 or U+2013, such as Linux's D050000L) in the settings' font, not in its own symbols. Chosen, it still sets the titles' face.
 - Choosing a family in the font picker writes its regular face when that face is named *Book*, *Roman* or *Normal* (DejaVu's and URW's fonts on Linux), not its bold or oblique one; with no regular face, its upright, normal-weight one.
 - On Linux, a restarted StreamFlex keeps its process name, `streamflex`, so `pgrep`, `pkill` and `ps` find it: starting again through `/proc/self/exe` had named it `exe`.
-- The hex editor's and the first page's key hints fit the settings column at 1280 x 720 and 1280 x 800: *Arrows edit the digits · OK keeps · Back returns*, and *Left and right change · OK opens · Back saves*.
+- The hex editor's, the first page's and the folder browser's key hints fit the settings column at 1280 x 720 and 1280 x 800: *Arrows edit the digits · OK keeps · Back returns*, *Left and right change · OK opens · Back saves*, and *Left and right page · OK chooses · Back goes up*.
 - A row's value may use the room its label leaves, so a binding's command reads in full beside a short key name (*F9*, *Close the app on show*).
-- The debug log's list of hotkeys (`-d`) includes the Windows exit hotkey, and any later `:exit` binding marked as not used (only the first is the exit hotkey), and the frame timing line says when VSync is off with no FPS limit set, so frames keep the display's rate.
+- The debug log's list of hotkeys (`-d`) includes the Windows exit hotkey (marked as not registered, with Windows' reason, when Windows refuses it), and any later `:exit` binding marked as not used (only the first is the exit hotkey), and the frame timing line says when VSync is off with no FPS limit set, so frames keep the display's rate.
 - The debug log (`-d`) says when a binding's line was changed or removed by hand while settings were open, and adds, for a change written as a new line, that the first line on a key or button is the one that runs.
 - Headless tests for every page, every picker, the bindings (check 62), the mappings file (63) and the restart (64). The harness sends function keys through `tests/headless/key.py`, since Fedora's keymap makes `xdotool` hold Alt down for them. `tests/headless/run-shards.ps1` runs the four passes in shards on 8 containers, and `merge.py` adds each pass's shards up into one result.
 - CI also runs the unit tests built with AddressSanitizer and UBSan, in the Debian headless image, as part of the required `build-and-test` gate.
@@ -47,6 +47,7 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 - **A clock whose background thread cannot start renders in place** instead of freezing.
 - **After a launched application exits, each gamepad is reopened at its current device index.** It used to be reopened at a stale one, and could get another pad.
 - Repeating `DefaultMenu`, `StartupCmd`, `QuitCmd`, `Font` or `ControllerMappingsFile` in the config no longer leaks the earlier value.
+- A BSD build compiles: the call that keeps a restarted StreamFlex's process name (`prctl`) and its header are Linux-only.
 - The docs: the gamepad is on by default (the README and the docs home page said it was off), `PauseSlideshow` follows the background's `Mode` (not `BackgroundMode`), and `SlideshowTransitionTime`'s built-in default is 1.5 seconds, at most 3. With more than 62 menus, the Menus page lists 61 and a note.
 
 ## [0.3.1] - 2026-09-29
