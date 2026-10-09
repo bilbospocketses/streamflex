@@ -94,9 +94,11 @@ Vendored code in `src/external/` is taken from the latest upstream and evaluated
 `master` is **PR-gated**. Direct pushes are blocked by a branch ruleset; every change goes branch → PR → required checks green → squash-merge.
 
 **Required status checks** (all must be green before merge, and the branch must be up to date with `master`):
-- `build-and-test` — the gate job in `build.yml`; passes only when the Windows, Debian, Raspberry Pi, and Arch Linux builds, the `Icon library` check, the `Unit tests (ASan, UBSan)` job, the eight `Headless (<distro>, <pass> K/2)` shard jobs of the `headless` job and the four `Headless (<distro>, <pass>)` merges of the `headless_merge` job all succeed.
+- `build-and-test` — the gate job in `build.yml`; passes only when the Windows, Debian, Raspberry Pi, and Arch Linux builds, the `Icon library` check, the `American spelling` check, the `Unit tests (ASan, UBSan)` job, the eight `Headless (<distro>, <pass> K/2)` shard jobs of the `headless` job and the four `Headless (<distro>, <pass>)` merges of the `headless_merge` job all succeed.
 - `CodeQL` — code scanning via CodeQL default setup (C/C++ and GitHub Actions). It is required as the single `CodeQL` result rather than the per-language `Analyze (...)` jobs, so PRs where those jobs don't run are not blocked forever.
 - `Scorecard analysis` — OpenSSF supply-chain scoring from `scorecard.yml`.
+
+**American spelling.** Every English word in the repository uses American spelling: code, comments, docs and commit messages. The `American spelling` job runs the central gate, [`bilbospocketses/american-spelling`](https://github.com/bilbospocketses/american-spelling), pinned by commit in `build.yml`, over the lines a PR adds and its commit messages, and fails on a British spelling it finds. Its exceptions live in that repository's `allow.txt`, never in a file here; a new one is a PR there, then a bump of the pin.
 
 **Merge method:** squash only. Rebase merges are disallowed because they skip GitHub's signature on the merged commit.
 

@@ -8,6 +8,9 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+### Changed
+- CI checks that added lines and commit messages use American spelling.
+
 ## [0.4.0] - 2026-10-09
 
 Every setting is now on the settings screen, with color, font and command pickers, key and gamepad bindings, and an offer to restart when a change needs one. Checked by hand on Windows 11 and Ubuntu 26.04. A config written for 0.3.x reads and saves as before; on Linux, StreamFlex now needs SDL2 2.0.18 or later.
