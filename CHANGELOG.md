@@ -10,6 +10,7 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ### Changed
 - CI checks that added lines and commit messages use American spelling.
+- CI pulls the test images' bases, and the Linux, Raspberry Pi and Arch Linux build containers, through mirror.gcr.io.
 
 ## [0.4.0] - 2026-10-09
 
