@@ -1423,10 +1423,12 @@ static void draw_column(SettingsRow *rows, int count)
         draw_browser_rows(x, top, hint_y - margin);
     else
         draw_model_rows(rows, count, x, top, hint_y - margin);
+    // The hint is one line: the top page's fits the column at 1280 x 800 (a share of the width, with
+    // text a share of the height), its Back's "saves and closes" said as "saves"
     const char *hint = pickers_active() ? pickers_hint()
                      : browser != NULL ? "Left and right page \xC2\xB7 OK opens or chooses \xC2\xB7 Back goes up"
                      : settings_page(model) == SETTINGS_PAGE_TOP
-                       ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back saves and closes"
+                       ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back saves"
                        : "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back goes back";
     draw_text(font_small, hint, x, hint_y, column_width, ALPHA_DIM, false);
     if (strcmp(hint, logged_hint) != 0) {

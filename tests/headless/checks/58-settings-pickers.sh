@@ -165,6 +165,14 @@ for p58_size in 1280x720 1280x800; do
         && [ -n "${p58_column:-}" ] && [ "$p58_wide" -le "$p58_column" ] && ran_clean "$name" && ok=0
     result "pickers: at $p58_size the hex editor's key hint fits the column (exit $(cat "$out/$name.code"))" $ok
     echo "      $(grep -o 'Settings: the key hint reads .*' "$log" | tail -1): ${line:-no width logged}"
+    # The same run's first hint, the top page's, as settings open on it
+    line=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' "$log" | head -1)
+    read -r p58_wide p58_column <<< "$(sed 's/.* is \([0-9]*\) px wide, in a column \([0-9]*\) px wide/\1 \2/' <<< "$line")"
+    ok=1
+    grep -qx "Resolution: *$p58_size" "$log" && grep -m1 'Settings: the key hint reads ' "$log" | grep -qF 'OK opens' \
+        && [ -n "${p58_column:-}" ] && [ "$p58_wide" -le "$p58_column" ] && ran_clean "$name" && ok=0
+    result "pickers: at $p58_size the top page's key hint fits the column (exit $(cat "$out/$name.code"))" $ok
+    echo "      $(grep -o 'Settings: the key hint reads .*' "$log" | head -1): ${line:-no width logged}"
 done
 
 # Home (a hotkey for :home in these fixtures) and the settings key close the picker before they
