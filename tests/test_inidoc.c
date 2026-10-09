@@ -463,6 +463,313 @@ static void test_check_in_agrees_with_set(void)
     inidoc_free(doc);
 }
 
+static const char *const GAMEPAD_SETTINGS[] = { "Enabled", "DeviceIndex", "ControllerMappingsFile", NULL };
+
+// A function to parse a text, failing the check when it does not parse
+static IniDoc *parse(const char *text)
+{
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    CHECK(doc != NULL);
+    return doc;
+}
+
+// A function to write a document out for comparing (a static buffer)
+static const char *written(const IniDoc *doc)
+{
+    static char text[4096];
+    char *out = inidoc_serialize(doc, NULL);
+    snprintf(text, sizeof(text), "%s", out != NULL ? out : "");
+    free(out);
+    return text;
+}
+
+// A function to test listing a section's lines: in order, duplicates kept, settings and
+// continuations left out
+static void test_list(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nEnabled=true\nButtonA=:select ; confirm\n  :back\nButtonA=:up\n; a comment\n"
+                        "DeviceIndex=0\n\n[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey1=#40000045;:settings\n[Main]\n"
+                        "Entry1=One;apps;:quit\n");
+    IniDocItem items[8];
+    int count = inidoc_list(doc, "Gamepad", GAMEPAD_SETTINGS, items, 8);
+    CHECK_INT(count, 2);
+    CHECK_STR(items[0].key, "ButtonA");
+    CHECK_STR(items[0].value, ":select");
+    CHECK_STR(items[0].text, "ButtonA=:select ; confirm");
+    CHECK_STR(items[1].value, ":up");
+    count = inidoc_list(doc, "Hotkeys", NULL, items, 8);
+    CHECK_INT(count, 2);                                    // One key name, two bindings: inih reads both
+    CHECK_STR(items[1].value, "#40000045;:settings");
+    CHECK_INT(inidoc_list(doc, "Hotkeys", NULL, items, 1), 2);   // The count, though only one fits
+    CHECK_INT(inidoc_list(doc, "Nowhere", NULL, items, 8), 0);
+    CHECK_INT(inidoc_find_line(doc, "Hotkeys", "Hotkey1=#40000045;:settings"), items[1].line);
+    CHECK_INT(inidoc_find_line(doc, "Hotkeys", "Hotkey1=#40000045;:quit"), -1);
+    CHECK_INT(inidoc_find_line(doc, "Gamepad", "  :back"), -1);  // A continuation is not a line of the list
+    inidoc_free(doc);
+}
+
+// A function to test setting a line: the same key keeps its spacing and comment, and another key
+// is written in its place; only the line asked for changes, though another has the same key
+static void test_list_set(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nButtonA = :select ; confirm\nButtonA=:up\n");
+    IniDocItem items[4];
+    inidoc_list(doc, "Gamepad", GAMEPAD_SETTINGS, items, 4);
+    CHECK(inidoc_list_set(doc, items[1].line, "ButtonA", ":down"));
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA = :select ; confirm\nButtonA=:down\n");
+    CHECK(inidoc_list_set(doc, items[0].line, "ButtonA", ":home"));
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA = :home ; confirm\nButtonA=:down\n");
+    CHECK(inidoc_list_set(doc, items[0].line, "ButtonB", ":back"));
+    CHECK_STR(written(doc), "[Gamepad]\nButtonB=:back ; confirm\nButtonA=:down\n");
+    inidoc_free(doc);
+
+    // Refused: not a key line; a value config.ini cannot hold; another key over continuation lines
+    doc = parse("[Hotkeys]\n; keys\nHotkey1=#4000003A;:quit\n  :home\n");
+    CHECK(!inidoc_list_set(doc, 1, "Hotkey1", "#4000003A;:up"));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_set(doc, 2, "Hotkey1", " ;x"));
+    CHECK(!inidoc_list_set(doc, 2, "Hotkey9", "#4000003A;:up"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(inidoc_list_set(doc, 2, "Hotkey1", "#4000003A;:up"));   // The same key: its continuation stays its own
+    CHECK_STR(written(doc), "[Hotkeys]\n; keys\nHotkey1=#4000003A;:up\n  :home\n");
+    inidoc_free(doc);
+}
+
+// A function to test adding a line: after the section's last key (before a comment or blank line
+// that follows it), under the header of a section with no keys, or in a new section at the end
+static void test_list_add(void)
+{
+    IniDoc *doc = parse("[Hotkeys]\r\nHotkey1=#4000003A;:quit\r\n\r\n; next\r\n[Main]\r\nEntry1=One;apps;:quit\r\n");
+    CHECK(inidoc_list_add(doc, "Hotkeys", "Hotkey2", "#40000045;:home"));
+    CHECK_STR(written(doc), "[Hotkeys]\r\nHotkey1=#4000003A;:quit\r\nHotkey2=#40000045;:home\r\n\r\n; next\r\n"
+                            "[Main]\r\nEntry1=One;apps;:quit\r\n");
+    inidoc_free(doc);
+
+    doc = parse("[Gamepad]\n; none yet\n");
+    CHECK(inidoc_list_add(doc, "Gamepad", "ButtonA", ":select"));
+    CHECK(inidoc_list_add(doc, "Gamepad", "ButtonA", ":up"));        // A label twice is allowed
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA=:select\nButtonA=:up\n; none yet\n");
+    inidoc_free(doc);
+
+    doc = parse("[Main]\nEntry1=One;apps;:quit");
+    CHECK(inidoc_list_add(doc, "Hotkeys", "Hotkey1", "#4000003A;:quit"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=One;apps;:quit\n\n[Hotkeys]\nHotkey1=#4000003A;:quit");
+    CHECK(!inidoc_list_add(doc, "Hotkeys", "Hotkey2", "x\ny"));
+    inidoc_free(doc);
+}
+
+// A function to test removing a line: only it, with its continuation lines, and the file's last
+// line keeping its missing line ending
+static void test_list_remove(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nButtonA=:select\n  :back\n; keep\nButtonA=:up");
+    IniDocItem items[4];
+    inidoc_list(doc, "Gamepad", GAMEPAD_SETTINGS, items, 4);
+    CHECK(inidoc_list_remove(doc, items[0].line));
+    CHECK_STR(written(doc), "[Gamepad]\n; keep\nButtonA=:up");
+    inidoc_list(doc, "Gamepad", GAMEPAD_SETTINGS, items, 4);
+    CHECK(inidoc_list_remove(doc, items[0].line));
+    CHECK_STR(written(doc), "[Gamepad]\n; keep");
+    CHECK(!inidoc_list_remove(doc, 1));                   // A comment is not a key line
+    CHECK(!inidoc_list_remove(doc, 7));
+    inidoc_free(doc);
+}
+
+// A function to test the edges of listing and finding: a list too short for every item is written
+// no further than its end, and a line is found only by its whole text, in its own section
+static void test_list_edges(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nButtonA=:select\n[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey1=#40000045;:settings\n");
+    IniDocItem items[3];
+    memset(items, 0, sizeof(items));
+    items[1].line = -7;
+    CHECK_INT(inidoc_list(doc, "Hotkeys", NULL, items, 1), 2);
+    CHECK_INT(items[0].line, 3);
+    CHECK_INT(items[1].line, -7);                                // Past `max`: untouched
+    CHECK_INT(inidoc_list(doc, "Hotkeys", NULL, NULL, 0), 2);    // Only the count
+    CHECK_INT(inidoc_find_line(doc, "Hotkeys", "Hotkey1=#4000003A"), -1);             // A part of a line is not it
+    CHECK_INT(inidoc_find_line(doc, "Gamepad", "Hotkey1=#40000045;:settings"), -1);   // Another section's line
+    CHECK_INT(inidoc_find_line(doc, "Gamepad", "ButtonA=:select"), 1);
+    inidoc_free(doc);
+}
+
+// A function to test the edges of setting a line: an index outside the document, a line too long for
+// config.ini with its comment or spacing (199 bytes fits), a key that would not read back, and a key
+// with an empty name, whose indented lines would become the new key's continuations
+static void test_list_set_edges(void)
+{
+    // An index past the last line, though the slot after it once held a key (removed since)
+    IniDoc *doc = parse("[S]\nA=1\nB=2\n");
+    CHECK(inidoc_list_remove(doc, 2));
+    CHECK(!inidoc_list_set(doc, 2, "B", "3"));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_set(doc, -1, "A", "3"));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_remove(doc, 2));
+    CHECK(!inidoc_list_remove(doc, -1));
+    CHECK_STR(written(doc), "[S]\nA=1\n");
+    inidoc_free(doc);
+
+    // A value config.ini cannot hold is refused with inidoc_check()'s own reason
+    doc = parse("[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    CHECK(!inidoc_list_set(doc, 1, "Hotkey1", " ;x"));
+    CHECK_STR(inidoc_why(doc), inidoc_check("Hotkey1", " ;x"));
+    inidoc_free(doc);
+
+    // Too long with the line's comment: "K = " + value + " ; comment" is 14 bytes and the value
+    char value[256];
+    memset(value, 'a', 186);
+    value[185] = '\0';
+    doc = parse("[S]\nK = x ; comment\n");
+    CHECK(inidoc_list_set(doc, 1, "K", value));                 // 199 bytes: it fits
+    value[185] = 'a';
+    value[186] = '\0';
+    CHECK(!inidoc_list_set(doc, 1, "K", value));                // 200 bytes
+    CHECK(strstr(inidoc_why(doc), "with its comment") != NULL);
+    value[187] = '\0';
+    memset(value, 'b', 187);
+    CHECK(inidoc_list_set(doc, 1, "J", value));                 // Another key: "J=" + 187 + " ; comment" is 199
+    CHECK_STR(inidoc_why(doc), "");                             // The refusal before it is not kept
+    value[187] = 'b';
+    value[188] = '\0';
+    CHECK(!inidoc_list_set(doc, 1, "I", value));                // 200
+    CHECK(strstr(inidoc_why(doc), "with its comment") != NULL);
+    inidoc_free(doc);
+
+    // Too long with the line's spacing alone
+    char spaced[128];
+    snprintf(spaced, sizeof(spaced), "[S]\nK%20s=%20sx\n", "", "");
+    doc = parse(spaced);
+    memset(value, 'c', 158);
+    value[158] = '\0';                                          // 42 bytes before the value: 200
+    CHECK(!inidoc_list_set(doc, 1, "K", value));
+    CHECK(strstr(inidoc_why(doc), "spacing") != NULL);
+    value[157] = '\0';
+    CHECK(inidoc_list_set(doc, 1, "K", value));
+    inidoc_free(doc);
+
+    // A key that would not read back as itself: refused, and the line is as it was
+    doc = parse("[Gamepad]\nButtonA=:select ; confirm\n");
+    CHECK(!inidoc_list_set(doc, 1, "Bad=key", ":x"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_set(doc, 1, ";c", ":x"));                // Not a key at all: a comment
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_set(doc, 1, "ButtonB ", ":x"));          // inih reads the key without its space
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA=:select ; confirm\n");
+    IniDocItem items[2];
+    CHECK_INT(inidoc_list(doc, "Gamepad", NULL, items, 2), 1);
+    CHECK_STR(items[0].value, ":select");
+    inidoc_free(doc);
+
+    // A key with an empty name ends the key before it, so the indented line after it is a key of its
+    // own; another key there would read it as a continuation, so it is refused
+    doc = parse("[Gamepad]\n=x\n  ButtonA=:a\n");
+    CHECK(!inidoc_list_set(doc, 1, "ButtonB", ":b"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), "[Gamepad]\n=x\n  ButtonA=:a\n");
+    CHECK_INT(inidoc_list(doc, "Gamepad", NULL, items, 2), 2);
+    CHECK(inidoc_list_set(doc, 1, "", "y"));                    // The same empty key: nothing changes how it reads
+    CHECK_STR(written(doc), "[Gamepad]\n=y\n  ButtonA=:a\n");
+    inidoc_free(doc);
+
+    // The other way round: a key with continuation lines renamed to an empty name would let them go,
+    // each an empty-named key of its own (a binding more), so it is refused
+    doc = parse("[S]\nA=1\n  :c\n");
+    CHECK(!inidoc_list_set(doc, 1, "", "1"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), "[S]\nA=1\n  :c\n");
+    inidoc_free(doc);
+
+    // The line keeps its own ending: here none, in a CRLF file
+    doc = parse("[Gamepad]\r\nButtonA=:select\r\nButtonA=:up");
+    CHECK(inidoc_list_set(doc, 2, "ButtonA", ":down"));
+    CHECK_STR(written(doc), "[Gamepad]\r\nButtonA=:select\r\nButtonA=:down");
+    inidoc_free(doc);
+
+    // An indented line that starts with '#' or ';' is a comment to inih, not a continuation, so
+    // another key may take the line before it
+    doc = parse("[Hotkeys]\nHotkey1=#4000003A;:quit\n  #40000045;:home\n");
+    CHECK(inidoc_list_set(doc, 1, "Hotkey2", "#4000003A;:up"));
+    CHECK_STR(written(doc), "[Hotkeys]\nHotkey2=#4000003A;:up\n  #40000045;:home\n");
+    inidoc_free(doc);
+}
+
+// A function to test the edges of adding a line: after the last key's continuation lines, at the
+// end of the section when under the header an indented line would become its continuation, and
+// refused, with the file as it was, when no place reads it back
+static void test_list_add_edges(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nButtonA=:select\n  :back\n\n[Main]\nEntry1=One;apps;:quit\n");
+    CHECK(inidoc_list_add(doc, "Gamepad", "ButtonB", ":x"));
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA=:select\n  :back\nButtonB=:x\n\n[Main]\nEntry1=One;apps;:quit\n");
+    inidoc_free(doc);
+
+    doc = parse("[Gamepad]\n  junk\n[Main]\nEntry1=One;apps;:quit\n");
+    CHECK(inidoc_list_add(doc, "Gamepad", "ButtonA", ":select"));
+    CHECK_STR(inidoc_why(doc), "");                             // The first place failed; the second did not
+    CHECK_STR(written(doc), "[Gamepad]\n  junk\nButtonA=:select\n[Main]\nEntry1=One;apps;:quit\n");
+    inidoc_free(doc);
+
+    static const char *const keyed = "[Gamepad]\nButtonA=:select\n; end\n[Main]\nEntry1=One;apps;:quit\n";
+    doc = parse(keyed);
+    CHECK(!inidoc_list_add(doc, "Gamepad", "Bad=key", ":x"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_add(doc, "Gamepad", ";c", ":x"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_add(doc, "Gamepad", "ButtonB ", ":x"));  // inih reads the key without its space
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_add(doc, "Gamepad", "ButtonB", "x\ny"));
+    CHECK_STR(inidoc_why(doc), inidoc_check("ButtonB", "x\ny"));
+    CHECK_STR(written(doc), keyed);
+    inidoc_free(doc);
+
+    doc = parse("[Gamepad]\n");                                 // One place only: under the header, at the end
+    CHECK(!inidoc_list_add(doc, "Gamepad", "Bad=key", ":x"));
+    CHECK_STR(written(doc), "[Gamepad]\n");
+    inidoc_free(doc);
+}
+
+// A function to test the lines that are not removed: a key with an empty name (the indented lines
+// after it are keys of their own, and with it gone they would become the key before it's
+// continuations), a section header, and a continuation line that reads like a key
+static void test_list_remove_edges(void)
+{
+    IniDoc *doc = parse("[Gamepad]\nButtonA=:a\n=x\n  :b\n");
+    CHECK(!inidoc_list_remove(doc, 2));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");   // Listed, but never removable: say why
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA=:a\n=x\n  :b\n");
+    CHECK(inidoc_list_remove(doc, 1));
+    CHECK_STR(inidoc_why(doc), "");                             // The refusal before it is not kept
+    inidoc_free(doc);
+
+    doc = parse("[Gamepad]\nButtonA=:a\n  ButtonB=:b\n");
+    CHECK(!inidoc_list_remove(doc, 0));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_remove(doc, 2));
+    CHECK_STR(written(doc), "[Gamepad]\nButtonA=:a\n  ButtonB=:b\n");
+    inidoc_free(doc);
+}
+
+// A function to test that a key holding a line break is refused, by every edit: written out, it
+// would split into two lines, and the second could be read as a key or as another key's continuation
+static void test_key_line_break(void)
+{
+    static const char *const text = "[Gamepad]\nButtonA=:select\n";
+    IniDoc *doc = parse(text);
+    CHECK(!inidoc_list_add(doc, "Gamepad", "a\nb", ":x"));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_list_add(doc, "Gamepad", "a\r", ":x"));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_list_set(doc, 1, "a\nb", ":x"));              // A rename
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK(!inidoc_set(doc, "Gamepad", "a\n  b", ":x", INIDOC_AFTER_LAST_KEY));
+    CHECK_STR(inidoc_why(doc), "it contains a line break");
+    CHECK_STR(written(doc), text);
+    CHECK_STR(inidoc_check_in(doc, "Gamepad", "a\rb", ":x"), "it contains a line break");
+    inidoc_free(doc);
+}
+
 int main(void)
 {
     test_round_trip_is_identical();
@@ -480,5 +787,14 @@ int main(void)
     test_long_key_continuations();
     test_why();
     test_check_in_agrees_with_set();
+    test_list();
+    test_list_set();
+    test_list_add();
+    test_list_remove();
+    test_list_edges();
+    test_list_set_edges();
+    test_list_add_edges();
+    test_list_remove_edges();
+    test_key_line_break();
     return check_report();
 }

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "browser.h"
+#include "fileio.h"
 #include "alloc.h"
 
 static const char *const IMAGE_EXTENSIONS[] = { ".jpg", ".jpeg", ".png", ".webp" };
@@ -30,28 +31,16 @@ struct Browser {
     const char *why;        // Why the last command did nothing because of the browser itself; NULL otherwise
 };
 
-// A function to tell a path separator, in either style
-static bool is_separator(char c)
-{
-    return c == '/' || c == '\\';
-}
-
-// A function to lower-case an ASCII letter, for sorting and extensions
-static int lower(char c)
-{
-    return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : (unsigned char) c;
-}
-
 // A function to compare names without regard to ASCII case, then exactly
 static int compare_names(const char *a, const char *b)
 {
     const char *x = a;
     const char *y = b;
-    while (*x != '\0' && lower(*x) == lower(*y)) {
+    while (*x != '\0' && fileio_lower(*x) == fileio_lower(*y)) {
         x++;
         y++;
     }
-    int difference = lower(*x) - lower(*y);
+    int difference = fileio_lower(*x) - fileio_lower(*y);
     return difference != 0 ? difference : strcmp(a, b);
 }
 
@@ -73,7 +62,7 @@ bool browser_is_image(const char *name)
             continue;
         const char *tail = name + length - extension_length;
         size_t k = 0;
-        while (k < extension_length && lower(tail[k]) == IMAGE_EXTENSIONS[i][k])
+        while (k < extension_length && fileio_lower(tail[k]) == IMAGE_EXTENSIONS[i][k])
             k++;
         if (k == extension_length)
             return true;
@@ -81,25 +70,26 @@ bool browser_is_image(const char *name)
     return false;
 }
 
-// A function to tell a listed file that counts as an image: not a folder, not hidden, and with an
-// image's extension, whatever its case. The browser, the Folder row's count and both platforms'
-// slideshow scans all use it, so they agree on every folder.
+// A function to tell a listed file that counts as an image: a regular file (never a pipe, socket or
+// device, whose read could wait for good), not hidden, and with an image's extension, whatever its
+// case. The browser, the Folder row's count and both platforms' slideshow scans all use it, so they
+// agree on every folder.
 bool browser_is_image_file(const FileioEntry *entry)
 {
-    return !entry->is_dir && !entry->hidden && browser_is_image(entry->name);
+    return entry->is_file && !entry->hidden && browser_is_image(entry->name);
 }
 
 // A function to tell a root, which has no parent: "/", "C:", "C:\" or "\\server\share"
 static bool is_root(const char *path, size_t length)
 {
-    if (length == 1 && is_separator(path[0]))
+    if (length == 1 && fileio_is_separator(path[0]))
         return true;
-    if ((length == 2 || length == 3) && path[1] == ':' && (length == 2 || is_separator(path[2])))
+    if ((length == 2 || length == 3) && path[1] == ':' && (length == 2 || fileio_is_separator(path[2])))
         return true;
-    if (length >= 2 && is_separator(path[0]) && is_separator(path[1])) {
+    if (length >= 2 && fileio_is_separator(path[0]) && fileio_is_separator(path[1])) {
         int separators = 0;
         for (size_t i = 2; i < length; i++) {
-            if (is_separator(path[i]))
+            if (fileio_is_separator(path[i]))
                 separators++;
         }
         return separators <= 1;
@@ -111,12 +101,12 @@ static bool is_root(const char *path, size_t length)
 bool browser_parent(const char *path, char *out, size_t size)
 {
     size_t length = strlen(path);
-    while (length > 1 && is_separator(path[length - 1]) && !is_root(path, length))
+    while (length > 1 && fileio_is_separator(path[length - 1]) && !is_root(path, length))
         length--;
     if (length == 0 || is_root(path, length))
         return false;
     size_t cut = length;
-    while (cut > 0 && !is_separator(path[cut - 1]))
+    while (cut > 0 && !fileio_is_separator(path[cut - 1]))
         cut--;
     if (cut == 0)
         return false;
@@ -139,7 +129,7 @@ static char *join_path(const char *folder, const char *name)
 {
     size_t length = strlen(folder);
     bool backslash = strchr(folder, '\\') != NULL || (strchr(folder, '/') == NULL && length >= 2 && folder[1] == ':');
-    const char *between = length > 0 && is_separator(folder[length - 1]) ? "" : (backslash ? "\\" : "/");
+    const char *between = length > 0 && fileio_is_separator(folder[length - 1]) ? "" : (backslash ? "\\" : "/");
     size_t size = length + strlen(between) + strlen(name) + 1;
     char *path = alloc_malloc(size);
     if (path != NULL)
@@ -231,10 +221,11 @@ static const char *why_not(const Browser *browser, const char *path)
     return why;
 }
 
-// A function to show a folder: folders first, then images, each sorted by name, hidden files left
-// out; in folder mode "Use this folder" comes first. A path too long to choose is shown, and refused
-// with the reason. When the folder cannot be listed, or memory runs out, what was on show is left
-// as it was.
+// A function to show a folder: folders first, then images (in file mode, every file), each sorted by
+// name, hidden files left out. Only regular files are listed: never a pipe or device, which a read
+// could wait on for good. In folder mode "Use this folder" comes first. A path too long to
+// choose is shown, and refused with the reason. When the folder cannot be listed, or memory runs
+// out, what was on show is left as it was.
 static LoadResult load_folder(Browser *browser, const char *folder, const char *selected)
 {
     FileioEntry *entries = NULL;
@@ -252,7 +243,7 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
             continue;
         if (entries[i].is_dir)
             folders[folder_count++] = &entries[i];
-        else if (browser_is_image_file(&entries[i]))
+        else if (browser->mode == BROWSER_FILE ? entries[i].is_file : browser_is_image_file(&entries[i]))
             images[image_count++] = &entries[i];
     }
     BrowserRow *rows = NULL;
@@ -273,8 +264,10 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
         ok = add_row(rows, &row_count, BROWSER_ROW_FOLDER, folders[i]->name, join_path(copy, folders[i]->name), true, NULL);
     for (int i = 0; ok && i < image_count; i++) {
         char *path = join_path(copy, images[i]->name);
-        const char *why = path != NULL && browser->mode == BROWSER_IMAGE ? why_not(browser, path) : NULL;
-        ok = add_row(rows, &row_count, BROWSER_ROW_IMAGE, images[i]->name, path, browser->mode == BROWSER_IMAGE && why == NULL, why);
+        bool choosable = browser->mode == BROWSER_IMAGE || browser->mode == BROWSER_FILE;
+        const char *why = path != NULL && choosable ? why_not(browser, path) : NULL;
+        ok = add_row(rows, &row_count, browser->mode == BROWSER_FILE ? BROWSER_ROW_FILE : BROWSER_ROW_IMAGE,
+                     images[i]->name, path, choosable && why == NULL, why);
     }
     alloc_free(folders);
     alloc_free(images);
@@ -294,11 +287,12 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
     return LOAD_DONE;
 }
 
-// A function to open the browser: at `start` (an image opens its folder with the image highlighted),
-// else at the first place that can be listed (Pictures, then Home, ...) and is not on a network
-// share, which could keep the browser waiting on the network, else at the places. NULL when out of
-// memory (the reason goes in *why), rather than a browser opened somewhere other than asked. A folder
-// whose list function fails (out of memory there included) cannot be listed, and the next place is tried.
+// A function to open the browser: at `start` (an image, or in file mode any start, opens its folder
+// with it highlighted), else at the first place that can be listed (Pictures, then Home, ...) and is
+// not on a network share, which could keep the browser waiting on the network, else at the places.
+// NULL when out of memory (the reason goes in *why), rather than a browser opened somewhere other
+// than asked. A folder whose list function fails (out of memory there included) cannot be listed,
+// and the next place is tried.
 Browser *browser_open(BrowserMode mode, const char *start, const BrowserPlace *places, int place_count,
                       BrowserList list, BrowserCheck check, void *context, const char **why)
 {
@@ -338,9 +332,9 @@ Browser *browser_open(BrowserMode mode, const char *start, const BrowserPlace *p
     LoadResult loaded = LOAD_UNLISTED;
     if (folder != NULL) {
         size_t length = strlen(folder);
-        while (length > 1 && is_separator(folder[length - 1]) && !is_root(folder, length))
+        while (length > 1 && fileio_is_separator(folder[length - 1]) && !is_root(folder, length))
             folder[--length] = '\0';
-        if (mode == BROWSER_IMAGE && browser_is_image(folder)) {
+        if ((mode == BROWSER_IMAGE && browser_is_image(folder)) || mode == BROWSER_FILE) {
             char *parent = alloc_malloc(length + 1);
             ok = parent != NULL;
             if (ok && browser_parent(folder, parent, length + 1))

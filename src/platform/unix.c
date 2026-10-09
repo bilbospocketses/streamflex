@@ -1,10 +1,15 @@
 #include <unistd.h>
 #include <pwd.h>
+#include <errno.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 #include <signal.h>
 #include <SDL.h>
 #include <ini.h>
@@ -20,6 +25,8 @@
 static int desktop_handler(void *user, const char *section, const char *name, const char *value);
 static void strip_field_codes(char *cmd);
 static bool ends_with(const char *string, const char *phrase);
+
+static char self_path[4096];   // The program a restart starts, found before anything is torn down
 
 // A function to handle .desktop lines
 static int desktop_handler(void *user, const char *section, const char *name, const char *value)
@@ -189,7 +196,8 @@ bool start_process(char *cmd, bool application)
 }
 
 // A function to scan the slideshow directory for image files, by the rule the settings' folder
-// browser uses (browser_is_image_file): any case of extension, hidden files left out. It lists the
+// browser uses (browser_is_image_file): regular files only, so a pipe named like an image never holds
+// the launcher in its read; any case of extension; hidden files left out. It lists the
 // folder as the browser does (fileio_list), so a link onto a network mount is never followed, and
 // an entry the file system gives no kind for costs at most one lookup of the entry itself.
 void scan_slideshow_directory(Slideshow *slideshow, const char *directory)
@@ -248,6 +256,75 @@ void scmd_sleep()
     start_process(CMD_SLEEP, false);
 }
 
+// A function to tell whether a path is a program this user may run: a regular file it may execute
+static bool runnable(const char *path)
+{
+    struct stat file;
+    return stat(path, &file) == 0 && S_ISREG(file.st_mode) && access(path, X_OK) == 0;
+}
+
+// A function to find this program for a restart to start again, before anything is torn down:
+// /proc/self/exe, the kernel's link to it, else argv[0] as it was started, a path as given or a name
+// in a folder of the PATH. False, logged, when none of them is a program that can be run.
+bool find_self(const char *argv0)
+{
+    const char *self = "/proc/self/exe";
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_RESTART_SELF names the file looked for
+    // in place of /proc/self/exe, so a check can make it missing, or a file that is not a program
+    if (getenv("STREAMFLEX_TEST_RESTART_SELF") != NULL)
+        self = getenv("STREAMFLEX_TEST_RESTART_SELF");
+#endif
+    bool found = runnable(self);
+    if (found)
+        copy_string(self_path, self, sizeof(self_path));
+    else if (strchr(argv0, '/') != NULL) {
+        found = runnable(argv0);
+        copy_string(self_path, argv0, sizeof(self_path));
+    }
+    else {
+        // Each folder of the PATH in turn, as a shell looks a name up
+        const char *folder = getenv("PATH");
+        while (folder != NULL && !found) {
+            const char *end = strchr(folder, ':');
+            int length = end != NULL ? (int) (end - folder) : (int) strlen(folder);
+            snprintf(self_path, sizeof(self_path), "%.*s/%s", length, folder, argv0);
+            found = runnable(self_path);
+            folder = end != NULL ? end + 1 : NULL;
+        }
+    }
+    if (!found) {
+        log_error("Cannot restart StreamFlex: the program is neither at %s nor found as %s", self, argv0);
+        return false;
+    }
+    log_debug("Restart: the program is %s", self_path);
+    return true;
+}
+
+// A function to give a restart's fresh copy its program's name back. find_self() execs through
+// /proc/self/exe, which runs this very file even after an upgrade has replaced or removed it, and
+// the kernel then names the process after that path's last name, "exe": the name pgrep, pkill and
+// ps read (/proc/<pid>/comm). The name becomes argv[0]'s last name again, as the first start had it.
+// prctl() is Linux's own, so a BSD build has neither it nor this.
+#ifdef __linux__
+void keep_name(const char *argv0)
+{
+    const char *name = strrchr(argv0, '/');
+    name = name != NULL ? name + 1 : argv0;
+    if (prctl(PR_SET_NAME, name, 0, 0, 0) != 0)
+        log_error("Restart: the process could not be named %s again: %s", name, strerror(errno));
+}
+#endif
+
+// A function to start the program find_self() found in this process's place (exec), with the
+// arguments given; comes back only when it could not, with the reason logged
+bool start_self(char **argv)
+{
+    execv(self_path, argv);
+    log_error("Could not restart StreamFlex: %s did not start: %s", self_path, strerror(errno));
+    return false;
+}
+
 // A function to print usage to the command line
 void print_usage()
 {
@@ -256,4 +333,5 @@ void print_usage()
     printf("  -d,   --debug      Enable debug messages.\n");
     printf("  -h,   --help       Show this help message.\n");
     printf("  -v,   --version    Print version information.\n");
+    printf("        --restarted  Internal: StreamFlex restarting itself, which runs no StartupCmd.\n");
 }

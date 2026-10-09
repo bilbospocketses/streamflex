@@ -9,6 +9,8 @@
 #include "util.h"
 #include "debug.h"
 #include "fileio.h"
+#include "settings.h"
+#include "config_fields.h"
 #include "platform/platform.h"
 #ifdef __unix__
 #include "platform/unix.h"
@@ -16,8 +18,17 @@
 
 static int init_log(void);
 
+// On Linux the log is closed on exec ("e", O_CLOEXEC): a restart keeps it open to its end, for its
+// own lines, and the program that takes the process over opens it again
+#ifdef __unix__
+#define LOG_EXEC_CLOSES "e"
+#else
+#define LOG_EXEC_CLOSES ""
+#endif
+
 extern Config config;
 extern FILE *log_file;
+extern Effective eff;
 
 // A function to initialize the logging subsystem
 static int init_log()
@@ -43,9 +54,9 @@ static int init_log()
     join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
 #endif
 
-    // Open log
+    // Open log; a restart's fresh copy goes on with the log the restart wrote to
     if (log_file == NULL)
-        log_file = fileio_open(log_file_path, "wb");
+        log_file = fileio_open(log_file_path, config.restarted ? "ab" LOG_EXEC_CLOSES : "wb" LOG_EXEC_CLOSES);
     if (log_file == NULL) {
 #ifdef __unix__
         printf("Failed to create log file");
@@ -119,13 +130,22 @@ const char *debug_string(const char *value)
     return value != NULL ? value : "(null)";
 }
 
+// A function to show a setting as config.ini would write it, through the settings table
+static const char *debug_setting(SettingId id, char *out, size_t size)
+{
+    SettingValue value = config_read(id, NULL);
+    setting_format(setting_def(id), &value, out, size);
+    return out[0] != '\0' ? out : "(none)";
+}
+
 // A function to print the parsed settings to the log
 void debug_settings()
 {
+    char text[SETTING_TEXT_MAX];
     log_debug("======================= General ========================\n");
     DEBUG_STR(SETTING_DEFAULT_MENU, config.default_menu);
     DEBUG_BOOL(SETTING_VSYNC, config.vsync);
-    DEBUG_INT(SETTING_FPS_LIMIT, config.fps_limit);
+    DEBUG_STR(SETTING_FPS_LIMIT, debug_setting(SET_ID_FPS_LIMIT, text, sizeof(text)));
     DEBUG_INT(SETTING_APPLICATION_TIMEOUT, config.application_timeout / 1000);
     DEBUG_MODE(SETTING_ON_LAUNCH, MODE_SETTING_ON_LAUNCH, config.on_launch);
     DEBUG_BOOL(SETTING_WRAP_ENTRIES, config.wrap_entries);
@@ -145,6 +165,7 @@ void debug_settings()
     DEBUG_FLOAT(SETTING_SLIDESHOW_TRANSITION_TIME, ((float) config.slideshow_transition_time) / 1000.0f);
     DEBUG_BOOL(SETTING_BACKGROUND_OVERLAY, config.background_overlay);
     DEBUG_COLOR(SETTING_BACKGROUND_OVERLAY_COLOR, config.background_overlay_color);
+    DEBUG_STR(SETTING_BACKGROUND_OVERLAY_OPACITY, debug_setting(SET_ID_OVERLAY_OPACITY, text, sizeof(text)));
     log_debug("");
 
     log_debug("======================= Layout =========================\n");
@@ -154,8 +175,8 @@ void debug_settings()
         DEBUG_INT(SETTING_ICON_SIZE, config.icon_size);
     else
         DEBUG_STR(SETTING_ICON_SIZE, "none (buttons fill the grid)");
-    DEBUG_INT(SETTING_ICON_SPACING, config.icon_spacing);
-    DEBUG_STR(SETTING_VCENTER, config.vcenter[0] != '\0' ? config.vcenter : "50%");
+    DEBUG_STR(SETTING_ICON_SPACING, debug_setting(SET_ID_ICON_SPACING, text, sizeof(text)));
+    DEBUG_STR(SETTING_VCENTER, debug_setting(SET_ID_VCENTER, text, sizeof(text)));
     log_debug("");
 
     log_debug("======================== Titles ========================\n");
@@ -176,6 +197,8 @@ void debug_settings()
     else
         snprintf(title_value, sizeof(title_value), "%i", config.title_padding);
     DEBUG_STR(SETTING_TITLE_PADDING, title_value);
+    DEBUG_STR(SETTING_TITLE_OPACITY, debug_setting(SET_ID_TITLE_OPACITY, text, sizeof(text)));
+    DEBUG_STR(SETTING_TITLE_FONT_FACE, debug_setting(SET_ID_TITLE_FONT_FACE, text, sizeof(text)));
     log_debug("");
 
     log_debug("====================== Highlight =======================\n");
@@ -185,6 +208,9 @@ void debug_settings()
     DEBUG_INT(SETTING_HIGHLIGHT_CORNER_RADIUS, config.highlight_rx);
     DEBUG_INT(SETTING_HIGHLIGHT_VPADDING, config.highlight_vpadding);
     DEBUG_INT(SETTING_HIGHLIGHT_HPADDING, config.highlight_hpadding);
+    DEBUG_BOOL(SETTING_HIGHLIGHT_ENABLED, config.highlight);
+    DEBUG_STR(SETTING_HIGHLIGHT_FILL_OPACITY, debug_setting(SET_ID_HIGHLIGHT_FILL_OPACITY, text, sizeof(text)));
+    DEBUG_STR(SETTING_HIGHLIGHT_OUTLINE_OPACITY, debug_setting(SET_ID_HIGHLIGHT_OUTLINE_OPACITY, text, sizeof(text)));
     log_debug("");
 
     log_debug("================== Scroll Indicators ===================\n");
@@ -192,6 +218,7 @@ void debug_settings()
     DEBUG_COLOR(SETTING_SCROLL_INDICATOR_FILL_COLOR, config.scroll_indicator_fill_color);
     DEBUG_INT(SETTING_SCROLL_INDICATOR_OUTLINE_SIZE, config.scroll_indicator_outline_size);
     DEBUG_COLOR(SETTING_SCROLL_INDICATOR_OUTLINE_COLOR, config.scroll_indicator_outline_color);
+    DEBUG_STR(SETTING_SCROLL_INDICATOR_OPACITY, debug_setting(SET_ID_SCROLL_OPACITY, text, sizeof(text)));
     log_debug("");
 
     log_debug("======================== Clock =========================\n");
@@ -200,21 +227,28 @@ void debug_settings()
     DEBUG_MODE(SETTING_CLOCK_ALIGNMENT, MODE_SETTING_ALIGNMENT, config.clock_alignment);
     DEBUG_STR(SETTING_CLOCK_FONT, config.clock_font_path);
     DEBUG_INT(SETTING_CLOCK_FONT_SIZE, config.clock_font_size);
-    DEBUG_INT(SETTING_CLOCK_MARGIN, config.clock_margin);
+    DEBUG_STR(SETTING_CLOCK_MARGIN, debug_setting(SET_ID_CLOCK_MARGIN, text, sizeof(text)));
     DEBUG_COLOR(SETTING_CLOCK_FONT_COLOR, config.clock_font_color);
     DEBUG_BOOL(SETTING_CLOCK_SHADOWS, config.clock_shadows);
     DEBUG_COLOR(SETTING_CLOCK_SHADOW_COLOR, config.clock_shadow_color);
     DEBUG_MODE(SETTING_CLOCK_TIME_FORMAT, MODE_SETTING_TIME_FORMAT, config.clock_time_format);
     DEBUG_MODE(SETTING_CLOCK_DATE_FORMAT, MODE_SETTING_DATE_FORMAT, config.clock_date_format);
     DEBUG_BOOL(SETTING_CLOCK_INCLUDE_WEEKDAY, config.clock_include_weekday);
+    DEBUG_STR(SETTING_CLOCK_OPACITY, debug_setting(SET_ID_CLOCK_OPACITY, text, sizeof(text)));
+    DEBUG_STR(SETTING_CLOCK_FONT_FACE, debug_setting(SET_ID_CLOCK_FONT_FACE, text, sizeof(text)));
     log_debug("");
 
     log_debug("===================== Screensaver ======================\n");
     DEBUG_BOOL(SETTING_SCREENSAVER_ENABLED, config.screensaver_enabled);
     DEBUG_INT(SETTING_SCREENSAVER_IDLE_TIME, config.screensaver_idle_time / 1000);
-    DEBUG_STR(SETTING_SCREENSAVER_INTENSITY, config.screensaver_intensity_str[0] != '\0' ? config.screensaver_intensity_str : DEFAULT_SCREENSAVER_INTENSITY);
+    DEBUG_STR(SETTING_SCREENSAVER_INTENSITY, debug_setting(SET_ID_SCREENSAVER_INTENSITY, text, sizeof(text)));
     DEBUG_BOOL(SETTING_SCREENSAVER_PAUSE_SLIDESHOW, config.screensaver_pause_slideshow);
     log_debug("");
+
+    log_debug("Effective: IconSpacing %i px, VCenter %i px, HPadding %i px, VPadding %i px, "
+        "OutlineSize %i px, CornerRadius %i, Clock Margin %i px\n",
+        eff.icon_spacing, eff.vcenter, eff.highlight_hpadding, eff.highlight_vpadding,
+        eff.highlight_outline_size, eff.highlight_rx, eff.clock_margin);
 }
 
 // A function to print the parsed menu entries to the command line
@@ -275,7 +309,23 @@ void debug_gamepad(GamepadControl *gamepad_controls)
 
 void debug_hotkeys(Hotkey *hotkeys)
 {
-    if (hotkeys == NULL) {
+    // On Windows the exit hotkey is not in the list: Windows holds it (register_exit_hotkey()), or
+    // would not register it, which is listed with Windows' reason. A later :exit binding is not the
+    // exit hotkey and runs nothing; it is listed, and says so, so the list holds every hotkey "the
+    // bindings now hold N hotkeys" counts.
+    const char *refused_why = "";
+#ifdef _WIN32
+    SDL_Keycode exit_code = exit_hotkey_keycode();
+    SDL_Keycode refused_code = refused_exit_hotkey(&refused_why);
+    SDL_Keycode unused[16];
+    int unused_count = unused_exit_hotkeys(unused, 16);
+#else
+    SDL_Keycode exit_code = 0;
+    SDL_Keycode refused_code = 0;
+    SDL_Keycode unused[1];
+    int unused_count = 0;
+#endif
+    if (hotkeys == NULL && exit_code == 0 && refused_code == 0 && unused_count == 0) {
         log_debug("No hotkeys detected");
         return;
     }
@@ -286,6 +336,22 @@ void debug_hotkeys(Hotkey *hotkeys)
         log_debug("Hotkey %i Command: %s", index, i->cmd);
         index++;
     }
+    if (exit_code != 0) {
+        log_debug("Hotkey %i Keycode: %X", index, exit_code);
+        log_debug("Hotkey %i Command: %s (the exit hotkey, which Windows holds)", index, SCMD_EXIT);
+        index++;
+    }
+    if (refused_code != 0) {
+        log_debug("Hotkey %i Keycode: %X", index, refused_code);
+        log_debug("Hotkey %i Command: %s (not registered: %s)", index, SCMD_EXIT, refused_why);
+        index++;
+    }
+    for (int i = 0; i < unused_count && i < (int) (sizeof(unused) / sizeof(unused[0])); i++, index++) {
+        log_debug("Hotkey %i Keycode: %X", index, unused[i]);
+        log_debug("Hotkey %i Command: %s (not used: only the first :exit is the exit hotkey)", index, SCMD_EXIT);
+    }
+    if (unused_count > (int) (sizeof(unused) / sizeof(unused[0])))
+        log_debug("And %i more %s hotkeys, not used", unused_count - (int) (sizeof(unused) / sizeof(unused[0])), SCMD_EXIT);
     log_debug("");
 }
 

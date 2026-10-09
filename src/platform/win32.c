@@ -26,6 +26,15 @@ extern Config config;
 extern SDL_SysWMinfo wm_info;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
+static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
+static SDL_Keycode refused_exit_code = 0;  // The exit hotkey's key when Windows would not register it...
+static char refused_exit_why[256];         // ...and Windows' reason
+#define UNUSED_EXITS_KEPT 16
+static SDL_Keycode unused_exits[UNUSED_EXITS_KEPT];   // :exit bindings after the exit hotkey, which nothing runs...
+static int unused_exit_count = 0;                     // ...and how many, past the ones kept too
+static wchar_t self_path[32768];   // The program a restart starts, found before anything is torn down
+static wchar_t self_line[32768];   // Its command line, which CreateProcessW may write to
+static PROCESS_INFORMATION fresh;  // The fresh copy a restart made, waiting until this one is torn down
 
 
 // A function to determine if a file exists on the filesystem
@@ -190,7 +199,8 @@ bool start_process(char *cmd, bool application)
 }
 
 // A function to scan the slideshow directory for image files, by the rule the settings' folder
-// browser uses (browser_is_image_file): any case of extension, hidden files left out
+// browser uses (browser_is_image_file): regular files only (here every file a folder lists), any
+// case of extension, hidden files left out
 void scan_slideshow_directory(Slideshow *slideshow, const char *directory)
 {
     FileioEntry *entries = NULL;
@@ -260,6 +270,92 @@ void scmd_sleep()
     SetSuspendState(FALSE, FALSE, FALSE);
 }
 
+// A function to put Windows' own words for an error code into a buffer, as UTF-8
+static void windows_error_text(DWORD code, char *out, size_t size)
+{
+    wchar_t text[256];
+    DWORD length = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, code, 0, text,
+                                  (DWORD) (sizeof(text) / sizeof(text[0])), NULL);
+    while (length > 0 && (text[length - 1] == L'\r' || text[length - 1] == L'\n' || text[length - 1] == L' '))
+        length--;
+    text[length] = L'\0';
+    if (length == 0 || WideCharToMultiByte(CP_UTF8, 0, text, -1, out, (int) size, NULL, NULL) == 0)
+        snprintf(out, size, "Windows error %lu", (unsigned long) code);
+}
+
+// A function to find this program for a restart to start again, before anything is torn down: the
+// file Windows started it from. False, logged, when Windows cannot say.
+bool find_self(const char *argv0)
+{
+    UNUSED(argv0);
+    DWORD size = (DWORD) (sizeof(self_path) / sizeof(self_path[0]));
+    DWORD length = GetModuleFileNameW(NULL, self_path, size);
+    if (length == 0 || length >= size) {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_error("Cannot restart StreamFlex: Windows cannot say where its program is: %s", why);
+        return false;
+    }
+    return true;
+}
+
+// A function to make a restart's fresh copy before anything is torn down: the program find_self()
+// found, with the command line this one was started with and --restarted after it (unless it has it
+// already, from a restart before). It waits, suspended, until start_self() lets it run once this
+// copy's window and :exit hotkey are gone. It is made, and allowed the foreground, while this copy
+// is still in front: Windows lets a new process take the foreground only when the one in front
+// gives it, and once this window is gone the window under it is in front. False, logged, when it
+// could not be made. The arguments are Windows' own command line, never rebuilt.
+bool make_self(void)
+{
+    if (!fileio_command_with(self_line, sizeof(self_line) / sizeof(self_line[0]), GetCommandLineW(),
+                             config.restarted ? NULL : L"--restarted")) {
+        log_error("Could not restart StreamFlex: %s", fileio_last_error());
+        return false;
+    }
+    STARTUPINFOW startup = { .cb = (DWORD) sizeof(STARTUPINFOW) };
+    if (!CreateProcessW(self_path, self_line, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &startup, &fresh)) {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_error("Could not restart StreamFlex: it did not start: %s", why);
+        return false;
+    }
+    if (AllowSetForegroundWindow(fresh.dwProcessId))
+        log_debug("Restart: the fresh copy (pid %lu) may take the foreground", (unsigned long) fresh.dwProcessId);
+    else {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_debug("Restart: Windows would not let the fresh copy (pid %lu) take the foreground: %s",
+                  (unsigned long) fresh.dwProcessId, why);
+    }
+    return true;
+}
+
+// A function to let the fresh copy make_self() made run, once this one is torn down; false, logged,
+// when it could not, and the copy is ended
+bool start_self(char **argv)
+{
+    UNUSED(argv);
+    bool started = ResumeThread(fresh.hThread) != (DWORD) -1;
+    if (!started) {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_error("Could not restart StreamFlex: it did not start: %s", why);
+        TerminateProcess(fresh.hProcess, EXIT_FAILURE);
+    }
+    CloseHandle(fresh.hThread);
+    CloseHandle(fresh.hProcess);
+    return started;
+}
+
+// A function to bring a restart's fresh copy to the front with the keyboard, which the copy before
+// it allowed (make_self()); true when Windows put it in front
+bool take_foreground(void)
+{
+    HWND hwnd = wm_info.info.win.window;
+    return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
+}
+
 // A function to get the shutdown privilege from Windows
 static bool get_shutdown_privilege()
 {
@@ -302,21 +398,63 @@ bool has_exit_hotkey()
 // A function to store an exit hotkey
 void set_exit_hotkey(SDL_Keycode keycode)
 {
-    if (exit_hotkey) 
+    // Only the first is the exit hotkey: a later one is kept for the debug log's list, which names it unused
+    if (exit_hotkey) {
+        if (unused_exit_count < UNUSED_EXITS_KEPT)
+            unused_exits[unused_exit_count] = keycode;
+        unused_exit_count++;
         return;
+    }
     exit_hotkey = sdl_to_win32_keycode(keycode);
+    exit_hotkey_code = keycode;
     if (!exit_hotkey)
         log_error("Invalid exit hotkey keycode %X", keycode);
 }
 
-// A function to register the exit hotkey with Windows
+// A function to give the exit hotkey's SDL keycode, for the debug log's list of hotkeys; 0 when there is none
+SDL_Keycode exit_hotkey_keycode()
+{
+    return exit_hotkey ? exit_hotkey_code : 0;
+}
+
+// A function to give the :exit bindings set_exit_hotkey() left unused, for the debug log's list:
+// up to `max` of their keycodes into `out`, and how many there are in all
+int unused_exit_hotkeys(SDL_Keycode *out, int max)
+{
+    for (int i = 0; i < unused_exit_count && i < max && i < UNUSED_EXITS_KEPT; i++)
+        out[i] = unused_exits[i];
+    return unused_exit_count;
+}
+
+// A function to give the exit hotkey's SDL keycode when Windows would not register it, with
+// Windows' reason, for the debug log's list; 0 when it was registered or there is none
+SDL_Keycode refused_exit_hotkey(const char **why)
+{
+    *why = refused_exit_why;
+    return refused_exit_code;
+}
+
+// A function to register the exit hotkey with Windows. A refusal is kept, with its reason, so the
+// debug log's list still names the hotkey the bindings count.
 void register_exit_hotkey()
 {
     BOOL ret = RegisterHotKey(wm_info.info.win.window, 1, 0, exit_hotkey);
     if (!ret) {
+        windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
+        refused_exit_code = exit_hotkey_code;
         exit_hotkey = 0;
-        log_error("Failed to register exit hotkey with Windows");
+        log_error("Failed to register exit hotkey with Windows: %s", refused_exit_why);
     }
+}
+
+// A function to let go of the exit hotkey, before settings bind it again
+void clear_exit_hotkey()
+{
+    if (exit_hotkey)
+        UnregisterHotKey(wm_info.info.win.window, 1);
+    exit_hotkey = 0;
+    refused_exit_code = 0;
+    unused_exit_count = 0;
 }
 
 // A function to check if the exit hotkey was pressed, and close the active window if so

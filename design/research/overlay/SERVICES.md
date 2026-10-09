@@ -82,7 +82,7 @@ The Linux Chrome, Edge and Firefox columns for the majors come from `21` (pass 3
 | Apple TV+ | 2 | Medium | Apple Media Services terms (2026-09-14) ban an "automated process ... monitoring of any portion of the Content or Services"; the risk is theoretical V | Apple ID 2FA sign-in from the couch; possible shadow DOM |
 | Hulu | 2 | Medium-high | Same agreement as Disney+; also bans "code ... that ... limit the functionality" V | Keys act only on the focused control; UI churn from the Disney+ integration |
 | Peacock | 2, Windows only | Medium | Terms (2025-12-03) ban "software and/or tools" that "interfere with" the service; a modified-display clause is summarizer paraphrase only V/R | Linux playback is blocked (error 6007) on the OS where an HTPC most likely runs |
-| Crunchyroll | 2 | Low-medium | Bans any "mod, hack, exploit ... tool" used to "modify ... or otherwise interfere"; the terms page is undated V | Linux Widevine behaviour is unresolved |
+| Crunchyroll | 2 | Low-medium | Bans any "mod, hack, exploit ... tool" used to "modify ... or otherwise interfere"; the terms page is undated V | Linux Widevine behavior is unresolved |
 | YouTube TV | 2 | Medium | Terms (2026-02-11) ban any technology that can "skip ... advertising ... on a recorded program" and "post-market modification devices" V | The household location check plus the circumvention clause; an ad-skip feature would breach the terms (D2) |
 | Paramount+ | 3 | Medium (not probed) | **§9.6 bans altering or "enhancing" any portion of the video player; §5.1(d) bans ad blockers (terms dated 2026-09-15)** V | §9.6 |
 | MGM+ | 3 | Unknown (medium assumed) | Terms (2023-11-02) ban anything that "modif[ies] ... alter[s] ... features" V | Almost no verified technical data; many subscribers watch through Prime Video Channels |
@@ -105,7 +105,7 @@ The Linux Chrome, Edge and Firefox columns for the majors come from `21` (pass 3
 - **Apple TV+**: a second-class web app with 2FA sign-in and possible shadow DOM.
 - **Hulu**: it shares an agreement and a future with Disney+. Build it once the Disney+ adapter and UI settle.
 - **Peacock (a Windows-only adapter, D5; excluded on Linux)**: a major service, but Linux playback is blocked in every browser (R, from 2021 to 2023 reports).
-- **Crunchyroll**: a simple player and a flat catalogue; its terms are lenient in the ways that matter.
+- **Crunchyroll**: a simple player and a flat catalog; its terms are lenient in the ways that matter.
 - **YouTube TV**: live TV. It is not on the official list for Edge or for any Linux browser, and ad-skip must never be built (D2).
 - **Tubi and Pluto TV**: the largest free services (Tubi has 110M MAU globally V). They need a Linux smoke test.
 - **Twitch**: no DRM, and a large US audience (about 37M R).
@@ -114,7 +114,7 @@ The Linux Chrome, Edge and Firefox columns for the majors come from `21` (pass 3
 
 **Tier 3 (on demand)**
 - **Paramount+ (final, D1)**: ToS §9.6 and §5.1(d).
-- **MGM+**: a small catalogue, no technical data, and often reached through Prime Video Channels.
+- **MGM+**: a small catalog, no technical data, and often reached through Prime Video Channels.
 - **The Roku Channel**: no browser or Linux data.
 - **Fubo, Sling TV and Philo**: live-TV guides are a hard overlay target, and Sling and Philo are effectively Windows-only.
 - **DAZN, NBA League Pass and MLB.tv**: seasonal sports. Linux is unsupported or capped at 720p. Treat MLB.tv as part of ESPN.
@@ -166,7 +166,7 @@ The user took the recommended answer on every decision. They are recorded in `RE
    - Apple TV+ may use shadow DOM (R, background only).
 
    The engine must pierce open shadow roots, and adapters must be able to name a shadow host.
-5. **Ad states must be recognised, never skipped.** Hulu's ad tier plays non-skippable ad pods as a separate overlay state. Disney+ exposes its ad timer. YouTube TV and Paramount+ ban skipping or blocking ads (D2).
+5. **Ad states must be recognized, never skipped.** Hulu's ad tier plays non-skippable ad pods as a separate overlay state. Disney+ exposes its ad timer. YouTube TV and Paramount+ ban skipping or blocking ads (D2).
 6. **Multi-host match patterns.** Max needs `max.com`, `hbomax.com` and `play.hbomax.com` (the player lives on its own host). Sign-in pages also sit on separate hosts: `auth.hbomax.com`, `auth.hulu.com` and `amazon.com/ap/signin`.
 7. **The YouTube /tv UA rule behaves identically in Chrome, Edge and Firefox** (V, a gate test from a Windows host):
    - The gate keys on the user-agent string only. Linux Chrome, Linux Edge and Linux Firefox user agents all got the ordinary site, exactly like a Windows desktop user agent, and PS4, Switch and Tizen user agents got Leanback.

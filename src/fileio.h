@@ -15,6 +15,8 @@
 typedef struct {
     char *name;   // UTF-8 name of the file or folder, without its folder
     bool is_dir;
+    bool is_file; // A regular file, or a link to one: never a pipe, socket or device, which a read can
+                  // wait on for good. Windows lists only files and folders: every entry not a folder.
     bool hidden;  // Windows: the hidden or system attribute; elsewhere: the name starts with '.'
 } FileioEntry;
 
@@ -22,6 +24,8 @@ FILE *fileio_open(const char *path, const char *mode);
 bool fileio_exists(const char *path);    // exists and can be read
 bool fileio_present(const char *path);   // exists, whether or not it can be read
 bool fileio_is_dir(const char *path);
+bool fileio_is_file(const char *path);   // A regular file, or a link to one; on Windows, a file on a disk
+bool fileio_not_a_file(const char *path);   // Something is there, and it is not a regular file
 bool fileio_is_writable(const char *path);
 char *fileio_read_all(const char *path, size_t *length);
 bool fileio_write_all(const char *path, const char *data, size_t length);
@@ -37,10 +41,14 @@ int fileio_list(const char *folder, FileioEntry **entries);
 void fileio_free_list(FileioEntry *entries, int count);
 const char *fileio_last_error(void);
 const char *fileio_last_warning(void);   // What the last replace could not keep, though it succeeded; "" if nothing
+bool fileio_is_separator(char c);        // '/' or '\', on every platform
+int fileio_lower(char c);                // An ASCII capital in lower case; any other byte as it is (0-255)
+void fileio_base_name(const char *path, char *out, size_t size);   // The last name in a path, ignoring a trailing separator
 
 #ifdef _WIN32
 #include <wchar.h>
 wchar_t *fileio_wide(const char *text);   // For other Windows calls that take a path or command
+bool fileio_command_with(wchar_t *out, size_t size, const wchar_t *line, const wchar_t *argument);   // A restart's command line
 #endif
 
 typedef struct {

@@ -1,7 +1,7 @@
 // The allocation-failure proof for the pure modules: each operation runs again and again, with
 // its first allocation failing, then its second, and so on, until a run in which none failed. Every
-// run must end without a crash or a leak, and a run that failed must leave the document, the file
-// or the browser as it was.
+// run must end without a crash or a leak, and a run that failed must leave what it worked on as it
+// was.
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +12,9 @@
 #include "config_save.h"
 #include "browser.h"
 #include "settings.h"
+#include "listpick.h"
+#include "fontlist.h"
+#include "bindings.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -479,7 +482,7 @@ static int fake_list(const char *folder, FileioEntry **entries, void *context)
         }
         if (is_dir)
             name[length - 1] = '\0';
-        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = is_dir, .hidden = name[0] == '.' };
+        (*entries)[i] = (FileioEntry) { .name = name, .is_dir = is_dir, .is_file = !is_dir, .hidden = name[0] == '.' };
     }
     return count;
 }
@@ -606,6 +609,235 @@ static void prove_settings(void)
     report("making the settings model");
 }
 
+// A function to prove that naming the pads fails cleanly: a pad whose name could not be copied has
+// none, and nothing is left allocated once the model is freed
+static void prove_pads(void)
+{
+    static const char *const names[] = { "Main" };
+    static const char *const pads[] = { "Xbox Controller", "8BitDo Pro 2" };
+    for (int n = 1;; n++) {
+        SettingsState *state = settings_create(names, 1);
+        arm(n);
+        settings_set_pads(state, pads, 2);
+        disarm();
+        CHECK_RUN(settings_pad_count(state) == 2, n);
+        for (int i = 0; i < 2; i++) {
+            // Allocation n copies pads[n - 1]: that pad, when it failed, falls back to "Pad N"
+            char fallback[16];
+            snprintf(fallback, sizeof(fallback), "Pad %d", i);
+            const char *name = settings_pad_name(state, i);
+            CHECK_RUN(name != NULL && strcmp(name, failed && i == n - 1 ? fallback : pads[i]) == 0, n);
+        }
+        settings_free(state);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("naming the pads");
+}
+
+// A function to prove that the list picker fails cleanly: a row that could not be added is not
+// there, a Custom row that could not be pinned is not either, and nothing is left allocated
+static void prove_listpick(void)
+{
+    for (int n = 1;; n++) {
+        arm(n);
+        ListPick *pick = listpick_create();
+        bool added = pick != NULL && listpick_add(pick, "Left", ":left", true, NULL) &&
+                     listpick_add(pick, "Right", ":right", true, NULL);
+        bool pinned = added && listpick_select(pick, "custom command", "Custom: custom command");
+        disarm();
+        CHECK_RUN(failed || (added && pinned), n);
+        if (!failed)
+            CHECK_RUN(listpick_count(pick) == 3 && listpick_row(pick, 0)->custom, n);
+        else if (pick != NULL) {
+            // Allocations 2-4 make "Left" (label, value, the rows), 5-6 "Right", 7-8 the Custom row:
+            // the one that failed is not there, and those before it are
+            int kept = n <= 4 ? 0 : n <= 6 ? 1 : 2;
+            CHECK_RUN(!added || !pinned, n);
+            CHECK_RUN(listpick_count(pick) == kept, n);
+            CHECK_RUN(listpick_count(pick) == 0 || !listpick_row(pick, 0)->custom, n);
+        }
+        listpick_free(pick);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the list picker");
+}
+
+// A function to prove that the font list fails cleanly: a face that could not be added is not
+// there, and nothing is left allocated
+static void prove_fontlist(void)
+{
+    for (int n = 1;; n++) {
+        arm(n);
+        FontList *list = fontlist_create();
+        bool added = list != NULL && fontlist_add(list, "/f/a.ttf", 0, "A", "Bold", false) &&
+                     fontlist_add(list, "/f/a.ttf", 1, "A", "Regular", false) &&
+                     fontlist_add(list, "/f/b.ttf", 0, "B", "Regular", true);
+        disarm();
+        if (list != NULL)
+            fontlist_finish(list);
+        CHECK_RUN(failed || (added && fontlist_count(list) == 2 && fontlist_face(list, 1) == 1), n);
+        fontlist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the font list");
+}
+
+// A function to prove that sorting the font list fails cleanly: out of memory, the families keep
+// the order they were found in, and each face still finds its family
+static void prove_fontlist_finish(void)
+{
+    for (int n = 1;; n++) {
+        FontList *list = fontlist_create();
+        CHECK(list != NULL && fontlist_add(list, "/f/b.ttf", 0, "B", "Regular", false) &&
+              fontlist_add(list, "/f/a.ttf", 0, "A", "Regular", false));
+        arm(n);
+        fontlist_finish(list);
+        disarm();
+        const char *first = failed ? "B" : "A";
+        CHECK_RUN(fontlist_count(list) == 2 && strcmp(fontlist_family(list, 0), first) == 0, n);
+        CHECK_RUN(fontlist_find(list, "/f/a.ttf", 0) == (failed ? 1 : 0), n);
+        fontlist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("sorting the font list");
+}
+
+// A function to prove that list mode's add and set fail cleanly: refused, saying "out of memory",
+// with the document as it was, and no later add refused for it
+static void prove_list_mode(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Main]\nEntry1=One;apps;:quit\n";
+    static const char *const after_set = "[Hotkeys]\nHotkey1=#40000045;:home\n\n[Main]\nEntry1=One;apps;:quit\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[2];
+        inidoc_list(doc, "Hotkeys", NULL, items, 2);
+        arm(n);
+        bool set = inidoc_list_set(doc, items[0].line, "Hotkey1", "#40000045;:home");
+        bool added = set && inidoc_list_add(doc, "Hotkeys", "Hotkey2", "#4000003A;:up");
+        disarm();
+        char *out = text_of(doc);
+        if (!failed)
+            CHECK_RUN(set && added && strstr(out, "Hotkey1=#40000045;:home\nHotkey2=#4000003A;:up\n") != NULL, n);
+        else {
+            CHECK_RUN(strcmp(inidoc_why(doc), "out of memory") == 0, n);
+            CHECK_RUN(out != NULL && strcmp(out, set ? after_set : text) == 0, n);   // As it was before the call that failed
+            CHECK_RUN(inidoc_list_add(doc, "Hotkeys", "Hotkey3", ":x"), n);           // A refusal for memory does not stick
+        }
+        alloc_free(out);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("list mode");
+}
+
+// A function to prove that a save with list edits fails cleanly: refused with a reason (memory's) and
+// the config as it was, or done in full
+static void prove_config_save_lists(void)
+{
+    static const char *const before = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n";
+    static const char *const after = "[Hotkeys]\nHotkey1=#4000003A;:settings\nHotkey2=#4000003C;:back\n";
+    ConfigListEdit lists[] = {
+        { CONFIG_LIST_SET, "Hotkeys", "Hotkey1=#4000003A;:quit", "Hotkey", true, "#4000003A;:settings" },
+        { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey2=#4000003B;:home", NULL, false, NULL },
+        { CONFIG_LIST_ADD, "Hotkeys", NULL, "Hotkey", true, "#4000003C;:back" }
+    };
+    CHECK(fileio_make_dirs(DIR));
+    for (int n = 1;; n++) {
+        fileio_remove(CONFIG ".tmp");
+        fileio_remove(CONFIG ".bak.tmp");
+        CHECK(fileio_write_all(CONFIG, before, strlen(before)));
+        ConfigSaveResult result;
+        arm(n);
+        bool ok = config_save_all(CONFIG, NULL, NULL, NULL, 0, lists, 3, &result);
+        disarm();
+        if (ok)
+            CHECK_RUN(holds(CONFIG, after), n);
+        else {
+            CHECK_RUN(failed && result.why[0] != '\0' && holds(CONFIG, before), n);
+            CHECK_RUN(strstr(result.why, "out of memory") != NULL, n);   // Memory's reason, never another's
+        }
+        CHECK_RUN(!fileio_exists(CONFIG ".tmp"), n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("saving list edits");
+}
+
+// A function to prove that loading and changing bindings fails cleanly: a list that could not be
+// loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
+// nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
+static void prove_bindings(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n"
+        "Hotkey3=#4000003D;:up\nHotkey4=#4000003E;:down\nHotkey5=#4000003F;:left\nHotkey6=#40000040;:right\n"
+        "Hotkey7=#40000041;:select\nHotkey8=#40000042;:back\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[8];
+        int count = inidoc_list(doc, "Hotkeys", NULL, items, 8);
+        arm(n);
+        Bindings *b = bindings_create(false, true);
+        bool loaded = b != NULL && bindings_load(b, BINDINGS_KEYBOARD, items, count);
+        bool ok = loaded && bindings_set(b, BINDINGS_KEYBOARD, -1, 0x4000003C, ":back") == 8;
+        disarm();
+        CHECK_RUN(failed || ok, n);
+        if (b != NULL && !ok) {
+            CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == (loaded ? 8 : 0), n);
+            bindings_discard(b);
+            CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == (loaded ? 8 : 0), n);
+        }
+        bindings_free(b);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the bindings");
+}
+
+// A function to prove that loading a list again fails cleanly: out of memory, the list is empty, and
+// Discard does not bring back the list loaded before it. Nine lines make the list grow past its first
+// block, so both of the load's allocations can fail.
+static void prove_bindings_reload(void)
+{
+    static const char *const text = "[Hotkeys]\nHotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home\n"
+        "Hotkey3=#4000003D;:up\nHotkey4=#4000003E;:down\nHotkey5=#4000003F;:left\nHotkey6=#40000040;:right\n"
+        "Hotkey7=#40000041;:select\nHotkey8=#40000042;:back\nHotkey9=#40000043;:settings\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        IniDocItem items[9];
+        int count = inidoc_list(doc, "Hotkeys", NULL, items, 9);
+        Bindings *b = bindings_create(false, true);
+        CHECK(b != NULL && bindings_load(b, BINDINGS_KEYBOARD, items, 1));
+        arm(n);
+        bool ok = bindings_load(b, BINDINGS_KEYBOARD, items, count);
+        disarm();
+        CHECK_RUN(failed != ok, n);
+        int expected = ok ? 9 : 0;
+        CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == expected, n);
+        bindings_discard(b);
+        CHECK_RUN(bindings_count(b, BINDINGS_KEYBOARD) == expected, n);
+        bindings_free(b);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("loading the bindings again");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -634,6 +866,14 @@ int main(void)
     prove_browser();
     prove_remove();
     prove_settings();
+    prove_pads();
+    prove_listpick();
+    prove_fontlist();
+    prove_fontlist_finish();
+    prove_list_mode();
+    prove_config_save_lists();
+    prove_bindings();
+    prove_bindings_reload();
     alloc_set_hooks(NULL);
     return check_report();
 }

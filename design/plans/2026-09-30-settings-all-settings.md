@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Every `config.ini` setting that 3a left file-only becomes editable from the remote, live, with a colour picker, a font picker, a command picker and key and gamepad bindings, and Back saves only what changed.
+**Goal:** Every `config.ini` setting that 3a left file-only becomes editable from the remote, live, with a color picker, a font picker, a command picker and key and gamepad bindings, and Back saves only what changed.
 
 **Architecture:**
 - **One parse path.** Every remaining key joins 3a's settings table (`settings.c`) and is read through `setting_parse()`. A new SDL-side module, `config_fields.c`, is the only code that moves a `SettingValue` into `Config` or back. `config_handler()` loses its per-key branches.
@@ -10,7 +10,7 @@
 - **A start, stop and reload for each feature** (overlay, highlight, scroll indicators, clock, screensaver, gamepad) in `launcher.c`. Startup calls the same `start` the settings screen does.
 - **New pure modules,** each unit-tested without SDL:
   - `listpick.c`, the shared list picker;
-  - `colourpick.c`, the swatch grid and hex editor, with the contrast maths;
+  - `colorpick.c`, the swatch grid and hex editor, with the contrast math;
   - `fontlist.c`, which groups font faces into families;
   - `bindings.c`, the binding lists, the safety floor and the capture state machine.
 - **`inidoc` gains list mode,** and `config_save` gains list edits, for `[Hotkeys]` and `[Gamepad]`.
@@ -29,20 +29,20 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
 3. **Both Menu key codes already open settings** (`menu_key()`, `launcher.c`). 3b's capture shows either code as *Menu*; nothing else changes.
 4. **More values are rewritten in `Config` than the spec lists.**
    - `load_font()` replaces the configured font path with the bundled one when the font fails.
-   - `calculate_shadow_alpha()` writes the shadow colour's alpha.
+   - `calculate_shadow_alpha()` writes the shadow color's alpha.
    - `init_screensaver()`, `init_clock()`, the scroll arrow's failure path and `create_window()` switch `screensaver_enabled`, `clock_enabled`, `scroll_indicators` and `vsync` off or on.
 
    All of them move out of `Config`: into `Effective`, into each feature's own running state, or into the `TextInfo` that opened the font.
 5. **`validate_settings()` also writes `geo.vcenter`.** `derive_settings()` computes it now, and `refresh_effective()` copies it into `geo`.
-6. **The built-in highlight fill's alpha moves from `0x40` to `0x3F`.** Until now the default colour carried alpha `0x40`, while `FillOpacity=25%` (the sample config's value) gave `0x3F`. With one source, the percentage, the built-in default gives what the sample config always gave. The pixel checks' tolerance (4) covers it.
+6. **The built-in highlight fill's alpha moves from `0x40` to `0x3F`.** Until now the default color carried alpha `0x40`, while `FillOpacity=25%` (the sample config's value) gave `0x3F`. With one source, the percentage, the built-in default gives what the sample config always gave. The pixel checks' tolerance (4) covers it.
 7. **`derive_settings()` takes a plain `DeriveInput`, not `const Config *`.** `Config` holds SDL types, and `derive.c` must stay pure. `config_fields.c` fills the input from `Config`.
-8. **Settings rows have no reason field.** `SettingsRow` gains `why`. A greyed row that has a reason can take the cursor, so the caption can say why it is greyed; Left, Right and OK do nothing on it. 3a's Discard row, greyed with no reason, is still skipped.
+8. **Settings rows have no reason field.** `SettingsRow` gains `why`. A grayed row that has a reason can take the cursor, so the caption can say why it is grayed; Left, Right and OK do nothing on it. 3a's Discard row, grayed with no reason, is still skipped.
 9. **The folder browser has only image modes.** It gains `BROWSER_FILE`, which lists every file that is not hidden, for *Mappings file*.
 10. **`add_gamepad_control()` has the same function-local static tail pointer as `add_hotkey()`.** Both go.
 11. **Several textures are built once and never rebuilt or freed.**
     - The overlay texture is built once in `main()` and never destroyed.
     - The scroll arrows are built once in `main()`.
-    - The highlight's texture cache is keyed on its geometry only, so a colour change would not redraw it.
+    - The highlight's texture cache is keyed on its geometry only, so a color change would not redraw it.
 
     Each becomes part of its feature's start, stop and reload.
 12. **The clock hands its rendered surfaces to the main thread through plain `bool`s** (`state.clock_rendering`, `state.clock_ready`). That is a data race, and `stop_clock()` must wait for the thread safely. They become `SDL_atomic_t`, as the slideshow's are.
@@ -56,7 +56,7 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
 16. **Windows' registry API needs `advapi32`,** which the launcher does not link by name today.
 17. **Percentages in the file can have decimals** (`Opacity=12.5%`: `convert_percent_to_int()` read them with `atof`). The table keeps percentages in hundredths, so `12.5%` survives a round trip. *Padding* stays whole, as `layout_parse_title_padding()` always required.
 18. **`IconSpacing` and `[Clock] Margin` accept px as well as percentages,** and so does `[Titles] Padding`. A px value shows as *N px*, sorted before the percentages.
-19. **The spec gives *Default menu* and *Device* two behaviours**, stepped (the pages) and the list picker (the pickers section). They get both: Left and Right step, and OK opens the list picker.
+19. **The spec gives *Default menu* and *Device* two behaviors**, stepped (the pages) and the list picker (the pickers section). They get both: Left and Right step, and OK opens the list picker.
 20. **The new number and percentage keys are parsed strictly.** `atoi` and `atof` used to read `IconSpacing=40px` as 40 and `Opacity=abc%` as 0%. Both are now refused with a log line, as the spec asks for invalid values. 3a's `SlideshowImageDuration` keeps its `atoi` reading, and so do the two new seconds keys, which share its type.
 21. **The Keyboard and Gamepad pages list the file's lines**, read when settings open, not the in-memory lists. Only the file has each line's original text, which the save needs to find it again, and a Windows `:exit` hotkey never reaches the in-memory list. Applying a binding change rebuilds the in-memory lists from the model. *Discard* rebuilds them from the lines as settings opened. The spec's "replace and remove functions" become `clear_hotkeys()`, `clear_gamepad_controls()` and a rebuild.
 22. **The harness can hold only the virtual pad's Start button.** Its hook gains `STREAMFLEX_TEST_PAD_BUTTON`, naming the button to hold, so a gamepad capture can be driven.
@@ -90,7 +90,7 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
   Stage named files only; never `git add -A`. Commit messages are conventional (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `refactor:`) with no AI attribution. The PR is squash-merged.
 - **The pure modules must not include SDL, `launcher.h` or any SDL-using header:**
   - 3a's `fileio.c`, `inidoc.c`, `config_save.c`, `settings.c`, `browser.c` and `layout.c`;
-  - 3b's new `derive.c`, `listpick.c`, `colourpick.c`, `fontlist.c` and `bindings.c`.
+  - 3b's new `derive.c`, `listpick.c`, `colorpick.c`, `fontlist.c` and `bindings.c`.
 
   They may include `<launcher_config.h>` (macros only). Each test executable links them without SDL. They allocate through `alloc.h`, and each one that allocates joins `test_alloc`.
 - **Use no SDL API newer than 2.0.18,** no SDL_image API newer than 2.0.5, and no SDL_ttf API newer than 2.0.15.
@@ -172,14 +172,14 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
   sf-test replies with numbered findings and how to reproduce each. Each finding is fixed with a failing check first, then handed back to sf-test to check again.
 - **The user's standing rules for this build:**
   - fix everything a review finds, Minors included;
-  - never trim a repeat run: parallelise instead;
+  - never trim a repeat run: parallelize instead;
   - write a failing check before every fix.
 - **Exact values from the spec:**
   - *App timeout* steps: 3, 5, 10, 15, 20 and 30 s.
   - *FPS limit* steps: Off, 30, 60, 75, 120, 144, 165 and 240.
   - *Overlay opacity*, *Opacity*, *Fill opacity* and *Outline opacity*: 0-100% in steps of 5.
   - *Icon spacing*: 0-10% of the screen width in steps of 1.
-  - *Vertical centre*: 25-75% in steps of 5.
+  - *Vertical center*: 25-75% in steps of 5.
   - Titles *Padding*: 0-20% in steps of 2.
   - *Outline size*: 0-10 px.
   - *Corner radius*: 0-100 in steps of 5.
@@ -191,7 +191,7 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
   - Capture waits 5 s, and navigation taken away must be confirmed within 10 s.
   - **The 24 swatches, in order:**
     - Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A`, Burgundy `#4A1520`;
-    - White `#FFFFFF`, Light grey `#C8C8C8`, Grey `#808080`, Dark grey `#4A4A4A`;
+    - White `#FFFFFF`, Light gray `#C8C8C8`, Gray `#808080`, Dark gray `#4A4A4A`;
     - Red `#D03030`, Orange `#E07020`, Amber `#F0B000`, Yellow `#F0E040`, Lime `#80C040`, Green `#30A050`, Cyan `#20B0C0`, Blue `#3070D0`, Indigo `#5048C0`, Pink `#D04890`.
   - The contrast warning's threshold is 3:1 (WCAG).
 - **The menu key** is `SDLK_APPLICATION` (`0x40000065`) or `SDLK_MENU` (`0x40000076`). `xdotool key Menu` sends the first.
@@ -237,11 +237,11 @@ These five input classes are the most likely to bite someone using this, and the
 
 | File | Status | Responsibility |
 |---|---|---|
-| `src/settings.h`, `src/settings.c` | modify | New value types; every remaining key in the table; `setting_find()`; the nine pages, greyed rows with reasons, picker and binding rows |
+| `src/settings.h`, `src/settings.c` | modify | New value types; every remaining key in the table; `setting_find()`; the nine pages, grayed rows with reasons, picker and binding rows |
 | `src/derive.h`, `src/derive.c` | new | `derive_settings()`: configured values to the ones the launcher draws with |
 | `src/config_fields.h`, `src/config_fields.c` | new | The only code that moves a `SettingValue` into `Config` or a menu, or back; the built-in defaults; `derive_input()` |
 | `src/listpick.h`, `src/listpick.c` | new | The shared list picker's model |
-| `src/colourpick.h`, `src/colourpick.c` | new | The swatch grid, the hex editor, luminance and contrast |
+| `src/colorpick.h`, `src/colorpick.c` | new | The swatch grid, the hex editor, luminance and contrast |
 | `src/fontlist.h`, `src/fontlist.c` | new | Font faces grouped into families; the face a family writes |
 | `src/fontscan.h`, `src/fontscan.c` | new | Finding font files: Windows' registry, Linux's folders; the listing thread |
 | `src/bindings.h`, `src/bindings.c` | new | The binding lists, the safety floor, confirmations, the capture state machine, list edits for the save |
@@ -253,12 +253,12 @@ These five input classes are the most likely to bite someone using this, and the
 | `src/launcher.h`, `src/launcher.c` | modify | `Config`'s new field types; `Effective eff`; start, stop and reload for every feature; frame timing; the title font's reload; the gamepad fixes; `:exit`'s log; capture routing |
 | `src/util.h`, `src/util.c` | modify | `config_handler()` through the table; `validate_settings()` reduced; `clear_hotkeys()`, `clear_gamepad_controls()`, the gamepad label table shared |
 | `src/image.h`, `src/image.c` | modify | `TextInfo` owns its font path and face; `load_font()` with a face; the highlight and scroll arrow from `eff`; a surface's mean luminance |
-| `src/clock.h`, `src/clock.c` | modify | Colours and margin from `eff`; the thread handoff through atomics |
+| `src/clock.h`, `src/clock.c` | modify | Colors and margin from `eff`; the thread handoff through atomics |
 | `src/debug.c` | modify | The settings dump prints configured values |
 | `src/platform/platform.h`, `win32.c` | modify | `clear_exit_hotkey()` |
 | `src/CMakeLists.txt`, `CMakeLists.txt` | modify | New sources; `advapi32` on Windows; the SDL 2.0.18 floor |
 | `config/config_settings.cmake`, `config/launcher_config.h.in` | modify | `FontFace` keys; default opacities as macros |
-| `tests/CMakeLists.txt`, `tests/test_*.c` | new/modify | `test_derive`, `test_listpick`, `test_colourpick`, `test_fontlist`, `test_bindings`; `test_settings`, `test_inidoc`, `test_config_save`, `test_browser`, `test_alloc` extended |
+| `tests/CMakeLists.txt`, `tests/test_*.c` | new/modify | `test_derive`, `test_listpick`, `test_colorpick`, `test_fontlist`, `test_bindings`; `test_settings`, `test_inidoc`, `test_config_save`, `test_browser`, `test_alloc` extended |
 | `tests/headless/checks/*.sh`, `tests/headless/fixtures/*` | new/modify | The General row's extra `Down`; the new checks and fixtures |
 | `docs/configuration.md`, `docs/compilation.md`, `CHANGELOG.md`, `CONTRIBUTING.md` | modify | Documentation |
 | `tests/qa/checklists/*.md` | modify | The hands-on rows for 3b |
@@ -461,10 +461,10 @@ static void test_new_steps(void)
     CHECK(!stepped(SET_ID_ICON_SPACING, first_pct, &px, -1, 1).percent);
     CHECK_INT(stepped(SET_ID_ICON_SPACING, px, &px, 1, 20).number, 1000);   // 10% at most
 
-    // Vertical centre: 25-75% in fives
-    SettingValue centre = parsed(SET_ID_VCENTER, "50%");
-    CHECK_INT(stepped(SET_ID_VCENTER, centre, &centre, 1, 20).number, 7500);
-    CHECK_INT(stepped(SET_ID_VCENTER, centre, &centre, -1, 20).number, 2500);
+    // Vertical center: 25-75% in fives
+    SettingValue center = parsed(SET_ID_VCENTER, "50%");
+    CHECK_INT(stepped(SET_ID_VCENTER, center, &center, 1, 20).number, 7500);
+    CHECK_INT(stepped(SET_ID_VCENTER, center, &center, -1, 20).number, 2500);
 
     // Padding: 0-20% in twos; a file's px sits first
     SettingValue padding = parsed(SET_ID_TITLE_PADDING, "8%");
@@ -790,7 +790,7 @@ Replace `src/settings.c` lines 15-60 (from the `MODE_NAMES` comment through the 
 ```c
 // The names each choice setting reads and writes, NULL-terminated, and what the screen calls them
 static const char *const MODE_NAMES[] = { "Color", "Image", "Slideshow", "Transparent", NULL };
-static const char *const MODE_LABELS[] = { "Colour", "Image", "Slideshow", "Transparent" };
+static const char *const MODE_LABELS[] = { "Color", "Image", "Slideshow", "Transparent" };
 static const char *const ON_LAUNCH_NAMES[] = { "Blank", "None", "Quit", NULL };
 static const char *const ON_LAUNCH_LABELS[] = { "Blank screen", "Keep showing", "Quit" };
 static const char *const OVERSIZE_NAMES[] = { "Truncate", "Shrink", "None", NULL };
@@ -838,7 +838,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_BACKGROUND_MODE] = { .id = SET_ID_BACKGROUND_MODE, .label = "Mode", .section = "Background",
         .key = SETTING_BACKGROUND_MODE, .type = SET_TYPE_CHOICE, .refresh = SET_REFRESH_BACKGROUND,
         .lo = 0, .hi = 3, .names = MODE_NAMES, .labels = MODE_LABELS },
-    [SET_ID_BACKGROUND_COLOR] = { .id = SET_ID_BACKGROUND_COLOR, .label = "Colour", .section = "Background",
+    [SET_ID_BACKGROUND_COLOR] = { .id = SET_ID_BACKGROUND_COLOR, .label = "Color", .section = "Background",
         .key = SETTING_BACKGROUND_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_BACKGROUND_IMAGE] = { .id = SET_ID_BACKGROUND_IMAGE, .label = "Image", .section = "Background",
         .key = SETTING_BACKGROUND_IMAGE, .type = SET_TYPE_PATH, .refresh = SET_REFRESH_BACKGROUND },
@@ -888,11 +888,11 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
         .key = SETTING_QUIT_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
 
     // Background, beyond 3a's
-    [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through colour", .section = "Background",
+    [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through color", .section = "Background",
         .key = SETTING_CHROMA_KEY_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_OVERLAY] = { .id = SET_ID_OVERLAY, .label = "Overlay", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_BACKGROUND },
-    [SET_ID_OVERLAY_COLOR] = { .id = SET_ID_OVERLAY_COLOR, .label = "Overlay colour", .section = "Background",
+    [SET_ID_OVERLAY_COLOR] = { .id = SET_ID_OVERLAY_COLOR, .label = "Overlay color", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_OVERLAY_OPACITY] = { .id = SET_ID_OVERLAY_OPACITY, .label = "Overlay opacity", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000,
@@ -903,7 +903,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_ICON_SPACING] = { .id = SET_ID_ICON_SPACING, .label = "Icon spacing", .section = "Layout",
         .key = SETTING_ICON_SPACING, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_LAYOUT,
         .lo = 0, .hi = 1000, .step = 100, .max_px = INT_MAX, .flags = SET_FLAG_PX, .fallback = DEFAULT_ICON_SPACING },
-    [SET_ID_VCENTER] = { .id = SET_ID_VCENTER, .label = "Vertical centre", .section = "Layout",
+    [SET_ID_VCENTER] = { .id = SET_ID_VCENTER, .label = "Vertical center", .section = "Layout",
         .key = SETTING_VCENTER, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_LAYOUT,
         .lo = 2500, .hi = 7500, .step = 500, .fallback = DEFAULT_VCENTER },
 
@@ -915,14 +915,14 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_TITLE_FONT_FACE] = { .id = SET_ID_TITLE_FONT_FACE, .label = "Font face", .section = "Titles",
         .key = SETTING_TITLE_FONT_FACE, .type = SET_TYPE_NUMBER, .min = 0, .max = 65535, .can_inherit = true,
         .refresh = SET_REFRESH_TITLE_FONT, .flags = SET_FLAG_HIDDEN, .inherit_label = "0" },
-    [SET_ID_TITLE_COLOR] = { .id = SET_ID_TITLE_COLOR, .label = "Colour", .section = "Titles",
+    [SET_ID_TITLE_COLOR] = { .id = SET_ID_TITLE_COLOR, .label = "Color", .section = "Titles",
         .key = SETTING_TITLE_FONT_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_TITLES },
     [SET_ID_TITLE_OPACITY] = { .id = SET_ID_TITLE_OPACITY, .label = "Opacity", .section = "Titles",
         .key = SETTING_TITLE_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_TITLES,
         .lo = 0, .hi = 10000, .step = 500, .fallback = DEFAULT_TITLE_OPACITY },
     [SET_ID_TITLE_SHADOWS] = { .id = SET_ID_TITLE_SHADOWS, .label = "Shadows", .section = "Titles",
         .key = SETTING_TITLE_SHADOWS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_TITLES },
-    [SET_ID_TITLE_SHADOW_COLOR] = { .id = SET_ID_TITLE_SHADOW_COLOR, .label = "Shadow colour", .section = "Titles",
+    [SET_ID_TITLE_SHADOW_COLOR] = { .id = SET_ID_TITLE_SHADOW_COLOR, .label = "Shadow color", .section = "Titles",
         .key = SETTING_TITLE_SHADOW_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_TITLES },
     [SET_ID_TITLE_OVERSIZE] = { .id = SET_ID_TITLE_OVERSIZE, .label = "Too long", .section = "Titles",
         .key = SETTING_TITLE_OVERSIZE_MODE, .type = SET_TYPE_CHOICE, .refresh = SET_REFRESH_TITLES,
@@ -934,7 +934,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     // Highlight
     [SET_ID_HIGHLIGHT_ENABLED] = { .id = SET_ID_HIGHLIGHT_ENABLED, .label = "Show", .section = "Highlight",
         .key = SETTING_HIGHLIGHT_ENABLED, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_HIGHLIGHT },
-    [SET_ID_HIGHLIGHT_FILL_COLOR] = { .id = SET_ID_HIGHLIGHT_FILL_COLOR, .label = "Fill colour", .section = "Highlight",
+    [SET_ID_HIGHLIGHT_FILL_COLOR] = { .id = SET_ID_HIGHLIGHT_FILL_COLOR, .label = "Fill color", .section = "Highlight",
         .key = SETTING_HIGHLIGHT_FILL_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_HIGHLIGHT },
     [SET_ID_HIGHLIGHT_FILL_OPACITY] = { .id = SET_ID_HIGHLIGHT_FILL_OPACITY, .label = "Fill opacity",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_FILL_OPACITY, .type = SET_TYPE_PERCENT, .min = 0,
@@ -943,7 +943,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_HIGHLIGHT_OUTLINE_SIZE] = { .id = SET_ID_HIGHLIGHT_OUTLINE_SIZE, .label = "Outline size",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_OUTLINE_SIZE, .type = SET_TYPE_NUMBER, .min = 0,
         .max = INT_MAX, .refresh = SET_REFRESH_HIGHLIGHT, .lo = 0, .hi = 10, .step = 1, .unit = " px" },
-    [SET_ID_HIGHLIGHT_OUTLINE_COLOR] = { .id = SET_ID_HIGHLIGHT_OUTLINE_COLOR, .label = "Outline colour",
+    [SET_ID_HIGHLIGHT_OUTLINE_COLOR] = { .id = SET_ID_HIGHLIGHT_OUTLINE_COLOR, .label = "Outline color",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_OUTLINE_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_HIGHLIGHT },
     [SET_ID_HIGHLIGHT_OUTLINE_OPACITY] = { .id = SET_ID_HIGHLIGHT_OUTLINE_OPACITY, .label = "Outline opacity",
@@ -963,13 +963,13 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     // Scroll indicators
     [SET_ID_SCROLL_ENABLED] = { .id = SET_ID_SCROLL_ENABLED, .label = "Show", .section = "Scroll Indicators",
         .key = SETTING_SCROLL_INDICATORS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_SCROLL },
-    [SET_ID_SCROLL_FILL_COLOR] = { .id = SET_ID_SCROLL_FILL_COLOR, .label = "Fill colour",
+    [SET_ID_SCROLL_FILL_COLOR] = { .id = SET_ID_SCROLL_FILL_COLOR, .label = "Fill color",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_FILL_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_SCROLL },
     [SET_ID_SCROLL_OUTLINE_SIZE] = { .id = SET_ID_SCROLL_OUTLINE_SIZE, .label = "Outline size",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_OUTLINE_SIZE, .type = SET_TYPE_NUMBER,
         .min = 0, .max = INT_MAX, .refresh = SET_REFRESH_SCROLL, .lo = 0, .hi = 10, .step = 1, .unit = " px" },
-    [SET_ID_SCROLL_OUTLINE_COLOR] = { .id = SET_ID_SCROLL_OUTLINE_COLOR, .label = "Outline colour",
+    [SET_ID_SCROLL_OUTLINE_COLOR] = { .id = SET_ID_SCROLL_OUTLINE_COLOR, .label = "Outline color",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_OUTLINE_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_SCROLL },
     [SET_ID_SCROLL_OPACITY] = { .id = SET_ID_SCROLL_OPACITY, .label = "Opacity", .section = "Scroll Indicators",
@@ -989,11 +989,11 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_CLOCK_FONT_FACE] = { .id = SET_ID_CLOCK_FONT_FACE, .label = "Font face", .section = "Clock",
         .key = SETTING_CLOCK_FONT_FACE, .type = SET_TYPE_NUMBER, .min = 0, .max = 65535, .can_inherit = true,
         .refresh = SET_REFRESH_CLOCK, .flags = SET_FLAG_HIDDEN, .inherit_label = "0" },
-    [SET_ID_CLOCK_COLOR] = { .id = SET_ID_CLOCK_COLOR, .label = "Colour", .section = "Clock",
+    [SET_ID_CLOCK_COLOR] = { .id = SET_ID_CLOCK_COLOR, .label = "Color", .section = "Clock",
         .key = SETTING_CLOCK_FONT_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_CLOCK },
     [SET_ID_CLOCK_SHADOWS] = { .id = SET_ID_CLOCK_SHADOWS, .label = "Shadows", .section = "Clock",
         .key = SETTING_CLOCK_SHADOWS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_CLOCK },
-    [SET_ID_CLOCK_SHADOW_COLOR] = { .id = SET_ID_CLOCK_SHADOW_COLOR, .label = "Shadow colour", .section = "Clock",
+    [SET_ID_CLOCK_SHADOW_COLOR] = { .id = SET_ID_CLOCK_SHADOW_COLOR, .label = "Shadow color", .section = "Clock",
         .key = SETTING_CLOCK_SHADOW_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_CLOCK },
     [SET_ID_CLOCK_OPACITY] = { .id = SET_ID_CLOCK_OPACITY, .label = "Opacity", .section = "Clock",
         .key = SETTING_CLOCK_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_CLOCK,
@@ -1331,7 +1331,7 @@ bool setting_equal(const SettingDef *def, const SettingValue *a, const SettingVa
 In the candidates code, raise `MAX_CANDIDATES` (line 226) from `48` to `64`. In `sort_key()` (lines 240-249) and `same_candidate()` (lines 252-261), treat `PERCENT` like `TITLE_SIZE`, with px sorted first:
 
 ```c
-// A function to give a step its place: following the default first, then a custom colour, a fixed
+// A function to give a step its place: following the default first, then a custom color, a fixed
 // title size or a px value, then the rest in order
 static long sort_key(const SettingDef *def, const Candidate *c)
 {
@@ -1654,7 +1654,7 @@ static void test_defaults(void)
     CHECK_INT(eff.clock_shadow_color.a, 191);
     CHECK_INT(eff.screensaver_alpha, 178);      // 70%
     CHECK_INT(eff.title_padding_pct, 8);
-    CHECK_INT(eff.highlight_fill.r, 0xFF);      // The colour itself passes through
+    CHECK_INT(eff.highlight_fill.r, 0xFF);      // The color itself passes through
     CHECK_INT(eff.highlight_outline.b, 0xFF);
 }
 
@@ -1716,7 +1716,7 @@ static void test_clamps_restore(void)
     derive_settings(&in, &eff);
     CHECK_INT(eff.clock_margin, 20);
 
-    // The vertical centre stays between 25% and 75%
+    // The vertical center stays between 25% and 75%
     in.vcenter = 1000;
     derive_settings(&in, &eff);
     CHECK_INT(eff.vcenter, 270);
@@ -1816,7 +1816,7 @@ Create `src/derive.h`:
 #include <stdbool.h>
 
 #define DERIVE_MAX_CLOCK_MARGIN_PM 100        // The clock's margin: at most 10% of the screen height
-#define DERIVE_MIN_VCENTER_PM 250             // The vertical centre: 25% to 75% of the screen height
+#define DERIVE_MIN_VCENTER_PM 250             // The vertical center: 25% to 75% of the screen height
 #define DERIVE_MAX_VCENTER_PM 750
 #define DERIVE_MAX_SCROLL_OUTLINE_PM 10       // The scroll arrow's outline: at most 1% of the screen height
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
@@ -1828,7 +1828,7 @@ typedef struct {
     unsigned char a;
 } DeriveColor;
 
-// The configured values: as config.ini says, percentages in hundredths. A colour's `a` is ignored.
+// The configured values: as config.ini says, percentages in hundredths. A color's `a` is ignored.
 typedef struct DeriveInput {
     int screen_width;
     int screen_height;
@@ -1875,7 +1875,7 @@ typedef struct Effective {
     int highlight_outline_size;    // px, inside the smaller padding
     int highlight_rx;              // 0 when there is an outline (NanoSVG cannot draw both)
     int scroll_outline_size;       // px
-    DeriveColor title_color;       // Every colour below with its alpha from its opacity
+    DeriveColor title_color;       // Every color below with its alpha from its opacity
     DeriveColor title_shadow_color;
     DeriveColor overlay_color;
     DeriveColor highlight_fill;
@@ -1926,7 +1926,7 @@ int derive_alpha(int hundredths)
     return hundredths_of(255, max_int(0, min_int(hundredths, 10000)));
 }
 
-// A function to give a colour the alpha of an opacity
+// A function to give a color the alpha of an opacity
 static DeriveColor with_alpha(DeriveColor color, int alpha)
 {
     color.a = (unsigned char) alpha;
@@ -2041,7 +2041,7 @@ DeriveInput derive_input(void);
 // launcher.h
 extern Effective eff;
 extern TextInfo title_info;     // declared in image.h's users; launcher.c defines it
-void refresh_effective(void);   // derive into eff, then geo.vcenter and the draw colours
+void refresh_effective(void);   // derive into eff, then geo.vcenter and the draw colors
 // image.h
 int load_font(TextInfo *info, const char *configured, int face, const char *default_font);
 ```
@@ -2304,7 +2304,7 @@ In `src/launcher.c`'s initializer (lines 55-166), remove the lines that set fiel
 - `.clock_margin                     = -1,`
 - `.clock_opacity[0]                 = '\0',`
 
-The fields they set are zero until `config_apply_defaults()` runs, first thing in `main()` (Step 8). Every other initializer line stays. The colours keep their `*_A` alpha bytes, which nothing reads any more except the background and chroma key colours' `0xFF`.
+The fields they set are zero until `config_apply_defaults()` runs, first thing in `main()` (Step 8). Every other initializer line stays. The colors keep their `*_A` alpha bytes, which nothing reads any more except the background and chroma key colors' `0xFF`.
 
 - [ ] **Step 5: Write `config_fields.c`**
 
@@ -2323,7 +2323,7 @@ Create `src/config_fields.c`:
 extern Config config;
 extern Geometry geo;
 
-// A function to put a value's colour into an SDL colour, leaving its alpha
+// A function to put a value's color into an SDL color, leaving its alpha
 static void store_rgb(SDL_Color *color, const SettingValue *value)
 {
     color->r = value->color.r;
@@ -2331,7 +2331,7 @@ static void store_rgb(SDL_Color *color, const SettingValue *value)
     color->b = value->color.b;
 }
 
-// A function to read an SDL colour into a value
+// A function to read an SDL color into a value
 static void read_rgb(SettingValue *value, SDL_Color color)
 {
     value->color.r = color.r;
@@ -2360,7 +2360,7 @@ static void read_percent(SettingValue *value, int number, bool percent)
     value->percent = percent;
 }
 
-// A function to derive a colour's input for derive_settings(), its alpha unused
+// A function to derive a color's input for derive_settings(), its alpha unused
 static DeriveColor derive_color(SDL_Color color)
 {
     return (DeriveColor) { color.r, color.g, color.b, 0 };
@@ -2733,7 +2733,7 @@ In `src/launcher.c`:
 
 ```c
 Effective eff;                        // The values drawn with, derived from config (derive.h)
-SDL_Color title_color;                // eff's colours as SDL colours, for the text they draw
+SDL_Color title_color;                // eff's colors as SDL colors, for the text they draw
 SDL_Color title_shadow_color;
 SDL_Color clock_color;
 SDL_Color clock_shadow_color;
@@ -3002,7 +3002,7 @@ static SettingValue read_value(SettingId id, int menu_index)
         path = title_info.font_path;
 ```
 
-In `src/debug.h`, replace `DEBUG_COLOR` (line 28) with `#define DEBUG_COLOR(setting_name, color) log_debug("%-25s #%.2X%.2X%.2X", setting_name ":", color.r, color.g, color.b)`. The colour's alpha is no longer the setting: its opacity is.
+In `src/debug.h`, replace `DEBUG_COLOR` (line 28) with `#define DEBUG_COLOR(setting_name, color) log_debug("%-25s #%.2X%.2X%.2X", setting_name ":", color.r, color.g, color.b)`. The color's alpha is no longer the setting: its opacity is.
 
 In `src/debug.c`, add `#include "settings.h"` and `#include "config_fields.h"`, and above `debug_settings()`, add:
 
@@ -3061,7 +3061,7 @@ In `debug_settings()`, with `char text[SETTING_TEXT_MAX];` declared at its top:
 Build and run the unit tests (Global Constraints). Expected: `100% tests passed`. The MSVC `/W4 /WX` build is only in CI, so also run the **Linux unit tests** with the label `t3`: `warnings outside src/external: 0`.
 
 Run the headless harness with the label `t3`. Expected:
-- `0 failed`: the four new checks pass, and every 3a check still passes (`f12-padding`'s `OutlineSize: 5`, `f14-junk`'s `Invalid MaxButtons value '7x'`, `f15-limits`, `f40-*`, `f60-colour`'s pixels).
+- `0 failed`: the four new checks pass, and every 3a check still passes (`f12-padding`'s `OutlineSize: 5`, `f14-junk`'s `Invalid MaxButtons value '7x'`, `f15-limits`, `f40-*`, `f60-color`'s pixels).
 - The leak pass (label `t3-leaks`) is also `0 failed`: `TextInfo`'s path is freed for both fonts.
 
 Then run both again on Fedora (labels `t3-fedora` and `t3-fedora-leaks`), in parallel with the Debian runs where the host's memory allows.
@@ -3318,7 +3318,7 @@ static void stop_overlay()
     log_debug("Overlay stopped");
 }
 
-// A function to start the overlay, when it is on: a screen-sized texture of its colour and opacity
+// A function to start the overlay, when it is on: a screen-sized texture of its color and opacity
 static void start_overlay()
 {
     if (!config.background_overlay || background_overlay != NULL)
@@ -3815,7 +3815,7 @@ In their place, after `reload_background();` (line 1677), write:
     calculate_layout_area();
 ```
 
-`reload_background()` starts the overlay, and it now runs after `create_window()` and `refresh_effective()`, which the overlay's colour needs.
+`reload_background()` starts the overlay, and it now runs after `create_window()` and `refresh_effective()`, which the overlay's color needs.
 
 In `cleanup()`:
 - After `settings_close_now();`, stop every feature while the renderer and SDL still run:
@@ -3875,11 +3875,11 @@ git -C C:/Users/jscha/source/repos/streamflex add CMakeLists.txt docs/compilatio
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: a start, stop and reload for every feature, and live frame timing (SDL 2.0.18)"
 ```
 
-### Task 5: The pages — nine sections, greyed rows with reasons, and picker rows
+### Task 5: The pages — nine sections, grayed rows with reasons, and picker rows
 
 The model gains:
 - one page per config section, with the rows the spec lists (the Controls page gets its Keyboard row in Task 14);
-- greyed rows that say why they are greyed;
+- grayed rows that say why they are grayed;
 - rows marked › that open a picker (`SETTINGS_ROW_PICK`, and `SETTINGS_EVENT_PICK`);
 - the *Default menu* and *Device* rows, which step through the launcher's menus and the pads present.
 
@@ -3903,8 +3903,8 @@ typedef enum {
     SETTINGS_PAGE_SAVE_FAILED
 } SettingsPage;
 // SettingsRowKind gains SETTINGS_ROW_PICK: OK opens a picker for its slot; Left and Right step it
-// when its type steps (colours, the default menu, the device)
-// SettingsRow gains: const char *why;   // A greyed row's reason; NULL for none
+// when its type steps (colors, the default menu, the device)
+// SettingsRow gains: const char *why;   // A grayed row's reason; NULL for none
 // SettingsEventKind gains SETTINGS_EVENT_PICK: open the picker for `slot`
 SettingsEvent settings_choose_value(SettingsState *state, SettingSlot *slot, const SettingValue *value);
 void settings_set_pads(SettingsState *state, const char *const *names, int count);
@@ -3965,7 +3965,7 @@ static void test_top_and_menus(void)
         CHECK_INT(rows[i].kind, SETTINGS_ROW_LINK);
     }
     CHECK_STR(rows[0].value, "Main");            // General: the default menu
-    CHECK_STR(rows[1].value, "Colour");
+    CHECK_STR(rows[1].value, "Color");
     CHECK_STR(rows[2].value, "2 menus");
     CHECK_STR(rows[3].value, "Medium");
     CHECK_STR(rows[4].value, "On");
@@ -3976,11 +3976,11 @@ static void test_top_and_menus(void)
     CHECK_INT(rows[9].kind, SETTINGS_ROW_DIVIDER);
     CHECK_STR(rows[10].label, "Discard changes");
     CHECK(!rows[10].enabled);
-    CHECK(rows[10].why == NULL);                  // Greyed with no reason: the cursor skips it
+    CHECK(rows[10].why == NULL);                  // Grayed with no reason: the cursor skips it
     CHECK_INT(settings_cursor(state), 0);
     for (int i = 0; i < 8; i++)
         CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_MOVED);
-    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is greyed
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is grayed
     CHECK_INT(settings_cursor(state), 8);
     for (int i = 0; i < 6; i++)
         settings_command(state, SETTINGS_UP);
@@ -4030,7 +4030,7 @@ static void test_top_and_menus(void)
     CHECK(settings_changed(settings_slot(state, SET_ID_MENU_ROWS, 1)));
     CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_NONE);
 
-    // Back at the top, Discard is offered; it puts every value back and greys out again
+    // Back at the top, Discard is offered; it puts every value back and grays out again
     settings_command(state, SETTINGS_BACK);
     settings_command(state, SETTINGS_BACK);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
@@ -4043,7 +4043,7 @@ static void test_top_and_menus(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_DISCARD);
     CHECK_INT(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number, 3);
     CHECK(!settings_any_changed(state));
-    CHECK_INT(settings_cursor(state), 8);                    // Off the greyed Discard, onto Controls
+    CHECK_INT(settings_cursor(state), 8);                    // Off the grayed Discard, onto Controls
 
     CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_CLOSE);
     CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_CLOSE_HOME);
@@ -4055,7 +4055,7 @@ static void test_top_and_menus(void)
 In `test_background_page()` (lines 360-422):
 - Insert `settings_command(state, SETTINGS_DOWN);` before its first `settings_command(state, SETTINGS_OK);`: Background is now the second row.
 - The Background page's counts grow by the overlay's three rows:
-  - `CHECK_INT(count, 2);` becomes `CHECK_INT(count, 5);` twice (Colour, then Image);
+  - `CHECK_INT(count, 2);` becomes `CHECK_INT(count, 5);` twice (Color, then Image);
   - Slideshow's `CHECK_INT(count, 4);` becomes `CHECK_INT(count, 7);`;
   - Transparent's `CHECK_INT(count, 2);` becomes `CHECK_INT(count, 6);`.
 - After the Transparent count, add:
@@ -4068,9 +4068,9 @@ In `test_background_page()` (lines 360-422):
 - After the first `CHECK_STR(rows[1].value, "Black");`, add:
 
 ```c
-    CHECK_INT(rows[1].kind, SETTINGS_ROW_PICK);                // OK opens the colour picker...
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_PICK);                // OK opens the color picker...
     CHECK_STR(rows[2].label, "Overlay");
-    CHECK_STR(rows[3].label, "Overlay colour");
+    CHECK_STR(rows[3].label, "Overlay color");
     CHECK(!rows[3].enabled);                                    // ...and the overlay's rows wait for it
     CHECK_STR(rows[3].why, "Turn Overlay on to change this");
     CHECK(!rows[4].enabled);
@@ -4096,7 +4096,7 @@ Add these tests above `main()`:
 
 ```c
 // A function to find a row on the page on show by its label
-static const SettingsRow *row_labelled(SettingsState *state, SettingsRow *rows, const char *label)
+static const SettingsRow *row_labeled(SettingsState *state, SettingsRow *rows, const char *label)
 {
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     for (int i = 0; i < count; i++) {
@@ -4128,7 +4128,7 @@ static void open_page(SettingsState *state, const char *label)
     settings_command(state, SETTINGS_OK);
 }
 
-// A function to test the General page: its rows, a row greyed with its reason, and the default menu
+// A function to test the General page: its rows, a row grayed with its reason, and the default menu
 static void test_general_page(void)
 {
     SettingsState *state = open_model();
@@ -4149,8 +4149,8 @@ static void test_general_page(void)
     CHECK_INT(rows[9].kind, SETTINGS_ROW_PICK);
     CHECK_STR(rows[9].value, "None");
 
-    // FPS limit is greyed while VSync is on, says why, and can take the cursor, which changes nothing
-    const SettingsRow *fps = row_labelled(state, rows, "FPS limit");
+    // FPS limit is grayed while VSync is on, says why, and can take the cursor, which changes nothing
+    const SettingsRow *fps = row_labeled(state, rows, "FPS limit");
     CHECK(fps != NULL && !fps->enabled);
     CHECK_STR(fps->why, "Used only while VSync is off");
     cursor_to(state, "FPS limit");
@@ -4159,7 +4159,7 @@ static void test_general_page(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
     settings_command(state, SETTINGS_UP);                        // VSync off: FPS limit opens up
     CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_CHANGED);
-    fps = row_labelled(state, rows, "FPS limit");
+    fps = row_labeled(state, rows, "FPS limit");
     CHECK(fps->enabled && fps->why == NULL);
 
     // Default menu steps through the menus in file order, and OK opens its list
@@ -4179,26 +4179,26 @@ static void test_general_page(void)
     SettingSlot *startup = settings_slot(state, SET_ID_STARTUP_CMD, -1);
     CHECK_INT(settings_choose_value(state, startup, &quit).kind, SETTINGS_EVENT_CHANGED);
     CHECK_INT(settings_choose_value(state, startup, &quit).kind, SETTINGS_EVENT_NONE);
-    CHECK_STR(row_labelled(state, rows, "Startup command")->value, "Quit StreamFlex");
+    CHECK_STR(row_labeled(state, rows, "Startup command")->value, "Quit StreamFlex");
     settings_free(state);
 }
 
 // A function to test the pages whose rows follow a switch: Titles, Highlight, Clock
-static void test_greyed_rows(void)
+static void test_grayed_rows(void)
 {
     SettingsState *state = open_model();
     SettingsRow rows[SETTINGS_MAX_ROWS];
 
-    // Titles: Shadow colour waits for Shadows; titles off greys everything but Show titles
+    // Titles: Shadow color waits for Shadows; titles off grays everything but Show titles
     open_page(state, "Titles");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TITLES);
-    static const char *const labels[] = { "Size", "Show titles", "Font", "Colour", "Opacity", "Shadows",
-                                          "Shadow colour", "Too long", "Padding" };
+    static const char *const labels[] = { "Size", "Show titles", "Font", "Color", "Opacity", "Shadows",
+                                          "Shadow color", "Too long", "Padding" };
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     for (int i = 0; i < count; i++)
         CHECK_STR(rows[i].label, labels[i]);
-    CHECK_STR(row_labelled(state, rows, "Shadow colour")->why, "Turn Shadows on to change this");
-    CHECK_INT(row_labelled(state, rows, "Font")->kind, SETTINGS_ROW_PICK);
+    CHECK_STR(row_labeled(state, rows, "Shadow color")->why, "Turn Shadows on to change this");
+    CHECK_INT(row_labeled(state, rows, "Font")->kind, SETTINGS_ROW_PICK);
     cursor_to(state, "Show titles");
     settings_command(state, SETTINGS_LEFT);
     count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
@@ -4212,25 +4212,25 @@ static void test_greyed_rows(void)
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_STR(rows[3].value, "Off");                     // The top page's summary follows
 
-    // Highlight: the outline's colour and opacity wait for a size; corners and an outline exclude each other
+    // Highlight: the outline's color and opacity wait for a size; corners and an outline exclude each other
     open_page(state, "Highlight");
-    CHECK_STR(row_labelled(state, rows, "Outline colour")->why, "The outline's size is 0");
-    CHECK(row_labelled(state, rows, "Corner radius")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Outline color")->why, "The outline's size is 0");
+    CHECK(row_labeled(state, rows, "Corner radius")->enabled);
     cursor_to(state, "Outline size");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK(row_labelled(state, rows, "Outline colour")->enabled);
-    CHECK_STR(row_labelled(state, rows, "Corner radius")->why, "Rounded corners cannot be drawn with an outline");
+    CHECK(row_labeled(state, rows, "Outline color")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Corner radius")->why, "Rounded corners cannot be drawn with an outline");
     settings_command(state, SETTINGS_BACK);
 
-    // Clock: off greys all but Show; with it on, the date's rows wait for Show date
+    // Clock: off grays all but Show; with it on, the date's rows wait for Show date
     open_page(state, "Clock");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CLOCK);
-    CHECK_STR(row_labelled(state, rows, "Size")->why, "The clock is off");
+    CHECK_STR(row_labeled(state, rows, "Size")->why, "The clock is off");
     cursor_to(state, "Show");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK(row_labelled(state, rows, "Size")->enabled);
-    CHECK_STR(row_labelled(state, rows, "Date")->why, "Turn Show date on to change this");
-    CHECK_STR(row_labelled(state, rows, "Weekday")->why, "Turn Show date on to change this");
+    CHECK(row_labeled(state, rows, "Size")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Date")->why, "Turn Show date on to change this");
+    CHECK_STR(row_labeled(state, rows, "Weekday")->why, "Turn Show date on to change this");
     settings_free(state);
 }
 
@@ -4242,8 +4242,8 @@ static void test_other_pages(void)
     char path[256];
     open_page(state, "Screensaver");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_SCREENSAVER);
-    CHECK_STR(row_labelled(state, rows, "Idle time")->why, "The screensaver is off");
-    CHECK_STR(row_labelled(state, rows, "Idle time")->value, "5 min");
+    CHECK_STR(row_labeled(state, rows, "Idle time")->why, "The screensaver is off");
+    CHECK_STR(row_labeled(state, rows, "Idle time")->value, "5 min");
     settings_command(state, SETTINGS_BACK);
 
     open_page(state, "Scroll indicators");
@@ -4273,21 +4273,21 @@ static void test_other_pages(void)
     SettingsEvent event = settings_command(state, SETTINGS_RIGHT);
     CHECK_INT(event.kind, SETTINGS_EVENT_CHANGED);
     CHECK_INT(event.slot->value.number, 0);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "Xbox Controller");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "Xbox Controller");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "8BitDo Pro 2");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "8BitDo Pro 2");
     CHECK_INT(settings_command(state, SETTINGS_RIGHT).kind, SETTINGS_EVENT_NONE);
     SettingValue gone = parsed(SET_ID_GAMEPAD_DEVICE, "5");
     settings_set_entry(state, SET_ID_GAMEPAD_DEVICE, -1, &gone);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "Pad 5 (not connected)");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "Pad 5 (not connected)");
     settings_command(state, SETTINGS_LEFT);
     CHECK_INT(settings_slot(state, SET_ID_GAMEPAD_DEVICE, -1)->value.number, 1);
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_PICK);
 
-    // The gamepad off greys the rest
+    // The gamepad off grays the rest
     cursor_to(state, "On");
     settings_command(state, SETTINGS_LEFT);
-    CHECK_STR(row_labelled(state, rows, "Device")->why, "The gamepad is off");
+    CHECK_STR(row_labeled(state, rows, "Device")->why, "The gamepad is off");
     settings_free(state);
 }
 ```
@@ -4296,7 +4296,7 @@ Call the three new tests from `main()`, after `test_more_menus_than_rows();`:
 
 ```c
     test_general_page();
-    test_greyed_rows();
+    test_grayed_rows();
     test_other_pages();
 ```
 
@@ -4329,7 +4329,7 @@ typedef enum {
 ```
 
 - Add `SETTINGS_ROW_PICK,           // OK opens a picker for its slot; Left and Right step it when its type steps` after `SETTINGS_ROW_BROWSE` in `SettingsRowKind`.
-- Add `const char *why;             // A greyed row's reason (the cursor may rest on it); NULL for none` after `bool enabled;` in `SettingsRow`.
+- Add `const char *why;             // A grayed row's reason (the cursor may rest on it); NULL for none` after `bool enabled;` in `SettingsRow`.
 - Add `SETTINGS_EVENT_PICK,         // Open the picker for `slot`` after `SETTINGS_EVENT_BROWSE` in `SettingsEventKind`.
 - Declare, after `settings_choose()`:
 
@@ -4445,10 +4445,10 @@ static SettingsRow global_row(SettingsState *state, SettingId id)
     return setting_row(state, settings_slot(state, id, -1));
 }
 
-// A function to grey a row out with its reason when `grey` holds
-static SettingsRow greyed(SettingsRow row, bool grey, const char *why)
+// A function to gray a row out with its reason when `gray` holds
+static SettingsRow grayed(SettingsRow row, bool gray, const char *why)
 {
-    if (grey) {
+    if (gray) {
         row.enabled = false;
         row.why = why;
     }
@@ -4461,7 +4461,7 @@ static bool is_on(SettingsState *state, SettingId id)
     return settings_slot(state, id, -1)->value.number != 0;
 }
 
-// A function to summarise an on/off setting for the top page
+// A function to summarize an on/off setting for the top page
 static const char *on_off(SettingsState *state, SettingId id)
 {
     return is_on(state, id) ? "On" : "Off";
@@ -4506,7 +4506,7 @@ Replace the `SETTINGS_PAGE_TOP` case of `settings_rows()` (lines 673-685) with:
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_FPS_LIMIT)
-                    row = greyed(row, is_on(state, SET_ID_VSYNC), WHY_VSYNC);
+                    row = grayed(row, is_on(state, SET_ID_VSYNC), WHY_VSYNC);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -4522,8 +4522,8 @@ In the `SETTINGS_PAGE_BACKGROUND` case (lines 686-701), replace the final `else`
             }
             bool overlay = is_on(state, SET_ID_OVERLAY);
             n = add_row(rows, n, max, global_row(state, SET_ID_OVERLAY));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_OVERLAY_COLOR), !overlay, WHY_OVERLAY));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_OVERLAY_OPACITY), !overlay, WHY_OVERLAY));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_OVERLAY_COLOR), !overlay, WHY_OVERLAY));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_OVERLAY_OPACITY), !overlay, WHY_OVERLAY));
             break;
 ```
 
@@ -4550,9 +4550,9 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_TITLE_SHADOW_COLOR)
-                    row = greyed(row, !is_on(state, SET_ID_TITLE_SHADOWS), WHY_SHADOWS);
+                    row = grayed(row, !is_on(state, SET_ID_TITLE_SHADOWS), WHY_SHADOWS);
                 if (ids[i] != SET_ID_TITLES_ENABLED)
-                    row = greyed(row, off, WHY_TITLES);
+                    row = grayed(row, off, WHY_TITLES);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -4567,11 +4567,11 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_HIGHLIGHT_OUTLINE_COLOR || ids[i] == SET_ID_HIGHLIGHT_OUTLINE_OPACITY)
-                    row = greyed(row, !outline, WHY_NO_OUTLINE);
+                    row = grayed(row, !outline, WHY_NO_OUTLINE);
                 if (ids[i] == SET_ID_HIGHLIGHT_CORNER_RADIUS)
-                    row = greyed(row, outline, WHY_ROUNDED);
+                    row = grayed(row, outline, WHY_ROUNDED);
                 if (ids[i] != SET_ID_HIGHLIGHT_ENABLED)
-                    row = greyed(row, off, WHY_HIGHLIGHT);
+                    row = grayed(row, off, WHY_HIGHLIGHT);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -4584,9 +4584,9 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_SCROLL_OUTLINE_COLOR)
-                    row = greyed(row, !outline, WHY_NO_OUTLINE);
+                    row = grayed(row, !outline, WHY_NO_OUTLINE);
                 if (ids[i] != SET_ID_SCROLL_ENABLED)
-                    row = greyed(row, off, WHY_SCROLL);
+                    row = grayed(row, off, WHY_SCROLL);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -4601,11 +4601,11 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_CLOCK_WEEKDAY || ids[i] == SET_ID_CLOCK_DATE_FORMAT)
-                    row = greyed(row, !date, WHY_DATE);
+                    row = grayed(row, !date, WHY_DATE);
                 if (ids[i] == SET_ID_CLOCK_SHADOW_COLOR)
-                    row = greyed(row, !is_on(state, SET_ID_CLOCK_SHADOWS), WHY_SHADOWS);
+                    row = grayed(row, !is_on(state, SET_ID_CLOCK_SHADOWS), WHY_SHADOWS);
                 if (ids[i] != SET_ID_CLOCK_ENABLED)
-                    row = greyed(row, off, WHY_CLOCK);
+                    row = grayed(row, off, WHY_CLOCK);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -4615,7 +4615,7 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
             static const SettingId ids[] = { SET_ID_SCREENSAVER_ENABLED, SET_ID_SCREENSAVER_IDLE_TIME,
                 SET_ID_SCREENSAVER_INTENSITY, SET_ID_SCREENSAVER_PAUSE };
             for (int i = 0; i < LENGTH(ids); i++)
-                n = add_row(rows, n, max, greyed(global_row(state, ids[i]), off && i > 0, WHY_SCREENSAVER));
+                n = add_row(rows, n, max, grayed(global_row(state, ids[i]), off && i > 0, WHY_SCREENSAVER));
             break;
         }
         case SETTINGS_PAGE_CONTROLS:
@@ -4624,8 +4624,8 @@ Replace the `SETTINGS_PAGE_TITLES` case (lines 730-732) with the Titles page and
         case SETTINGS_PAGE_GAMEPAD: {
             bool off = !is_on(state, SET_ID_GAMEPAD_ENABLED);
             n = add_row(rows, n, max, global_row(state, SET_ID_GAMEPAD_ENABLED));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_DEVICE), off, WHY_GAMEPAD));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_MAPPINGS), off, WHY_GAMEPAD));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_GAMEPAD_DEVICE), off, WHY_GAMEPAD));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_GAMEPAD_MAPPINGS), off, WHY_GAMEPAD));
             n = add_row(rows, n, max, note_row(MAPPINGS_NOTE));
             break;
         }
@@ -4635,7 +4635,7 @@ Replace `selectable()` (lines 742-746) with:
 
 ```c
 // A function to tell whether the cursor may rest on a row: any row but a divider or a note, unless
-// it is greyed with no reason to give (Discard with nothing to discard)
+// it is grayed with no reason to give (Discard with nothing to discard)
 static bool selectable(const SettingsRow *row)
 {
     return row->kind != SETTINGS_ROW_DIVIDER && row->kind != SETTINGS_ROW_NOTE && (row->enabled || row->why != NULL);
@@ -4726,7 +4726,7 @@ In `settings_command()`, replace the `SETTINGS_LEFT`/`SETTINGS_RIGHT` case (line
             break;
 ```
 
-In its `SETTINGS_OK` case, after `if (row == NULL || !selectable(row)) break;`, add `if (!row->enabled && row->kind != SETTINGS_ROW_ACTION) break;`: a greyed row that took the cursor does nothing. Then add the picker's branch after the `BROWSE` branch:
+In its `SETTINGS_OK` case, after `if (row == NULL || !selectable(row)) break;`, add `if (!row->enabled && row->kind != SETTINGS_ROW_ACTION) break;`: a grayed row that took the cursor does nothing. Then add the picker's branch after the `BROWSE` branch:
 
 ```c
             else if (row->kind == SETTINGS_ROW_PICK) {
@@ -4735,12 +4735,12 @@ In its `SETTINGS_OK` case, after `if (row == NULL || !selectable(row)) break;`, 
             }
 ```
 
-(The existing `ACTION` branches test `row->action`, and a greyed Discard never takes the cursor, so nothing else changes.)
+(The existing `ACTION` branches test `row->action`, and a grayed Discard never takes the cursor, so nothing else changes.)
 
 Add below `settings_choose()`:
 
 ```c
-// A function to set a value chosen in a picker (a colour, a font, a command, a menu, a device)
+// A function to set a value chosen in a picker (a color, a font, a command, a menu, a device)
 SettingsEvent settings_choose_value(SettingsState *state, SettingSlot *slot, const SettingValue *value)
 {
     SettingsEvent event;
@@ -4804,7 +4804,7 @@ Build and run the unit tests (Global Constraints). Expected: `100% tests passed`
 
 ```powershell
 git -C C:/Users/jscha/source/repos/streamflex add src/settings.h src/settings.c tests/test_settings.c tests/test_alloc.c
-git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the settings pages for every section, with greyed rows that say why"
+git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the settings pages for every section, with grayed rows that say why"
 ```
 
 ### Task 6: The screen applies every setting live, through its refresh group
@@ -4812,13 +4812,13 @@ git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the settings page
 The settings screen draws Task 5's pages and applies each change through the refresh group its `SettingDef` names. Beyond the groups:
 - the OS screensaver block and the default menu take effect at once;
 - *Discard* re-runs exactly the groups whose settings it puts back;
-- a greyed row's reason shows in the caption;
+- a grayed row's reason shows in the caption;
 - the preview shows the dim level while the Screensaver page is open;
 - the Device row names the pads present.
 
 The existing harness sequences gain the General row's `Down`. New checks walk every page, switch every feature off and on under ASan, stop the clock mid-render, and check VSync, the default menu and the dim preview.
 
-OK on a picker row opens the pickers in Tasks 9, 10 and 15. Until then `SETTINGS_EVENT_PICK` does nothing, and rows that step (colours, the default menu, the device) still step with Left and Right.
+OK on a picker row opens the pickers in Tasks 9, 10 and 15. Until then `SETTINGS_EVENT_PICK` does nothing, and rows that step (colors, the default menu, the device) still step with Left and Right.
 
 **Files:**
 - Modify: `src/settings_screen.c` (`apply_slot()`, `apply_all()`, `handle_event()`, `handle_command()`, `measure_layout()`, `draw_row()`, `draw_caption()`, `settings_draw()`, `settings_open()`)
@@ -4855,7 +4855,7 @@ In `tests/headless/checks/60-settings-background.sh`, every sequence opens Backg
 
 In `tests/headless/checks/65-settings-reasons.sh`, lines 12, 35, 45, 53, 64 and 73: the same, `Menu Return` becomes `Menu Down Return`.
 
-Background's first rows are unchanged (Mode, then the mode's rows), so the `Down`s after `Return` still reach Colour, Image or Folder.
+Background's first rows are unchanged (Mode, then the mode's rows), so the `Down`s after `Return` still reach Color, Image or Folder.
 
 - [ ] **Step 2: Write the failing harness checks**
 
@@ -4976,7 +4976,7 @@ Create `tests/headless/checks/55-settings-pages.sh`:
 ARROW=$(printf ' \xE2\x80\xBA ')
 
 # A function to make the keys that walk one page: each row stepped right, left, left and right (an
-# on/off that is on ends on; one that is off ends on too, which opens the rows it greys), then down;
+# on/off that is on ends on; one that is off ends on too, which opens the rows it grays), then down;
 # 14 times, more rows than any page has
 walk() { local i; for i in $(seq 14); do printf 'Right Left Left Right Down '; done; }
 tour() {
@@ -5015,10 +5015,10 @@ for feature in Overlay Highlight 'Scroll indicators' Clock Screensaver Gamepad; 
 done
 result "settings: every feature stops and starts again live" $ok
 
-# A greyed row's reason shows under the preview: the FPS limit while VSync is on
+# A grayed row's reason shows under the preview: the FPS limit while VSync is on
 ok=1
 grep -q 'Settings: the note under the preview says Used only while VSync is off' "$log" && ok=0
-result "settings: a greyed row says why under the preview" $ok
+result "settings: a grayed row says why under the preview" $ok
 
 # The clock switched off while its render thread is at work (the harness build's
 # STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits
@@ -5232,13 +5232,13 @@ In `measure_layout()`, widen the column's sample. Replace `labels` and `values` 
 ```c
     static const char *const labels[] = {
         "General", "Background", "Menus", "Titles", "Highlight", "Scroll indicators", "Clock", "Screensaver",
-        "Controls", "Discard changes", "Mode", "Colour", "Image", "Folder", "Change every", "Fade", "Rows",
+        "Controls", "Discard changes", "Mode", "Color", "Image", "Folder", "Change every", "Fade", "Rows",
         "Columns", "Largest button", "Size", "All menus", "Try again", "Leave without saving", "Use this folder",
         "Default menu", "Wrap around", "Reset on Back", "Mouse select", "Block the OS screensaver", "VSync",
         "FPS limit", "After launching an app", "App timeout", "Startup command", "Quit command",
-        "See-through colour", "Overlay", "Overlay colour", "Overlay opacity", "Icon spacing", "Vertical centre",
-        "Show titles", "Font", "Opacity", "Shadows", "Shadow colour", "Too long", "Padding", "Show",
-        "Fill colour", "Fill opacity", "Outline size", "Outline colour", "Outline opacity", "Corner radius",
+        "See-through color", "Overlay", "Overlay color", "Overlay opacity", "Icon spacing", "Vertical center",
+        "Show titles", "Font", "Opacity", "Shadows", "Shadow color", "Too long", "Padding", "Show",
+        "Fill color", "Fill opacity", "Outline size", "Outline color", "Outline opacity", "Corner radius",
         "Vertical padding", "Horizontal padding", "Show date", "Weekday", "Alignment", "Margin", "Time", "Date",
         "On", "Idle time", "Dim level", "Pause slideshow", "Gamepad", "Device", "Mappings file"
     };
@@ -5252,7 +5252,7 @@ In `measure_layout()`, widen the column's sample. Replace `labels` and `values` 
 
 The column's width is still capped at 32% of the screen, and `draw_text()` cuts longer values with "...".
 
-In `draw_row()`, show a picker row's arrows and grey a greyed row's value. Replace the `value` formatting and the two `draw_text()` calls (lines 1111-1120) with:
+In `draw_row()`, show a picker row's arrows and gray a grayed row's value. Replace the `value` formatting and the two `draw_text()` calls (lines 1111-1120) with:
 
 ```c
     bool steps = row->slot != NULL && (row->slot->def->type == SET_TYPE_COLOR ||
@@ -5274,7 +5274,7 @@ In `draw_row()`, show a picker row's arrows and grey a greyed row's value. Repla
 Add above `draw_caption()`:
 
 ```c
-// A function to say why the row under the cursor is greyed, or "" when it is not
+// A function to say why the row under the cursor is grayed, or "" when it is not
 static const char *cursor_why(void)
 {
     SettingsRow rows[SETTINGS_MAX_ROWS];
@@ -5358,7 +5358,7 @@ typedef struct {
     bool custom;        // The pinned row for a value that matched no other
 } ListPickRow;
 typedef enum { LISTPICK_UP, LISTPICK_DOWN, LISTPICK_PAGE_UP, LISTPICK_PAGE_DOWN, LISTPICK_OK, LISTPICK_BACK } ListPickCommand;
-typedef enum { LISTPICK_NONE, LISTPICK_MOVED, LISTPICK_CHOSEN, LISTPICK_CANCELLED } ListPickResult;
+typedef enum { LISTPICK_NONE, LISTPICK_MOVED, LISTPICK_CHOSEN, LISTPICK_CANCELED } ListPickResult;
 typedef struct ListPick ListPick;
 ListPick *listpick_create(void);
 void listpick_free(ListPick *pick);
@@ -5417,7 +5417,7 @@ static void test_moves(void)
     listpick_free(pick);
 }
 
-// A function to test choosing, a row that cannot be chosen, and cancelling
+// A function to test choosing, a row that cannot be chosen, and canceling
 static void test_choose(void)
 {
     ListPick *pick = sample();
@@ -5432,7 +5432,7 @@ static void test_choose(void)
     CHECK_STR(listpick_why(pick), "Only on Windows");
     listpick_command(pick, LISTPICK_DOWN, 3);
     CHECK(listpick_why(pick) == NULL);                        // Moving clears the reason
-    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELLED);
+    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELED);
 
     // None chooses the empty value
     CHECK(listpick_select(pick, "", "Custom: "));
@@ -5475,7 +5475,7 @@ static void test_empty(void)
     CHECK_INT(listpick_count(pick), 0);
     CHECK_INT(listpick_command(pick, LISTPICK_DOWN, 3), LISTPICK_NONE);
     CHECK_INT(listpick_command(pick, LISTPICK_OK, 3), LISTPICK_NONE);
-    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELLED);
+    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELED);
     CHECK(listpick_row(pick, 0) == NULL);
     listpick_free(pick);
     listpick_free(NULL);
@@ -5572,7 +5572,7 @@ typedef enum {
     LISTPICK_NONE,       // Nothing happened (an end, or OK on a row that cannot be chosen)
     LISTPICK_MOVED,
     LISTPICK_CHOSEN,     // listpick_chosen() gives the value
-    LISTPICK_CANCELLED
+    LISTPICK_CANCELED
 } ListPickResult;
 
 typedef struct ListPick ListPick;
@@ -5693,7 +5693,7 @@ bool listpick_has(const ListPick *pick, const char *value)
 }
 
 // A function to put the cursor on the row that gives a value. A value no row gives is pinned
-// first, labelled `custom_row_label` (the caller's "Custom: ..."), so choosing it keeps it; a Custom
+// first, labeled `custom_row_label` (the caller's "Custom: ..."), so choosing it keeps it; a Custom
 // row pinned before goes. False when out of memory, with the cursor on the first row.
 bool listpick_select(ListPick *pick, const char *value, const char *custom_row_label)
 {
@@ -5749,7 +5749,7 @@ ListPickResult listpick_command(ListPick *pick, ListPickCommand command, int pag
             return LISTPICK_CHOSEN;
         }
         case LISTPICK_BACK:
-            return LISTPICK_CANCELLED;
+            return LISTPICK_CANCELED;
     }
     return pick->cursor != before ? LISTPICK_MOVED : LISTPICK_NONE;
 }
@@ -5798,63 +5798,63 @@ git -C C:/Users/jscha/source/repos/streamflex add src/listpick.h src/listpick.c 
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the shared list picker's model"
 ```
 
-### Task 8: The colour picker's model and the contrast maths (`colourpick.c`)
+### Task 8: The color picker's model and the contrast math (`colorpick.c`)
 
-A pure model of the colour picker:
+A pure model of the color picker:
 - a 6 × 4 grid of the spec's 24 named swatches, moved with all four arrows;
-- a *Custom #RRGGBB* row below it, which opens a hex editor. There, Left and Right choose a digit, Up and Down step it through 0-F with wrapping, OK keeps the colour and Back leaves the editor.
+- a *Custom #RRGGBB* row below it, which opens a hex editor. There, Left and Right choose a digit, Up and Down step it through 0-F with wrapping, OK keeps the color and Back leaves the editor.
 
-Back on the grid cancels, and the preview goes back to the colour the picker opened with. The same module holds the contrast warning's maths: WCAG relative luminance, the contrast ratio, the mean luminance of an image's pixels, and a colour laid over a background at an opacity.
+Back on the grid cancels, and the preview goes back to the color the picker opened with. The same module holds the contrast warning's math: WCAG relative luminance, the contrast ratio, the mean luminance of an image's pixels, and a color laid over a background at an opacity.
 
 **Files:**
-- Create: `src/colourpick.h`, `src/colourpick.c`
-- Modify: `tests/CMakeLists.txt` (`test_colourpick`, linked with `m` on Unix)
-- Test: `tests/test_colourpick.c`
+- Create: `src/colorpick.h`, `src/colorpick.c`
+- Modify: `tests/CMakeLists.txt` (`test_colorpick`, linked with `m` on Unix)
+- Test: `tests/test_colorpick.c`
 
 **Interfaces:**
 - Consumes: `SettingColor` (`settings.h`).
 - Produces:
 
 ```c
-#define COLOURPICK_COLUMNS 6
-#define COLOURPICK_ROWS 4
-#define COLOURPICK_SWATCHES 24
-#define COLOURPICK_CUSTOM 24                   // The cursor on the Custom #RRGGBB row
-#define COLOURPICK_MIN_CONTRAST 3.0            // WCAG's 3:1 for large text
-typedef enum { COLOURPICK_UP, COLOURPICK_DOWN, COLOURPICK_LEFT, COLOURPICK_RIGHT, COLOURPICK_OK, COLOURPICK_BACK } ColourPickCommand;
-typedef enum { COLOURPICK_NONE, COLOURPICK_MOVED, COLOURPICK_CHOSEN, COLOURPICK_CANCELLED } ColourPickResult;
-typedef struct { int cursor; int column; bool editing; int digit; SettingColor original; SettingColor hex; SettingColor chosen; } ColourPick;
-void colourpick_open(ColourPick *pick, SettingColor current);
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command);
-SettingColor colourpick_shown(const ColourPick *pick);
-const char *colourpick_name(int index);
-SettingColor colourpick_swatch(int index);
-int colourpick_find(SettingColor color);
-double colour_luminance(SettingColor color);
-double colour_contrast(double a, double b);
-double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
-double colour_over(double below, SettingColor over, int alpha);
+#define COLORPICK_COLUMNS 6
+#define COLORPICK_ROWS 4
+#define COLORPICK_SWATCHES 24
+#define COLORPICK_CUSTOM 24                   // The cursor on the Custom #RRGGBB row
+#define COLORPICK_MIN_CONTRAST 3.0            // WCAG's 3:1 for large text
+typedef enum { COLORPICK_UP, COLORPICK_DOWN, COLORPICK_LEFT, COLORPICK_RIGHT, COLORPICK_OK, COLORPICK_BACK } ColorPickCommand;
+typedef enum { COLORPICK_NONE, COLORPICK_MOVED, COLORPICK_CHOSEN, COLORPICK_CANCELED } ColorPickResult;
+typedef struct { int cursor; int column; bool editing; int digit; SettingColor original; SettingColor hex; SettingColor chosen; } ColorPick;
+void colorpick_open(ColorPick *pick, SettingColor current);
+ColorPickResult colorpick_command(ColorPick *pick, ColorPickCommand command);
+SettingColor colorpick_shown(const ColorPick *pick);
+const char *colorpick_name(int index);
+SettingColor colorpick_swatch(int index);
+int colorpick_find(SettingColor color);
+double color_luminance(SettingColor color);
+double color_contrast(double a, double b);
+double color_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
+double color_over(double below, SettingColor over, int alpha);
 ```
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/test_colourpick.c`:
+Create `tests/test_colorpick.c`:
 
 ```c
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
 #include "check.h"
-#include "colourpick.h"
+#include "colorpick.h"
 
-// A function to make a colour
+// A function to make a color
 static SettingColor rgb(unsigned char r, unsigned char g, unsigned char b)
 {
     SettingColor color = { r, g, b };
     return color;
 }
 
-// A function to compare two colours
+// A function to compare two colors
 static bool same(SettingColor a, SettingColor b)
 {
     return a.r == b.r && a.g == b.g && a.b == b.b;
@@ -5869,98 +5869,98 @@ static bool near(double a, double b)
 // A function to test the swatches: 24, in the spec's order, with names
 static void test_swatches(void)
 {
-    CHECK_STR(colourpick_name(0), "Black");
-    CHECK(same(colourpick_swatch(0), rgb(0x00, 0x00, 0x00)));
-    CHECK_STR(colourpick_name(9), "Burgundy");
-    CHECK(same(colourpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
-    CHECK_STR(colourpick_name(10), "White");
-    CHECK_STR(colourpick_name(13), "Dark grey");
-    CHECK_STR(colourpick_name(14), "Red");
-    CHECK(same(colourpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
-    CHECK_STR(colourpick_name(23), "Pink");
-    CHECK(same(colourpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6D)), -1);
+    CHECK_STR(colorpick_name(0), "Black");
+    CHECK(same(colorpick_swatch(0), rgb(0x00, 0x00, 0x00)));
+    CHECK_STR(colorpick_name(9), "Burgundy");
+    CHECK(same(colorpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
+    CHECK_STR(colorpick_name(10), "White");
+    CHECK_STR(colorpick_name(13), "Dark gray");
+    CHECK_STR(colorpick_name(14), "Red");
+    CHECK(same(colorpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
+    CHECK_STR(colorpick_name(23), "Pink");
+    CHECK(same(colorpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6D)), -1);
 }
 
 // A function to test moving through the grid, onto the Custom row and back
 static void test_grid(void)
 {
-    ColourPick pick;
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
+    ColorPick pick;
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
     CHECK_INT(pick.cursor, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The row's end
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_NONE);      // The grid's top
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The row's end
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_NONE);      // The grid's top
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 4);
-    CHECK(same(colourpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
+    CHECK(same(colorpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
     for (int i = 0; i < 3; i++)
-        CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
+        CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Row 4, column 5: Indigo
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the colour it opened with
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_NONE);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);   // One wide row
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the color it opened with
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_NONE);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);   // One wide row
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Back to the column it left
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x50, 0x48, 0xC0)));
 
     // Back on the grid cancels, and the preview goes back
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_CANCELLED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_CANCELED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
 }
 
 // A function to test the hex editor: digits chosen, stepped with wrapping, kept or left
 static void test_hex(void)
 {
-    ColourPick pick;
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);
+    ColorPick pick;
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);
     CHECK(pick.editing);
     CHECK_INT(pick.digit, 0);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);    // The first digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);    // The first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
     for (int i = 0; i < 5; i++)
-        colourpick_command(&pick, COLOURPICK_RIGHT);
+        colorpick_command(&pick, COLORPICK_RIGHT);
     CHECK_INT(pick.digit, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The last digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The last digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
+    colorpick_command(&pick, COLORPICK_DOWN);
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
 
-    // Back leaves the editor, not the picker; OK in it keeps the colour
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_MOVED);
+    // Back leaves the editor, not the picker; OK in it keeps the color
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_MOVED);
     CHECK(!pick.editing);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);   // Opens on the edited colour
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);   // Opens on the edited color
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x22, 0x34, 0x5E)));
 }
 
 // A function to test luminance and contrast against WCAG's own figures
 static void test_contrast(void)
 {
-    CHECK(near(colour_luminance(rgb(0, 0, 0)), 0.0));
-    CHECK(near(colour_luminance(rgb(255, 255, 255)), 1.0));
-    CHECK(near(colour_luminance(rgb(0x80, 0x80, 0x80)), 0.2159));
-    CHECK(near(colour_contrast(1.0, 0.0), 21.0));
-    CHECK(near(colour_contrast(0.0, 1.0), 21.0));           // Either way round
-    double grey = colour_luminance(rgb(0x76, 0x76, 0x76));   // WCAG's #767676 on white is 4.54:1
-    CHECK(fabs(colour_contrast(1.0, grey) - 4.54) < 0.01);
+    CHECK(near(color_luminance(rgb(0, 0, 0)), 0.0));
+    CHECK(near(color_luminance(rgb(255, 255, 255)), 1.0));
+    CHECK(near(color_luminance(rgb(0x80, 0x80, 0x80)), 0.2159));
+    CHECK(near(color_contrast(1.0, 0.0), 21.0));
+    CHECK(near(color_contrast(0.0, 1.0), 21.0));           // Either way round
+    double gray = color_luminance(rgb(0x76, 0x76, 0x76));   // WCAG's #767676 on white is 4.54:1
+    CHECK(fabs(color_contrast(1.0, gray) - 4.54) < 0.01);
 
-    // A black overlay at half opacity over white; a colour at full opacity is the colour
-    CHECK(near(colour_over(1.0, rgb(0, 0, 0), 128), 1.0 - 128.0 / 255.0));
-    CHECK(near(colour_over(0.3, rgb(255, 255, 255), 255), 1.0));
-    CHECK(near(colour_over(0.3, rgb(255, 255, 255), 0), 0.3));
+    // A black overlay at half opacity over white; a color at full opacity is the color
+    CHECK(near(color_over(1.0, rgb(0, 0, 0), 128), 1.0 - 128.0 / 255.0));
+    CHECK(near(color_over(0.3, rgb(255, 255, 255), 255), 1.0));
+    CHECK(near(color_over(0.3, rgb(255, 255, 255), 0), 0.3));
 }
 
 // A function to test an image's mean luminance, read from its pixels
@@ -5971,7 +5971,7 @@ static void test_mean(void)
     for (int i = 0; i < 4; i++)
         pixels[i * 4 + 3] = 0xFF;
     memset(pixels, 0xFF, 4);                                  // One white pixel, three black
-    CHECK(near(colour_mean_luminance(pixels, 2, 2, 8), 0.25));
+    CHECK(near(color_mean_luminance(pixels, 2, 2, 8), 0.25));
 
     // A pitch wider than the row, and an image larger than the sampling grid
     static unsigned char big[300 * 200 * 4];
@@ -5979,8 +5979,8 @@ static void test_mean(void)
         big[i * 4] = big[i * 4 + 1] = big[i * 4 + 2] = 0xFF;
         big[i * 4 + 3] = 0xFF;
     }
-    CHECK(near(colour_mean_luminance(big, 300, 200, 300 * 4), 1.0));
-    CHECK(near(colour_mean_luminance(big, 0, 0, 0), 0.0));    // Nothing to read
+    CHECK(near(color_mean_luminance(big, 300, 200, 300 * 4), 1.0));
+    CHECK(near(color_mean_luminance(big, 0, 0, 0), 0.0));    // Nothing to read
 }
 
 int main(void)
@@ -5997,86 +5997,86 @@ int main(void)
 Add to `tests/CMakeLists.txt`, after `test_listpick`:
 
 ```cmake
-# Unit tests for the colour picker's model and the contrast maths (pure; the maths needs libm)
-add_executable(test_colourpick test_colourpick.c "${PROJECT_SOURCE_DIR}/src/colourpick.c")
-target_include_directories(test_colourpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
+# Unit tests for the color picker's model and the contrast math (pure; the math needs libm)
+add_executable(test_colorpick test_colorpick.c "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+target_include_directories(test_colorpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if (UNIX)
-  target_link_libraries(test_colourpick m)
+  target_link_libraries(test_colorpick m)
 endif ()
-add_test(NAME colourpick COMMAND test_colourpick)
+add_test(NAME colorpick COMMAND test_colorpick)
 ```
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Reconfigure (Global Constraints). Expected: the configure fails with `Cannot find source file: .../src/colourpick.c`.
+Reconfigure (Global Constraints). Expected: the configure fails with `Cannot find source file: .../src/colorpick.c`.
 
-- [ ] **Step 3: Write `colourpick.h` and `colourpick.c`**
+- [ ] **Step 3: Write `colorpick.h` and `colorpick.c`**
 
-Create `src/colourpick.h`:
+Create `src/colorpick.h`:
 
 ```c
-// The colour picker's model: a 6 x 4 grid of named swatches moved with all four arrows, and below it
-// a Custom #RRGGBB row whose hex editor steps one digit at a time; and the contrast warning's maths
-// (WCAG relative luminance and contrast, an image's mean luminance, a colour laid over another).
+// The color picker's model: a 6 x 4 grid of named swatches moved with all four arrows, and below it
+// a Custom #RRGGBB row whose hex editor steps one digit at a time; and the contrast warning's math
+// (WCAG relative luminance and contrast, an image's mean luminance, a color laid over another).
 // Pure: no SDL, no globals, no allocation. settings_pickers.c draws it.
-#ifndef COLOURPICK_H
-#define COLOURPICK_H
+#ifndef COLORPICK_H
+#define COLORPICK_H
 
 #include <stdbool.h>
 #include "settings.h"
 
-#define COLOURPICK_COLUMNS 6
-#define COLOURPICK_ROWS 4
-#define COLOURPICK_SWATCHES 24
-#define COLOURPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
-#define COLOURPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
+#define COLORPICK_COLUMNS 6
+#define COLORPICK_ROWS 4
+#define COLORPICK_SWATCHES 24
+#define COLORPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
+#define COLORPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
 
 typedef enum {
-    COLOURPICK_UP,
-    COLOURPICK_DOWN,
-    COLOURPICK_LEFT,
-    COLOURPICK_RIGHT,
-    COLOURPICK_OK,
-    COLOURPICK_BACK
-} ColourPickCommand;
+    COLORPICK_UP,
+    COLORPICK_DOWN,
+    COLORPICK_LEFT,
+    COLORPICK_RIGHT,
+    COLORPICK_OK,
+    COLORPICK_BACK
+} ColorPickCommand;
 
 typedef enum {
-    COLOURPICK_NONE,
-    COLOURPICK_MOVED,      // What the preview shows may have changed
-    COLOURPICK_CHOSEN,     // `chosen` holds the colour
-    COLOURPICK_CANCELLED
-} ColourPickResult;
+    COLORPICK_NONE,
+    COLORPICK_MOVED,      // What the preview shows may have changed
+    COLORPICK_CHOSEN,     // `chosen` holds the color
+    COLORPICK_CANCELED
+} ColorPickResult;
 
 typedef struct {
-    int cursor;              // 0-23 a swatch, row by row; COLOURPICK_CUSTOM the Custom row
+    int cursor;              // 0-23 a swatch, row by row; COLORPICK_CUSTOM the Custom row
     int column;              // The column Up goes back to from the Custom row
     bool editing;            // The hex editor is open
     int digit;               // 0-5: the digit of #RRGGBB that Up and Down step
-    SettingColor original;   // The colour the picker opened with
-    SettingColor hex;        // The hex editor's colour
-    SettingColor chosen;     // The colour OK chose
-} ColourPick;
+    SettingColor original;   // The color the picker opened with
+    SettingColor hex;        // The hex editor's color
+    SettingColor chosen;     // The color OK chose
+} ColorPick;
 
-void colourpick_open(ColourPick *pick, SettingColor current);
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command);
-SettingColor colourpick_shown(const ColourPick *pick);
-const char *colourpick_name(int index);
-SettingColor colourpick_swatch(int index);
-int colourpick_find(SettingColor color);
-double colour_luminance(SettingColor color);
-double colour_contrast(double a, double b);
-double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
-double colour_over(double below, SettingColor over, int alpha);
+void colorpick_open(ColorPick *pick, SettingColor current);
+ColorPickResult colorpick_command(ColorPick *pick, ColorPickCommand command);
+SettingColor colorpick_shown(const ColorPick *pick);
+const char *colorpick_name(int index);
+SettingColor colorpick_swatch(int index);
+int colorpick_find(SettingColor color);
+double color_luminance(SettingColor color);
+double color_contrast(double a, double b);
+double color_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
+double color_over(double below, SettingColor over, int alpha);
 
 #endif
 ```
 
-Create `src/colourpick.c`:
+Create `src/colorpick.c`:
 
 ```c
 #include <math.h>
 #include <string.h>
-#include "colourpick.h"
+#include "colorpick.h"
 
 #define SAMPLES 64   // The most points across and down an image's mean luminance reads
 
@@ -6084,7 +6084,7 @@ Create `src/colourpick.c`:
 static const struct {
     const char *name;
     SettingColor color;
-} SWATCHES[COLOURPICK_SWATCHES] = {
+} SWATCHES[COLORPICK_SWATCHES] = {
     { "Black",      { 0x00, 0x00, 0x00 } },
     { "Charcoal",   { 0x1E, 0x1E, 0x1E } },
     { "Graphite",   { 0x33, 0x38, 0x3D } },
@@ -6096,9 +6096,9 @@ static const struct {
     { "Plum",       { 0x3B, 0x1F, 0x3A } },
     { "Burgundy",   { 0x4A, 0x15, 0x20 } },
     { "White",      { 0xFF, 0xFF, 0xFF } },
-    { "Light grey", { 0xC8, 0xC8, 0xC8 } },
-    { "Grey",       { 0x80, 0x80, 0x80 } },
-    { "Dark grey",  { 0x4A, 0x4A, 0x4A } },
+    { "Light gray", { 0xC8, 0xC8, 0xC8 } },
+    { "Gray",       { 0x80, 0x80, 0x80 } },
+    { "Dark gray",  { 0x4A, 0x4A, 0x4A } },
     { "Red",        { 0xD0, 0x30, 0x30 } },
     { "Orange",     { 0xE0, 0x70, 0x20 } },
     { "Amber",      { 0xF0, 0xB0, 0x00 } },
@@ -6112,22 +6112,22 @@ static const struct {
 };
 
 // A function to get a swatch's name
-const char *colourpick_name(int index)
+const char *colorpick_name(int index)
 {
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].name : "";
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].name : "";
 }
 
-// A function to get a swatch's colour
-SettingColor colourpick_swatch(int index)
+// A function to get a swatch's color
+SettingColor colorpick_swatch(int index)
 {
     SettingColor black = { 0, 0, 0 };
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].color : black;
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].color : black;
 }
 
-// A function to find a colour among the swatches; -1 when it is none of them
-int colourpick_find(SettingColor color)
+// A function to find a color among the swatches; -1 when it is none of them
+int colorpick_find(SettingColor color)
 {
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
         const SettingColor *s = &SWATCHES[i].color;
         if (s->r == color.r && s->g == color.g && s->b == color.b)
             return i;
@@ -6135,19 +6135,19 @@ int colourpick_find(SettingColor color)
     return -1;
 }
 
-// A function to open the picker on a colour: the cursor on its swatch, else on the Custom row
-void colourpick_open(ColourPick *pick, SettingColor current)
+// A function to open the picker on a color: the cursor on its swatch, else on the Custom row
+void colorpick_open(ColorPick *pick, SettingColor current)
 {
     memset(pick, 0, sizeof(*pick));
     pick->original = current;
     pick->hex = current;
     pick->chosen = current;
-    int found = colourpick_find(current);
-    pick->cursor = found >= 0 ? found : COLOURPICK_CUSTOM;
-    pick->column = found >= 0 ? found % COLOURPICK_COLUMNS : 0;
+    int found = colorpick_find(current);
+    pick->cursor = found >= 0 ? found : COLORPICK_CUSTOM;
+    pick->column = found >= 0 ? found % COLORPICK_COLUMNS : 0;
 }
 
-// A function to step one hex digit of a colour (0 the red's first, 5 the blue's second) up or
+// A function to step one hex digit of a color (0 the red's first, 5 the blue's second) up or
 // down, wrapping F to 0 and 0 to F
 static SettingColor step_digit(SettingColor color, int digit, int direction)
 {
@@ -6160,90 +6160,90 @@ static SettingColor step_digit(SettingColor color, int digit, int direction)
 }
 
 // A function to act on a key in the hex editor
-static ColourPickResult edit(ColourPick *pick, ColourPickCommand command)
+static ColorPickResult edit(ColorPick *pick, ColorPickCommand command)
 {
     switch (command) {
-        case COLOURPICK_LEFT:
+        case COLORPICK_LEFT:
             if (pick->digit == 0)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit--;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_RIGHT:
+            return COLORPICK_MOVED;
+        case COLORPICK_RIGHT:
             if (pick->digit == 5)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit++;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_UP:
-        case COLOURPICK_DOWN:
-            pick->hex = step_digit(pick->hex, pick->digit, command == COLOURPICK_UP ? 1 : -1);
-            return COLOURPICK_MOVED;
-        case COLOURPICK_OK:
+            return COLORPICK_MOVED;
+        case COLORPICK_UP:
+        case COLORPICK_DOWN:
+            pick->hex = step_digit(pick->hex, pick->digit, command == COLORPICK_UP ? 1 : -1);
+            return COLORPICK_MOVED;
+        case COLORPICK_OK:
             pick->chosen = pick->hex;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             pick->editing = false;
-            return COLOURPICK_MOVED;
+            return COLORPICK_MOVED;
     }
-    return COLOURPICK_NONE;
+    return COLORPICK_NONE;
 }
 
 // A function to act on one key: move through the grid and onto the Custom row, open the hex
 // editor, choose, or cancel
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command)
+ColorPickResult colorpick_command(ColorPick *pick, ColorPickCommand command)
 {
     if (pick->editing)
         return edit(pick, command);
     int before = pick->cursor;
-    int row = pick->cursor / COLOURPICK_COLUMNS;
-    int column = pick->cursor % COLOURPICK_COLUMNS;
+    int row = pick->cursor / COLORPICK_COLUMNS;
+    int column = pick->cursor % COLORPICK_COLUMNS;
     switch (command) {
-        case COLOURPICK_LEFT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column > 0)
+        case COLORPICK_LEFT:
+            if (pick->cursor != COLORPICK_CUSTOM && column > 0)
                 pick->cursor--;
             break;
-        case COLOURPICK_RIGHT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column < COLOURPICK_COLUMNS - 1)
+        case COLORPICK_RIGHT:
+            if (pick->cursor != COLORPICK_CUSTOM && column < COLORPICK_COLUMNS - 1)
                 pick->cursor++;
             break;
-        case COLOURPICK_UP:
-            if (pick->cursor == COLOURPICK_CUSTOM)
-                pick->cursor = (COLOURPICK_ROWS - 1) * COLOURPICK_COLUMNS + pick->column;
+        case COLORPICK_UP:
+            if (pick->cursor == COLORPICK_CUSTOM)
+                pick->cursor = (COLORPICK_ROWS - 1) * COLORPICK_COLUMNS + pick->column;
             else if (row > 0)
-                pick->cursor -= COLOURPICK_COLUMNS;
+                pick->cursor -= COLORPICK_COLUMNS;
             break;
-        case COLOURPICK_DOWN:
-            if (pick->cursor == COLOURPICK_CUSTOM)
+        case COLORPICK_DOWN:
+            if (pick->cursor == COLORPICK_CUSTOM)
                 break;
-            if (row < COLOURPICK_ROWS - 1)
-                pick->cursor += COLOURPICK_COLUMNS;
+            if (row < COLORPICK_ROWS - 1)
+                pick->cursor += COLORPICK_COLUMNS;
             else {
                 pick->column = column;
-                pick->cursor = COLOURPICK_CUSTOM;
+                pick->cursor = COLORPICK_CUSTOM;
             }
             break;
-        case COLOURPICK_OK:
-            if (pick->cursor == COLOURPICK_CUSTOM) {
+        case COLORPICK_OK:
+            if (pick->cursor == COLORPICK_CUSTOM) {
                 pick->editing = true;
                 pick->digit = 0;
-                return COLOURPICK_MOVED;
+                return COLORPICK_MOVED;
             }
             pick->chosen = SWATCHES[pick->cursor].color;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             pick->cursor = before;
             pick->editing = false;
-            return COLOURPICK_CANCELLED;
+            return COLORPICK_CANCELED;
     }
-    if (pick->cursor != COLOURPICK_CUSTOM)
-        pick->column = pick->cursor % COLOURPICK_COLUMNS;
-    return pick->cursor != before ? COLOURPICK_MOVED : COLOURPICK_NONE;
+    if (pick->cursor != COLORPICK_CUSTOM)
+        pick->column = pick->cursor % COLORPICK_COLUMNS;
+    return pick->cursor != before ? COLORPICK_MOVED : COLORPICK_NONE;
 }
 
 // A function to say what the preview shows: the swatch under the cursor; on the Custom row, the hex
-// editor's colour (the colour the picker opened with, until it is edited)
-SettingColor colourpick_shown(const ColourPick *pick)
+// editor's color (the color the picker opened with, until it is edited)
+SettingColor colorpick_shown(const ColorPick *pick)
 {
-    if (pick->cursor == COLOURPICK_CUSTOM)
+    if (pick->cursor == COLORPICK_CUSTOM)
         return pick->hex;
     return SWATCHES[pick->cursor].color;
 }
@@ -6255,14 +6255,14 @@ static double linear(unsigned char channel)
     return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
 }
 
-// A function to give a colour's relative luminance: 0 for black, 1 for white (WCAG 2)
-double colour_luminance(SettingColor color)
+// A function to give a color's relative luminance: 0 for black, 1 for white (WCAG 2)
+double color_luminance(SettingColor color)
 {
     return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b);
 }
 
 // A function to give the contrast ratio of two luminances, 1 to 21, whichever is lighter
-double colour_contrast(double a, double b)
+double color_contrast(double a, double b)
 {
     double light = a > b ? a : b;
     double dark = a > b ? b : a;
@@ -6271,7 +6271,7 @@ double colour_contrast(double a, double b)
 
 // A function to give an image's mean relative luminance (RGBA bytes, alpha ignored), read at most
 // SAMPLES points across and down; 0 for an empty image
-double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch)
+double color_mean_luminance(const unsigned char *rgba, int width, int height, int pitch)
 {
     if (width <= 0 || height <= 0)
         return 0.0;
@@ -6284,50 +6284,50 @@ double colour_mean_luminance(const unsigned char *rgba, int width, int height, i
             int x = (int) ((long long) i * width / across);
             const unsigned char *p = rgba + (long long) y * pitch + (long long) x * 4;
             SettingColor color = { p[0], p[1], p[2] };
-            sum += colour_luminance(color);
+            sum += color_luminance(color);
         }
     }
     return sum / (double) (across * down);
 }
 
-// A function to give the luminance of a colour laid at an alpha (0-255) over a background of a given
-// luminance. It mixes the luminances, not the colours: close enough for an advisory warning.
-double colour_over(double below, SettingColor over, int alpha)
+// A function to give the luminance of a color laid at an alpha (0-255) over a background of a given
+// luminance. It mixes the luminances, not the colors: close enough for an advisory warning.
+double color_over(double below, SettingColor over, int alpha)
 {
     double a = (double) alpha / 255.0;
-    return a * colour_luminance(over) + (1.0 - a) * below;
+    return a * color_luminance(over) + (1.0 - a) * below;
 }
 ```
 
-Add `colourpick.c` and `colourpick.h` to `src/CMakeLists.txt`'s `SOURCES`, after `listpick.h`.
+Add `colorpick.c` and `colorpick.h` to `src/CMakeLists.txt`'s `SOURCES`, after `listpick.h`.
 
 The mean-luminance test's `0.25`: one white pixel (luminance 1) and three black (0) average to 0.25. `near()` allows 0.001.
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Reconfigure, build and run the unit tests: `100% tests passed`, with `colourpick` among them. Run the **Linux unit tests** (label `t8`): `warnings outside src/external: 0`.
+Reconfigure, build and run the unit tests: `100% tests passed`, with `colorpick` among them. Run the **Linux unit tests** (label `t8`): `warnings outside src/external: 0`.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git -C C:/Users/jscha/source/repos/streamflex add src/colourpick.h src/colourpick.c src/CMakeLists.txt tests/test_colourpick.c tests/CMakeLists.txt
-git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the colour picker's model and the contrast maths"
+git -C C:/Users/jscha/source/repos/streamflex add src/colorpick.h src/colorpick.c src/CMakeLists.txt tests/test_colorpick.c tests/CMakeLists.txt
+git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the color picker's model and the contrast math"
 ```
 
-### Task 9: The pickers on screen — list, colour and command, with the contrast warning
+### Task 9: The pickers on screen — list, color and command, with the contrast warning
 
 A new SDL-side module, `settings_pickers.c`, draws Task 7's and Task 8's models in the settings column and runs their keys. OK on a picker row opens:
-- the **colour picker** for a colour;
+- the **color picker** for a color;
 - the **list picker** for the default menu, the device and a command.
 
-The colour picker previews the highlighted swatch live, and Back puts the colour back. The command picker lists:
+The color picker previews the highlighted swatch live, and Back puts the color back. The command picker lists:
 - *None*;
 - the navigation and special commands;
 - *Open submenu: <name>* for every menu;
 - on Windows, `:exit`;
-- then every command the menus' entries run, labelled with the entry's title and deduplicated.
+- then every command the menus' entries run, labeled with the entry's title and deduplicated.
 
-The caption warns when a title or clock colour falls below 3:1 contrast against what lies behind it. That is the background colour, or an image's mean luminance, measured when the image is decoded, with the overlay composited over either. Task 10 adds the font picker to the same module, and Task 14 the binding command and capture.
+The caption warns when a title or clock color falls below 3:1 contrast against what lies behind it. That is the background color, or an image's mean luminance, measured when the image is decoded, with the overlay composited over either. Task 10 adds the font picker to the same module, and Task 14 the binding command and capture.
 
 **Files:**
 - Create: `src/settings_pickers.h`, `src/settings_pickers.c`
@@ -6340,7 +6340,7 @@ The caption warns when a title or clock colour falls below 3:1 contrast against 
 **Interfaces:**
 - Consumes:
   - Task 7's `ListPick`;
-  - Task 8's `ColourPick`, `colour_luminance()`, `colour_contrast()`, `colour_over()`, `colour_mean_luminance()`;
+  - Task 8's `ColorPick`, `color_luminance()`, `color_contrast()`, `color_over()`, `color_mean_luminance()`;
   - Task 5's `settings_choose_value()`, `settings_pad_count()`, `settings_pad_name()`;
   - Task 6's `apply_slot()` and `handle_event()`, through the host.
 - Produces:
@@ -6395,26 +6395,26 @@ Entry1=One;apps;:quit
 Create `tests/headless/checks/58-settings-pickers.sh`:
 
 ```bash
-# The pickers (3b): a colour typed in the hex editor and shown in the preview, the command picker,
+# The pickers (3b): a color typed in the hex editor and shown in the preview, the command picker,
 # the default menu's list, and the contrast warning
 
-# Background > Colour > Custom: #000000 becomes #102030 one digit at a time, the preview shows it,
+# Background > Color > Custom: #000000 becomes #102030 one digit at a time, the preview shows it,
 # and it saves
 shows_hex() { look "$1" "$2" hex 'Settings: previewing #102030' 30,30=16,32,48; }
 hex_keys="Down Down Down Down Return Up Right Right Up Up Right Right Up Up Up"
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f58-hex Menu Down Return Down Return $hex_keys +shows_hex Return BackSpace BackSpace
 ok=1
 grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #000000 -> #102030' "$out/f58-hex.log" \
     && grep -qx 'hex yes' "$out/f58-hex.seen" && ran_clean f58-hex && ok=0
-result "pickers: a colour typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
+result "pickers: a color typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
 
-# Back in the colour picker puts the colour back: nothing is saved
-CFG=$FX/f60-colour.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
+# Back in the color picker puts the color back: nothing is saved
+CFG=$FX/f60-color.ini run_keys f58-colorback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
 ok=1
-grep -q 'Settings: previewing #33383D' "$out/f58-colourback.log" && grep -q 'Settings: nothing changed' "$out/f58-colourback.log" \
-    && ran_clean f58-colourback && ok=0
-result "pickers: Back in the colour picker puts the colour back (exit $(cat "$out/f58-colourback.code"))" $ok
+grep -q 'Settings: previewing #33383D' "$out/f58-colorback.log" && grep -q 'Settings: nothing changed' "$out/f58-colorback.log" \
+    && ran_clean f58-colorback && ok=0
+result "pickers: Back in the color picker puts the color back (exit $(cat "$out/f58-colorback.code"))" $ok
 
 # General > Startup command: the command picker lists None, the special commands, the submenus and
 # the entries' commands; Quit StreamFlex is the tenth row. General > Default menu: Games from its list.
@@ -6428,13 +6428,13 @@ grep -qx 'StartupCmd=:quit' "$cfg" && grep -qx 'DefaultMenu=Games' "$cfg" \
 result "pickers: a command and a default menu chosen from their lists save (exit $(cat "$out/f58-command.code"))" $ok
 grep -E 'Settings: (the command picker|\[General\])' "$out/f58-command.log" | sed 's/^/      /'
 
-# Titles > Colour: black titles on the black background are 1:1, and the caption says so
-CFG=$FX/f60-colour.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
+# Titles > Color: black titles on the black background are 1:1, and the caption says so
+CFG=$FX/f60-color.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
 ok=1
 grep -q 'Settings: the note under the preview says White #FFFFFF' "$out/f58-contrast.log" \
     && ! grep -q 'Low contrast' "$out/f58-contrast.log" && ran_clean f58-contrast && ok=0
 result "pickers: white titles on black raise no contrast warning (exit $(cat "$out/f58-contrast.code"))" $ok
-CFG=$FX/f60-colour.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
+CFG=$FX/f60-color.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
 ok=1
 grep -q 'Settings: the note under the preview says Black #000000 · Low contrast: 1.0:1 against the background' "$out/f58-lowcontrast.log" \
     && ran_clean f58-lowcontrast && ok=0
@@ -6449,12 +6449,12 @@ The row counts the checks rely on:
   - 1 entry command: `kodi --standalone`. The entries' `:submenu Games` and `:quit` are already listed.
 
   *Quit StreamFlex* is the tenth row (index 9), and *Startup command* is General's tenth row. Nine `Up`s from it reach *Default menu*.
-- **The Titles page:** Size, Show titles, Font, Colour. Colour is its fourth row, so three `Down`s.
-- **The colour picker:**
+- **The Titles page:** Size, Show titles, Font, Color. Color is its fourth row, so three `Down`s.
+- **The color picker:**
   - It opens on the titles' white, which is swatch 10: row 2, column 5.
   - `Up` reaches row 1, and the next two `Up`s do nothing.
   - Four `Left`s reach Black, swatch 0.
-- **The note:** the separator between a colour's name and the warning is ` · ` (U+00B7).
+- **The note:** the separator between a color's name and the warning is ` · ` (U+00B7).
 
 - [ ] **Step 2: Run the harness to see the new checks fail**
 
@@ -6462,7 +6462,7 @@ Run the headless harness with the label `t9-red`. Expected: the five new checks 
 
 - [ ] **Step 3: Measure what lies behind the text: an image's mean luminance**
 
-In `src/image.h`, declare `double surface_luminance(SDL_Surface *surface);` after `load_texture_from_file`. In `src/image.c`, add `#include "colourpick.h"`, and add above `load_texture_from_file()`:
+In `src/image.h`, declare `double surface_luminance(SDL_Surface *surface);` after `load_texture_from_file`. In `src/image.c`, add `#include "colorpick.h"`, and add above `load_texture_from_file()`:
 
 ```c
 // A function to measure a decoded image's mean relative luminance, for the contrast warning: at
@@ -6501,7 +6501,7 @@ double surface_luminance(SDL_Surface *surface)
         }
     }
     SDL_UnlockSurface(surface);
-    return colour_mean_luminance(samples, across, down, across * 4);
+    return color_mean_luminance(samples, across, down, across * 4);
 }
 ```
 
@@ -6568,7 +6568,7 @@ Create `src/settings_pickers.h`:
 
 ```c
 // The settings screen's pickers: the list picker (commands, the default menu, the device) and the
-// colour picker, drawn in the settings column in place of a page, and the contrast warning. The
+// color picker, drawn in the settings column in place of a page, and the contrast warning. The
 // screen hands them what they draw with and how to apply a value (PickerHost).
 #ifndef SETTINGS_PICKERS_H
 #define SETTINGS_PICKERS_H
@@ -6624,7 +6624,7 @@ Create `src/settings_pickers.c`:
 #include "settings.h"
 #include "settings_pickers.h"
 #include "listpick.h"
-#include "colourpick.h"
+#include "colorpick.h"
 #include "util.h"
 #include "debug.h"
 
@@ -6639,7 +6639,7 @@ extern ModeBackground background_shown;
 typedef enum {
     PICKER_NONE,
     PICKER_LIST,
-    PICKER_COLOUR
+    PICKER_COLOR
 } PickerKind;
 
 static PickerHost host;
@@ -6649,7 +6649,7 @@ static SettingValue original;           // Its value when the picker opened: Bac
 static ListPick *list = NULL;
 static int list_first = 0;              // The list's first row on show
 static int list_page = 1;               // How many of its rows fit: Left and Right page this far
-static ColourPick colour;
+static ColorPick color;
 static char note[512];                  // What the caption says, built as it is asked for
 
 // The special commands the command picker offers, in its order, after None
@@ -6687,7 +6687,7 @@ bool pickers_active(void)
     return kind != PICKER_NONE;
 }
 
-// A function to add a command to the command picker once, labelled as the screen describes it
+// A function to add a command to the command picker once, labeled as the screen describes it
 static void add_command(const char *command, const char *label)
 {
     char text[LISTPICK_TEXT_MAX];
@@ -6768,8 +6768,8 @@ void pickers_open(SettingSlot *s)
     slot = s;
     original = s->value;
     if (s->def->type == SET_TYPE_COLOR) {
-        colourpick_open(&colour, s->value.color);
-        kind = PICKER_COLOUR;
+        colorpick_open(&color, s->value.color);
+        kind = PICKER_COLOR;
     }
     else if (s->def->type == SET_TYPE_MENU || s->def->type == SET_TYPE_DEVICE || s->def->type == SET_TYPE_COMMAND)
         open_list(s);
@@ -6781,7 +6781,7 @@ void pickers_open(SettingSlot *s)
 static void choose(SettingValue value)
 {
     SettingSlot *s = slot;
-    s->value = original;   // The colour picker's preview changed it; the choice is made from the original
+    s->value = original;   // The color picker's preview changed it; the choice is made from the original
     close_picker();
     SettingsEvent event = settings_choose_value(host.model, s, &value);
     if (event.kind == SETTINGS_EVENT_NONE)
@@ -6790,8 +6790,8 @@ static void choose(SettingValue value)
         host.event(&event);
 }
 
-// A function to show a colour in the preview, live, without choosing it
-static void preview_colour(SettingColor shown)
+// A function to show a color in the preview, live, without choosing it
+static void preview_color(SettingColor shown)
 {
     slot->value = original;
     slot->value.color = shown;
@@ -6816,7 +6816,7 @@ static void list_command(const char *command)
     else
         key = LISTPICK_BACK;
     ListPickResult result = listpick_command(list, key, list_page);
-    if (result == LISTPICK_CANCELLED)
+    if (result == LISTPICK_CANCELED)
         close_picker();
     else if (result == LISTPICK_CHOSEN) {
         SettingValue value = original;
@@ -6832,34 +6832,34 @@ static void list_command(const char *command)
     }
 }
 
-// A function to act on a key in the colour picker
-static void colour_command(const char *command)
+// A function to act on a key in the color picker
+static void color_command(const char *command)
 {
-    ColourPickCommand key;
+    ColorPickCommand key;
     if (MATCH(command, SCMD_UP))
-        key = COLOURPICK_UP;
+        key = COLORPICK_UP;
     else if (MATCH(command, SCMD_DOWN))
-        key = COLOURPICK_DOWN;
+        key = COLORPICK_DOWN;
     else if (MATCH(command, SCMD_LEFT))
-        key = COLOURPICK_LEFT;
+        key = COLORPICK_LEFT;
     else if (MATCH(command, SCMD_RIGHT))
-        key = COLOURPICK_RIGHT;
+        key = COLORPICK_RIGHT;
     else if (MATCH(command, SCMD_SELECT))
-        key = COLOURPICK_OK;
+        key = COLORPICK_OK;
     else
-        key = COLOURPICK_BACK;
-    ColourPickResult result = colourpick_command(&colour, key);
-    if (result == COLOURPICK_MOVED)
-        preview_colour(colourpick_shown(&colour));
-    else if (result == COLOURPICK_CANCELLED) {
+        key = COLORPICK_BACK;
+    ColorPickResult result = colorpick_command(&color, key);
+    if (result == COLORPICK_MOVED)
+        preview_color(colorpick_shown(&color));
+    else if (result == COLORPICK_CANCELED) {
         slot->value = original;
         host.apply(slot, true);
-        log_debug("Settings: the colour picker put [%s] %s back", slot->def->section, slot->def->key);
+        log_debug("Settings: the color picker put [%s] %s back", slot->def->section, slot->def->key);
         close_picker();
     }
-    else if (result == COLOURPICK_CHOSEN) {
+    else if (result == COLORPICK_CHOSEN) {
         SettingValue value = original;
-        value.color = colour.chosen;
+        value.color = color.chosen;
         choose(value);
     }
 }
@@ -6869,8 +6869,8 @@ static void colour_command(const char *command)
 void pickers_command(const char *command)
 {
     if (MATCH(command, SCMD_HOME) || MATCH(command, SCMD_SETTINGS)) {
-        if (kind == PICKER_COLOUR)
-            colour_command(SCMD_BACK);
+        if (kind == PICKER_COLOR)
+            color_command(SCMD_BACK);
         else
             close_picker();
         SettingsEvent event = settings_command(host.model, MATCH(command, SCMD_HOME) ? SETTINGS_HOME : SETTINGS_CLOSE);
@@ -6884,8 +6884,8 @@ void pickers_command(const char *command)
     }
     if (kind == PICKER_LIST)
         list_command(command);
-    else if (kind == PICKER_COLOUR)
-        colour_command(command);
+    else if (kind == PICKER_COLOR)
+        color_command(command);
 }
 
 // A function to draw the list picker's rows, scrolled to keep the cursor in view
@@ -6910,16 +6910,16 @@ static void draw_list(int x, int top, int bottom)
     }
 }
 
-// A function to draw the colour picker: the swatches, the current one marked and the one under the
+// A function to draw the color picker: the swatches, the current one marked and the one under the
 // cursor outlined, then the Custom row, and in the hex editor each digit with the chosen one boxed
-static void draw_colour(int x, int top, int bottom)
+static void draw_color(int x, int top, int bottom)
 {
     int pad = host.margin / 2;
-    int cell = (host.column_width - 2 * pad) / COLOURPICK_COLUMNS;
-    int current = colourpick_find(colour.original);
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
-        SettingColor c = colourpick_swatch(i);
-        SDL_Rect box = { x + pad + (i % COLOURPICK_COLUMNS) * cell + 3, top + (i / COLOURPICK_COLUMNS) * cell + 3,
+    int cell = (host.column_width - 2 * pad) / COLORPICK_COLUMNS;
+    int current = colorpick_find(color.original);
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
+        SettingColor c = colorpick_swatch(i);
+        SDL_Rect box = { x + pad + (i % COLORPICK_COLUMNS) * cell + 3, top + (i / COLORPICK_COLUMNS) * cell + 3,
                          cell - 6, cell - 6 };
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0xFF);
         SDL_RenderFillRect(renderer, &box);
@@ -6928,7 +6928,7 @@ static void draw_colour(int x, int top, int bottom)
             SDL_SetRenderDrawColor(renderer, 0xFF - c.r, 0xFF - c.g, 0xFF - c.b, 0xFF);
             SDL_RenderFillRect(renderer, &mark);
         }
-        if (i == colour.cursor) {
+        if (i == color.cursor) {
             SDL_Rect outline = { box.x - 3, box.y - 3, box.w + 6, box.h + 6 };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
             SDL_RenderDrawRect(renderer, &outline);
@@ -6936,21 +6936,21 @@ static void draw_colour(int x, int top, int bottom)
             SDL_RenderDrawRect(renderer, &inner);
         }
     }
-    int y = top + COLOURPICK_ROWS * cell + pad;
-    SettingColor shown = colour.editing || colour.cursor == COLOURPICK_CUSTOM ? colour.hex : colour.original;
+    int y = top + COLORPICK_ROWS * cell + pad;
+    SettingColor shown = color.editing || color.cursor == COLORPICK_CUSTOM ? color.hex : color.original;
     SettingsRow custom;
     memset(&custom, 0, sizeof(custom));
     custom.kind = SETTINGS_ROW_ACTION;
     custom.enabled = true;
     snprintf(custom.label, sizeof(custom.label), "Custom");
     snprintf(custom.value, sizeof(custom.value), "#%02X%02X%02X", shown.r, shown.g, shown.b);
-    y += host.row(&custom, colour.cursor == COLOURPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
-    if (!colour.editing || y + host.row_height > bottom)
+    y += host.row(&custom, color.cursor == COLORPICK_CUSTOM && !color.editing, x, y, host.column_width, 0);
+    if (!color.editing || y + host.row_height > bottom)
         return;
 
     // The hex editor: # and six digits in cells as wide as the widest digit, the chosen one boxed
     char digits[8];
-    snprintf(digits, sizeof(digits), "%02X%02X%02X", colour.hex.r, colour.hex.g, colour.hex.b);
+    snprintf(digits, sizeof(digits), "%02X%02X%02X", color.hex.r, color.hex.g, color.hex.b);
     int w = 0;
     int h = 0;
     TTF_SizeUTF8(host.font_row, "W", &w, &h);
@@ -6960,7 +6960,7 @@ static void draw_colour(int x, int top, int bottom)
         char one[2] = { digits[i], '\0' };
         int cx = x + pad + (i + 1) * step;
         host.text(host.font_row, one, cx, y, step, 255, false);
-        if (i == colour.digit) {
+        if (i == color.digit) {
             SDL_Rect box = { cx - pad / 2, y, step, h };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
             SDL_RenderDrawRect(renderer, &box);
@@ -6973,8 +6973,8 @@ void pickers_draw(int x, int top, int bottom)
 {
     if (kind == PICKER_LIST)
         draw_list(x, top, bottom);
-    else if (kind == PICKER_COLOUR)
-        draw_colour(x, top, bottom);
+    else if (kind == PICKER_COLOR)
+        draw_color(x, top, bottom);
 }
 
 // A function to write the column's path line: the page's path, then the setting being chosen
@@ -6989,15 +6989,15 @@ void pickers_path(char *out, size_t size)
 // A function to give the key hint for the picker on show
 const char *pickers_hint(void)
 {
-    if (kind == PICKER_COLOUR && colour.editing)
+    if (kind == PICKER_COLOR && color.editing)
         return "Left and right choose a digit" DOT "Up and down change it" DOT "OK keeps" DOT "Back returns";
-    if (kind == PICKER_COLOUR)
+    if (kind == PICKER_COLOR)
         return "Arrows move" DOT "OK chooses" DOT "Back cancels";
     return "Left and right page" DOT "OK chooses" DOT "Back cancels";
 }
 
-// A function to warn when a title or clock colour stands out too little from what lies behind it:
-// the background colour or the image on show (its mean luminance), under the overlay when it is on.
+// A function to warn when a title or clock color stands out too little from what lies behind it:
+// the background color or the image on show (its mean luminance), under the overlay when it is on.
 // It says nothing for a transparent background, or an image not yet measured.
 void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
 {
@@ -7007,7 +7007,7 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
     double behind;
     if (background_shown == BACKGROUND_COLOR) {
         SettingColor bg = { config.background_color.r, config.background_color.g, config.background_color.b };
-        behind = colour_luminance(bg);
+        behind = color_luminance(bg);
     }
     else if ((background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW) && background_luminance >= 0.0)
         behind = background_luminance;
@@ -7015,26 +7015,26 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
         return;
     if (config.background_overlay) {
         SettingColor over = { eff.overlay_color.r, eff.overlay_color.g, eff.overlay_color.b };
-        behind = colour_over(behind, over, eff.overlay_color.a);
+        behind = color_over(behind, over, eff.overlay_color.a);
     }
-    double ratio = colour_contrast(colour_luminance(color), behind);
-    if (ratio < COLOURPICK_MIN_CONTRAST)
+    double ratio = color_contrast(color_luminance(color), behind);
+    if (ratio < COLORPICK_MIN_CONTRAST)
         snprintf(out, size, "Low contrast: %.1f:1 against the background; 3:1 or more reads well", ratio);
 }
 
 // A function to say what the caption says while a picker is open: why OK did nothing in a list; in
-// the colour picker, the colour under the cursor, and a contrast warning for it
+// the color picker, the color under the cursor, and a contrast warning for it
 const char *pickers_note(void)
 {
     note[0] = '\0';
     if (kind == PICKER_LIST && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
-    else if (kind == PICKER_COLOUR) {
-        SettingColor shown = colourpick_shown(&colour);
-        int index = colour.editing ? -1 : colourpick_find(shown);
+    else if (kind == PICKER_COLOR) {
+        SettingColor shown = colorpick_shown(&color);
+        int index = color.editing ? -1 : colorpick_find(shown);
         char warning[160];
         contrast_warning(slot->def->id, shown, warning, sizeof(warning));
-        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colourpick_name(index) : "Custom",
+        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colorpick_name(index) : "Custom",
             shown.r, shown.g, shown.b, warning[0] != '\0' ? DOT : "", warning);
     }
     return note;
@@ -7046,7 +7046,7 @@ Add `settings_pickers.c` and `settings_pickers.h` to `src/CMakeLists.txt`'s `SOU
 - [ ] **Step 6: Hand picker rows to the pickers**
 
 In `src/settings_screen.c`:
-- Add `#include "settings_pickers.h"` after `#include "settings_screen.h"`, and `#include "colourpick.h"`.
+- Add `#include "settings_pickers.h"` after `#include "settings_screen.h"`, and `#include "colorpick.h"`.
 - In `settings_open()`, after `measure_layout();`, set the pickers up:
 
 ```c
@@ -7084,7 +7084,7 @@ In `src/settings_screen.c`:
 - Add above `draw_caption()`:
 
 ```c
-// A function to warn in the caption when the row under the cursor is a title or clock colour that
+// A function to warn in the caption when the row under the cursor is a title or clock color that
 // stands out too little from the background
 static const char *row_warning(void)
 {
@@ -7112,13 +7112,13 @@ static const char *row_warning(void)
 
 Build and run the unit tests: `100% tests passed`. Run the **Linux unit tests** (label `t9`): `warnings outside src/external: 0`.
 
-Run the headless harness (labels `t9`, `t9-fedora`) and the leak pass (`t9-leaks`, `t9-fedora-leaks`). Expected: `0 failed` in each. The five new checks pass, and every earlier check still does. `f60-colour` steps the colour with `Right`, which a picker row still does.
+Run the headless harness (labels `t9`, `t9-fedora`) and the leak pass (`t9-leaks`, `t9-fedora-leaks`). Expected: `0 failed` in each. The five new checks pass, and every earlier check still does. `f60-color` steps the color with `Right`, which a picker row still does.
 
 - [ ] **Step 8: Commit**
 
 ```powershell
 git -C C:/Users/jscha/source/repos/streamflex add src/settings_pickers.h src/settings_pickers.c src/settings_screen.c src/launcher.h src/launcher.c src/image.h src/image.c src/CMakeLists.txt tests/headless/checks/58-settings-pickers.sh tests/headless/fixtures/f58-pickers.ini
-git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the colour, command and list pickers, with the contrast warning"
+git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the color, command and list pickers, with the contrast warning"
 ```
 
 ### Task 10: The font picker — installed fonts by family, each drawn in its own face
@@ -7248,7 +7248,7 @@ int main(void)
 }
 ```
 
-Add to `tests/CMakeLists.txt`, after `test_colourpick`:
+Add to `tests/CMakeLists.txt`, after `test_colorpick`:
 
 ```cmake
 # Unit tests for grouping font faces into families (pure)
@@ -7301,7 +7301,7 @@ chown -R tester:tester "$TESTER_HOME/fonts"
 # Titles > Font: the list loads, the cursor starts on the font in use (Open Sans, the fifth family),
 # and four Ups choose DejaVu Sans, the first
 wait_fonts() { wait_line 'Fonts: found' "$2"; sleep 1; }
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-fonts Menu Down Down Down Return Down Down Return +wait_fonts Up Up Up Up Return BackSpace BackSpace
 log=$out/f59-fonts.log
@@ -7849,7 +7849,7 @@ void fontscan_free(FontScan *scan)
 ```
 
 In `src/CMakeLists.txt`:
-- add `fontlist.c`, `fontlist.h`, `fontscan.c` and `fontscan.h` to `SOURCES`, after `colourpick.h`;
+- add `fontlist.c`, `fontlist.h`, `fontscan.c` and `fontscan.h` to `SOURCES`, after `colorpick.h`;
 - add `advapi32` to the Windows link list, after `uuid` (the registry's API).
 
 - [ ] **Step 5: Add the font picker to the pickers**
@@ -7864,7 +7864,7 @@ void pickers_quit(void);
 In `src/settings_pickers.c`:
 - add `#include "fontlist.h"`, `#include "fontscan.h"` and `#include "image.h"`, and `extern TextInfo title_info;` and `extern Clock *clk;` after the other externs, with `#include "clock.h"`;
 - add `PICKER_FONT` to `PickerKind`;
-- add the font state after the colour picker's:
+- add the font state after the color picker's:
 
 ```c
 #define FONT_SAMPLE_SIZE_RATIO 1.0F    // A family's row is drawn at the row font's size
@@ -9801,7 +9801,7 @@ git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the bindings mode
 The Controls page gains *Keyboard ›*. The Keyboard and Gamepad pages list each binding as *key → command*, with *Add binding* at the top. OK on a binding opens its page:
 - *Key*, which captures;
 - *Command ›*, the command picker;
-- *Remove*, greyed with its reason when the floor refuses it.
+- *Remove*, grayed with its reason when the floor refuses it.
 
 Capture: *Press the key or button… (5 s)*, then a confirm page with *Keep*, *Try again* and *Cancel*. A change that takes Up, Down or a Menu key's navigation away is applied, and must be confirmed by pressing that key again within 10 s, or it reverts.
 
@@ -9912,10 +9912,10 @@ static void test_add_binding(void)
     settings_command(state, SETTINGS_OK);
     settings_captured(state, 0x4000003E);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CONFIRM);
-    CHECK_STR(row_labelled(state, rows, "Keep")->label, "Keep");
+    CHECK_STR(row_labeled(state, rows, "Keep")->label, "Keep");
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);   // Keep
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003E");
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "#4000003E");
 
     // The command commits the new binding
     cursor_to(state, "Command");
@@ -9956,7 +9956,7 @@ static void test_navigation_confirm(void)
     bindings_free(b);
 }
 
-// A function to test Remove: greyed with the floor's reason for the last way to a command, and
+// A function to test Remove: grayed with the floor's reason for the last way to a command, and
 // allowed otherwise
 static void test_remove_binding(void)
 {
@@ -9968,7 +9968,7 @@ static void test_remove_binding(void)
     settings_command(state, SETTINGS_DOWN);                  // The binding
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    const SettingsRow *remove = row_labelled(state, rows, "Remove");
+    const SettingsRow *remove = row_labeled(state, rows, "Remove");
     CHECK(remove != NULL && remove->enabled);
     cursor_to(state, "Remove");
     SettingsEvent event = settings_command(state, SETTINGS_OK);
@@ -10355,7 +10355,7 @@ In `settings_rows()`:
             else {
                 const char *why = bindings_refuse_change(state->bindings, (BindingsDevice) state->pending.device,
                                                          state->pending.index, 0, NULL, true);
-                n = add_row(rows, n, max, greyed(action_row("Remove", SETTINGS_ACTION_REMOVE_BINDING, true), why != NULL, why));
+                n = add_row(rows, n, max, grayed(action_row("Remove", SETTINGS_ACTION_REMOVE_BINDING, true), why != NULL, why));
             }
             break;
         }
@@ -11150,10 +11150,10 @@ This task documents everything 3b added, and writes the hands-on checklists for 
 - [ ] **Step 1: Document every page, picker and binding in `docs/configuration.md`**
 
 In **The Settings Screen** (lines 43-86):
-- Rewrite *What it changes* (lines 62-67) as one sub-section per top-level row, in the screen's order: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver, Controls. Each lists its rows with the steps from Global Constraints' exact values, and says which rows are greyed until a switch is on.
+- Rewrite *What it changes* (lines 62-67) as one sub-section per top-level row, in the screen's order: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver, Controls. Each lists its rows with the steps from Global Constraints' exact values, and says which rows are grayed until a switch is on.
 - Add **### The pickers**:
-  - the colour picker: the 24 swatches by name, *Custom #RRGGBB*, the hex editor's keys, and Back's putting the colour back;
-  - the contrast warning (advisory, 3:1, against the background colour or an image's mean luminance with the overlay);
+  - the color picker: the 24 swatches by name, *Custom #RRGGBB*, the hex editor's keys, and Back's putting the color back;
+  - the contrast warning (advisory, 3:1, against the background color or an image's mean luminance with the overlay);
   - the command picker's rows, with `:exit` on Windows only;
   - the font picker: installed fonts by family, the bundled fonts first, *Loading fonts… (N)* on the first opening, the Regular style written, and `FontFace=` for a face in a collection;
   - the list pickers for *Default menu* and *Device*.
@@ -11182,8 +11182,8 @@ Under `## [Unreleased]`, keeping its existing `### Changed` lines, add:
 
 ```markdown
 ### Added
-- **Every setting on the settings screen.** Nine pages mirror `config.ini`: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver and Controls. Every change shows at once, and Back saves only what changed. A row that depends on a switch that is off is greyed, and says why.
-- **A colour picker:** 24 named swatches, a hex editor for any other colour, and a warning when a title or clock colour stands out too little from the background.
+- **Every setting on the settings screen.** Nine pages mirror `config.ini`: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver and Controls. Every change shows at once, and Back saves only what changed. A row that depends on a switch that is off is grayed, and says why.
+- **A color picker:** 24 named swatches, a hex editor for any other color, and a warning when a title or clock color stands out too little from the background.
 - **A font picker:** the installed fonts by family, each drawn in its own face. A face inside a font collection is written as the new `FontFace` key.
 - **A command picker** for the startup and quit commands and for bindings: the special commands, every submenu, and every command the menus already run.
 - **Key and gamepad bindings:** add, change and remove hotkeys and gamepad controls from the remote. Capture a key or button, and keep it. The arrows, OK and Back always keep their meaning. Taking Up, Down or the Menu key over must be confirmed within 10 seconds, or it goes back.
@@ -11201,7 +11201,7 @@ Under `## [Unreleased]`, keeping its existing `### Changed` lines, add:
 
 - [ ] **Step 3: Update `CONTRIBUTING.md`'s project structure and tests**
 
-In **## Project Structure** (lines 44-46), add the new modules to the settings screen's list: `settings_pickers.c`, `listpick.c`, `colourpick.c`, `fontlist.c`, `fontscan.c`, `bindings.c`, `config_fields.c`, `derive.c`. Line 11's pure modules gain `derive`, `listpick`, `colourpick`, `fontlist` and `bindings`. Name the new unit tests: `test_derive`, `test_listpick`, `test_colourpick`, `test_fontlist` and `test_bindings`.
+In **## Project Structure** (lines 44-46), add the new modules to the settings screen's list: `settings_pickers.c`, `listpick.c`, `colorpick.c`, `fontlist.c`, `fontscan.c`, `bindings.c`, `config_fields.c`, `derive.c`. Line 11's pure modules gain `derive`, `listpick`, `colorpick`, `fontlist` and `bindings`. Name the new unit tests: `test_derive`, `test_listpick`, `test_colorpick`, `test_fontlist` and `test_bindings`.
 
 - [ ] **Step 4: Write the hands-on checklists for sf-test**
 
@@ -11222,7 +11222,7 @@ Create `tests/qa/checklists/windows-3b-hands-on.md` and `tests/qa/checklists/ubu
    - Pick one that is not bundled: on Windows *Segoe UI*, on Ubuntu *Ubuntu* or *DejaVu Serif*.
 
    Expected: the titles change at once; `[Titles] Font=` names the system file, with `FontFace=` only for a collection's later face. **Frame** B4.
-6. **B5. A colour by hex.** Titles › Colour › Custom: type `#FFD700`, then Keep. Expected: the titles turn gold in the preview and after the save. Then choose Black: the caption warns of low contrast against the black background.
+6. **B5. A color by hex.** Titles › Color › Custom: type `#FFD700`, then Keep. Expected: the titles turn gold in the preview and after the save. Then choose Black: the caption warns of low contrast against the black background.
 7. **B6. Turn the clock on.** Clock › Show: On, with Show date On. Expected: the clock appears at once and the menu moves below it. **Frame** B6.
 8. **B7. Restart and compare.** Quit, and start again with `-d`. Expected:
    - every change from B1-B6 is in force;
@@ -11242,7 +11242,7 @@ Check host memory, and announce the batch to qa-harness, qa-test and sf-test (Gl
 4. The leak pass on both (labels `final-leaks`, `final-fedora-leaks`): `0 failed`, with no `LEAK` line.
 5. `scrollfail` on Debian (label `final-scrollfail`): `0 failed`.
 
-Each run's `N failed` line and its PASS count go into the SDD workspace's `progress.md`. A failure is fixed with a failing check first, then every run is repeated in full. Never trim a run: parallelise instead.
+Each run's `N failed` line and its PASS count go into the SDD workspace's `progress.md`. A failure is fixed with a failing check first, then every run is repeated in full. Never trim a run: parallelize instead.
 
 - [ ] **Step 6: Commit, and hand the build to sf-test**
 

@@ -1,7 +1,7 @@
-// Memory for the pure modules (fileio, inidoc, config_save, settings, browser). They allocate and
-// free through these, which use the C library's own unless a unit test puts its functions in place
-// to make an allocation fail on purpose. With the C library's in place, memory from these may be
-// freed with free(), and memory from malloc() with alloc_free(). Pure: no SDL.
+// Memory for the pure modules. They allocate and free through these, which use the C library's own
+// unless a unit test puts its functions in place to make an allocation fail on purpose. With the C
+// library's in place, memory from these may be freed with free(), and memory from malloc() with
+// alloc_free(). Pure: no SDL.
 #ifndef ALLOC_H
 #define ALLOC_H
 

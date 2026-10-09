@@ -3,9 +3,9 @@
   python branding/library/import-brand.py <name> <image> --source <page URL> [--art <image URL>] [--fill '#RRGGBB']
 
 - The image must be square and at least 512 px. Art above 1024 px is reduced to 1024; art is never enlarged.
-- A palette, greyscale or RGB image is converted to RGBA; an embedded colour profile is converted to sRGB.
+- A palette, grayscale or RGB image is converted to RGBA; an embedded color profile is converted to sRGB.
 - Transparent pixels inside the outline (an old round or padded logo) are refused unless --fill names a solid
-  colour to put behind the art. Choose the art's own background colour and say so in the task report.
+  color to put behind the art. Choose the art's own background color and say so in the task report.
 - Opaque pixels within one step of the default chroma key, #010101, in every channel (#000000 to #020202)
   become #030303: Transparent mode on Windows shows through the key, and scaling averages them onto it.
 - Writes assets/icons/library/brands/<name>.png, and records source, art, fill, size and sha256 in
@@ -47,7 +47,7 @@ def import_brand(name, image_path, source, art=None, fill=None, library=libtools
     if not libtools.NAME_RE.match(name):
         raise ImportRefused(f"'{name}' is not a valid icon name (a-z, 0-9 and '-', up to 32 characters)")
     if fill is not None and not re.fullmatch(r"#[0-9A-Fa-f]{6}", fill):
-        raise ImportRefused(f"--fill '{fill}' is not a colour; write it as #RRGGBB, for example #13405F")
+        raise ImportRefused(f"--fill '{fill}' is not a color; write it as #RRGGBB, for example #13405F")
     image = load_rgba(image_path)
     width, height = image.size
     if width != height:
@@ -68,7 +68,7 @@ def import_brand(name, image_path, source, art=None, fill=None, library=libtools
         if fill is None:
             raise ImportRefused(f"{image_path} has transparent pixels inside the outline (around {holes}). "
                                 f"Look at it: if it is an old round or padded logo, re-run with --fill "
-                                f"'#RRGGBB' set to its own background colour")
+                                f"'#RRGGBB' set to its own background color")
         rgb = tuple(int(fill[i:i + 2], 16) for i in (1, 3, 5))
         image = Image.alpha_composite(Image.new("RGBA", (size, size), rgb + (255,)), image)
 

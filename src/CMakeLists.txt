@@ -28,10 +28,28 @@ set(SOURCES
   config_save.h
   settings.c
   settings.h
+  derive.c
+  derive.h
+  config_fields.c
+  config_fields.h
+  listpick.c
+  listpick.h
+  colorpick.c
+  colorpick.h
+  fontlist.c
+  fontlist.h
+  fontscan.c
+  fontscan.h
+  bindings.c
+  bindings.h
   browser.c
   browser.h
   settings_screen.c
   settings_screen.h
+  settings_pickers.c
+  settings_pickers.h
+  settings_fonts.c
+  settings_fonts.h
   test_hooks.c
   test_hooks.h
 )
@@ -72,6 +90,7 @@ else ()
 	shell32
 	ole32
 	uuid
+	advapi32
   )
   target_include_directories(${EXECUTABLE_TITLE} PUBLIC ${INIH_INCLUDE_DIR} ${GETOPT_INCLUDE_DIR})
 endif ()

@@ -11,7 +11,7 @@ StreamFlex is a 10-foot launcher: it runs full screen on a TV and is driven by a
 The overhaul has four sub-projects. Sub-projects 1 (grids and button sizing) and 2 (the icon library) were released in v0.2.0. Sub-project 4 (fullscreen polish) fits in anywhere. Sub-project 3, the settings screen, was split by the user on 2026-09-27 into three parts, each with its own spec, plan and build, in this order:
 
 1. **3a** (this document): the config writer, the settings screen and its basic controls, applying changes live, and the first settings: the background, each menu's grid, and title sizing.
-2. **3b:** every other setting in `config.ini`, including the harder controls: a colour picker, a font picker, and "press the button you want" for key and gamepad bindings.
+2. **3b:** every other setting in `config.ini`, including the harder controls: a color picker, a font picker, and "press the button you want" for key and gamepad bindings.
 3. **3c:** editing menus: adding, removing and reordering apps and submenus, and picking icons from the library.
 
 The user chose the full scope ("all settings, plus editing menus"); the split only orders it.
@@ -20,7 +20,7 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 
 - **Config.** `config.ini` is read once at startup by inih (`parse_config_file()` and `config_handler()` in `src/util.c`) into the global `Config`, and nothing writes it. `main()` frees the file's path right after parsing.
 - **Validation.** `validate_settings()` converts some values in place (percentages to px, the title padding clamped against `IconSize`), so it cannot run a second time.
-- **One-time setup.** The background (colour, image, slideshow, transparent), the overlay, the clock, the highlight, the scroll indicators and the screensaver are all set up once in `main()`. Only the grid is recomputed, by `apply_layout()` on every menu load.
+- **One-time setup.** The background (color, image, slideshow, transparent), the overlay, the clock, the highlight, the scroll indicators and the screensaver are all set up once in `main()`. Only the grid is recomputed, by `apply_layout()` on every menu load.
 - **Input.** The built-in keys (arrows, Return, Backspace), `[Hotkeys]` and the gamepad controls all end in `execute_command()` and its special commands (`:left`, `:select`, `:back`, `:home` and so on).
 - **Titles.** One font at one size, `config.title_font_size`, for the whole launcher; `geo.font_height` feeds every menu's `title_block`. Shrink mode (`render_text()`, `src/image.c:346-364`) reopens the font one point smaller at a time with no floor, and leaks the last font it opened when it reaches 0.
 - **Where the config is found.** Linux searches `./`, the executable's folder, `~/.config/streamflex/`, then `/usr/share/streamflex/`, where the packages install it read-only. Windows searches `./` and the executable's folder.
@@ -38,7 +38,7 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 | When changes apply | **Live**, as they are made. Leaving settings with Back writes the visit's changes in one save. A *Discard changes* row restores everything as it was on entry. |
 | The layout | **A narrow settings column on the left and a large live preview on the right.** In the user's words: "the left column only as wide as is comfortable to fit the menus, so that the preview on the right can be large enough to get a good feel for the changes being made". Approved from mockups. |
 | Choosing an image or a folder | A **folder browser** in the left column. The preview shows the highlighted image as the background. |
-| Colours in 3a | Preset colours, stepped with Left and Right. The full colour picker is 3b's. |
+| Colors in 3a | Preset colors, stepped with Left and Right. The full color picker is 3b's. |
 | Title sizing | **Titles scale with the button**, per menu, with a readable minimum. This reverses sub-project 1's rule that "the title size stays global, for readability at 10 feet": that rule is what made item 19. |
 | How edits reach the launcher and the file | **A settings table** (approach 1): the screen edits typed values in `Config` and refreshes only what they affect; on save, each changed value is formatted back into the file. |
 | The file writer | Edits `config.ini` line by line, so comments, blank lines, order and line endings survive. Reads the file fresh at save time, keeps a `.bak`, and replaces the file safely. |
@@ -51,14 +51,14 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 
 - `:settings` is dispatched in `execute_command()` beside the other special commands, so an entry, a hotkey or a gamepad control can use it. The sample config's System menu gains a *Settings* tile (`Settings;settings;:settings`).
 - **Gamepad default.** If no gamepad control maps `:settings`, the Start button opens it, unless the config assigns Start to something else (`add_default_controls()`, as for `:up` and `:down`).
-- **Keyboard default.** The context-menu key (`SDLK_APPLICATION`, labelled Menu on most remotes; `xdotool key Menu` sends it) becomes a built-in key that opens settings, unless `[Hotkeys]` binds that key, in which case the hotkey keeps it (as for Up and Down).
+- **Keyboard default.** The context-menu key (`SDLK_APPLICATION`, labeled Menu on most remotes; `xdotool key Menu` sends it) becomes a built-in key that opens settings, unless `[Hotkeys]` binds that key, in which case the hotkey keeps it (as for Up and Down).
 - Settings open over whichever menu is showing, and close back to it.
 
 ### Layout
 
 - **Left column:** "Settings", the page path under it (*Settings › Menus › Games*), the rows, and a one-line key hint at the bottom. Its width is fixed while settings are open, so the preview never jumps between pages: the widest label and value among the table's rows, kept between 20% and 32% of the screen width. Longer text, such as a file name in the browser, is cut with "…".
-- **Preview:** the rest of the screen, 16:9, centred vertically, with a thin outline. A caption under it names what it shows: *Preview: Games · 6 × 3, 190 px buttons*, adding *reduced to 9 columns to fit* when `layout_compute()` reduced the grid.
-- **The look is fixed and ours.** The screen always uses the bundled default font (`FILENAME_DEFAULT_FONT`), sized from the screen height, and its own colours. A decorative title font or an unusual highlight colour in someone's config never makes settings unreadable.
+- **Preview:** the rest of the screen, 16:9, centered vertically, with a thin outline. A caption under it names what it shows: *Preview: Games · 6 × 3, 190 px buttons*, adding *reduced to 9 columns to fit* when `layout_compute()` reduced the grid.
+- **The look is fixed and ours.** The screen always uses the bundled default font (`FILENAME_DEFAULT_FONT`), sized from the screen height, and its own colors. A decorative title font or an unusual highlight color in someone's config never makes settings unreadable.
 - Approved mockups: `C:/Users/jscha/ClaudeScratch/streamflex-settings-brainstorm/.superpowers/brainstorm/576075-1790561805/content/` (scratch; `layout-c-v2.html` is the approved layout, `title-sizing.html` the title comparison).
 
 ### Keys
@@ -82,7 +82,7 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 - **Back at the top level:**
   - with nothing changed, nothing is written;
   - with changes, only the changed keys are written (see **The config writer**), then the screen closes back to its menu.
-- ***Discard changes*** puts every value back to the snapshot, refreshes everything, and stays in settings. The row is greyed while there is nothing to discard.
+- ***Discard changes*** puts every value back to the snapshot, refreshes everything, and stays in settings. The row is grayed while there is nothing to discard.
 - **A failed save** replaces the rows with *Couldn't save to <path>: <reason>* and two rows, *Try again* and *Leave without saving*. Leaving without saving keeps the changes on screen until the launcher restarts. Back returns to the settings rows.
 
 ### While settings are open
@@ -101,16 +101,16 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 
 ### Background
 
-*Mode* steps through *Colour*, *Image*, *Slideshow* and *Transparent*, written as `[Background] Mode=Color|Image|Slideshow|Transparent`. The rows under it depend on the mode:
+*Mode* steps through *Color*, *Image*, *Slideshow* and *Transparent*, written as `[Background] Mode=Color|Image|Slideshow|Transparent`. The rows under it depend on the mode:
 
-- **Colour:** *Colour* steps through ten presets: *Black* `#000000` (the built-in default), *Charcoal* `#1E1E1E`, *Graphite* `#33383D`, *Slate* `#2E3440`, *Midnight* `#121A2E`, *Navy* `#0B1F3A`, *Teal* `#07606C` (the app icon's), *Forest* `#1E3B2F`, *Plum* `#3B1F3A` and *Burgundy* `#4A1520`. A colour in the file that is not a preset appears as *Custom #1A2B3C* before *Black*, until the user steps off it. Written as `Color=#RRGGBB`.
+- **Color:** *Color* steps through ten presets: *Black* `#000000` (the built-in default), *Charcoal* `#1E1E1E`, *Graphite* `#33383D`, *Slate* `#2E3440`, *Midnight* `#121A2E`, *Navy* `#0B1F3A`, *Teal* `#07606C` (the app icon's), *Forest* `#1E3B2F`, *Plum* `#3B1F3A` and *Burgundy* `#4A1520`. A color in the file that is not a preset appears as *Custom #1A2B3C* before *Black*, until the user steps off it. Written as `Color=#RRGGBB`.
 - **Image:** *Image ›* opens the folder browser. The row shows the file name. Written as `Image=<absolute path>`.
 - **Slideshow:**
   - *Folder ›* opens the folder browser; the row shows the folder name and its image count. Written as `SlideshowDirectory=<absolute path>`.
   - *Change every*: 5 s to 60 min in steps (5, 10, 15, 30 s; 1, 2, 5, 10, 30, 60 min), the existing limits. Written as `SlideshowImageDuration=<seconds>`.
   - *Fade*: 0 to 3 s in 0.5 s steps, the existing limit. Written as `SlideshowTransitionTime=<seconds>`.
-- **Transparent:** a note that the desktop shows through, and that Linux needs a compositor, with the docs page named. The see-through colour (`ChromaKeyColor`) stays as configured; 3b can expose it.
-- **An incomplete mode**, such as *Image* with no image chosen yet, previews as the colour background. Leaving the Background page with the mode still incomplete puts *Mode* back to its value on entry, and the caption says why.
+- **Transparent:** a note that the desktop shows through, and that Linux needs a compositor, with the docs page named. The see-through color (`ChromaKeyColor`) stays as configured; 3b can expose it.
+- **An incomplete mode**, such as *Image* with no image chosen yet, previews as the color background. Leaving the Background page with the mode still incomplete puts *Mode* back to its value on entry, and the caption says why.
 
 ### Folder browser
 
@@ -136,7 +136,7 @@ The user chose the full scope ("all settings, plus editing menus"); the split on
 
 - *Size* steps through *Small*, *Medium* and *Large*, written as `[Titles] FontSize=11%`, `14%` and `17%`.
 - A fixed size already in the file (`FontSize=36`) appears as *Fixed 36* before *Small*, until the user steps off it.
-- The other title settings (`Enabled`, colours, shadows, `OversizeMode`) are 3b's.
+- The other title settings (`Enabled`, colors, shadows, `OversizeMode`) are 3b's.
 
 ## Title sizing (items 18 and 19)
 
@@ -220,11 +220,11 @@ void        inidoc_free(IniDoc *doc);
 ### `src/settings.c` / `src/settings.h` (new, pure)
 
 - **The table.** One `SettingDef` per setting: label, section (or "the menu being edited"), key, type, limits or step list, whether it can inherit, and its refresh group (layout, titles or background). 3b extends 3a by adding rows to this table.
-- **Types:** count, choice (a mode setting's names), button size cap, preset colour, image path, folder path, seconds, and title size.
+- **Types:** count, choice (a mode setting's names), button size cap, preset color, image path, folder path, seconds, and title size.
 - **Values.** A small `SettingValue` (a number, a string or *inherit*). Per type: `setting_parse()` (text to value), `setting_format()` (value to text) and `setting_step()` (Left or Right from a value, keeping a custom entry value in its sorted place).
-- **One text-to-value path.** `config_handler()` reads the table's keys through `setting_parse()` instead of its own branches, so the startup parser and the screen cannot disagree about what a line means. Behaviour for invalid values stays as today: ignored, with a log line. So does sub-project 1's reserved-name rule: in a menu section, `Rows`, `Columns` and `IconSize` are settings only when the value holds no `;`, and are otherwise read as entries.
+- **One text-to-value path.** `config_handler()` reads the table's keys through `setting_parse()` instead of its own branches, so the startup parser and the screen cannot disagree about what a line means. Behavior for invalid values stays as today: ignored, with a log line. So does sub-project 1's reserved-name rule: in a menu section, `Rows`, `Columns` and `IconSize` are settings only when the value holds no `;`, and are otherwise read as entries.
 - **Pages.** The page stack, the cursor, which rows are enabled, and which settings changed since the snapshot.
-- **Colours** are a plain `{r, g, b, a}` struct here; the SDL side copies them into `SDL_Color`.
+- **Colors** are a plain `{r, g, b, a}` struct here; the SDL side copies them into `SDL_Color`.
 
 ### `src/browser.c` / `src/browser.h` (new, pure)
 
@@ -244,7 +244,7 @@ The folder browser's model: its mode (image or folder), current folder, rows (*P
   - `draw_screen()` splits into `draw_scene()` and presenting, and the main loop draws the settings screen instead while it is open;
   - `:settings` in `execute_command()`, and the command routing and screensaver rule of **While settings are open**;
   - the keyboard's context-menu key as a built-in key;
-  - **`reload_background()`**, new: stops the slideshow thread and frees the slideshow, destroys the background textures, sets the new mode up the way `main()` does, sets the draw colour, and on Windows turns the layered-window transparency on or off. `main()` calls it too, so startup and settings share one path;
+  - **`reload_background()`**, new: stops the slideshow thread and frees the slideshow, destroys the background textures, sets the new mode up the way `main()` does, sets the draw color, and on Windows turns the layered-window transparency on or off. `main()` calls it too, so startup and settings share one path;
   - **`reload_titles()`**, new: marks every menu's textures as stale and re-lays out the current menu;
   - `init_sdl()`: when SDL reports a refresh rate of 0 or less, use 60 Hz and log it once, and use that value at all three divisions (item 22).
 - **`util.c`:** the table's keys are parsed through `settings.c`; `validate_settings()` stops clamping the title padding against `IconSize` (the layout now sizes it); `add_default_gamepad_controls()` adds Start for `:settings`.
@@ -255,7 +255,7 @@ The folder browser's model: its mode (image or folder), current folder, rows (*P
 ## Errors and limits
 
 - A setting whose value in the file is invalid is ignored with a log line, as today. The screen shows the value the launcher actually uses.
-- A background image or slideshow folder that disappears after it was chosen is handled as at startup today: the launcher logs it and falls back to the colour background.
+- A background image or slideshow folder that disappears after it was chosen is handled as at startup today: the launcher logs it and falls back to the color background.
 - The settings screen never writes an invalid value: every value it can produce comes from the table's limits or step lists, and `inidoc_set()` refuses what the parser would misread.
 - **Debug output** (`-d`): every change (setting, old value, new value), every refresh, the save's target path and backup path, and each step of a failed save.
 
@@ -264,7 +264,7 @@ The folder browser's model: its mode (image or folder), current folder, rows (*P
 ### Unit tests (CTest, no SDL; Windows, Debian and Pi CI jobs)
 
 - **`test_inidoc`:**
-  - loading and serialising without edits is byte-identical, for fixtures with LF, CRLF, a BOM, comments, trailing comments, `:` separators, repeated sections and keys, no final newline, and the shipped sample config;
+  - loading and serializing without edits is byte-identical, for fixtures with LF, CRLF, a BOM, comments, trailing comments, `:` separators, repeated sections and keys, no final newline, and the shipped sample config;
   - setting an existing key changes only its value text, and keeps a trailing comment;
   - each placement rule: a new key in a menu section, in another section, and a new section;
   - removing a key; refused values; exact-case matching.
@@ -303,7 +303,7 @@ CI's Windows zip in the qa-harness Windows 11 guest, driven by keys and a virtua
 
 ## Out of scope
 
-- **3b:** every other setting, the colour and font pickers, key and gamepad bindings, the background overlay, and the see-through colour.
+- **3b:** every other setting, the color and font pickers, key and gamepad bindings, the background overlay, and the see-through color.
 - **3c:** editing menus.
 - **Sub-project 4:** making Transparent mode work without the tinkering.
 - **Not planned:** bundled background images; a per-user config location on Windows (`%APPDATA%`); mouse use in settings.

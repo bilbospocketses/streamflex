@@ -16,8 +16,8 @@ static unsigned char two_off(unsigned char key)
 
 // A function to move each fully opaque pixel of an RGBA image within one step of the key in every
 // channel (the key itself included) to two steps off it in every channel. For #010101 that is
-// #030303. The renderer's scaling averages neighbouring pixels, and pixels at #030303 or lighter
-// cannot average back to #010101; art with other colours as far off still could (#000003, #000300
+// #030303. The renderer's scaling averages neighboring pixels, and pixels at #030303 or lighter
+// cannot average back to #010101; art with other colors as far off still could (#000003, #000300
 // and #030000 together average to it). A pixel with any transparency is left alone. `pitch` is the bytes from one row to
 // the next. Returns how many pixels moved.
 int chroma_keep_off(unsigned char *rgba, int width, int height, int pitch,

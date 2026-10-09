@@ -2,10 +2,10 @@
 
 Every icon in this folder is the trademark and artwork of the company named beside it. StreamFlex includes
 them only to identify each service on its launcher button. They are not covered by StreamFlex's GPL-3.0
-licence.
+license.
 
 Near-black pixels in them (#000000 to #020202) are lifted to #030303, so no opaque pixel is within one step
-of the colour key of Windows' Transparent mode (#010101), and scaling these icons (checked at 128, 256 and
+of the color key of Windows' Transparent mode (#010101), and scaling these icons (checked at 128, 256 and
 512 px) blends no opaque pixels onto it.
 
 If you own one of these marks and want it removed, open an issue at

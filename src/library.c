@@ -127,7 +127,8 @@ static bool inside_library(const char *file)
     return true;
 }
 
-// A function to read root/icons.ini, keeping every icon whose file is inside the library and exists
+// A function to read root/icons.ini, keeping every icon whose file is inside the library and is a
+// regular file that exists
 int library_load(const char *root)
 {
     library_free();
@@ -139,6 +140,13 @@ int library_load(const char *root)
     if (manifest == NULL)
         return -1;
     snprintf(manifest, manifest_size, "%s%s%s", root, separator, LIBRARY_MANIFEST);
+    // Something there that is not a regular file (a pipe, say, whose open would wait for good) is
+    // never opened, here or for an icon below
+    if (fileio_not_a_file(manifest)) {
+        warn("Icon library: could not open %s: %s", manifest, fileio_last_error());
+        free(manifest);
+        return -1;
+    }
     FILE *file = fileio_open(manifest, "r");
     if (file == NULL) {
         warn("Icon library: could not open %s", manifest);
@@ -172,6 +180,11 @@ int library_load(const char *root)
         if (path == NULL)
             continue;
         snprintf(path, path_size, "%s%s%s", root, separator, icon->file);
+        if (fileio_not_a_file(path)) {
+            warn("Icon library: [%s] file %s is %s, skipping it", icon->name, path, fileio_last_error());
+            free(path);
+            continue;
+        }
         FILE *probe = fileio_open(path, "rb");
         if (probe == NULL) {
             warn("Icon library: [%s] file %s does not exist, skipping it", icon->name, path);

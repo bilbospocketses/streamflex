@@ -10,6 +10,16 @@
 #                               a path no config or input can reach
 #   run.sh <label> leaks        every check again, with LeakSanitizer on: a run that leaks fails
 #                               its check, and each leak is listed at the end as a failure too
+#   run.sh <label> [leaks] K/N  shard K of N of either pass, a run of its own in its own
+#                               container: the build, Xvfb, the fixtures and each check file
+#                               marked "Every shard runs this file" (00-harness.sh,
+#                               90-titles-fit.sh) run in every shard, and each other check file
+#                               in exactly one, planned from its measured time so the shards take
+#                               about as long. Its console says which check file each result
+#                               belongs to (SHARD lines). merge.py adds the N consoles up into the
+#                               pass's one result, and fails when they are not one complete run;
+#                               run-shards.ps1 (Windows) runs a set of passes in shards and merges
+#                               each. A shard alone is not the pass: only the merge is.
 # The build defines STREAMFLEX_TEST_HOOKS, which only this harness does: each hook it enables sits
 # under #ifdef STREAMFLEX_TEST_HOOKS in src/, and a STREAMFLEX_TEST_* environment variable drives it.
 # Prints PASS or FAIL per check and exits non-zero when any failed. Every run's output, log and
@@ -17,22 +27,102 @@
 set -u
 label=${1:-}
 fault=${2:-}
+shard=${3:-}
 case $label in
-    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks], where <label> names a folder in /out"; exit 2 ;;
+    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks] [K/N], where <label> names a folder in /out"; exit 2 ;;
 esac
+# The shard is an argument, never the environment: a variable left set could quietly turn a
+# whole pass into part of one, which would still end "0 failed". It comes second when there is
+# no mode.
 case $fault in
     '' | scrollfail | leaks) ;;
+    */*) [ -z "$shard" ] || { echo "a shard comes after the mode, once"; exit 2; }
+         shard=$fault; fault= ;;
     *) echo "unknown mode '$fault'"; exit 2 ;;
 esac
+shard_k= shard_n=
+if [ -n "$shard" ]; then
+    [[ $shard =~ ^([1-9][0-9]{0,2})/([1-9][0-9]{0,2})$ ]] && [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] \
+        || { echo "unknown shard '$shard': give K/N, with 1 <= K <= N"; exit 2; }
+    shard_k=${BASH_REMATCH[1]} shard_n=${BASH_REMATCH[2]}
+    [ "$fault" != scrollfail ] || { echo "scrollfail runs one check, so it has no shards"; exit 2; }
+fi
 HERE=/src/tests/headless
 FX=$HERE/fixtures
 out=/out/$label
 rm -rf "$out"; mkdir -p "$out"
 
 # Build a copy of the source, without the Windows build tree (vcpkg, several GB), .git, or the
-# output of an earlier run that CONTRIBUTING's command keeps in the repo
+# output of an earlier run that CONTRIBUTING's command keeps in the repo. Folders the build and
+# the checks never read are left out too: .superpowers (notes that change while a set runs),
+# design, branding and .github. A shard's digest is of this copy, so a change in them between
+# two shards' starts does not part their trees.
 rm -rf /work; mkdir -p /work
-tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out -cf - . | tar -C /work -xf -
+tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclude=./.superpowers \
+    --exclude=./design --exclude=./branding --exclude=./.github -cf - . | tar -C /work -xf -
+
+# Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
+# passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
+# at 9550682. They only balance the shards: a check file missing here counts as 60 s, and a stale
+# time makes the shards uneven, never a check lost or run twice.
+declare -A shard_seconds=(
+    [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
+    [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
+    [50-settings.sh]=203 [55-settings-pages.sh]=231 [58-settings-pickers.sh]=506
+    [59-settings-fonts.sh]=416 [60-settings-background.sh]=180 [62-settings-bindings.sh]=1069
+    [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
+    [70-chroma.sh]=2
+)
+
+# A function to plan the shards and print the plan. A check file with a line "# Every shard runs
+# this file" runs in every shard; each other one goes, longest first, to the shard with the least
+# time so far (the lowest-numbered on a tie), so every shard works out the same plan. Prints the
+# shard's header (with a digest of the source it copied, so shards of different trees cannot be
+# merged), then a DECLARED line for each check file the harness has and the shard that runs it:
+# (build) first, and (leaks) last in the leak pass, are the build's result and the LEAK lines.
+shard_plan() {
+    local check base seconds k best tree
+    local -a load
+    declare -gA shard_of=()
+    restore=$(shopt -p nullglob); shopt -s nullglob
+    shard_checks=("$HERE"/checks/*.sh)
+    eval "$restore"
+    [ "${#shard_checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    for check in "${shard_checks[@]}"; do
+        grep -q '^# Every shard runs this file' "$check" && shard_of[${check##*/}]=every
+    done
+    for ((k = 1; k <= shard_n; k++)); do load[k]=0; done
+    while read -r seconds base; do
+        best=1
+        for ((k = 2; k <= shard_n; k++)); do [ "${load[k]}" -lt "${load[best]}" ] && best=$k; done
+        shard_of[$base]=$best
+        load[best]=$((load[best] + seconds))
+    done < <(for check in "${shard_checks[@]}"; do
+                 base=${check##*/}
+                 [ "${shard_of[$base]:-}" = every ] || echo "${shard_seconds[$base]:-60} $base"
+             done | LC_ALL=C sort -k1,1nr -k2,2)
+    tree=$(find /work -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16)
+    echo "SHARD $shard_k of $shard_n: label $label, mode ${fault:-plain}, tree $tree, planned ${load[shard_k]} s"
+    echo "SHARD DECLARED (build) every"
+    for check in "${shard_checks[@]}"; do echo "SHARD DECLARED ${check##*/} ${shard_of[${check##*/}]}"; done
+    [ "$fault" != leaks ] || echo "SHARD DECLARED (leaks) every"
+}
+[ -z "$shard_k" ] || shard_plan
+
+# A function to open a shard's section NAME (a check file, (build) or (leaks)): the results
+# between it and shard_end are NAME's. An unsharded run prints nothing.
+shard_begin() {
+    [ -n "$shard_k" ] || return 0
+    echo "SHARD BEGIN $1"
+    shard_mark=$results
+}
+
+# A function to close the section NAME with the number of results it gave, which merge.py
+# matches against the lines it reads, so a console that lost or gained a line does not add up
+shard_end() {
+    [ -n "$shard_k" ] || return 0
+    echo "SHARD END $1 $((results - shard_mark))"
+}
 
 if [ "$fault" = scrollfail ]; then
     sed -i 's|^    if (scroll->texture == NULL)|    SDL_DestroyTexture(scroll->texture); scroll->texture = NULL; /* FAULT */\n&|' /work/src/image.c
@@ -46,9 +136,10 @@ cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="$flags" 
 cmake --build /work/build -j"$(nproc)" > "$out/build.log" 2>&1 \
     || { echo "BUILD FAILED"; tail -30 "$out/build.log"; exit 2; }
 
-failures=0
+failures=0 results=0
 result() {
     if [ "$2" = 0 ]; then echo "PASS  $1"; else echo "FAIL  $1"; failures=$((failures + 1)); fi
+    results=$((results + 1))
 }
 
 # A compiler warning in our code fails the run; the bundled libraries in src/external are not
@@ -58,7 +149,9 @@ warnings=$(grep -iE 'warning:' "$out/build.log" | grep -vE '^g?make(\[[0-9]+\])?
 ours=$(printf '%s\n' "$warnings" | grep -v '^/work/src/external/' | sed '/^$/d')
 printf '%s\n' "$warnings" | sed '/^$/d; s/^/BUILD WARNING: /'
 ok=1; [ -z "$ours" ] && ok=0
+shard_begin '(build)'
 result "the build has no compiler warnings outside src/external" $ok
+shard_end '(build)'
 
 # Xvfb reports a refresh rate of 0, which the launcher must survive (item 22). -ac lets the
 # unprivileged test user connect to it.
@@ -66,6 +159,18 @@ Xvfb :99 -screen 0 1920x1080x24 -ac > /dev/null 2>&1 &
 export DISPLAY=:99
 for i in $(seq 100); do xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
 xdotool getdisplaygeometry > /dev/null 2>&1 || { echo "Xvfb DID NOT START"; exit 2; }
+
+# A function standing in for xdotool. A function key pressed, let go or both (key, keydown or keyup
+# with one F key) goes through key.py, by its keycode with no modifier held: Fedora's keymap makes
+# xdotool hold Alt down for every F key, which a key capture would catch (key.py says why). Anything
+# else goes to xdotool itself.
+xdotool() {
+    if [ $# = 2 ] && [[ $1 =~ ^key(down|up)?$ ]] && [[ $2 =~ ^F[0-9]+$ ]]; then
+        python3 "$HERE/key.py" "$1" "$2"
+    else
+        command xdotool "$@"
+    fi
+}
 
 # The launcher runs as `tester`: root ignores file permissions, and the settings checks need a
 # config it cannot write. setpriv, env and setarch each exec the next, so the launcher keeps the
@@ -234,6 +339,24 @@ run_keys() {
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }
 
+# A function to run run_keys on a second X display of SIZE (WxH), for a check of how settings fit a
+# screen the main display is not: SIZE, then the run's NAME and its keys as run_keys takes them
+run_keys_at() {
+    local size=$1 xvfb i word at=()
+    shift
+    Xvfb :97 -screen 0 "${size}x24" -ac > /dev/null 2>&1 &
+    xvfb=$!
+    for i in $(seq 100); do DISPLAY=:97 command xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+    for word in "${TESTER[@]}"; do
+        case $word in
+            DISPLAY=:99) at+=(DISPLAY=:97) ;;
+            *) at+=("$word") ;;
+        esac
+    done
+    ( export DISPLAY=:97; TESTER=("${at[@]}"); run_keys "$@" )
+    kill "$xvfb" 2> /dev/null; wait "$xvfb" 2> /dev/null
+}
+
 # A function to run a config until its log shows LINE, then send the keys as run_keys does
 run_after_line() {
     local name=$1 line=$2; shift 2
@@ -294,7 +417,7 @@ preview_point() {
     echo "$((px + $1 * pw / 1920)),$((py + $2 * ph / 1080))"
 }
 
-# A function to wait up to 10 s for the screen to show the colours asked for, each x,y=r,g,b:
+# A function to wait up to 10 s for the screen to show the colors asked for, each x,y=r,g,b:
 # it takes a screenshot, reads the points and tries again until they match. Every reading, and
 # any error taking the screenshot, is kept in NAME.pixels under TAG, and the last screenshot in
 # NAME-TAG.xwd when they never match.
@@ -313,7 +436,7 @@ screen_shows() {
 }
 
 # A function for a +key (see run_keys), called with the run's NAME and PID: wait for the log line
-# LINE, then for the settings preview to show each colour asked for, written sx,sy=r,g,b with the
+# LINE, then for the settings preview to show each color asked for, written sx,sy=r,g,b with the
 # point in the launcher's scene (or @x,y=r,g,b, a point of the screen). Writes "TAG yes" or
 # "TAG no" to NAME.seen for the check to read. A preview whose place was never logged is "no",
 # and so is a probe with no points, which any screen would pass.
@@ -361,8 +484,10 @@ list_leaks() {
 if [ "$fault" = scrollfail ]; then
     run_quick f11-scroll
     ok=1
-    ran_clean f11-scroll && grep -q 'Could not render scroll indicator' "$out/f11-scroll.log" && ok=0
-    result "item 11: a failed scroll arrow disables the arrows and exits cleanly (exit $(cat "$out/f11-scroll.code"))" $ok
+    ran_clean f11-scroll \
+        && grep -q 'Could not render scroll indicator, so the scroll indicators were not started' "$out/f11-scroll.log" \
+        && ! grep -q 'Scroll indicators started' "$out/f11-scroll.log" && ok=0
+    result "item 11: a failed scroll arrow leaves the arrows not started, and exits cleanly (exit $(cat "$out/f11-scroll.code"))" $ok
     grep -m3 -E 'AddressSanitizer|double-free|runtime error' "$out/f11-scroll.err" | sed 's/^/      /'
 else
     # A check file that does not parse would stop part-way through when sourced, and the checks
@@ -371,19 +496,35 @@ else
     restore=$(shopt -p nullglob); shopt -s nullglob
     checks=("$HERE"/checks/*.sh)
     eval "$restore"
+    # A shard runs from the list its plan printed, which merge.py holds it to
+    [ -z "$shard_k" ] || checks=("${shard_checks[@]}")
     [ "${#checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
     for check in "${checks[@]}"; do
+        # A shard runs its own check files and those every shard runs, and skips the others
+        shard_file=${check##*/}
+        [ -z "$shard_k" ] || [ "${shard_of[$shard_file]:-}" = every ] \
+            || [ "${shard_of[$shard_file]:-}" = "$shard_k" ] || continue
+        shard_begin "$shard_file"
         if bash -n "$check" 2> "$out/parse.err"; then
             . "$check"
         else
             result "$(basename "$check") parses" 1
             sed 's/^/      /' "$out/parse.err"
         fi
+        shard_end "$shard_file"
     done
-    [ "$fault" != leaks ] || list_leaks
+    if [ "$fault" = leaks ]; then
+        # Each LEAK line is one of this section's results, as each is one failure
+        shard_begin '(leaks)'
+        shard_leaks=$failures
+        list_leaks
+        results=$((results + failures - shard_leaks))
+        shard_end '(leaks)'
+    fi
 fi
 # The total counts a leaking run twice on purpose: once as its check's FAIL and once as its LEAK
 # line (22 leaking runs read "44 failed"). The LEAK count is what makes a leak in a run whose
 # check never looked at its sanitizers fail the pass; do not bring the total down to the FAILs.
 echo "$failures failed"
+[ -z "$shard_k" ] || echo "SHARD DONE $shard_k of $shard_n: $failures failed"
 [ "$failures" = 0 ]

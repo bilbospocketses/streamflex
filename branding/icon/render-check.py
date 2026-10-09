@@ -1,9 +1,9 @@
 """Portability check for the SVG masters: render each in Chromium (Skia) and in Inkscape (cairo) at 512 px
 and compare them with ImageMagick.
 
-Inkscape and librsvg both rasterise through cairo, so they always agree with each other and prove nothing
+Inkscape and librsvg both rasterize through cairo, so they always agree with each other and prove nothing
 about portability. Chromium is an independent engine. The approved design differs from Inkscape only by
-edge antialiasing: normalised RMSE about 0.0058 for both masters. A much larger number means an SVG
+edge antialiasing: normalized RMSE about 0.0058 for both masters. A much larger number means an SVG
 feature one engine draws differently (keep the masters filter-free).
 
 Needs the Python `playwright` package with its Chromium installed, Inkscape 1.x and ImageMagick 7.
@@ -45,4 +45,4 @@ for v in ("full", "small"):
     m = re.search(r"\(([0-9.eE+-]+)\)", r.stderr)
     if r.returncode not in (0, 1) or not m:
         raise SystemExit(f"{v}: compare failed: {r.stderr.strip()}")
-    print(f"{v:5}  Chromium vs Inkscape at 512 px: RMSE {r.stderr.strip()}  (normalised {float(m.group(1)):.4f})")
+    print(f"{v:5}  Chromium vs Inkscape at 512 px: RMSE {r.stderr.strip()}  (normalized {float(m.group(1)):.4f})")

@@ -1,6 +1,6 @@
 # The background's startup paths, which now all go through reload_background(): an image, a
 # missing image, a slideshow, a slideshow folder with one image, one with none, and none at all.
-# The setting is kept as chosen even when the launcher falls back to the colour.
+# The setting is kept as chosen even when the launcher falls back to the color.
 
 run_quick f30-image
 ok=1
@@ -12,7 +12,24 @@ run_quick f30-missing
 ok=1
 ran_clean f30-missing && grep -q "Couldn't load background image" "$out/f30-missing.log" \
     && grep -A2 'Background ===' "$out/f30-missing.log" | grep -qE 'Mode:\s+Image$' && ok=0
-result "a missing image falls back to the colour, and the setting stays Image (exit $(cat "$out/f30-missing.code"))" $ok
+result "a missing image falls back to the color, and the setting stays Image (exit $(cat "$out/f30-missing.code"))" $ok
+
+# A missing image, as the background and as either kind of icon, is still opened, so SDL gives its
+# own reason on the line after the path, never the words of the check made before the open, which
+# refuses only something there that is not a regular file. SDL's words differ between its versions
+# and its loaders (an SVG's is SDL_LoadFile's), except for the background's.
+sdl_reason() {
+    local reason
+    reason=$(grep -A1 -xF "Could not load image $2" "$out/$1.log" | sed -n 2p)
+    [ -n "$reason" ] && [ "$reason" != 'not found' ] && [ "$reason" != 'not a regular file' ]
+}
+ok=1
+sdl_reason f30-missing /home/tester/Pictures/missing.png && sdl_reason f30-missing /home/tester/Pictures/missing-icon.png \
+    && sdl_reason f30-missing /home/tester/Pictures/missing-icon.svg \
+    && grep -A1 -xF 'Could not load image /home/tester/Pictures/missing.png' "$out/f30-missing.log" \
+        | grep -qF "Couldn't open /home/tester/Pictures/missing.png" && ok=0
+result "a missing image or icon logs SDL's own reason (exit $(cat "$out/f30-missing.code"))" $ok
+grep -A1 'Could not load image' "$out/f30-missing.log" | sed 's/^/      /'
 
 run_quick f30-slideshow
 ok=1
@@ -37,7 +54,7 @@ run_quick f30-empty
 ok=1
 ran_clean f30-empty && grep -q "No images found in slideshow directory" "$out/f30-empty.log" \
     && grep -q 'Background set up: Color' "$out/f30-empty.log" && ok=0
-result "an empty slideshow folder falls back to the colour (exit $(cat "$out/f30-empty.code"))" $ok
+result "an empty slideshow folder falls back to the color (exit $(cat "$out/f30-empty.code"))" $ok
 
 run_quick f30-nodir
 ok=1
@@ -46,7 +63,7 @@ result "Mode=Slideshow with no SlideshowDirectory falls back instead of crashing
 
 # The slideshow loader. It runs on its own thread, so when its folder stops giving it two pictures
 # it only reports, and the main thread falls back: to the one picture that still loads, or to the
-# colour. The Mode setting stays Slideshow. run_slideshow (run.sh) waits for the verdict's line.
+# color. The Mode setting stays Slideshow. run_slideshow (run.sh) waits for the verdict's line.
 
 # At startup: no file in the folder loads
 run_quick f30-broken
@@ -54,7 +71,7 @@ ok=1
 ran_clean f30-broken \
     && grep -q "Could not load any image from slideshow directory /home/tester/broken" "$out/f30-broken.log" \
     && grep -q "Background set up: Color" "$out/f30-broken.log" && ok=0
-result "a slideshow whose files all fail to load falls back to the colour instead of hanging (exit $(cat "$out/f30-broken.code"))" $ok
+result "a slideshow whose files all fail to load falls back to the color instead of hanging (exit $(cat "$out/f30-broken.code"))" $ok
 
 # While running: the only picture that loads is the one on show
 run_slideshow f30-mixed 'Could only load one image from slideshow directory /home/tester/mixed, showing it as a single image' true
@@ -73,5 +90,30 @@ run_slideshow f30-vanish 'Could not load any image from slideshow directory /hom
 ok=1
 ran_clean f30-vanish \
     && grep -q "Could not load any image from slideshow directory /home/tester/vanish" "$out/f30-vanish.log" && ok=0
-result "a running slideshow whose pictures vanish falls back to the colour (exit $(cat "$out/f30-vanish.code"))" $ok
+result "a running slideshow whose pictures vanish falls back to the color (exit $(cat "$out/f30-vanish.code"))" $ok
 grep -m2 -E 'runtime error|AddressSanitizer' "$out/f30-vanish.err" | sed 's/^/      /'
+
+# Pipes that nothing writes, named as the background image and as two icons (a raster one and an
+# SVG): a read of any would wait for good, so none is opened. Each is refused as a file that will
+# not load is, with its path in the log, and the launcher starts and quits by itself.
+rm -rf "$TESTER_HOME/pipes"
+mkdir -p "$TESTER_HOME/pipes"
+mkfifo "$TESTER_HOME/pipes/bg.png" "$TESTER_HOME/pipes/icon.png" "$TESTER_HOME/pipes/icon.svg" "$TESTER_HOME/pipes/kodi.png"
+chown -R tester:tester "$TESTER_HOME/pipes"
+run_quick f30-pipes
+ok=1
+ran_clean f30-pipes && grep -q "Couldn't load background image" "$out/f30-pipes.log" \
+    && grep -A1 'Could not load image /home/tester/pipes/bg.png' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && grep -A1 'Could not load image /home/tester/pipes/icon.png' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && grep -A1 'Could not load image /home/tester/pipes/icon.svg' "$out/f30-pipes.log" | grep -q 'not a regular file' \
+    && ok=0
+result "a pipe named as the background image or an icon is never opened, and the launcher starts (exit $(cat "$out/f30-pipes.code"))" $ok
+grep -A1 'Could not load image' "$out/f30-pipes.log" | sed 's/^/      /'
+
+# A pipe named as one of the icons older versions shipped (kodi.png) is rescued from the library, as
+# a missing one is, rather than refused
+ok=1
+grep -qF "Entry 'Legacy' in menu 'Main': '/home/tester/pipes/kodi.png' is not a file; using the library icon 'kodi'" "$out/f30-pipes.log" \
+    && ! grep -q 'Could not load image /home/tester/pipes/kodi.png' "$out/f30-pipes.log" && ran_clean f30-pipes && ok=0
+result "a pipe named as a legacy icon gets the library's icon (exit $(cat "$out/f30-pipes.code"))" $ok
+grep -F "'Legacy'" "$out/f30-pipes.log" | sed 's/^/      /'

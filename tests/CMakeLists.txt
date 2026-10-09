@@ -47,11 +47,49 @@ link_fileio(test_config_save)
 add_test(NAME config_save COMMAND test_config_save)
 
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
-# sizes through layout.c's parsers
+# sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
+# through bindings.c's model (whose lines the tests parse with inidoc.c), and names a color through
+# colorpick.c's swatches (whose contrast math needs libm)
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
-  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_settings)
+if (UNIX)
+  target_link_libraries(test_settings m)
+endif ()
 add_test(NAME settings COMMAND test_settings)
+
+# Unit tests for deriving the values the launcher draws with from the configured ones (pure)
+add_executable(test_derive test_derive.c "${PROJECT_SOURCE_DIR}/src/derive.c")
+target_include_directories(test_derive PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME derive COMMAND test_derive)
+
+# Unit tests for the shared list picker's model (pure)
+add_executable(test_listpick test_listpick.c "${PROJECT_SOURCE_DIR}/src/listpick.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_listpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME listpick COMMAND test_listpick)
+
+# Unit tests for the color picker's model and the contrast math (pure; the math needs libm)
+add_executable(test_colorpick test_colorpick.c "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+target_include_directories(test_colorpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if (UNIX)
+  target_link_libraries(test_colorpick m)
+endif ()
+add_test(NAME colorpick COMMAND test_colorpick)
+
+# Unit tests for grouping font faces into families (pure; names compare through fileio.c's helpers)
+add_executable(test_fontlist test_fontlist.c "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_fontlist PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_fontlist)
+add_test(NAME fontlist COMMAND test_fontlist)
+
+# Unit tests for the bindings model: lists, the safety floor, confirmation and capture (pure)
+add_executable(test_bindings test_bindings.c "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/inidoc.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_bindings PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME bindings COMMAND test_bindings)
 
 # Unit tests for the folder browser's model, over a pretend file system
 add_executable(test_browser test_browser.c "${PROJECT_SOURCE_DIR}/src/browser.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
@@ -61,11 +99,16 @@ link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
+# (colorpick.c allocates nothing; settings.c names colors through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
-  "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c")
+  "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
+  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
+if (UNIX)
+  target_link_libraries(test_alloc m)
+endif ()
 add_test(NAME alloc COMMAND test_alloc)
 
 # A function to link inih the way the launcher does

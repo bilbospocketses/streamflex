@@ -2,7 +2,7 @@
 #include "check.h"
 #include "chroma.h"
 
-// A function to tell whether a pixel of an RGBA buffer holds a colour
+// A function to tell whether a pixel of an RGBA buffer holds a color
 static int pixel_is(const unsigned char *pixel, int r, int g, int b, int a)
 {
     return pixel[0] == r && pixel[1] == g && pixel[2] == b && pixel[3] == a;
@@ -77,7 +77,7 @@ static void test_blend_cannot_reach_the_key(void)
 // written, and that every row is visited
 static void test_pitch(void)
 {
-    // Two rows of two pixels, each row padded to 12 bytes with key-coloured bytes
+    // Two rows of two pixels, each row padded to 12 bytes with key-colored bytes
     unsigned char rgba[24];
     for (size_t i = 0; i < sizeof(rgba); i++)
         rgba[i] = (i % 4 == 3) ? 255 : 1;

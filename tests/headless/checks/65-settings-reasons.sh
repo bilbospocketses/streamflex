@@ -9,7 +9,7 @@
 mkdir -p /mnt/nas
 cp "$TESTER_HOME/Pictures/red.png" /mnt/nas/
 chmod -R a+rX /mnt/nas
-XDG_PICTURES_DIR=/mnt/nas CFG=$FX/f60-colour.ini run_keys f65-network Menu Return Right Down Return Menu
+XDG_PICTURES_DIR=/mnt/nas CFG=$FX/f60-color.ini run_keys f65-network Menu Down Return Right Down Return Menu
 ok=1
 grep -qE 'Settings: browsing /home/tester$' "$out/f65-network.log" && ! grep -q 'Settings: browsing /mnt' "$out/f65-network.log" \
     && grep -q 'Settings: nothing changed' "$out/f65-network.log" && ran_clean f65-network && ok=0
@@ -32,7 +32,7 @@ chown -R tester:tester "$long" "$TESTER_HOME/cfg"
 fits=$(( ${#long} + 1 + ${#wide} + 6 ))                        # Image=<path>
 with=$(( fits + 1 + ${#comment} ))                               # Image=<path> <comment>
 now=$(( ${#long} + 6 + 6 + 1 + ${#comment} ))                    # Image=<long>/a.png <comment>
-CFG=$cfg run_keys f65-comment Menu Return Down Return Down Return Menu
+CFG=$cfg run_keys f65-comment Menu Down Return Down Return Down Return Menu
 ok=1
 [ "$fits" -le 199 ] && [ "$with" -gt 199 ] && [ "$now" -le 199 ] \
     && grep -qF 'Settings: it is too long for one line of config.ini (199 bytes at most) with its comment' "$out/f65-comment.log" \
@@ -42,7 +42,7 @@ result "settings: a path too long for its line beside the line's comment is refu
 grep -E 'Settings: (browsing|it is|chose|Couldn)' "$out/f65-comment.log" | sed 's/^/      /'
 
 # The browser's places run out of memory: it says so and opens at the image all the same
-STREAMFLEX_TEST_FAIL=places CFG=$FX/f60-broken.ini run_keys f65-noplaces Menu Return Down Return Menu
+STREAMFLEX_TEST_FAIL=places CFG=$FX/f60-broken.ini run_keys f65-noplaces Menu Down Return Down Return Menu
 ok=1
 grep -q 'Settings: the folder browser has no places: out of memory' "$out/f65-noplaces.log" \
     && grep -q 'Settings: browsing /home/tester/broken' "$out/f65-noplaces.log" \
@@ -50,7 +50,7 @@ grep -q 'Settings: the folder browser has no places: out of memory' "$out/f65-no
 result "settings: a browser whose places run out of memory says so and still opens (exit $(cat "$out/f65-noplaces.code"))" $ok
 
 # The browser itself runs out of memory as it opens: the log says why, and settings carry on
-STREAMFLEX_TEST_FAIL=browser CFG=$FX/f60-broken.ini run_keys f65-nobrowser Menu Return Down Return Menu
+STREAMFLEX_TEST_FAIL=browser CFG=$FX/f60-broken.ini run_keys f65-nobrowser Menu Down Return Down Return Menu
 ok=1
 grep -q 'Settings: the folder browser cannot open: out of memory' "$out/f65-nobrowser.log" \
     && ! grep -q 'Settings: browsing' "$out/f65-nobrowser.log" \
@@ -61,7 +61,7 @@ result "settings: a browser that cannot open says why (exit $(cat "$out/f65-nobr
 rm -rf "$TESTER_HOME/folders"
 mkdir -p "$TESTER_HOME/folders/inner"
 chown -R tester:tester "$TESTER_HOME/folders"
-STREAMFLEX_TEST_FAIL=command run_keys f65-command Menu Return Down Return Down Return Menu
+STREAMFLEX_TEST_FAIL=command run_keys f65-command Menu Down Return Down Return Down Return Menu
 ok=1
 grep -q "Settings: Can't open inner: out of memory" "$out/f65-command.log" \
     && grep -q 'Settings: nothing changed' "$out/f65-command.log" && ran_clean f65-command && ok=0
@@ -69,8 +69,8 @@ result "settings: a folder the browser runs out of memory opening says so (exit 
 grep -E "Settings: (browsing|Can't)" "$out/f65-command.log" | sed 's/^/      /'
 
 # A save that cannot keep the file's permissions succeeds, and the log says what was lost
-cfg=$(writable_config f60-colour)
-STREAMFLEX_TEST_FAIL=keep CFG=$cfg run_keys f65-keep Menu Return Down Right BackSpace BackSpace
+cfg=$(writable_config f60-color)
+STREAMFLEX_TEST_FAIL=keep CFG=$cfg run_keys f65-keep Menu Down Return Down Right BackSpace BackSpace
 ok=1
 grep -qx 'Color=#1E1E1E' "$cfg" \
     && grep -qF "Settings saved to $cfg, but the file's permissions could not be kept" "$out/f65-keep.log" \

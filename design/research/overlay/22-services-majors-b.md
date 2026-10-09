@@ -22,7 +22,7 @@ Date 2026-09-28, region US. Tags: VERIFIED / REPORTED / UNKNOWN. Revision 2 (gap
 | Peacock | Tier 2 on Windows; **exclude on Linux** (unchanged) | medium | **All three blocked** (Chrome and Chromium blocked in reports; Firefox blocked in reports; Edge has no Widevine anyway). OS-level check, not a Firefox issue | Linux playback blocked (error 6007); ToS bans "software and/or tools" that "interfere with" the service |
 | Paramount+ | **Tier 3 (was Tier 2, provisional)**. ToS now read | medium | Linux absent from official list. Chrome/Firefox: UNKNOWN, if they play then ~720p (L3). Edge: no Widevine | ToS (2026-09-15) bans altering/"enhancing" "any portion of the video player" and any ad blocker |
 | Crunchyroll | Tier 2 (confirmed, with caveat) | low-medium | Official list unreadable. Chrome/Firefox: UNKNOWN, ~720p expected (L3). Edge: no Widevine | ToS bans any "mod, hack, exploit ... tool"; ToS page undated |
-| MGM+ | Tier 3 (unchanged) | unknown (medium assumed) | All UNKNOWN; Chrome/Firefox ~720p expected, Edge no Widevine | Small catalogue; often via Amazon Channels; 2023 ToS |
+| MGM+ | Tier 3 (unchanged) | unknown (medium assumed) | All UNKNOWN; Chrome/Firefox ~720p expected, Edge no Widevine | Small catalog; often via Amazon Channels; 2023 ToS |
 | YouTube (/tv) | **Tier 1** (unchanged) | low | Chrome/Firefox: works (no DRM on ordinary video; Firefox 4K REPORTED). Edge: works (no DRM needed) | `/tv` is UA-gated; the UA header rule is the fragile part |
 | YouTube TV | Tier 2 (unchanged) | medium | Linux absent from official list (Chrome, Firefox, Safari only). Chrome/Firefox: UNKNOWN, ~720p expected (L3, live TV uses DRM). Edge: unlisted and no Widevine | Official list omits Edge and Linux; household location check; DVR ad-skip ban |
 
@@ -102,7 +102,7 @@ Date 2026-09-28, region US. Tags: VERIFIED / REPORTED / UNKNOWN. Revision 2 (gap
    - **Reading:** the word "mod" in the automated-access clause is broad, but the clause is about "automated data gathering or extraction". A key handler that adds focus rings is not that. Weaker exposure than Paramount+ §9.6.
 8. **Market weight.** Subscribers UNKNOWN. **Free ad-supported tier ended 2025-12-31** (https://www.animenewsnetwork.com/news/2026-02-02/crunchyroll-increases-subscription-prices-for-all-tiers/.233751; VERIFIED by a news source quoting the company). Prices after the hike (billing after 2026-03-04): Fan $9.99, Mega Fan $13.99, Ultimate Fan $17.99 per month (same ANN article, VERIFIED). No ad tier, so no ad-tier question.
 9. **10-foot option.** None known.
-10. **Verdict (confirmed).** Tier 2. Low-medium: the player is simple and the catalogue is a flat grid. The ToS turned out to be lenient in the ways that matter. Biggest risk: the Linux Widevine story is unresolved, and the ToS is undated.
+10. **Verdict (confirmed).** Tier 2. Low-medium: the player is simple and the catalog is a flat grid. The ToS turned out to be lenient in the ways that matter. Biggest risk: the Linux Widevine story is unresolved, and the ToS is undated.
 
 ## MGM+
 

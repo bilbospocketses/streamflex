@@ -32,7 +32,7 @@ struct IniDoc {
     int capacity;
     bool bom;            // The file started with a UTF-8 byte order mark
     const char *eol;     // The ending new lines get: the file's first one, else "\n"
-    const char *why;     // Why the last inidoc_set() failed; "" after one that succeeded
+    const char *why;     // Why the last set, add or list-mode remove failed; "" after one that succeeded
 };
 
 static const char *const EOL_LF = "\n";
@@ -47,6 +47,7 @@ static const char *const TOO_LONG_WITH_SPACING =
 static const char *const SECTION_TOO_LONG =
     "the section's name is too long for one line of config.ini (199 bytes at most)";
 static const char *const NO_SAFE_PLACE = "it would change how other lines read";
+static const char *const NOT_A_KEY = "the line is not a key";
 
 // A function to tell whitespace as inih does (isspace in the C locale)
 static bool is_space(char c)
@@ -440,11 +441,11 @@ const char *inidoc_get(const IniDoc *doc, const char *section, const char *key)
 }
 
 // A function to say why `key=value` cannot be written so that inih reads it back unchanged,
-// or NULL when it can
+// or NULL when it can. A line break in either would split the line in two when written out.
 const char *inidoc_check(const char *key, const char *value)
 {
     size_t length = strlen(value);
-    if (strchr(value, '\n') != NULL || strchr(value, '\r') != NULL)
+    if (strchr(value, '\n') != NULL || strchr(value, '\r') != NULL || strchr(key, '\n') != NULL || strchr(key, '\r') != NULL)
         return "it contains a line break";
     if (length > 0 && (is_space(value[0]) || is_space(value[length - 1])))
         return "it starts or ends with a space, which config.ini would drop";
@@ -467,12 +468,14 @@ static bool refuse(IniDoc *doc, const char *why)
 }
 
 // A function to say why a key's line would be too long with a new value in place of its old one,
-// or NULL when it would fit. When the key and value fit (inidoc_check), what the line keeps around
-// them is what does not: its comment, or its spacing.
-static const char *too_long_in_line(const Line *line, size_t value_length)
+// or NULL when it would fit. `head` is how many bytes the line will have before the value: its own
+// (line->value_start) when the key stays, or "key=" when list mode writes another key. When the key
+// and value fit (inidoc_check), what the line keeps around them is what does not: its comment, or
+// its spacing.
+static const char *too_long_in_line(const Line *line, size_t head, size_t value_length)
 {
     size_t tail = line->value_start + line->value_length;
-    if (line->value_start + value_length + (line->length - tail) <= INIDOC_MAX_LINE)
+    if (head + value_length + (line->length - tail) <= INIDOC_MAX_LINE)
         return NULL;
     return memchr(line->text + tail, ';', line->length - tail) != NULL ? TOO_LONG_WITH_COMMENT : TOO_LONG_WITH_SPACING;
 }
@@ -487,7 +490,7 @@ static bool replace_value(IniDoc *doc, int i, const char *section, const char *k
     size_t tail = line->value_start + line->value_length;
     size_t value_length = strlen(value);
     size_t new_length = head + value_length + (line->length - tail);
-    const char *too_long = too_long_in_line(line, value_length);
+    const char *too_long = too_long_in_line(line, head, value_length);
     if (too_long != NULL)
         return refuse(doc, too_long);
     Line updated = *line;   // Keeps the line ending; read_line() replaces the name and value
@@ -622,7 +625,7 @@ bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *v
     return ok;
 }
 
-// A function to say why the last inidoc_set() failed; "" when it succeeded
+// A function to say why the last set, add or list-mode remove failed; "" when it succeeded
 const char *inidoc_why(const IniDoc *doc)
 {
     return doc->why;
@@ -639,7 +642,7 @@ const char *inidoc_check_in(const IniDoc *doc, const char *section, const char *
         return reason;
     int i = find_key(doc, section, key);
     if (i >= 0)
-        return too_long_in_line(&doc->lines[i], strlen(value));
+        return too_long_in_line(&doc->lines[i], doc->lines[i].value_start, strlen(value));
     if (find_header(doc, section) < 0 && strlen(section) + 2 > INIDOC_MAX_LINE)
         return SECTION_TOO_LONG;
     return NULL;
@@ -666,6 +669,185 @@ bool inidoc_remove(IniDoc *doc, const char *section, const char *key)
         removed = true;
     }
     return removed;
+}
+
+// A function to tell whether a key is one a list leaves out (the settings its section also holds)
+static bool skipped(const char *key, const char *const *skip)
+{
+    for (int i = 0; skip != NULL && skip[i] != NULL; i++) {
+        if (strcmp(skip[i], key) == 0)
+            return true;
+    }
+    return false;
+}
+
+// A function to list a section's key lines in order, every one (a key may repeat), leaving out the
+// keys in `skip` (NULL-terminated; NULL for none). It fills at most `max` items and returns how many
+// there are. Continuation lines are not listed: they move with their key.
+int inidoc_list(const IniDoc *doc, const char *section, const char *const *skip, IniDocItem *items, int max)
+{
+    int count = 0;
+    for (int i = 0; i < doc->count; i++) {
+        const Line *line = &doc->lines[i];
+        if (line->kind != LINE_KEY || !same_section(section_name(doc, line->section), section) || skipped(line->name, skip))
+            continue;
+        if (count < max)
+            items[count] = (IniDocItem) { .line = i, .key = line->name, .value = line->value, .text = line->text };
+        count++;
+    }
+    return count;
+}
+
+// A function to find a section's key line by its whole text; -1 when no line reads so
+int inidoc_find_line(const IniDoc *doc, const char *section, const char *text)
+{
+    size_t length = strlen(text);
+    for (int i = 0; i < doc->count; i++) {
+        const Line *line = &doc->lines[i];
+        if (line->kind == LINE_KEY && line->length == length && memcmp(line->text, text, length) == 0 &&
+            same_section(section_name(doc, line->section), section))
+            return i;
+    }
+    return -1;
+}
+
+// A function to tell whether a key line has continuation lines after it
+static bool has_continuations(const IniDoc *doc, int i)
+{
+    return end_of_key(doc, i) != i;
+}
+
+// A function to set one line of a list section. The same key keeps the line's spacing and trailing
+// comment; another key is written as key=value with the comment kept. The line must read back as
+// written and stay a key of its own; another key over continuation lines is refused, since they
+// would start setting it. So is another key that would take continuation lines it did not have:
+// after a key with an empty name, indented lines are keys of their own (inih empties prev_name).
+bool inidoc_list_set(IniDoc *doc, int line, const char *key, const char *value)
+{
+    doc->why = "";
+    if (line < 0 || line >= doc->count || doc->lines[line].kind != LINE_KEY)
+        return refuse(doc, NOT_A_KEY);
+    const char *reason = inidoc_check(key, value);
+    if (reason != NULL)
+        return refuse(doc, reason);
+    Line *old = &doc->lines[line];
+    bool same_key = strcmp(old->name, key) == 0;
+    // Needed beside the read-back below, which cannot see this case: renamed to an empty name, the
+    // key ends its continuation lines (inih empties prev_name), and each becomes a key of its own
+    if (!same_key && has_continuations(doc, line))
+        return refuse(doc, NO_SAFE_PLACE);
+    size_t tail = old->value_start + old->value_length;
+    size_t head = same_key ? old->value_start : strlen(key) + 1;
+    size_t value_length = strlen(value);
+    size_t new_length = head + value_length + (old->length - tail);
+    const char *too_long = too_long_in_line(old, head, value_length);
+    if (too_long != NULL)
+        return refuse(doc, too_long);
+    Line updated = *old;   // Keeps the line ending; read_line() replaces the name and value
+    updated.text = alloc_malloc(new_length + 1);
+    if (updated.text == NULL)
+        return refuse(doc, OUT_OF_MEMORY);
+    if (same_key)
+        memcpy(updated.text, old->text, head);
+    else {
+        memcpy(updated.text, key, head - 1);
+        updated.text[head - 1] = '=';
+    }
+    memcpy(updated.text + head, value, value_length);
+    memcpy(updated.text + head + value_length, old->text + tail, old->length - tail);
+    updated.text[new_length] = '\0';
+    updated.length = new_length;
+    if (!read_line(&updated)) {
+        alloc_free(updated.text);
+        return refuse(doc, OUT_OF_MEMORY);
+    }
+    Line before = *old;
+    *old = updated;
+    classify_all(doc);
+    const Line *now = &doc->lines[line];
+    if (now->kind != LINE_KEY || strcmp(now->name, key) != 0 || strcmp(now->value, value) != 0 ||
+        (!same_key && has_continuations(doc, line))) {
+        free_line(&doc->lines[line]);
+        doc->lines[line] = before;
+        classify_all(doc);
+        return refuse(doc, NO_SAFE_PLACE);
+    }
+    free_line(&before);
+    return true;
+}
+
+// A function to prove a list line just inserted at `at`: exactly one more key, reading as written,
+// with no line after it that inih would read as its value
+static bool list_line_proven(const IniDoc *doc, int at, const char *key, const char *value, int keys_before)
+{
+    const Line *line = &doc->lines[at];
+    return count_keys(doc) == keys_before + 1 && line->kind == LINE_KEY && strcmp(line->name, key) == 0 &&
+           strcmp(line->value, value) == 0 && end_of_key(doc, at) == at;
+}
+
+// A function to add a line to a list section: after its last key and that key's continuation lines,
+// else (no key yet) under its header, else at the end of the section; a missing section is added at
+// the end of the file. Refused only when no place is safe.
+bool inidoc_list_add(IniDoc *doc, const char *section, const char *key, const char *value)
+{
+    doc->why = "";
+    const char *reason = inidoc_check(key, value);
+    if (reason != NULL)
+        return refuse(doc, reason);
+    size_t size = strlen(key) + strlen(value) + 2;
+    char *text = alloc_malloc(size);
+    if (text == NULL)
+        return refuse(doc, OUT_OF_MEMORY);
+    snprintf(text, size, "%s=%s", key, value);
+    int header = find_header(doc, section);
+    bool ok = false;
+    if (header < 0)
+        ok = add_section(doc, text, section, key, value);
+    else {
+        int after_last_key = -1;
+        for (int i = 0; i < doc->count; i++) {
+            const Line *line = &doc->lines[i];
+            if (line->kind == LINE_KEY && same_section(section_name(doc, line->section), section))
+                after_last_key = end_of_key(doc, i) + 1;
+        }
+        int section_end = header + 1;
+        while (section_end < doc->count && doc->lines[section_end].kind != LINE_SECTION)
+            section_end++;
+        int places[2] = { after_last_key >= 0 ? after_last_key : header + 1, section_end };
+        for (int i = 0; i < 2 && !ok && doc->why != OUT_OF_MEMORY; i++) {
+            if (i > 0 && places[i] == places[0])
+                break;
+            int keys_before = count_keys(doc);
+            if (!insert_line(doc, places[i], text))
+                refuse(doc, OUT_OF_MEMORY);
+            else if (list_line_proven(doc, places[i], key, value, keys_before))
+                ok = true;
+            else {
+                remove_line(doc, places[i]);
+                refuse(doc, NO_SAFE_PLACE);
+            }
+        }
+    }
+    alloc_free(text);
+    if (ok)
+        doc->why = "";
+    return ok;
+}
+
+// A function to remove one line of a list section, with its continuation lines, so none is left for
+// inih to read as the value of the key before it. A key with an empty name is refused, as
+// inidoc_remove() refuses it: the indented lines after it are keys of their own, and with it gone
+// they would become the key before it's continuations. inidoc_why() says why a remove failed.
+bool inidoc_list_remove(IniDoc *doc, int line)
+{
+    doc->why = "";
+    if (line < 0 || line >= doc->count || doc->lines[line].kind != LINE_KEY)
+        return refuse(doc, NOT_A_KEY);
+    if (doc->lines[line].name[0] == '\0')
+        return refuse(doc, NO_SAFE_PLACE);
+    remove_continuations(doc, line);
+    remove_line(doc, line);
+    return true;
 }
 
 // A function to free a document

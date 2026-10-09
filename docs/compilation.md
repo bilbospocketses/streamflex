@@ -10,7 +10,7 @@ title: Compilation Guide
 
 ## Overview
  StreamFlex builds natively on Linux and Windows, and features a cross-platform CMake build system. The following external dependencies are required:
- - SDL ≥ 2.0.14
+ - SDL ≥ 2.0.18
  - SDL_image ≥ 2.0.5
  - SDL_ttf ≥ 2.0.15
  - inih

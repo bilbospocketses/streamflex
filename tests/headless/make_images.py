@@ -1,11 +1,11 @@
 """Write small PNGs for the headless checks.
 
 Usage: python3 make_images.py <folder>
-           three solid-colour PNGs for the background checks
+           three solid-color PNGs for the background checks
        python3 make_images.py --keyed <file.png> <r,g,b> <rgb|rgba>
-           a 512 px icon for the chroma key check: a frame of the colour given, 128 px wide, around
+           a 512 px icon for the chroma key check: a frame of the color given, 128 px wide, around
            a square of one-pixel columns, black and #020202 in turn, fully opaque; RGB, or RGBA
-           with alpha 255. Neither colour is the default chroma key, #010101, but drawn at half
+           with alpha 255. Neither color is the default chroma key, #010101, but drawn at half
            size a linear filter averages each pair of columns to exactly #010101.
 """
 import os
@@ -14,8 +14,8 @@ import sys
 import zlib
 
 
-def png(path, width, height, rows, colour_type):
-    """Write a PNG from its rows of pixel bytes (colour type 2 = RGB, 6 = RGBA), with no library
+def png(path, width, height, rows, color_type):
+    """Write a PNG from its rows of pixel bytes (color type 2 = RGB, 6 = RGBA), with no library
     beyond the standard one."""
     raw = b"".join(b"\x00" + row for row in rows)
 
@@ -25,13 +25,13 @@ def png(path, width, height, rows, colour_type):
 
     with open(path, "wb") as f:
         f.write(b"\x89PNG\r\n\x1a\n")
-        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, colour_type, 0, 0, 0)))
+        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)))
         f.write(chunk(b"IDAT", zlib.compress(raw)))
         f.write(chunk(b"IEND", b""))
 
 
 def keyed(path, frame, alpha):
-    """Write the chroma key check's icon: the frame colour, with black and #020202 columns in the middle."""
+    """Write the chroma key check's icon: the frame color, with black and #020202 columns in the middle."""
     extra = b"\xff" if alpha else b""
     columns = [bytes((0, 0, 0) if x % 2 == 0 else (2, 2, 2)) + extra for x in range(512)]
     edge = bytes(frame) + extra

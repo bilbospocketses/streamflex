@@ -126,7 +126,7 @@ static void test_compute_grid_height_limited(void)
     CHECK_INT(layout_compute(&p, &SCREEN_1080, 18, &g, NULL, 0), 0);
     CHECK_INT(g.button, 180);    // (972 - 2*96 - 2*30) / 3 - 60
     CHECK_INT(g.x_origin, 180);  // (1920 - (6*180 + 5*96)) / 2
-    CHECK_INT(g.y_origin, 84);   // centred at 540, then kept inside: 54 + 30
+    CHECK_INT(g.y_origin, 84);   // centered at 540, then kept inside: 54 + 30
     CHECK_INT(g.y_advance, 336); // 180 + 60 + 96
 }
 
@@ -204,8 +204,8 @@ static void test_compute_limits(void)
     CHECK(strstr(why, "not even one") != NULL);
 }
 
-// A function to test centring: a partial single row on its own buttons, a partial last row on the columns
-static void test_compute_centring(void)
+// A function to test centering: a partial single row on its own buttons, a partial last row on the columns
+static void test_compute_centering(void)
 {
     LayoutParams p = params(3, 6, 0);
     LayoutGeometry g;
@@ -669,7 +669,7 @@ int main(void)
     test_compute_reduces_overflowing_axis();
     test_compute_fails_when_nothing_fits();
     test_compute_limits();
-    test_compute_centring();
+    test_compute_centering();
     test_compute_vcenter_clamp();
     test_compute_clock_band();
     test_parse_title_values();
