@@ -29,6 +29,7 @@ void print_usage(void);
 bool has_exit_hotkey(void);
 void set_exit_hotkey(SDL_Keycode keycode);
 SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey
+int unused_exit_hotkeys(SDL_Keycode *out, int max);   // The later :exit bindings, which nothing runs; how many
 void register_exit_hotkey(void);
 void clear_exit_hotkey(void);
 void check_exit_hotkey(SDL_SysWMmsg *msg);

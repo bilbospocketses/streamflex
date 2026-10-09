@@ -309,13 +309,19 @@ void debug_gamepad(GamepadControl *gamepad_controls)
 
 void debug_hotkeys(Hotkey *hotkeys)
 {
-    // On Windows the exit hotkey is not in the list: Windows holds it (register_exit_hotkey())
+    // On Windows the exit hotkey is not in the list: Windows holds it (register_exit_hotkey()). A
+    // later :exit binding is not the exit hotkey and runs nothing; it is listed, and says so, so the
+    // list holds every hotkey "the bindings now hold N hotkeys" counts.
 #ifdef _WIN32
     SDL_Keycode exit_code = exit_hotkey_keycode();
+    SDL_Keycode unused[16];
+    int unused_count = unused_exit_hotkeys(unused, 16);
 #else
     SDL_Keycode exit_code = 0;
+    SDL_Keycode unused[1];
+    int unused_count = 0;
 #endif
-    if (hotkeys == NULL && exit_code == 0) {
+    if (hotkeys == NULL && exit_code == 0 && unused_count == 0) {
         log_debug("No hotkeys detected");
         return;
     }
@@ -329,7 +335,14 @@ void debug_hotkeys(Hotkey *hotkeys)
     if (exit_code != 0) {
         log_debug("Hotkey %i Keycode: %X", index, exit_code);
         log_debug("Hotkey %i Command: %s (the exit hotkey, which Windows holds)", index, SCMD_EXIT);
+        index++;
     }
+    for (int i = 0; i < unused_count && i < (int) (sizeof(unused) / sizeof(unused[0])); i++, index++) {
+        log_debug("Hotkey %i Keycode: %X", index, unused[i]);
+        log_debug("Hotkey %i Command: %s (not used: only the first :exit is the exit hotkey)", index, SCMD_EXIT);
+    }
+    if (unused_count > (int) (sizeof(unused) / sizeof(unused[0])))
+        log_debug("And %i more %s hotkeys, not used", unused_count - (int) (sizeof(unused) / sizeof(unused[0])), SCMD_EXIT);
     log_debug("");
 }
 

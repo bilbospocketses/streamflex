@@ -27,6 +27,9 @@ extern SDL_SysWMinfo wm_info;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
 static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
+#define UNUSED_EXITS_KEPT 16
+static SDL_Keycode unused_exits[UNUSED_EXITS_KEPT];   // :exit bindings after the exit hotkey, which nothing runs...
+static int unused_exit_count = 0;                     // ...and how many, past the ones kept too
 static wchar_t self_path[32768];   // The program a restart starts, found before anything is torn down
 static wchar_t self_line[32768];   // Its command line, which CreateProcessW may write to
 static PROCESS_INFORMATION fresh;  // The fresh copy a restart made, waiting until this one is torn down
@@ -393,8 +396,13 @@ bool has_exit_hotkey()
 // A function to store an exit hotkey
 void set_exit_hotkey(SDL_Keycode keycode)
 {
-    if (exit_hotkey) 
+    // Only the first is the exit hotkey: a later one is kept for the debug log's list, which names it unused
+    if (exit_hotkey) {
+        if (unused_exit_count < UNUSED_EXITS_KEPT)
+            unused_exits[unused_exit_count] = keycode;
+        unused_exit_count++;
         return;
+    }
     exit_hotkey = sdl_to_win32_keycode(keycode);
     exit_hotkey_code = keycode;
     if (!exit_hotkey)
@@ -405,6 +413,15 @@ void set_exit_hotkey(SDL_Keycode keycode)
 SDL_Keycode exit_hotkey_keycode()
 {
     return exit_hotkey ? exit_hotkey_code : 0;
+}
+
+// A function to give the :exit bindings set_exit_hotkey() left unused, for the debug log's list:
+// up to `max` of their keycodes into `out`, and how many there are in all
+int unused_exit_hotkeys(SDL_Keycode *out, int max)
+{
+    for (int i = 0; i < unused_exit_count && i < max && i < UNUSED_EXITS_KEPT; i++)
+        out[i] = unused_exits[i];
+    return unused_exit_count;
 }
 
 // A function to register the exit hotkey with Windows
@@ -423,6 +440,7 @@ void clear_exit_hotkey()
     if (exit_hotkey)
         UnregisterHotKey(wm_info.info.win.window, 1);
     exit_hotkey = 0;
+    unused_exit_count = 0;
 }
 
 // A function to check if the exit hotkey was pressed, and close the active window if so
