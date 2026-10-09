@@ -240,6 +240,50 @@ grep -q 'Settings: \[Titles\] Font is unchanged' "$log" && ! grep -q 'Settings: 
 result "fonts: OK on the font in use, named by a relative path, changes nothing (exit $(cat "$out/f59-relok.code"))" $ok
 grep -E 'Settings: (\[Titles\]|nothing changed|saved)' "$log" | sed 's/^/      /'
 
+# The same, started from a folder without it: the file is found beside the executable, so it is
+# there and not taken as gone, and OK still changes nothing
+cfg=$(f59_config f59-relokexe "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=./assets/fonts/OpenSans-Regular.ttf\n$F59_MAIN")
+# shellcheck disable=SC2086
+( cd "$TESTER_HOME" && STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg run_keys f59-relokexe $TITLES_FONT +wait_fonts Return Menu )
+log=$out/f59-relokexe.log
+ok=1
+grep -qxF 'Title font: /work/build/./assets/fonts/OpenSans-Regular.ttf (face 0)' "$log" \
+    && grep -q 'Settings: \[Titles\] Font is unchanged' "$log" && ! grep -q 'Settings: \[Titles\] Font .* -> ' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" \
+    && [ "$(f59_key "$cfg" Titles Font)" = ./assets/fonts/OpenSans-Regular.ttf ] && ran_clean f59-relokexe && ok=0
+result "fonts: OK on the font in use, found beside the executable, changes nothing (exit $(cat "$out/f59-relokexe.code"))" $ok
+grep -E 'Settings: (\[Titles\]|nothing changed|saved)' "$log" | sed 's/^/      /'
+
+# The configured file gone: the cursor starts on the bundled font the titles fell back to, and OK
+# there writes that font, so the dead path leaves the file
+cfg=$(f59_config f59-goneok "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=$TESTER_HOME/fonts/gone.ttf\n$F59_MAIN")
+chown tester:tester "$TESTER_HOME/cfg"   # The save writes its backup beside the file
+# shellcheck disable=SC2086
+STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg UNTIL='Settings saved' \
+    run_keys f59-goneok $TITLES_FONT +wait_fonts Return BackSpace BackSpace
+log=$out/f59-goneok.log
+reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')
+ok=1
+grep -qF "Settings: [Titles] Font $TESTER_HOME/fonts/gone.ttf -> $BUNDLED/OpenSans-Regular.ttf" "$log" \
+    && [ "${reads%%|*}" = 'Open Sans' ] && [ "$(f59_key "$cfg" Titles Font)" = "$BUNDLED/OpenSans-Regular.ttf" ] \
+    && ! grep -q '^FontFace=' "$cfg" && ran_clean f59-goneok && ok=0
+result "fonts: OK on the bundled font a gone file fell back to writes it (exit $(cat "$out/f59-goneok.code"))" $ok
+grep -E 'Settings: (\[Titles\]|nothing changed|saved)' "$log" | sed 's/^/      /'
+
+# With no Font in the file the titles use the bundled font, which is not a file gone: OK on its
+# row, where the cursor starts, changes nothing and writes no Font
+cfg=$(f59_config f59-noneok "[General]\nDefaultMenu=Main\n$F59_MAIN")
+# shellcheck disable=SC2086
+STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg run_keys f59-noneok $TITLES_FONT +wait_fonts Return Menu
+log=$out/f59-noneok.log
+reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')
+ok=1
+grep -q 'Settings: \[Titles\] Font is unchanged' "$log" && ! grep -q 'Settings: \[Titles\] Font .* -> ' "$log" \
+    && [ "${reads%%|*}" = 'Open Sans' ] && grep -q 'Settings: nothing changed' "$log" && ! grep -q '^Font=' "$cfg" \
+    && ran_clean f59-noneok && ok=0
+result "fonts: OK on the bundled font, with no Font in the file, changes nothing (exit $(cat "$out/f59-noneok.code"))" $ok
+grep -E 'Settings: (\[Titles\]|nothing changed|saved)' "$log" | sed 's/^/      /'
+
 # A family whose regular face is named Book, as DejaVu's is: DejaVu Sanz (DejaVu Sans renamed),
 # its Bold in the first folder read and its Book in the second, so the Bold is found first.
 # Choosing the family writes the Book file. It is the eighth row, after the 7 bundled families.

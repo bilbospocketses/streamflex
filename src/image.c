@@ -689,3 +689,14 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
     }
     return 0;
 }
+
+// A function to tell whether a configured font file is there, where load_font() looks for it: the
+// path as given, else a relative one beside the executable
+bool font_file_found(const char *configured)
+{
+    if (fileio_is_file(configured))
+        return true;
+    char exe_font_path[MAX_PATH_CHARS + 1];
+    return config.exe_path != NULL && is_relative_path(configured)
+        && fileio_is_file(join_paths(exe_font_path, sizeof(exe_font_path), 2, config.exe_path, configured));
+}

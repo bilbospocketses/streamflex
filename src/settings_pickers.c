@@ -12,6 +12,7 @@
 #include "listpick.h"
 #include "colourpick.h"
 #include "fileio.h"
+#include "image.h"
 #include "test_hooks.h"
 #include "util.h"
 #include "debug.h"
@@ -729,12 +730,15 @@ static void put_colour_back(void)
 // once). The same file's other face leaves the font's own value as it was, so the refresh is run
 // here. `chosen` is copied before the list goes. The row of the font in use (where the cursor
 // started) changes nothing, though the file names it otherwise: the Windows config's relative
-// .\assets\fonts\... would become the list's full path.
+// .\assets\fonts\... would become the list's full path. That row is written all the same when the
+// configured file is gone: the font in use is then the bundled one the loader fell back to, and
+// choosing it takes the dead path out of the file.
 static void choose_font(const char *chosen)
 {
     char in_use[FONT_VALUE_MAX];
     fonts_value_in_use(slot->def->id, in_use, sizeof(in_use));
-    if (strcmp(chosen, in_use) == 0) {
+    bool gone = original.text[0] != '\0' && !font_file_found(original.text);
+    if (strcmp(chosen, in_use) == 0 && !gone) {
         choose(original);
         return;
     }
