@@ -1,14 +1,14 @@
-"""Read the colour at chosen points of a screenshot taken with `xwd -root`, and compare it; or count
-the pixels of one colour inside the box that another colour spans.
+"""Read the color at chosen points of a screenshot taken with `xwd -root`, and compare it; or count
+the pixels of one color inside the box that another color spans.
 
 Usage: python3 pixels.py <file.xwd> x,y=r,g,b [x,y=r,g,b ...]
        python3 pixels.py <file.xwd> count r,g,b inside r,g,b
 
 The first form prints one line per point, "x,y r,g,b (want r,g,b)", and exits 0 only when every
-point is within 4 of the colour it wants in each channel, 1 when any is not. The second finds the
-box spanned by the pixels of exactly the second colour (an icon's frame, say), and prints
-"box x0,y0 to x1,y1: N pixels of r,g,b" for the pixels of exactly the first colour inside it; it
-exits 0, or 1 when no pixel has the second colour. Both exit 2 when the file is not a screenshot
+point is within 4 of the color it wants in each channel, 1 when any is not. The second finds the
+box spanned by the pixels of exactly the second color (an icon's frame, say), and prints
+"box x0,y0 to x1,y1: N pixels of r,g,b" for the pixels of exactly the first color inside it; it
+exits 0, or 1 when no pixel has the second color. Both exit 2 when the file is not a screenshot
 they can read.
 """
 import struct
@@ -18,7 +18,7 @@ TOLERANCE = 4
 
 
 def channel(value, mask):
-    """Take one colour channel out of a pixel value, scaled to 0-255."""
+    """Take one color channel out of a pixel value, scaled to 0-255."""
     if mask == 0:
         return 0
     shift = (mask & -mask).bit_length() - 1
@@ -27,7 +27,7 @@ def channel(value, mask):
 
 
 def exact(rgb, masks):
-    """The pixel value, under the colour masks, of a colour given as 0-255 channels."""
+    """The pixel value, under the color masks, of a color given as 0-255 channels."""
     value = 0
     for level, mask in zip(rgb, masks):
         shift = (mask & -mask).bit_length() - 1
@@ -36,7 +36,7 @@ def exact(rgb, masks):
     return value
 
 
-def colour(text):
+def color(text):
     return tuple(int(n) for n in text.split(","))
 
 
@@ -89,12 +89,12 @@ def main():
             print("usage: pixels.py <file.xwd> count r,g,b inside r,g,b")
             return 2
         return count_inside(data, start, width, height, bytes_per_line, size, byte_order,
-                            (red_mask, green_mask, blue_mask), colour(sys.argv[3]), colour(sys.argv[5]))
+                            (red_mask, green_mask, blue_mask), color(sys.argv[3]), color(sys.argv[5]))
     ok = True
     for arg in sys.argv[2:]:
         point, want = arg.split("=")
         x, y = (int(n) for n in point.split(","))
-        want = colour(want)
+        want = color(want)
         if not (0 <= x < width and 0 <= y < height):
             print(f"{point} is outside the {width} x {height} screen")
             ok = False

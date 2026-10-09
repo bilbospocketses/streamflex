@@ -717,7 +717,7 @@ Menu *create_menu(const char *menu_name, size_t *num_menus)
     return new_menu;
 }
 
-// A function to give every menu an array of its entries by index, for the layout maths
+// A function to give every menu an array of its entries by index, for the layout math
 void build_menu_items()
 {
     for (Menu *m = config.first_menu; m != NULL; m = m->next) {

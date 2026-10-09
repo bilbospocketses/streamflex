@@ -144,7 +144,7 @@ typedef struct menu {
     char            *name;
     unsigned int    num_entries;
     Entry           *first_entry;
-    Entry           **items;          // Entries by index, for the layout maths
+    Entry           **items;          // Entries by index, for the layout math
     LayoutOverrides overrides;        // Per-menu Rows/Columns/IconSize; 0 = from [Layout]
     LayoutPosition  position;         // Selected entry and scroll position
     int             rendered_size;    // Button size the textures were rendered at; 0 = not yet

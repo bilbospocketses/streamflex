@@ -544,7 +544,7 @@ for fail in list:f60 rows:f60 select:custom; do
     [ "$(f59_count 'Settings: the list cannot open: out of memory' "$log")" = 2 ] \
         && [ "$(f59_count 'Settings: opened the picker for \[Titles\] Font' "$log")" = 1 ] \
         && sed -n '/the list cannot open/,$p' "$log" | grep -q 'Settings: closed the picker for \[Titles\] Font' \
-        && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
+        && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Color" \
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
     result "fonts: a font list whose $step step runs out of memory does not open (exit $(cat "$out/$name.code"))" $ok
 done
@@ -557,7 +557,7 @@ for step in fontlist fontscan fontfolder fontthread; do
     ok=1
     [ "$(f59_count 'Settings: the fonts cannot be listed: out of memory, or no thread' "$log")" = 2 ] \
         && ! grep -q 'Settings: opened the picker' "$log" && ! grep -q 'Fonts: listing' "$log" \
-        && sed -n '/the fonts cannot be listed/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
+        && sed -n '/the fonts cannot be listed/,$p' "$log" | grep -q "Settings: the cursor's row reads Color" \
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
     result "fonts: a font list whose $step step fails does not open (exit $(cat "$out/$name.code"))" $ok
 done
@@ -587,7 +587,7 @@ for fail in 'faces:reading the faces' 'fontadd:listing the font files'; do
         && [ "$(f59_count "Fonts: out of memory while $what, so the list was let go" "$log")" = 2 ] \
         && [ "$(f59_count 'Settings: the list cannot open: out of memory' "$log")" = 2 ] \
         && ! grep -q 'Fonts: found' "$log" \
-        && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Colour" \
+        && sed -n '/the list cannot open/,$p' "$log" | grep -q "Settings: the cursor's row reads Color" \
         && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
     result "fonts: a font list that runs out of memory $what is let go, and read anew (exit $(cat "$out/$name.code"))" $ok
 done

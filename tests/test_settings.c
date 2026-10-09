@@ -153,7 +153,7 @@ static void test_steps(void)
     CHECK_INT(stepped(SET_ID_LAYOUT_ICON_SIZE, below, &odd, 1, 1).number, 200);
     CHECK_INT(stepped(SET_ID_LAYOUT_ICON_SIZE, odd, &odd, 1, 1).number, 256);
 
-    // Colours: a custom colour from the file first, then the presets in order
+    // Colors: a custom color from the file first, then the presets in order
     SettingValue custom = parsed(SET_ID_BACKGROUND_COLOR, "#123456");
     value = stepped(SET_ID_BACKGROUND_COLOR, custom, &custom, 1, 1);
     CHECK_STR(formatted(SET_ID_BACKGROUND_COLOR, &value), "#000000");
@@ -167,7 +167,7 @@ static void test_steps(void)
     value = stepped(SET_ID_BACKGROUND_COLOR, black, &black, 1, 20);
     CHECK_STR(formatted(SET_ID_BACKGROUND_COLOR, &value), "#4A1520");
 
-    // A swatch that is not a preset (the titles' default white) steps as a custom colour does: first,
+    // A swatch that is not a preset (the titles' default white) steps as a custom color does: first,
     // then the presets in order, and back to it
     SettingValue white = parsed(SET_ID_TITLE_COLOR, "#FFFFFF");
     value = stepped(SET_ID_TITLE_COLOR, white, &white, -1, 1);
@@ -221,12 +221,12 @@ static void test_descriptions(void)
     CHECK_STR(described(SET_ID_MENU_ICON_SIZE, &inherit, &cap), "All menus (256 px)");
     CHECK_STR(described(SET_ID_LAYOUT_ICON_SIZE, &cap, NULL), "256 px");
     value = parsed(SET_ID_BACKGROUND_MODE, "Color");
-    CHECK_STR(described(SET_ID_BACKGROUND_MODE, &value, NULL), "Colour");
+    CHECK_STR(described(SET_ID_BACKGROUND_MODE, &value, NULL), "Color");
     value = parsed(SET_ID_BACKGROUND_COLOR, "#1E1E1E");
     CHECK_STR(described(SET_ID_BACKGROUND_COLOR, &value, NULL), "Charcoal");
     value = parsed(SET_ID_BACKGROUND_COLOR, "#123456");
     CHECK_STR(described(SET_ID_BACKGROUND_COLOR, &value, NULL), "Custom #123456");
-    // A colour row names any of the colour picker's swatches, as the picker does, not only the presets
+    // A color row names any of the color picker's swatches, as the picker does, not only the presets
     value = parsed(SET_ID_TITLE_COLOR, "#FFFFFF");
     CHECK_STR(described(SET_ID_TITLE_COLOR, &value, NULL), "White");
     value = parsed(SET_ID_CLOCK_COLOR, "#D04890");
@@ -343,7 +343,7 @@ static void test_top_and_menus(void)
         CHECK_INT(rows[i].kind, SETTINGS_ROW_LINK);
     }
     CHECK_STR(rows[0].value, "Main");            // General: the default menu
-    CHECK_STR(rows[1].value, "Colour");
+    CHECK_STR(rows[1].value, "Color");
     CHECK_STR(rows[2].value, "2 menus");
     CHECK_STR(rows[3].value, "Medium");
     CHECK_STR(rows[4].value, "On");
@@ -354,11 +354,11 @@ static void test_top_and_menus(void)
     CHECK_INT(rows[9].kind, SETTINGS_ROW_DIVIDER);
     CHECK_STR(rows[10].label, "Discard changes");
     CHECK(!rows[10].enabled);
-    CHECK(rows[10].why == NULL);                  // Greyed with no reason: the cursor skips it
+    CHECK(rows[10].why == NULL);                  // Grayed with no reason: the cursor skips it
     CHECK_INT(settings_cursor(state), 0);
     for (int i = 0; i < 8; i++)
         CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_MOVED);
-    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is greyed
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is grayed
     CHECK_INT(settings_cursor(state), 8);
     for (int i = 0; i < 6; i++)
         settings_command(state, SETTINGS_UP);
@@ -408,7 +408,7 @@ static void test_top_and_menus(void)
     CHECK(settings_changed(settings_slot(state, SET_ID_MENU_ROWS, 1)));
     CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_NONE);
 
-    // Back at the top, Discard is offered; it puts every value back and greys out again
+    // Back at the top, Discard is offered; it puts every value back and grays out again
     settings_command(state, SETTINGS_BACK);
     settings_command(state, SETTINGS_BACK);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
@@ -421,7 +421,7 @@ static void test_top_and_menus(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_DISCARD);
     CHECK_INT(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number, 3);
     CHECK(!settings_any_changed(state));
-    CHECK_INT(settings_cursor(state), 8);                    // Off the greyed Discard, onto Controls
+    CHECK_INT(settings_cursor(state), 8);                    // Off the grayed Discard, onto Controls
 
     CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_CLOSE);
     CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_CLOSE_HOME);
@@ -439,12 +439,12 @@ static void test_background_page(void)
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BACKGROUND);
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 5);
-    CHECK_STR(rows[0].value, "Colour");
-    CHECK_STR(rows[1].label, "Colour");
+    CHECK_STR(rows[0].value, "Color");
+    CHECK_STR(rows[1].label, "Color");
     CHECK_STR(rows[1].value, "Black");
-    CHECK_INT(rows[1].kind, SETTINGS_ROW_PICK);                // OK opens the colour picker...
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_PICK);                // OK opens the color picker...
     CHECK_STR(rows[2].label, "Overlay");
-    CHECK_STR(rows[3].label, "Overlay colour");
+    CHECK_STR(rows[3].label, "Overlay color");
     CHECK(!rows[3].enabled);                                    // ...and the overlay's rows wait for it
     CHECK_STR(rows[3].why, "Turn Overlay on to change this");
     CHECK(!rows[4].enabled);
@@ -486,7 +486,7 @@ static void test_background_page(void)
     CHECK_STR(rows[2].value, "30 s");
     CHECK_STR(rows[3].value, "1.5 s");
 
-    // Transparent: a note in place of the mode's rows, then the see-through colour and the overlay's three rows
+    // Transparent: a note in place of the mode's rows, then the see-through color and the overlay's three rows
     settings_command(state, SETTINGS_RIGHT);
     count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 6);
@@ -844,10 +844,10 @@ static void test_new_steps(void)
     CHECK(after_huge.percent);
     CHECK_INT(after_huge.number, 0);
 
-    // Vertical centre: 25-75% in fives
-    SettingValue centre = parsed(SET_ID_VCENTER, "50%");
-    CHECK_INT(stepped(SET_ID_VCENTER, centre, &centre, 1, 20).number, 7500);
-    CHECK_INT(stepped(SET_ID_VCENTER, centre, &centre, -1, 20).number, 2500);
+    // Vertical center: 25-75% in fives
+    SettingValue center = parsed(SET_ID_VCENTER, "50%");
+    CHECK_INT(stepped(SET_ID_VCENTER, center, &center, 1, 20).number, 7500);
+    CHECK_INT(stepped(SET_ID_VCENTER, center, &center, -1, 20).number, 2500);
 
     // Padding: 0-20% in twos; a file's px sits first
     SettingValue padding = parsed(SET_ID_TITLE_PADDING, "8%");
@@ -961,12 +961,12 @@ static void no_such_row(const char *helper, const char *label)
 {
     check_count++;
     check_failures++;
-    fprintf(stderr, "%s: no row labelled \"%s\" on this page\n", helper, label);
+    fprintf(stderr, "%s: no row labeled \"%s\" on this page\n", helper, label);
 }
 
 // A function to find a row on the page on show by its label. A label the page does not have fails
-// a check and gives an empty row (no label, no value, greyed, no reason), never NULL.
-static const SettingsRow *row_labelled(SettingsState *state, SettingsRow *rows, const char *label)
+// a check and gives an empty row (no label, no value, grayed, no reason), never NULL.
+static const SettingsRow *row_labeled(SettingsState *state, SettingsRow *rows, const char *label)
 {
     static SettingsRow missing;
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
@@ -974,7 +974,7 @@ static const SettingsRow *row_labelled(SettingsState *state, SettingsRow *rows, 
         if (strcmp(rows[i].label, label) == 0)
             return &rows[i];
     }
-    no_such_row("row_labelled", label);
+    no_such_row("row_labeled", label);
     return &missing;
 }
 
@@ -1001,7 +1001,7 @@ static void open_page(SettingsState *state, const char *label)
     settings_command(state, SETTINGS_OK);
 }
 
-// A function to test the General page: its rows, a row greyed with its reason, and the default menu
+// A function to test the General page: its rows, a row grayed with its reason, and the default menu
 static void test_general_page(void)
 {
     SettingsState *state = open_model();
@@ -1022,8 +1022,8 @@ static void test_general_page(void)
     CHECK_INT(rows[9].kind, SETTINGS_ROW_PICK);
     CHECK_STR(rows[9].value, "None");
 
-    // FPS limit is greyed while VSync is on, says why, and can take the cursor, which changes nothing
-    const SettingsRow *fps = row_labelled(state, rows, "FPS limit");
+    // FPS limit is grayed while VSync is on, says why, and can take the cursor, which changes nothing
+    const SettingsRow *fps = row_labeled(state, rows, "FPS limit");
     CHECK(fps != NULL && !fps->enabled);
     CHECK_STR(fps->why, "Used only while VSync is off");
     cursor_to(state, "FPS limit");
@@ -1032,7 +1032,7 @@ static void test_general_page(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
     settings_command(state, SETTINGS_UP);                        // VSync off: FPS limit opens up
     CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_CHANGED);
-    fps = row_labelled(state, rows, "FPS limit");
+    fps = row_labeled(state, rows, "FPS limit");
     CHECK(fps->enabled && fps->why == NULL);
 
     // Default menu steps through the menus in file order, and OK opens its list
@@ -1055,27 +1055,27 @@ static void test_general_page(void)
     SettingSlot *startup = settings_slot(state, SET_ID_STARTUP_CMD, -1);
     CHECK_INT(settings_choose_value(state, startup, &quit).kind, SETTINGS_EVENT_CHANGED);
     CHECK_INT(settings_choose_value(state, startup, &quit).kind, SETTINGS_EVENT_NONE);
-    CHECK_STR(row_labelled(state, rows, "Startup command")->value, "Quit StreamFlex");
+    CHECK_STR(row_labeled(state, rows, "Startup command")->value, "Quit StreamFlex");
     settings_free(state);
 }
 
 // A function to test the pages whose rows follow a switch: Titles, Highlight, Clock
-static void test_greyed_rows(void)
+static void test_grayed_rows(void)
 {
     SettingsState *state = open_model();
     SettingsRow rows[SETTINGS_MAX_ROWS];
 
-    // Titles: Shadow colour waits for Shadows; titles off greys everything but Show titles
+    // Titles: Shadow color waits for Shadows; titles off grays everything but Show titles
     open_page(state, "Titles");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TITLES);
-    static const char *const labels[] = { "Size", "Show titles", "Font", "Colour", "Opacity", "Shadows",
-                                          "Shadow colour", "Too long", "Padding" };
+    static const char *const labels[] = { "Size", "Show titles", "Font", "Color", "Opacity", "Shadows",
+                                          "Shadow color", "Too long", "Padding" };
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 9);
     for (int i = 0; i < count && i < (int) (sizeof(labels) / sizeof(labels[0])); i++)
         CHECK_STR(rows[i].label, labels[i]);
-    CHECK_STR(row_labelled(state, rows, "Shadow colour")->why, "Turn Shadows on to change this");
-    CHECK_INT(row_labelled(state, rows, "Font")->kind, SETTINGS_ROW_PICK);
+    CHECK_STR(row_labeled(state, rows, "Shadow color")->why, "Turn Shadows on to change this");
+    CHECK_INT(row_labeled(state, rows, "Font")->kind, SETTINGS_ROW_PICK);
     cursor_to(state, "Show titles");
     settings_command(state, SETTINGS_LEFT);
     count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
@@ -1089,25 +1089,25 @@ static void test_greyed_rows(void)
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_STR(rows[3].value, "Off");                     // The top page's summary follows
 
-    // Highlight: the outline's colour and opacity wait for a size; corners and an outline exclude each other
+    // Highlight: the outline's color and opacity wait for a size; corners and an outline exclude each other
     open_page(state, "Highlight");
-    CHECK_STR(row_labelled(state, rows, "Outline colour")->why, "The outline's size is 0");
-    CHECK(row_labelled(state, rows, "Corner radius")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Outline color")->why, "The outline's size is 0");
+    CHECK(row_labeled(state, rows, "Corner radius")->enabled);
     cursor_to(state, "Outline size");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK(row_labelled(state, rows, "Outline colour")->enabled);
-    CHECK_STR(row_labelled(state, rows, "Corner radius")->why, "Rounded corners cannot be drawn with an outline");
+    CHECK(row_labeled(state, rows, "Outline color")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Corner radius")->why, "Rounded corners cannot be drawn with an outline");
     settings_command(state, SETTINGS_BACK);
 
-    // Clock: off greys all but Show; with it on, the date's rows wait for Show date
+    // Clock: off grays all but Show; with it on, the date's rows wait for Show date
     open_page(state, "Clock");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CLOCK);
-    CHECK_STR(row_labelled(state, rows, "Size")->why, "The clock is off");
+    CHECK_STR(row_labeled(state, rows, "Size")->why, "The clock is off");
     cursor_to(state, "Show");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK(row_labelled(state, rows, "Size")->enabled);
-    CHECK_STR(row_labelled(state, rows, "Date")->why, "Turn Show date on to change this");
-    CHECK_STR(row_labelled(state, rows, "Weekday")->why, "Turn Show date on to change this");
+    CHECK(row_labeled(state, rows, "Size")->enabled);
+    CHECK_STR(row_labeled(state, rows, "Date")->why, "Turn Show date on to change this");
+    CHECK_STR(row_labeled(state, rows, "Weekday")->why, "Turn Show date on to change this");
     settings_free(state);
 }
 
@@ -1119,8 +1119,8 @@ static void test_other_pages(void)
     char path[256];
     open_page(state, "Screensaver");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_SCREENSAVER);
-    CHECK_STR(row_labelled(state, rows, "Idle time")->why, "The screensaver is off");
-    CHECK_STR(row_labelled(state, rows, "Idle time")->value, "5 min");
+    CHECK_STR(row_labeled(state, rows, "Idle time")->why, "The screensaver is off");
+    CHECK_STR(row_labeled(state, rows, "Idle time")->value, "5 min");
     cursor_to(state, "On");                                  // On: the top page says after how long
     settings_command(state, SETTINGS_RIGHT);
     settings_command(state, SETTINGS_BACK);
@@ -1159,13 +1159,13 @@ static void test_other_pages(void)
     SettingsEvent event = settings_command(state, SETTINGS_RIGHT);
     CHECK_INT(event.kind, SETTINGS_EVENT_CHANGED);
     CHECK_INT(event_value(&event)->number, 0);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "Xbox Controller");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "Xbox Controller");
     settings_command(state, SETTINGS_RIGHT);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "8BitDo Pro 2");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "8BitDo Pro 2");
     CHECK_INT(settings_command(state, SETTINGS_RIGHT).kind, SETTINGS_EVENT_NONE);
     SettingValue gone = parsed(SET_ID_GAMEPAD_DEVICE, "5");
     settings_set_entry(state, SET_ID_GAMEPAD_DEVICE, -1, &gone);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "Pad 5 (not connected)");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "Pad 5 (not connected)");
     settings_command(state, SETTINGS_LEFT);
     CHECK_INT(settings_slot(state, SET_ID_GAMEPAD_DEVICE, -1)->value.number, 1);
     event = settings_command(state, SETTINGS_RIGHT);                 // And back to it
@@ -1183,14 +1183,14 @@ static void test_other_pages(void)
     settings_set_pads(state, nameless, 2);
     settings_command(state, SETTINGS_LEFT);
     CHECK_INT(settings_slot(state, SET_ID_GAMEPAD_DEVICE, -1)->value.number, 0);
-    CHECK_STR(row_labelled(state, rows, "Device")->value, "Pad 0");
+    CHECK_STR(row_labeled(state, rows, "Device")->value, "Pad 0");
     CHECK_STR(settings_pad_name(state, 0), "Pad 0");
     CHECK_STR(settings_pad_name(state, 1), "8BitDo Pro 2");
 
-    // The gamepad off greys the rest, and the pages above say so
+    // The gamepad off grays the rest, and the pages above say so
     cursor_to(state, "On");
     settings_command(state, SETTINGS_LEFT);
-    CHECK_STR(row_labelled(state, rows, "Device")->why, "The gamepad is off");
+    CHECK_STR(row_labeled(state, rows, "Device")->why, "The gamepad is off");
     settings_command(state, SETTINGS_BACK);
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_STR(rows[0].value, "Off");
@@ -1202,35 +1202,35 @@ static void test_other_pages(void)
 }
 
 // A function to test what the model tells the screen about a row: whether Left and Right step it (a
-// setting, or a picker for a colour, the default menu or the device) and whether the cursor may rest
-// on it (not a divider or a note, and a greyed row only when it says why)
+// setting, or a picker for a color, the default menu or the device) and whether the cursor may rest
+// on it (not a divider or a note, and a grayed row only when it says why)
 static void test_row_steps_and_selectable(void)
 {
     SettingsState *state = open_model();
     SettingsRow rows[SETTINGS_MAX_ROWS];
     open_page(state, "General");
-    const SettingsRow *row = row_labelled(state, rows, "Default menu");
+    const SettingsRow *row = row_labeled(state, rows, "Default menu");
     CHECK(row->kind == SETTINGS_ROW_PICK && row->steps && settings_row_selectable(row));   // A picker that steps
-    row = row_labelled(state, rows, "Startup command");
+    row = row_labeled(state, rows, "Startup command");
     CHECK(row->kind == SETTINGS_ROW_PICK && !row->steps && settings_row_selectable(row));  // One that does not
-    row = row_labelled(state, rows, "Wrap around");
+    row = row_labeled(state, rows, "Wrap around");
     CHECK(row->kind == SETTINGS_ROW_SETTING && row->steps);                               // A setting
-    row = row_labelled(state, rows, "FPS limit");                                          // Greyed, with a reason
+    row = row_labeled(state, rows, "FPS limit");                                          // Grayed, with a reason
     CHECK(!row->enabled && row->why != NULL && row->steps && settings_row_selectable(row));
     settings_command(state, SETTINGS_BACK);
 
     open_page(state, "Background");
-    row = row_labelled(state, rows, "Colour");
-    CHECK(row->kind == SETTINGS_ROW_PICK && row->steps);                                  // A colour steps
+    row = row_labeled(state, rows, "Color");
+    CHECK(row->kind == SETTINGS_ROW_PICK && row->steps);                                  // A color steps
     settings_command(state, SETTINGS_BACK);
 
     open_page(state, "Titles");
-    row = row_labelled(state, rows, "Font");
+    row = row_labeled(state, rows, "Font");
     CHECK(row->kind == SETTINGS_ROW_PICK && !row->steps);                                 // A font does not
     settings_command(state, SETTINGS_BACK);
 
     open_page(state, "Controls");
-    row = row_labelled(state, rows, "Gamepad");
+    row = row_labeled(state, rows, "Gamepad");
     CHECK(row->kind == SETTINGS_ROW_LINK && !row->steps && settings_row_selectable(row));  // A link
     open_page(state, "Gamepad");
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
@@ -1241,7 +1241,7 @@ static void test_row_steps_and_selectable(void)
     settings_command(state, SETTINGS_BACK);
     settings_command(state, SETTINGS_BACK);
 
-    // The top page: a divider, and Discard greyed with nothing to discard and no reason to give
+    // The top page: a divider, and Discard grayed with nothing to discard and no reason to give
     count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 11);
     CHECK(rows[9].kind == SETTINGS_ROW_DIVIDER && !settings_row_selectable(&rows[9]));
@@ -1306,10 +1306,10 @@ static void test_add_binding(void)
     settings_command(state, SETTINGS_OK);
     settings_captured(state, 0x4000003E);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CONFIRM);
-    CHECK_STR(row_labelled(state, rows, "Keep")->label, "Keep");
+    CHECK_STR(row_labeled(state, rows, "Keep")->label, "Keep");
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);   // Keep
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003E");
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "#4000003E");
 
     // The command commits the new binding
     cursor_to(state, "Command");
@@ -1350,7 +1350,7 @@ static void test_navigation_confirm(void)
     bindings_free(b);
 }
 
-// A function to test Remove: greyed with the floor's reason for the last way to a command, and
+// A function to test Remove: grayed with the floor's reason for the last way to a command, and
 // allowed otherwise
 static void test_remove_binding(void)
 {
@@ -1362,7 +1362,7 @@ static void test_remove_binding(void)
     settings_command(state, SETTINGS_DOWN);                  // The binding
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    const SettingsRow *remove = row_labelled(state, rows, "Remove");
+    const SettingsRow *remove = row_labeled(state, rows, "Remove");
     CHECK(remove != NULL && remove->enabled);
     cursor_to(state, "Remove");
     SettingsEvent event = settings_command(state, SETTINGS_OK);
@@ -1428,8 +1428,8 @@ static void test_binding_pages(void)
     Bindings *b = with_lines(state, "Hotkey1=#4000003A;:quit\nHotkey2=#4000003B;:home", "ButtonY=:quit", false);
     open_page(state, "Controls");
     CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
-    CHECK_INT(row_labelled(state, rows, "Keyboard")->kind, SETTINGS_ROW_LINK);
-    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "2 hotkeys");
+    CHECK_INT(row_labeled(state, rows, "Keyboard")->kind, SETTINGS_ROW_LINK);
+    CHECK_STR(row_labeled(state, rows, "Keyboard")->value, "2 hotkeys");
 
     // The gamepad's page: its own rows, then Add binding, its bindings and the built-in note
     open_page(state, "Gamepad");
@@ -1446,15 +1446,15 @@ static void test_binding_pages(void)
     // A new binding's page: no key, no command (not those of the binding last open), and Cancel; its
     // key is captured from the pad
     open_page(state, "ButtonY");
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "Quit StreamFlex");
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "Quit StreamFlex");
     settings_command(state, SETTINGS_BACK);
     cursor_to(state, "Add binding");
     settings_command(state, SETTINGS_OK);
     settings_path(state, path, sizeof(path));
     CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Gamepad" ARROW "Binding");
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "Choose" ELLIPSIS);
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "None");
-    CHECK_INT(row_labelled(state, rows, "Command")->action, SETTINGS_ACTION_BIND_COMMAND);
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "Choose" ELLIPSIS);
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "None");
+    CHECK_INT(row_labeled(state, rows, "Command")->action, SETTINGS_ACTION_BIND_COMMAND);
     SettingsEvent event = settings_command(state, SETTINGS_OK);
     CHECK_INT(event.kind, SETTINGS_EVENT_CAPTURE);
     CHECK_INT(event.device, BINDINGS_GAMEPAD);
@@ -1481,7 +1481,7 @@ static void test_binding_pages(void)
     cursor_to(state, "Cancel");
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "Choose" ELLIPSIS);
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "Choose" ELLIPSIS);
 
     // Cancel on a new binding's page goes back to the list, adding nothing
     cursor_to(state, "Cancel");
@@ -1492,9 +1492,9 @@ static void test_binding_pages(void)
     // The Keyboard row leaves removed hotkeys out of its count
     settings_command(state, SETTINGS_BACK);
     bindings_remove(b, BINDINGS_KEYBOARD, 1);
-    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "1 hotkey");
+    CHECK_STR(row_labeled(state, rows, "Keyboard")->value, "1 hotkey");
     bindings_remove(b, BINDINGS_KEYBOARD, 0);
-    CHECK_STR(row_labelled(state, rows, "Keyboard")->value, "0 hotkeys");
+    CHECK_STR(row_labeled(state, rows, "Keyboard")->value, "0 hotkeys");
     open_page(state, "Keyboard");
     settings_path(state, path, sizeof(path));
     CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Keyboard");
@@ -1504,7 +1504,7 @@ static void test_binding_pages(void)
     // Changed bindings alone make Discard available
     settings_command(state, SETTINGS_BACK);
     settings_command(state, SETTINGS_BACK);
-    CHECK(row_labelled(state, rows, "Discard changes")->enabled);
+    CHECK(row_labeled(state, rows, "Discard changes")->enabled);
     settings_free(state);
     bindings_free(b);
 }
@@ -1528,8 +1528,8 @@ static void test_binding_edits(void)
     // An existing binding's page shows its key and command; a new command changes it in place
     open_page(state, "#4000003A");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003A");
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "Quit StreamFlex");
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "#4000003A");
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "Quit StreamFlex");
     CHECK_STR(settings_binding_command(state), ":quit");
     SettingsEvent event = settings_bind_command(state, ":home");
     CHECK_INT(event.kind, SETTINGS_EVENT_BINDINGS);
@@ -1542,7 +1542,7 @@ static void test_binding_edits(void)
     open_page(state, "#4000003A");
     CHECK_INT(settings_bind_command(state, "").kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "None");
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "None");
     CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 0)->command, ":home");
     settings_command(state, SETTINGS_BACK);
 
@@ -1551,7 +1551,7 @@ static void test_binding_edits(void)
     settings_command(state, SETTINGS_OK);
     CHECK_INT(settings_bind_command(state, ":sleep").kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "Sleep");
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "Sleep");
     CHECK_INT(bindings_count(b, BINDINGS_KEYBOARD), 2);
     cursor_to(state, "Key");
     settings_command(state, SETTINGS_OK);
@@ -1566,7 +1566,7 @@ static void test_binding_edits(void)
 
     // The new binding's own page offers Remove: a new line is not a line with no name
     open_page(state, "#4000003E");
-    CHECK(row_labelled(state, rows, "Remove")->enabled);
+    CHECK(row_labeled(state, rows, "Remove")->enabled);
     settings_command(state, SETTINGS_BACK);
 
     // A capture that ends with no reason leaves no notice
@@ -1642,7 +1642,7 @@ static void test_binding_waits(void)
 
 // A function to test the changes the pages refuse, each with its reason and nothing changed: the
 // floor's, a Windows exit hotkey off F1 to F24, a command config.ini cannot hold on one line, and a
-// Remove greyed by the floor or by a line with no name; and a binding the list has no room for
+// Remove grayed by the floor or by a line with no name; and a binding the list has no room for
 static void test_binding_refusals(void)
 {
     SettingsState *state = open_model();
@@ -1656,8 +1656,8 @@ static void test_binding_refusals(void)
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
     CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":up");
     CHECK_STR(settings_binding_command(state), ":up");       // The page keeps its command, not the refused one
-    CHECK_STR(row_labelled(state, rows, "Command")->value, "Up");
-    const SettingsRow *remove = row_labelled(state, rows, "Remove");
+    CHECK_STR(row_labeled(state, rows, "Command")->value, "Up");
+    const SettingsRow *remove = row_labeled(state, rows, "Remove");
     CHECK(!remove->enabled);
     CHECK_STR(remove->why, "That would leave no key for Up");
     cursor_to(state, "Remove");
@@ -1668,13 +1668,13 @@ static void test_binding_refusals(void)
     bindings_free(b);
 
     // A [Hotkeys] line with no name runs, and is listed; removing it would change how the lines after
-    // it read, so Remove is greyed, but its command can change
+    // it read, so Remove is grayed, but its command can change
     state = open_model();
     b = with_bindings(state, "=#4000003C;:home");
     open_page(state, "Controls");
     open_page(state, "Keyboard");
     open_page(state, "#4000003C");
-    remove = row_labelled(state, rows, "Remove");
+    remove = row_labeled(state, rows, "Remove");
     CHECK(!remove->enabled);
     CHECK_STR(remove->why, "This line has no name in config.ini, so removing it would change how the lines after it read");
     cursor_to(state, "Remove");
@@ -1685,13 +1685,13 @@ static void test_binding_refusals(void)
     settings_free(state);
     bindings_free(b);
 
-    // The gamepad's floor greys the Remove of OK's only button
+    // The gamepad's floor grays the Remove of OK's only button
     state = open_model();
     b = with_lines(state, "", "ButtonA=:select", false);
     open_page(state, "Controls");
     open_page(state, "Gamepad");
     open_page(state, "ButtonA");
-    CHECK_STR(row_labelled(state, rows, "Remove")->why, "That would leave no button for OK");
+    CHECK_STR(row_labeled(state, rows, "Remove")->why, "That would leave no button for OK");
     settings_free(state);
     bindings_free(b);
 
@@ -1720,7 +1720,7 @@ static void test_binding_refusals(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
     CHECK_STR(settings_notice(state), "The exit hotkey must be F1 to F24, but not F12");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BINDING);
-    CHECK_STR(row_labelled(state, rows, "Key")->value, "#4000003A");
+    CHECK_STR(row_labeled(state, rows, "Key")->value, "#4000003A");
     CHECK_INT(bindings_at(b, BINDINGS_KEYBOARD, 0)->code, 0x4000003A);
     settings_free(state);
     bindings_free(b);
@@ -1787,7 +1787,7 @@ static void test_binding_no_room(void)
     settings_set_bindings(state, b, NULL);
     open_page(state, "Controls");
     open_page(state, "Keyboard");
-    CHECK_STR(row_labelled(state, rows, "#4000003A")->value, "Quit StreamFlex");
+    CHECK_STR(row_labeled(state, rows, "#4000003A")->value, "Quit StreamFlex");
     new_binding(state, 0x40000042);
     static const AllocHooks failing = { failing_realloc, plain_free };
     alloc_set_hooks(&failing);
@@ -1957,7 +1957,7 @@ int main(void)
     test_background_entered_incomplete();
     test_more_menus_than_rows();
     test_general_page();
-    test_greyed_rows();
+    test_grayed_rows();
     test_other_pages();
     test_new_round_trips();
     test_new_rejects();

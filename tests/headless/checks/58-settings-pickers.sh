@@ -1,7 +1,7 @@
-# The pickers (3b): a colour typed in the hex editor and shown in the preview, the command picker,
+# The pickers (3b): a color typed in the hex editor and shown in the preview, the command picker,
 # the default menu's list, and the contrast warning
 
-# Background > Colour > Custom: #000000 becomes #102030 one digit at a time, the preview shows it,
+# Background > Color > Custom: #000000 becomes #102030 one digit at a time, the preview shows it,
 # and it saves
 shows_hex() { look "$1" "$2" hex 'Settings: previewing #102030' 30,30=16,32,48; }
 hex_keys="Down Down Down Down Return Up Right Right Up Up Right Right Up Up Up"
@@ -10,14 +10,14 @@ CFG=$cfg run_keys f58-hex Menu Down Return Down Return $hex_keys +shows_hex Retu
 ok=1
 grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #000000 -> #102030' "$out/f58-hex.log" \
     && grep -qx 'hex yes' "$out/f58-hex.seen" && ran_clean f58-hex && ok=0
-result "pickers: a colour typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
+result "pickers: a color typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
 
-# Back in the colour picker puts the colour back: nothing is saved
-CFG=$FX/f60-color.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
+# Back in the color picker puts the color back: nothing is saved
+CFG=$FX/f60-color.ini run_keys f58-colorback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
 ok=1
-grep -q 'Settings: previewing #33383D' "$out/f58-colourback.log" && grep -q 'Settings: nothing changed' "$out/f58-colourback.log" \
-    && ran_clean f58-colourback && ok=0
-result "pickers: Back in the colour picker puts the colour back (exit $(cat "$out/f58-colourback.code"))" $ok
+grep -q 'Settings: previewing #33383D' "$out/f58-colorback.log" && grep -q 'Settings: nothing changed' "$out/f58-colorback.log" \
+    && ran_clean f58-colorback && ok=0
+result "pickers: Back in the color picker puts the color back (exit $(cat "$out/f58-colorback.code"))" $ok
 
 # General > Startup command: the command picker lists None, the special commands, the submenus and
 # the entries' commands; Quit StreamFlex is the tenth row. General > Default menu: Games from its list.
@@ -31,7 +31,7 @@ grep -qx 'StartupCmd=:quit' "$cfg" && grep -qx 'DefaultMenu=Games' "$cfg" \
 result "pickers: a command and a default menu chosen from their lists save (exit $(cat "$out/f58-command.code"))" $ok
 grep -E 'Settings: (the command picker|\[General\])' "$out/f58-command.log" | sed 's/^/      /'
 
-# Titles > Colour: black titles on the black background are 1:1, and the caption says so
+# Titles > Color: black titles on the black background are 1:1, and the caption says so
 CFG=$FX/f60-color.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
 ok=1
 grep -q 'Settings: the note under the preview says White #FFFFFF' "$out/f58-contrast.log" \
@@ -46,7 +46,7 @@ result "pickers: black titles on black warn of low contrast (exit $(cat "$out/f5
 # ---------------------------------------------------------------------------------------------------
 # Beyond the plan's five: each check below proves a branch the five leave unexercised. The debug log
 # says what a picker shows: its path ("page ..."), its key hint, the list's rows on show and the row
-# under its cursor, the colour picker's Custom row and where its swatches are drawn.
+# under its cursor, the color picker's Custom row and where its swatches are drawn.
 ARROW=$(printf ' \xE2\x80\xBA ')
 LEFT_MARK=$(printf '\xE2\x80\xB9')
 RIGHT_MARK=$(printf '\xE2\x80\xBA')
@@ -54,17 +54,17 @@ P58_DOT=$(printf '\xC2\xB7')
 P58_LOW='Low contrast: 2.5:1 against the background'
 p58_downs() { local i; for i in $(seq "$1"); do printf 'Down '; done; }
 
-# The background colour's own picker is not a title's or the clock's colour: it warns of nothing,
-# though every colour it previews is the background it is previewed on
+# The background color's own picker is not a title's or the clock's color: it warns of nothing,
+# though every color it previews is the background it is previewed on
 ok=1
 grep -q 'Settings: the note under the preview says Black #000000' "$out/f58-hex.log" && ! grep -q 'Low contrast' "$out/f58-hex.log" \
-    && ! grep -q 'Low contrast' "$out/f58-colourback.log" && ok=0
-result "pickers: the background colour's picker warns of no contrast" $ok
+    && ! grep -q 'Low contrast' "$out/f58-colorback.log" && ok=0
+result "pickers: the background color's picker warns of no contrast" $ok
 
-# The hex editor: the settings key leaves it without choosing, so the colour typed is not kept
-# (nothing is saved); Back leaves the editor for the grid, where the Custom row keeps the colour typed
-# while the cursor is on it and shows the colour the picker opened with while it is not. In the
-# editor the note calls a colour Custom, even one a swatch has (#000000 as it opens).
+# The hex editor: the settings key leaves it without choosing, so the color typed is not kept
+# (nothing is saved); Back leaves the editor for the grid, where the Custom row keeps the color typed
+# while the cursor is on it and shows the color the picker opened with while it is not. In the
+# editor the note calls a color Custom, even one a swatch has (#000000 as it opens).
 cfg=$(writable_config f60-color)
 # shellcheck disable=SC2046
 CFG=$cfg run_keys f58-hexhome Menu Down Return Down Return $(p58_downs 4) Return Up BackSpace Up Down Return Up Menu
@@ -74,17 +74,17 @@ ok=1
 [ "$custom" = '#000000 #100000 #000000 #100000 #200000 ' ] && grep -q 'Settings: previewing #200000' "$log" \
     && grep -q 'Settings: the note under the preview says Custom #000000' "$log" \
     && grep -q 'Settings: the note under the preview says Custom #200000' "$log" \
-    && grep -qF "Settings: page Settings${ARROW}Background${ARROW}Colour" "$log" \
+    && grep -qF "Settings: page Settings${ARROW}Background${ARROW}Color" "$log" \
     && grep -qF "Settings: the key hint reads Arrows edit the digits $P58_DOT OK keeps $P58_DOT Back returns" "$log" \
     && grep -qF "Settings: the key hint reads Arrows move $P58_DOT OK chooses $P58_DOT Back cancels" "$log" \
     && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f60-color.ini" "$cfg" && ran_clean f58-hexhome && ok=0
 result "pickers: the settings key leaves the hex editor keeping nothing, and the Custom row follows the cursor (exit $(cat "$out/f58-hexhome.code"))" $ok
 echo "      the Custom row read: ${custom:-nothing}"
 
-# The preview is applied only when the colour it shows changes: in the hex editor, Right, Right and
-# Left choose a digit and leave the colour as it is, and so do opening the editor and leaving it
+# The preview is applied only when the color it shows changes: in the hex editor, Right, Right and
+# Left choose a digit and leave the color as it is, and so do opening the editor and leaving it
 # (Up on the second digit then shows #010000, which proves the digit moved). What was last previewed
-# is forgotten as the picker opens again: Teal, the last colour previewed before Back, is previewed
+# is forgotten as the picker opens again: Teal, the last color previewed before Back, is previewed
 # again by the first Down in the picker opened anew.
 # shellcheck disable=SC2046
 CFG=$FX/f60-color.ini run_keys f58-digits Menu Down Return Down Return $(p58_downs 4) Return Right Right Left Up \
@@ -93,19 +93,19 @@ log=$out/f58-digits.log
 previews=$(grep -o 'Settings: previewing #[0-9A-F]*' "$log" | sed 's/.* //' | tr '\n' ' ')
 ok=1
 [ "$previews" = '#07606C #808080 #80C040 #000000 #010000 #80C040 #808080 #07606C #07606C ' ] \
-    && [ "$(grep -c 'Settings: the colour picker put \[Background\] Color back' "$log")" = 2 ] \
+    && [ "$(grep -c 'Settings: the color picker put \[Background\] Color back' "$log")" = 2 ] \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-digits && ok=0
-result "pickers: a key that leaves the previewed colour as it is applies nothing (exit $(cat "$out/f58-digits.code"))" $ok
+result "pickers: a key that leaves the previewed color as it is applies nothing (exit $(cat "$out/f58-digits.code"))" $ok
 echo "      previewed: ${previews:-nothing}"
 
-# The swatches as drawn: Red in its place, the colour the picker opened with (White) marked in its
+# The swatches as drawn: Red in its place, the color the picker opened with (White) marked in its
 # middle with its opposite and outlined, as the cursor is on it, and the cell of a swatch the cursor
 # is not on left without an outline
 p58_swatches() {
     local name=$1 pid=$2 line c ox oy seen=no
     xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
-    if wait_line 'Settings: the colour picker draws' "$pid"; then
-        line=$(grep -o 'Settings: the colour picker draws [0-9]* px cells from [0-9]*,[0-9]*' "$LOG" | tail -1)
+    if wait_line 'Settings: the color picker draws' "$pid"; then
+        line=$(grep -o 'Settings: the color picker draws [0-9]* px cells from [0-9]*,[0-9]*' "$LOG" | tail -1)
         read -r c ox oy <<< "$(sed 's/.* draws \([0-9]*\) px cells from \([0-9]*\),\([0-9]*\)/\1 \2 \3/' <<< "$line")"
         [ -n "${oy:-}" ] && screen_shows "$name" swatches \
             "$((ox + 2 * c + c / 2)),$((oy + 2 * c + c / 2))=208,48,48" \
@@ -119,7 +119,7 @@ p58_swatches() {
 CFG=$FX/f60-color.ini run_keys f58-swatches Menu Down Down Down Return Down Down Down Return +p58_swatches Menu
 ok=1
 grep -qx 'swatches yes' "$out/f58-swatches.seen" && ran_clean f58-swatches && ok=0
-result "pickers: the swatches are drawn in their colours, the current one marked and the cursor's outlined (exit $(cat "$out/f58-swatches.code"))" $ok
+result "pickers: the swatches are drawn in their colors, the current one marked and the cursor's outlined (exit $(cat "$out/f58-swatches.code"))" $ok
 sed 's/^/      /' "$out/f58-swatches.pixels" 2> /dev/null | tail -6
 
 # On a short, wide screen (a second X display, 3840 x 480, where the column is a fifth of the width
@@ -140,14 +140,14 @@ done
   CFG=$FX/f60-color.ini run_keys f58-short Menu Down Return Down Return $(p58_downs 4) Return )
 kill "$p58_xvfb" 2> /dev/null; wait "$p58_xvfb" 2> /dev/null
 log=$out/f58-short.log
-line=$(grep -o 'Settings: the colour picker draws [0-9]* px cells from [0-9]*,[0-9]*, down to [0-9]* of [0-9]*' "$log" | tail -1)
+line=$(grep -o 'Settings: the color picker draws [0-9]* px cells from [0-9]*,[0-9]*, down to [0-9]* of [0-9]*' "$log" | tail -1)
 read -r p58_end p58_bottom <<< "$(sed 's/.* down to \([0-9]*\) of \([0-9]*\)/\1 \2/' <<< "$line")"
 ok=1
 [ -n "${p58_bottom:-}" ] && [ "$p58_end" -le "$p58_bottom" ] \
     && grep -qF "Settings: the key hint reads Arrows edit the digits $P58_DOT" "$log" \
     && ran_clean f58-short && ok=0
 result "pickers: on a short, wide screen the swatches end above the key hint (exit $(cat "$out/f58-short.code"))" $ok
-echo "      ${line:-the cells of the colour picker were never logged}"
+echo "      ${line:-the cells of the color picker were never logged}"
 
 # The hex editor's one-line key hint fits the column, uncut, on the smallest screens: 1280 x 720,
 # the smallest the specs lay the screens out for, and 1280 x 800, whose taller text (a share of the
@@ -190,8 +190,8 @@ done
 
 # Home (a hotkey for :home in these fixtures) and the settings key close the picker before they
 # close settings: with a save that fails (a read-only config), the failure page that follows takes
-# the keys, and Leave without saving closes. A list picker, then the colour picker, whose previewed
-# colour goes back first.
+# the keys, and Leave without saving closes. A list picker, then the color picker, whose previewed
+# color goes back first.
 cfg=$(writable_config f58-custom)
 chmod 444 "$cfg"
 # shellcheck disable=SC2046
@@ -202,13 +202,13 @@ grep -q "Couldn't save to $cfg" "$out/f58-listhome.log" && grep -q 'Settings: le
 result "pickers: Home closes a list picker before it closes settings (exit $(cat "$out/f58-listhome.code"))" $ok
 cfg=$(writable_config f58-home)
 chmod 444 "$cfg"
-CFG=$cfg run_keys f58-colourhome Menu Down Return Down Right Return Right Home Down Return
-log=$out/f58-colourhome.log
+CFG=$cfg run_keys f58-colorhome Menu Down Return Down Right Return Right Home Down Return
+log=$out/f58-colorhome.log
 ok=1
-grep -q 'Settings: previewing #33383D' "$log" && grep -q 'Settings: the colour picker put \[Background\] Color back' "$log" \
+grep -q 'Settings: previewing #33383D' "$log" && grep -q 'Settings: the color picker put \[Background\] Color back' "$log" \
     && grep -q "Couldn't save to $cfg" "$log" && grep -q 'Settings: leaving without saving' "$log" \
-    && cmp -s "$FX/f58-home.ini" "$cfg" && ran_clean f58-colourhome && ok=0
-result "pickers: Home puts the previewed colour back and closes the colour picker before settings (exit $(cat "$out/f58-colourhome.code"))" $ok
+    && cmp -s "$FX/f58-home.ini" "$cfg" && ran_clean f58-colorhome && ok=0
+result "pickers: Home puts the previewed color back and closes the color picker before settings (exit $(cat "$out/f58-colorhome.code"))" $ok
 
 # A command in the file that no row gives is pinned first as Custom, and choosing it keeps it; a
 # :quit hotkey is ignored while a picker is open; Back leaves a list without choosing; Home from a
@@ -378,7 +378,7 @@ STREAMFLEX_TEST_NO_LUMINANCE=1 CFG=$FX/f58-image.ini run_keys f58-nolum Menu Dow
 log=$out/f58-nolum.log
 ok=1
 grep -q 'Background: the image on show could not be measured' "$log" \
-    && grep -qF "Settings: the cursor's row reads Colour: $LEFT_MARK Black $RIGHT_MARK" "$log" \
+    && grep -qF "Settings: the cursor's row reads Color: $LEFT_MARK Black $RIGHT_MARK" "$log" \
     && ! grep -q 'Low contrast' "$log" && ran_clean f58-nolum && ok=0
 result "pickers: an image that could not be measured warns of nothing (exit $(cat "$out/f58-nolum.code"))" $ok
 
@@ -398,7 +398,7 @@ ok=1
 sed -n '/Settings: \[Background\] Mode Color -> Image/q; p' "$log" \
        | grep -qF 'Settings: the note under the preview says Low contrast: 1.9:1 against the background' \
     && sed -n '/Settings: \[Background\] Mode Slideshow -> Transparent/,$p' "$log" \
-       | grep -qF "Settings: the cursor's row reads Colour: $LEFT_MARK White $RIGHT_MARK" \
+       | grep -qF "Settings: the cursor's row reads Color: $LEFT_MARK White $RIGHT_MARK" \
     && ! sed -n '/Settings: \[Background\] Mode Slideshow -> Transparent/,$p' "$log" | grep -q 'Low contrast' \
     && grep -qx 'Mode=Transparent' "$cfg" && ran_clean f58-overlay && ok=0
 result "pickers: the overlay counts in the contrast, and a transparent background warns of nothing (exit $(cat "$out/f58-overlay.code"))" $ok

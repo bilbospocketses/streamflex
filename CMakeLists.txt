@@ -19,7 +19,7 @@ if (EXTRA_WARNINGS)
   endif ()
 endif ()
 
-# MSVC calls the POSIX names (strdup) deprecated in favour of its own (_strdup); the code uses the
+# MSVC calls the POSIX names (strdup) deprecated in favor of its own (_strdup); the code uses the
 # POSIX names on every platform. This reaches the launcher, platform and test targets, not vcpkg's builds
 if (MSVC)
   add_compile_definitions(_CRT_NONSTDC_NO_DEPRECATE)

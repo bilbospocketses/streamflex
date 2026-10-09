@@ -50,7 +50,7 @@ typedef struct {
     int y;
     int w;
     int h;
-    int vcenter;     // Vertical centre of the button block, in px from the top of the screen
+    int vcenter;     // Vertical center of the button block, in px from the top of the screen
 } LayoutArea;
 
 // The computed layout of one menu
@@ -58,8 +58,8 @@ typedef struct {
     int rows;          // After any reduction to fit the screen
     int columns;
     int button;        // Square button size in px
-    int x_advance;     // Distance between neighbouring buttons' x
-    int y_advance;     // Distance between neighbouring rows' y
+    int x_advance;     // Distance between neighboring buttons' x
+    int y_advance;     // Distance between neighboring rows' y
     int x_origin;      // Top-left of the first visible slot
     int y_origin;
     int hpad;          // Highlight padding after capping

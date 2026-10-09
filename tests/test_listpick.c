@@ -40,7 +40,7 @@ static void test_moves(void)
     listpick_free(pick);
 }
 
-// A function to test choosing, a row that cannot be chosen, and cancelling
+// A function to test choosing, a row that cannot be chosen, and canceling
 static void test_choose(void)
 {
     ListPick *pick = sample();
@@ -55,7 +55,7 @@ static void test_choose(void)
     CHECK_STR(listpick_why(pick), "Only on Windows");
     listpick_command(pick, LISTPICK_DOWN, 3);
     CHECK(listpick_why(pick) == NULL);                        // Moving clears the reason
-    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELLED);
+    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELED);
 
     // None chooses the empty value
     CHECK(listpick_select(pick, "", "Custom: "));
@@ -156,7 +156,7 @@ static void test_empty(void)
     CHECK_INT(listpick_count(pick), 0);
     CHECK_INT(listpick_command(pick, LISTPICK_DOWN, 3), LISTPICK_NONE);
     CHECK_INT(listpick_command(pick, LISTPICK_OK, 3), LISTPICK_NONE);
-    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELLED);
+    CHECK_INT(listpick_command(pick, LISTPICK_BACK, 3), LISTPICK_CANCELED);
     CHECK(listpick_row(pick, 0) == NULL);
     listpick_free(pick);
     listpick_free(NULL);

@@ -31,7 +31,7 @@ typedef enum {
     LISTPICK_NONE,       // Nothing happened (an end, or OK on a row that cannot be chosen)
     LISTPICK_MOVED,
     LISTPICK_CHOSEN,     // listpick_chosen() gives the value
-    LISTPICK_CANCELLED
+    LISTPICK_CANCELED
 } ListPickResult;
 
 typedef struct ListPick ListPick;

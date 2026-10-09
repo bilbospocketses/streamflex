@@ -27,7 +27,7 @@ int derive_alpha(int hundredths)
     return hundredths_of(255, max_int(0, min_int(hundredths, 10000)));
 }
 
-// A function to give a colour the alpha of an opacity
+// A function to give a color the alpha of an opacity
 static DeriveColor with_alpha(DeriveColor color, int alpha)
 {
     color.a = (unsigned char) alpha;

@@ -17,7 +17,7 @@
 
 // The names each choice setting reads and writes, NULL-terminated, and what the screen calls them
 static const char *const MODE_NAMES[] = { "Color", "Image", "Slideshow", "Transparent", NULL };
-static const char *const MODE_LABELS[] = { "Colour", "Image", "Slideshow", "Transparent" };
+static const char *const MODE_LABELS[] = { "Color", "Image", "Slideshow", "Transparent" };
 static const char *const ON_LAUNCH_NAMES[] = { "Blank", "None", "Quit", NULL };
 static const char *const ON_LAUNCH_LABELS[] = { "Blank screen", "Keep showing", "Quit" };
 static const char *const OVERSIZE_NAMES[] = { "Truncate", "Shrink", "None", NULL };
@@ -49,7 +49,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_BACKGROUND_MODE] = { .id = SET_ID_BACKGROUND_MODE, .label = "Mode", .section = "Background",
         .key = SETTING_BACKGROUND_MODE, .type = SET_TYPE_CHOICE, .refresh = SET_REFRESH_BACKGROUND,
         .lo = 0, .hi = 3, .names = MODE_NAMES, .labels = MODE_LABELS },
-    [SET_ID_BACKGROUND_COLOR] = { .id = SET_ID_BACKGROUND_COLOR, .label = "Colour", .section = "Background",
+    [SET_ID_BACKGROUND_COLOR] = { .id = SET_ID_BACKGROUND_COLOR, .label = "Color", .section = "Background",
         .key = SETTING_BACKGROUND_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_BACKGROUND_IMAGE] = { .id = SET_ID_BACKGROUND_IMAGE, .label = "Image", .section = "Background",
         .key = SETTING_BACKGROUND_IMAGE, .type = SET_TYPE_PATH, .refresh = SET_REFRESH_BACKGROUND },
@@ -99,11 +99,11 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
         .key = SETTING_QUIT_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
 
     // Background, beyond 3a's
-    [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through colour", .section = "Background",
+    [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through color", .section = "Background",
         .key = SETTING_CHROMA_KEY_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_OVERLAY] = { .id = SET_ID_OVERLAY, .label = "Overlay", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_BACKGROUND },
-    [SET_ID_OVERLAY_COLOR] = { .id = SET_ID_OVERLAY_COLOR, .label = "Overlay colour", .section = "Background",
+    [SET_ID_OVERLAY_COLOR] = { .id = SET_ID_OVERLAY_COLOR, .label = "Overlay color", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_BACKGROUND },
     [SET_ID_OVERLAY_OPACITY] = { .id = SET_ID_OVERLAY_OPACITY, .label = "Overlay opacity", .section = "Background",
         .key = SETTING_BACKGROUND_OVERLAY_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000,
@@ -114,7 +114,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_ICON_SPACING] = { .id = SET_ID_ICON_SPACING, .label = "Icon spacing", .section = "Layout",
         .key = SETTING_ICON_SPACING, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_LAYOUT,
         .lo = 0, .hi = 1000, .step = 100, .max_px = INT_MAX, .flags = SET_FLAG_PX, .fallback = DEFAULT_ICON_SPACING },
-    [SET_ID_VCENTER] = { .id = SET_ID_VCENTER, .label = "Vertical centre", .section = "Layout",
+    [SET_ID_VCENTER] = { .id = SET_ID_VCENTER, .label = "Vertical center", .section = "Layout",
         .key = SETTING_VCENTER, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_LAYOUT,
         .lo = 2500, .hi = 7500, .step = 500, .fallback = DEFAULT_VCENTER },
 
@@ -126,14 +126,14 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_TITLE_FONT_FACE] = { .id = SET_ID_TITLE_FONT_FACE, .label = "Font face", .section = "Titles",
         .key = SETTING_TITLE_FONT_FACE, .type = SET_TYPE_NUMBER, .min = 0, .max = 65535, .can_inherit = true,
         .refresh = SET_REFRESH_TITLE_FONT, .flags = SET_FLAG_HIDDEN, .inherit_label = "0" },
-    [SET_ID_TITLE_COLOR] = { .id = SET_ID_TITLE_COLOR, .label = "Colour", .section = "Titles",
+    [SET_ID_TITLE_COLOR] = { .id = SET_ID_TITLE_COLOR, .label = "Color", .section = "Titles",
         .key = SETTING_TITLE_FONT_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_TITLES },
     [SET_ID_TITLE_OPACITY] = { .id = SET_ID_TITLE_OPACITY, .label = "Opacity", .section = "Titles",
         .key = SETTING_TITLE_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_TITLES,
         .lo = 0, .hi = 10000, .step = 500, .fallback = DEFAULT_TITLE_OPACITY },
     [SET_ID_TITLE_SHADOWS] = { .id = SET_ID_TITLE_SHADOWS, .label = "Shadows", .section = "Titles",
         .key = SETTING_TITLE_SHADOWS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_TITLES },
-    [SET_ID_TITLE_SHADOW_COLOR] = { .id = SET_ID_TITLE_SHADOW_COLOR, .label = "Shadow colour", .section = "Titles",
+    [SET_ID_TITLE_SHADOW_COLOR] = { .id = SET_ID_TITLE_SHADOW_COLOR, .label = "Shadow color", .section = "Titles",
         .key = SETTING_TITLE_SHADOW_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_TITLES },
     [SET_ID_TITLE_OVERSIZE] = { .id = SET_ID_TITLE_OVERSIZE, .label = "Too long", .section = "Titles",
         .key = SETTING_TITLE_OVERSIZE_MODE, .type = SET_TYPE_CHOICE, .refresh = SET_REFRESH_TITLES,
@@ -145,7 +145,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     // Highlight
     [SET_ID_HIGHLIGHT_ENABLED] = { .id = SET_ID_HIGHLIGHT_ENABLED, .label = "Show", .section = "Highlight",
         .key = SETTING_HIGHLIGHT_ENABLED, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_HIGHLIGHT },
-    [SET_ID_HIGHLIGHT_FILL_COLOR] = { .id = SET_ID_HIGHLIGHT_FILL_COLOR, .label = "Fill colour", .section = "Highlight",
+    [SET_ID_HIGHLIGHT_FILL_COLOR] = { .id = SET_ID_HIGHLIGHT_FILL_COLOR, .label = "Fill color", .section = "Highlight",
         .key = SETTING_HIGHLIGHT_FILL_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_HIGHLIGHT },
     [SET_ID_HIGHLIGHT_FILL_OPACITY] = { .id = SET_ID_HIGHLIGHT_FILL_OPACITY, .label = "Fill opacity",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_FILL_OPACITY, .type = SET_TYPE_PERCENT, .min = 0,
@@ -154,7 +154,7 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_HIGHLIGHT_OUTLINE_SIZE] = { .id = SET_ID_HIGHLIGHT_OUTLINE_SIZE, .label = "Outline size",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_OUTLINE_SIZE, .type = SET_TYPE_NUMBER, .min = 0,
         .max = INT_MAX, .refresh = SET_REFRESH_HIGHLIGHT, .lo = 0, .hi = 10, .step = 1, .unit = " px" },
-    [SET_ID_HIGHLIGHT_OUTLINE_COLOR] = { .id = SET_ID_HIGHLIGHT_OUTLINE_COLOR, .label = "Outline colour",
+    [SET_ID_HIGHLIGHT_OUTLINE_COLOR] = { .id = SET_ID_HIGHLIGHT_OUTLINE_COLOR, .label = "Outline color",
         .section = "Highlight", .key = SETTING_HIGHLIGHT_OUTLINE_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_HIGHLIGHT },
     [SET_ID_HIGHLIGHT_OUTLINE_OPACITY] = { .id = SET_ID_HIGHLIGHT_OUTLINE_OPACITY, .label = "Outline opacity",
@@ -174,13 +174,13 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     // Scroll indicators
     [SET_ID_SCROLL_ENABLED] = { .id = SET_ID_SCROLL_ENABLED, .label = "Show", .section = "Scroll Indicators",
         .key = SETTING_SCROLL_INDICATORS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_SCROLL },
-    [SET_ID_SCROLL_FILL_COLOR] = { .id = SET_ID_SCROLL_FILL_COLOR, .label = "Fill colour",
+    [SET_ID_SCROLL_FILL_COLOR] = { .id = SET_ID_SCROLL_FILL_COLOR, .label = "Fill color",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_FILL_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_SCROLL },
     [SET_ID_SCROLL_OUTLINE_SIZE] = { .id = SET_ID_SCROLL_OUTLINE_SIZE, .label = "Outline size",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_OUTLINE_SIZE, .type = SET_TYPE_NUMBER,
         .min = 0, .max = INT_MAX, .refresh = SET_REFRESH_SCROLL, .lo = 0, .hi = 10, .step = 1, .unit = " px" },
-    [SET_ID_SCROLL_OUTLINE_COLOR] = { .id = SET_ID_SCROLL_OUTLINE_COLOR, .label = "Outline colour",
+    [SET_ID_SCROLL_OUTLINE_COLOR] = { .id = SET_ID_SCROLL_OUTLINE_COLOR, .label = "Outline color",
         .section = "Scroll Indicators", .key = SETTING_SCROLL_INDICATOR_OUTLINE_COLOR, .type = SET_TYPE_COLOR,
         .refresh = SET_REFRESH_SCROLL },
     [SET_ID_SCROLL_OPACITY] = { .id = SET_ID_SCROLL_OPACITY, .label = "Opacity", .section = "Scroll Indicators",
@@ -200,11 +200,11 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
     [SET_ID_CLOCK_FONT_FACE] = { .id = SET_ID_CLOCK_FONT_FACE, .label = "Font face", .section = "Clock",
         .key = SETTING_CLOCK_FONT_FACE, .type = SET_TYPE_NUMBER, .min = 0, .max = 65535, .can_inherit = true,
         .refresh = SET_REFRESH_CLOCK, .flags = SET_FLAG_HIDDEN, .inherit_label = "0" },
-    [SET_ID_CLOCK_COLOR] = { .id = SET_ID_CLOCK_COLOR, .label = "Colour", .section = "Clock",
+    [SET_ID_CLOCK_COLOR] = { .id = SET_ID_CLOCK_COLOR, .label = "Color", .section = "Clock",
         .key = SETTING_CLOCK_FONT_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_CLOCK },
     [SET_ID_CLOCK_SHADOWS] = { .id = SET_ID_CLOCK_SHADOWS, .label = "Shadows", .section = "Clock",
         .key = SETTING_CLOCK_SHADOWS, .type = SET_TYPE_BOOL, .refresh = SET_REFRESH_CLOCK },
-    [SET_ID_CLOCK_SHADOW_COLOR] = { .id = SET_ID_CLOCK_SHADOW_COLOR, .label = "Shadow colour", .section = "Clock",
+    [SET_ID_CLOCK_SHADOW_COLOR] = { .id = SET_ID_CLOCK_SHADOW_COLOR, .label = "Shadow color", .section = "Clock",
         .key = SETTING_CLOCK_SHADOW_COLOR, .type = SET_TYPE_COLOR, .refresh = SET_REFRESH_CLOCK },
     [SET_ID_CLOCK_OPACITY] = { .id = SET_ID_CLOCK_OPACITY, .label = "Opacity", .section = "Clock",
         .key = SETTING_CLOCK_OPACITY, .type = SET_TYPE_PERCENT, .min = 0, .max = 10000, .refresh = SET_REFRESH_CLOCK,
@@ -576,7 +576,7 @@ typedef struct {
 
 #define MAX_CANDIDATES 64
 
-// A function to find a colour among the presets; -1 when it is not one
+// A function to find a color among the presets; -1 when it is not one
 static int preset_index(SettingColor color)
 {
     for (int i = 0; i < COLORPICK_PRESETS; i++) {
@@ -587,7 +587,7 @@ static int preset_index(SettingColor color)
     return -1;
 }
 
-// A function to give a step its place: following the default first, then a custom colour, a fixed
+// A function to give a step its place: following the default first, then a custom color, a fixed
 // title size or a px value, then the rest in order
 static long long sort_key(const SettingDef *def, const Candidate *c)
 {
@@ -807,7 +807,7 @@ void setting_describe(const SettingDef *def, const SettingValue *value, const Se
                                       ? def->labels[value->number] : "?");
             break;
         case SET_TYPE_COLOR: {
-            // Named as the colour picker names it: any of its swatches, not only the presets
+            // Named as the color picker names it: any of its swatches, not only the presets
             int swatch = colorpick_find(value->color);
             if (swatch >= 0)
                 snprintf(out, size, "%s", colorpick_name(swatch));
@@ -1116,7 +1116,7 @@ static SettingsRowKind row_kind(const SettingDef *def)
 }
 
 // A function to tell whether Left and Right step a row of a kind and type: every setting row, and a
-// picker whose value has an order to step through (a colour's presets, the menus, the pads). A font's
+// picker whose value has an order to step through (a color's presets, the menus, the pads). A font's
 // or a command's picker only opens with OK.
 static bool row_steps(SettingsRowKind kind, const SettingDef *def)
 {
@@ -1149,10 +1149,10 @@ static SettingsRow global_row(SettingsState *state, SettingId id)
     return setting_row(state, settings_slot(state, id, -1));
 }
 
-// A function to grey a row out with its reason when `grey` holds
-static SettingsRow greyed(SettingsRow row, bool grey, const char *why)
+// A function to gray a row out with its reason when `gray` holds
+static SettingsRow grayed(SettingsRow row, bool gray, const char *why)
 {
-    if (grey) {
+    if (gray) {
         row.enabled = false;
         row.why = why;
     }
@@ -1165,7 +1165,7 @@ static bool is_on(SettingsState *state, SettingId id)
     return settings_slot(state, id, -1)->value.number != 0;
 }
 
-// A function to summarise an on/off setting for the top page
+// A function to summarize an on/off setting for the top page
 static const char *on_off(SettingsState *state, SettingId id)
 {
     return is_on(state, id) ? "On" : "Off";
@@ -1198,7 +1198,7 @@ static SettingsRow note_row(const char *text)
     return row;
 }
 
-// A function to summarise a menu's grid (columns x rows), or say it follows All menus
+// A function to summarize a menu's grid (columns x rows), or say it follows All menus
 static void grid_summary(SettingsState *state, int menu, char *out, size_t size)
 {
     const SettingValue *rows = &settings_slot(state, SET_ID_LAYOUT_ROWS, -1)->value;
@@ -1316,7 +1316,7 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_FPS_LIMIT)
-                    row = greyed(row, is_on(state, SET_ID_VSYNC), WHY_VSYNC);
+                    row = grayed(row, is_on(state, SET_ID_VSYNC), WHY_VSYNC);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1339,8 +1339,8 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             }
             bool overlay = is_on(state, SET_ID_OVERLAY);
             n = add_row(rows, n, max, global_row(state, SET_ID_OVERLAY));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_OVERLAY_COLOR), !overlay, WHY_OVERLAY));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_OVERLAY_OPACITY), !overlay, WHY_OVERLAY));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_OVERLAY_COLOR), !overlay, WHY_OVERLAY));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_OVERLAY_OPACITY), !overlay, WHY_OVERLAY));
             break;
         }
         case SETTINGS_PAGE_MENUS: {
@@ -1383,9 +1383,9 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_TITLE_SHADOW_COLOR)
-                    row = greyed(row, !is_on(state, SET_ID_TITLE_SHADOWS), WHY_SHADOWS);
+                    row = grayed(row, !is_on(state, SET_ID_TITLE_SHADOWS), WHY_SHADOWS);
                 if (ids[i] != SET_ID_TITLES_ENABLED)
-                    row = greyed(row, off, WHY_TITLES);
+                    row = grayed(row, off, WHY_TITLES);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1400,11 +1400,11 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_HIGHLIGHT_OUTLINE_COLOR || ids[i] == SET_ID_HIGHLIGHT_OUTLINE_OPACITY)
-                    row = greyed(row, !outline, WHY_NO_OUTLINE);
+                    row = grayed(row, !outline, WHY_NO_OUTLINE);
                 if (ids[i] == SET_ID_HIGHLIGHT_CORNER_RADIUS)
-                    row = greyed(row, outline, WHY_ROUNDED);
+                    row = grayed(row, outline, WHY_ROUNDED);
                 if (ids[i] != SET_ID_HIGHLIGHT_ENABLED)
-                    row = greyed(row, off, WHY_HIGHLIGHT);
+                    row = grayed(row, off, WHY_HIGHLIGHT);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1417,9 +1417,9 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_SCROLL_OUTLINE_COLOR)
-                    row = greyed(row, !outline, WHY_NO_OUTLINE);
+                    row = grayed(row, !outline, WHY_NO_OUTLINE);
                 if (ids[i] != SET_ID_SCROLL_ENABLED)
-                    row = greyed(row, off, WHY_SCROLL);
+                    row = grayed(row, off, WHY_SCROLL);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1434,11 +1434,11 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_CLOCK_WEEKDAY || ids[i] == SET_ID_CLOCK_DATE_FORMAT)
-                    row = greyed(row, !date, WHY_DATE);
+                    row = grayed(row, !date, WHY_DATE);
                 if (ids[i] == SET_ID_CLOCK_SHADOW_COLOR)
-                    row = greyed(row, !is_on(state, SET_ID_CLOCK_SHADOWS), WHY_SHADOWS);
+                    row = grayed(row, !is_on(state, SET_ID_CLOCK_SHADOWS), WHY_SHADOWS);
                 if (ids[i] != SET_ID_CLOCK_ENABLED)
-                    row = greyed(row, off, WHY_CLOCK);
+                    row = grayed(row, off, WHY_CLOCK);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1450,7 +1450,7 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] != SET_ID_SCREENSAVER_ENABLED)
-                    row = greyed(row, off, WHY_SCREENSAVER);
+                    row = grayed(row, off, WHY_SCREENSAVER);
                 n = add_row(rows, n, max, row);
             }
             break;
@@ -1468,8 +1468,8 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
         case SETTINGS_PAGE_GAMEPAD: {
             bool off = !is_on(state, SET_ID_GAMEPAD_ENABLED);
             n = add_row(rows, n, max, global_row(state, SET_ID_GAMEPAD_ENABLED));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_DEVICE), off, WHY_GAMEPAD));
-            n = add_row(rows, n, max, greyed(global_row(state, SET_ID_GAMEPAD_MAPPINGS), off, WHY_GAMEPAD));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_GAMEPAD_DEVICE), off, WHY_GAMEPAD));
+            n = add_row(rows, n, max, grayed(global_row(state, SET_ID_GAMEPAD_MAPPINGS), off, WHY_GAMEPAD));
             n = add_row(rows, n, max, note_row(MAPPINGS_NOTE));
             if (state->bindings != NULL) {
                 n = binding_rows(state, BINDINGS_GAMEPAD, rows, n, max);
@@ -1500,7 +1500,7 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
                 n = add_row(rows, n, max, action_row("Cancel", SETTINGS_ACTION_CANCEL, true));
             else {
                 const char *why = refuse_remove(state);
-                n = add_row(rows, n, max, greyed(action_row("Remove", SETTINGS_ACTION_REMOVE_BINDING, true), why != NULL, why));
+                n = add_row(rows, n, max, grayed(action_row("Remove", SETTINGS_ACTION_REMOVE_BINDING, true), why != NULL, why));
             }
             break;
         }
@@ -1532,7 +1532,7 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
 }
 
 // A function to tell whether the cursor may rest on a row: any row but a divider or a note, unless
-// it is greyed with no reason to give (Discard with nothing to discard). The screen asks it too.
+// it is grayed with no reason to give (Discard with nothing to discard). The screen asks it too.
 bool settings_row_selectable(const SettingsRow *row)
 {
     return row->kind != SETTINGS_ROW_DIVIDER && row->kind != SETTINGS_ROW_NOTE && (row->enabled || row->why != NULL);
@@ -1955,7 +1955,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_REMOVE_BINDING) {
                 if (!row->enabled)
-                    break;   // Greyed: its reason is on show
+                    break;   // Grayed: its reason is on show
                 bindings_remove(state->bindings, (BindingsDevice) state->pending.device, state->pending.index);
                 state->depth--;
                 event.kind = SETTINGS_EVENT_BINDINGS;
@@ -2024,7 +2024,7 @@ SettingsEvent settings_choose(SettingsState *state, SettingSlot *slot, const cha
     return event;
 }
 
-// A function to set a value chosen in a picker (a colour, a font, a command, a menu, a device)
+// A function to set a value chosen in a picker (a color, a font, a command, a menu, a device)
 SettingsEvent settings_choose_value(SettingsState *state, SettingSlot *slot, const SettingValue *value)
 {
     SettingsEvent event;

@@ -249,10 +249,10 @@ typedef struct {
     SettingsPage target;         // LINK rows
     int menu;                    // LINK rows to a menu's page: its index; -1 for All menus
     SettingsAction action;       // ACTION rows
-    bool enabled;                // False: shown greyed, and the cursor skips it unless `why` gives a reason
-    const char *why;             // A greyed row's reason (the cursor may rest on it); NULL for none
+    bool enabled;                // False: shown grayed, and the cursor skips it unless `why` gives a reason
+    const char *why;             // A grayed row's reason (the cursor may rest on it); NULL for none
     bool steps;                  // Left and Right step its value while it is enabled: a setting, or a
-                                 // picker for a colour, the default menu or the device
+                                 // picker for a color, the default menu or the device
     int binding;                 // BINDING rows: the binding's index
 } SettingsRow;
 

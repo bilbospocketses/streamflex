@@ -20,9 +20,9 @@ static const struct {
     { "Plum",       { 0x3B, 0x1F, 0x3A } },
     { "Burgundy",   { 0x4A, 0x15, 0x20 } },
     { "White",      { 0xFF, 0xFF, 0xFF } },
-    { "Light grey", { 0xC8, 0xC8, 0xC8 } },
-    { "Grey",       { 0x80, 0x80, 0x80 } },
-    { "Dark grey",  { 0x4A, 0x4A, 0x4A } },
+    { "Light gray", { 0xC8, 0xC8, 0xC8 } },
+    { "Gray",       { 0x80, 0x80, 0x80 } },
+    { "Dark gray",  { 0x4A, 0x4A, 0x4A } },
     { "Red",        { 0xD0, 0x30, 0x30 } },
     { "Orange",     { 0xE0, 0x70, 0x20 } },
     { "Amber",      { 0xF0, 0xB0, 0x00 } },
@@ -41,14 +41,14 @@ const char *colorpick_name(int index)
     return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].name : "";
 }
 
-// A function to get a swatch's colour
+// A function to get a swatch's color
 SettingColor colorpick_swatch(int index)
 {
     SettingColor black = { 0, 0, 0 };
     return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].color : black;
 }
 
-// A function to find a colour among the swatches; -1 when it is none of them
+// A function to find a color among the swatches; -1 when it is none of them
 int colorpick_find(SettingColor color)
 {
     for (int i = 0; i < COLORPICK_SWATCHES; i++) {
@@ -59,8 +59,8 @@ int colorpick_find(SettingColor color)
     return -1;
 }
 
-// A function to open the picker on a colour: the cursor on its swatch, else on the Custom row
-void colorpick_open(ColourPick *pick, SettingColor current)
+// A function to open the picker on a color: the cursor on its swatch, else on the Custom row
+void colorpick_open(ColorPick *pick, SettingColor current)
 {
     memset(pick, 0, sizeof(*pick));
     pick->original = current;
@@ -71,7 +71,7 @@ void colorpick_open(ColourPick *pick, SettingColor current)
     pick->column = found >= 0 ? found % COLORPICK_COLUMNS : 0;
 }
 
-// A function to step one hex digit of a colour (0 the red's first, 5 the blue's second) up or
+// A function to step one hex digit of a color (0 the red's first, 5 the blue's second) up or
 // down, wrapping F to 0 and 0 to F
 static SettingColor step_digit(SettingColor color, int digit, int direction)
 {
@@ -84,7 +84,7 @@ static SettingColor step_digit(SettingColor color, int digit, int direction)
 }
 
 // A function to act on a key in the hex editor
-static ColourPickResult edit(ColourPick *pick, ColourPickCommand command)
+static ColorPickResult edit(ColorPick *pick, ColorPickCommand command)
 {
     switch (command) {
         case COLORPICK_LEFT:
@@ -113,7 +113,7 @@ static ColourPickResult edit(ColourPick *pick, ColourPickCommand command)
 
 // A function to act on one key: move through the grid and onto the Custom row, open the hex
 // editor, choose, or cancel
-ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command)
+ColorPickResult colorpick_command(ColorPick *pick, ColorPickCommand command)
 {
     if (pick->editing)
         return edit(pick, command);
@@ -154,9 +154,9 @@ ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command)
             pick->chosen = SWATCHES[pick->cursor].color;
             return COLORPICK_CHOSEN;
         case COLORPICK_BACK:
-            // Cancel: the picker as it opened, so the preview goes back to the original colour
+            // Cancel: the picker as it opened, so the preview goes back to the original color
             colorpick_open(pick, pick->original);
-            return COLORPICK_CANCELLED;
+            return COLORPICK_CANCELED;
     }
     if (pick->cursor != COLORPICK_CUSTOM)
         pick->column = pick->cursor % COLORPICK_COLUMNS;
@@ -164,8 +164,8 @@ ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command)
 }
 
 // A function to say what the preview shows: the swatch under the cursor; on the Custom row, the hex
-// editor's colour (the colour the picker opened with, until it is edited)
-SettingColor colorpick_shown(const ColourPick *pick)
+// editor's color (the color the picker opened with, until it is edited)
+SettingColor colorpick_shown(const ColorPick *pick)
 {
     if (pick->cursor == COLORPICK_CUSTOM)
         return pick->hex;
@@ -179,14 +179,14 @@ static double linear(unsigned char channel)
     return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
 }
 
-// A function to give a colour's relative luminance: 0 for black, 1 for white (WCAG 2)
-double colour_luminance(SettingColor color)
+// A function to give a color's relative luminance: 0 for black, 1 for white (WCAG 2)
+double color_luminance(SettingColor color)
 {
     return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b);
 }
 
 // A function to give the contrast ratio of two luminances, 1 to 21, whichever is lighter
-double colour_contrast(double a, double b)
+double color_contrast(double a, double b)
 {
     double light = a > b ? a : b;
     double dark = a > b ? b : a;
@@ -195,7 +195,7 @@ double colour_contrast(double a, double b)
 
 // A function to give an image's mean relative luminance, read at most SAMPLES points across and down;
 // 0 for an empty image. The contract is colorpick.h's.
-double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch)
+double color_mean_luminance(const unsigned char *rgba, int width, int height, int pitch)
 {
     if (width <= 0 || height <= 0)
         return 0.0;
@@ -208,16 +208,16 @@ double colour_mean_luminance(const unsigned char *rgba, int width, int height, i
             int x = (int) ((long long) i * width / across);
             const unsigned char *p = rgba + (long long) y * pitch + (long long) x * 4;
             SettingColor color = { p[0], p[1], p[2] };
-            sum += colour_luminance(color);
+            sum += color_luminance(color);
         }
     }
     return sum / (double) (across * down);
 }
 
-// A function to give the luminance of a colour laid at an alpha (0-255) over a background of a given
-// luminance. It mixes the luminances, not the colours: close enough for an advisory warning.
-double colour_over(double below, SettingColor over, int alpha)
+// A function to give the luminance of a color laid at an alpha (0-255) over a background of a given
+// luminance. It mixes the luminances, not the colors: close enough for an advisory warning.
+double color_over(double below, SettingColor over, int alpha)
 {
     double a = (double) alpha / 255.0;
-    return a * colour_luminance(over) + (1.0 - a) * below;
+    return a * color_luminance(over) + (1.0 - a) * below;
 }

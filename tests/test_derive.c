@@ -64,7 +64,7 @@ static void test_defaults(void)
     CHECK_INT(eff.clock_shadow_color.a, 191);
     CHECK_INT(eff.screensaver_alpha, 178);      // 70%
     CHECK_INT(eff.title_padding_pct, 8);
-    CHECK_INT(eff.highlight_fill.r, 0xFF);      // The colour itself passes through
+    CHECK_INT(eff.highlight_fill.r, 0xFF);      // The color itself passes through
     CHECK_INT(eff.highlight_outline.b, 0xFF);
 }
 
@@ -126,7 +126,7 @@ static void test_clamps_restore(void)
     derive_settings(&in, &eff);
     CHECK_INT(eff.clock_margin, 20);
 
-    // The vertical centre stays between 25% and 75%
+    // The vertical center stays between 25% and 75%
     in.vcenter = 1000;
     derive_settings(&in, &eff);
     CHECK_INT(eff.vcenter, 270);
@@ -182,8 +182,8 @@ static void test_negative_px(void)
     CHECK_INT(eff.scroll_outline_size, 0);
 }
 
-// A function to test that each colour takes its alpha from its own feature's opacity: with every
-// opacity different, a colour reading another feature's opacity gets the wrong alpha
+// A function to test that each color takes its alpha from its own feature's opacity: with every
+// opacity different, a color reading another feature's opacity gets the wrong alpha
 static void test_opacities_distinct(void)
 {
     DeriveInput in = defaults();

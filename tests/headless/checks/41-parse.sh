@@ -49,7 +49,7 @@ ok=1
 [ "$(grep -c 'Test hook: the .* font opens again' "$out/f41-reload.log")" = 2 ] && ran_clean f41-reload && ok=0
 result "a font opened again closes the one it replaces (exit $(cat "$out/f41-reload.code"))" $ok
 
-# A grid change in settings works the layout area out again, so a new vertical centre (or a clock
+# A grid change in settings works the layout area out again, so a new vertical center (or a clock
 # that moved) reaches the layout: a Columns change here; the area is logged once at startup, and
 # again on it. 55-settings-pages.sh changes VCenter itself and sees the grid move.
 cfg=$(writable_config f50-grid)

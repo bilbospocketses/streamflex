@@ -47,7 +47,7 @@ extern TextInfo title_info;
 #define PREVIEW_REST_MS 300        // How long the Menus list's cursor rests before the preview follows it
 #define SLOW_KEY_MS 50             // A key that keeps the screen waiting this long is logged
 #define ALPHA_VALUE 180            // A row's value
-#define ALPHA_DIM 110              // Greyed rows, the page path and the key hint
+#define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
 #define ALPHA_FILL 40              // The highlighted row
 #define ALPHA_OUTLINE 220
 #define ALPHA_DIVIDER 46
@@ -351,7 +351,7 @@ static void run_refresh(SettingRefresh refresh)
 }
 
 // A function to put a setting's value into the running launcher, then refresh what it affects.
-// The clock is stopped before one of its settings is written. That is defence in depth, not a need:
+// The clock is stopped before one of its settings is written. That is defense in depth, not a need:
 // the clock's thread reads only its own snapshot (clk), never config, so a render in flight could
 // not see the write; reload_clock() would stop it anyway. Two settings act beyond any group: the OS
 // screensaver block, and the menu :home goes to.
@@ -441,13 +441,13 @@ static void measure_layout(void)
 {
     static const char *const labels[] = {
         "General", "Background", "Menus", "Titles", "Highlight", "Scroll indicators", "Clock", "Screensaver",
-        "Controls", "Discard changes", "Mode", "Colour", "Image", "Folder", "Change every", "Fade", "Rows",
+        "Controls", "Discard changes", "Mode", "Color", "Image", "Folder", "Change every", "Fade", "Rows",
         "Columns", "Largest button", "Size", "All menus", "Try again", "Leave without saving", "Use this folder",
         "Default menu", "Wrap around", "Reset on Back", "Mouse select", "Block the OS screensaver", "VSync",
         "FPS limit", "After launching an app", "App timeout", "Startup command", "Quit command",
-        "See-through colour", "Overlay", "Overlay colour", "Overlay opacity", "Icon spacing", "Vertical centre",
-        "Show titles", "Font", "Opacity", "Shadows", "Shadow colour", "Too long", "Padding", "Show",
-        "Fill colour", "Fill opacity", "Outline size", "Outline colour", "Outline opacity", "Corner radius",
+        "See-through color", "Overlay", "Overlay color", "Overlay opacity", "Icon spacing", "Vertical center",
+        "Show titles", "Font", "Opacity", "Shadows", "Shadow color", "Too long", "Padding", "Show",
+        "Fill color", "Fill opacity", "Outline size", "Outline color", "Outline opacity", "Corner radius",
         "Vertical padding", "Horizontal padding", "Show date", "Weekday", "Alignment", "Margin", "Time", "Date",
         "On", "Idle time", "Dim level", "Pause slideshow", "Gamepad", "Device", "Mappings file"
     };
@@ -969,8 +969,8 @@ static void handle_event(const SettingsEvent *event)
             close_settings();
             return;
         case SETTINGS_EVENT_PICK:
-            // OK on a picker row opens its picker (settings_pickers.c): the colour picker for a
-            // colour, the font picker for a font, the list picker for the default menu, the device
+            // OK on a picker row opens its picker (settings_pickers.c): the color picker for a
+            // color, the font picker for a font, the list picker for the default menu, the device
             // and a command. The mappings file is a browse row, which
             // SETTINGS_EVENT_BROWSE opens. The rows that step still step with Left and Right.
             pickers_open(event->slot);
@@ -1242,7 +1242,7 @@ static int row_drawn_height(const SettingsRow *row, int note_room)
 }
 
 // A function to write what a row shows on its right: under the cursor, Left and Right arrows round
-// the value of a row they step (the model says which) while it is not greyed; the › marker after
+// the value of a row they step (the model says which) while it is not grayed; the › marker after
 // any row OK opens (a page, the browser, a picker, a binding, a binding's command); else the value alone
 static void row_value_text(const SettingsRow *row, bool highlighted, char *out, size_t size)
 {
@@ -1325,7 +1325,7 @@ static void draw_model_rows(SettingsRow *rows, int count, int x, int top, int bo
 
     // With the cursor on the last row it can rest on, what follows it (the Menus page's note on
     // the menus it has no room for, say) comes on show too: the page scrolls to its end. Which rows
-    // the cursor can rest on is the model's to say (a greyed row that says why is one).
+    // the cursor can rest on is the model's to say (a grayed row that says why is one).
     bool rest_after = false;
     for (int i = cursor + 1; i < count; i++) {
         if (settings_row_selectable(&rows[i]))
@@ -1442,7 +1442,7 @@ static void draw_column(SettingsRow *rows, int count)
     }
 }
 
-// A function to say why the row under the cursor is greyed, or "" when it is not
+// A function to say why the row under the cursor is grayed, or "" when it is not
 static const char *cursor_why(const SettingsRow *rows, int count)
 {
     int cursor = settings_cursor(model);
@@ -1451,7 +1451,7 @@ static const char *cursor_why(const SettingsRow *rows, int count)
     return rows[cursor].why;
 }
 
-// A function to warn in the caption when the row under the cursor is a title or clock colour that
+// A function to warn in the caption when the row under the cursor is a title or clock color that
 // stands out too little from the background; "" otherwise
 static const char *row_warning(const SettingsRow *rows, int count)
 {
@@ -1465,7 +1465,7 @@ static const char *row_warning(const SettingsRow *rows, int count)
 
 // A function to draw the caption, two lines from (x, y) at most `width` wide: which menu, its grid
 // and titles, and any note: the open picker's; the browser's; the last key's; else what the row under
-// the cursor says (row_note: why it is greyed, or a contrast warning)
+// the cursor says (row_note: why it is grayed, or a contrast warning)
 static void draw_caption(const char *row_note, int x, int y, int width)
 {
     char caption[512];
@@ -1514,7 +1514,7 @@ void settings_draw(void)
     }
 
     // The page's rows, built once for the frame: the column draws them, and the caption says why the
-    // one under the cursor is greyed, or warns of its low contrast. The browser and the pickers have
+    // one under the cursor is grayed, or warns of its low contrast. The browser and the pickers have
     // rows of their own.
     SettingsRow rows[SETTINGS_MAX_ROWS];
     int count = browser == NULL && !pickers_active() ? settings_rows(model, rows, SETTINGS_MAX_ROWS) : 0;

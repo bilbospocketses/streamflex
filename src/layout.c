@@ -227,8 +227,8 @@ int layout_compute(const LayoutParams *given, const LayoutArea *area, int entry_
         snprintf(why, why_size, "not enough screen space for %i x %i buttons, reducing to %i x %i",
             params->columns, params->rows, g.columns, g.rows);
 
-    // Centre the block horizontally on the configured columns, so columns stay put as it
-    // scrolls. A menu that fills less than one row is centred on its own buttons instead.
+    // Center the block horizontally on the configured columns, so columns stay put as it
+    // scrolls. A menu that fills less than one row is centered on its own buttons instead.
     int count = max_int(entry_count, 1);
     int used_columns = min_int(count, g.columns);
     int used_rows = min_int(g.rows, (count + g.columns - 1) / g.columns);
@@ -238,7 +238,7 @@ int layout_compute(const LayoutParams *given, const LayoutArea *area, int entry_
     g.y_advance = g.button + g.title_block + spacing;
     g.x_origin = area->x + (area->w - block_w) / 2;
 
-    // Centre the occupied rows on VCenter, then keep the block and its highlight inside the area
+    // Center the occupied rows on VCenter, then keep the block and its highlight inside the area
     g.y_origin = area->vcenter - block_h / 2;
     g.y_origin = min_int(g.y_origin, area->y + area->h - g.vpad - block_h);
     g.y_origin = max_int(g.y_origin, area->y + g.vpad);

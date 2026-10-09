@@ -195,7 +195,7 @@ SDL_Texture *background_overlay       = NULL;
 SDL_Texture *background_override      = NULL; // The image being browsed in settings, shown in their preview
 Menu *default_menu                    = NULL;
 Menu *current_menu                    = NULL;
-ModeBackground background_shown       = BACKGROUND_COLOR; // What is on screen: the colour when the chosen background failed
+ModeBackground background_shown       = BACKGROUND_COLOR; // What is on screen: the color when the chosen background failed
 double background_luminance           = -1.0; // The image on show's mean luminance, for the contrast warning; -1 unknown
 Entry *current_entry                  = NULL;
 Highlight *highlight                  = NULL;
@@ -224,7 +224,7 @@ Uint32 refresh_period;
 Uint32 delay_period;
 Uint32 repeat_period;
 Effective eff;                        // The values drawn with, derived from config (derive.h)
-SDL_Color title_color;                // eff's title colours as SDL colours, for the titles (the clock keeps its own)
+SDL_Color title_color;                // eff's title colors as SDL colors, for the titles (the clock keeps its own)
 SDL_Color title_shadow_color;
 static bool gamepad_on = false;   // The game controller subsystem is running
 static bool vsync_wanted = true; // VSync and FPSLimit ask the renderer for VSync
@@ -697,7 +697,7 @@ static void log_luminance(void)
 }
 
 // A function to stop a slideshow that can no longer show two images, on the main thread: show the
-// one image that still loads (surface, the same image as the one on show), or the colour when none
+// one image that still loads (surface, the same image as the one on show), or the color when none
 // does. The Mode setting stays Slideshow, so the folder is tried again when the background is next
 // set up.
 static void fall_back_from_slideshow(SDL_Surface *surface)
@@ -725,13 +725,13 @@ static void fall_back_from_slideshow(SDL_Surface *surface)
     set_draw_color();
 }
 
-// A function to scan the slideshow folder. What is shown falls back to the colour, or to a single
+// A function to scan the slideshow folder. What is shown falls back to the color, or to a single
 // image, when the folder is missing or holds fewer than two images; the settings are left alone.
 static void init_slideshow()
 {
     // While settings are open, a mode with no folder chosen yet is not a config problem
     if (config.slideshow_directory == NULL && settings_is_open()) {
-        log_debug("Settings: no slideshow folder chosen yet, the preview shows the colour");
+        log_debug("Settings: no slideshow folder chosen yet, the preview shows the color");
         background_shown = BACKGROUND_COLOR;
         return;
     }
@@ -840,7 +840,7 @@ static void stop_overlay()
     log_debug("Overlay stopped");
 }
 
-// A function to start the overlay, when it is on: a screen-sized texture of its colour and opacity
+// A function to start the overlay, when it is on: a screen-sized texture of its color and opacity
 static void start_overlay()
 {
     if (!config.background_overlay || background_overlay != NULL)
@@ -1022,7 +1022,7 @@ static void stop_slideshow()
 }
 
 // A function to set the background up for config.background_mode: at startup, and whenever the
-// settings screen changes it. What is shown (background_shown) falls back to the colour when an
+// settings screen changes it. What is shown (background_shown) falls back to the color when an
 // image or slideshow cannot be used; the setting itself stays as it was chosen.
 void reload_background()
 {
@@ -1041,7 +1041,7 @@ void reload_background()
         // While settings are open, a mode with no image chosen yet is not a config problem; an
         // image that was chosen and fails to load is one, and says so as it does at startup
         if (config.background_image == NULL && settings_is_open())
-            log_debug("Settings: no image chosen yet, the preview shows the colour");
+            log_debug("Settings: no image chosen yet, the preview shows the color");
         else if (config.background_image == NULL)
             log_error("Background 'Image' setting not specified in config file");
         else
@@ -1131,7 +1131,7 @@ static void calculate_layout_area()
         .h = geo.screen_height - geo.screen_margin - top,
         .vcenter = geo.vcenter
     };
-    log_debug("Layout area: from y %i, %i px tall, centred at %i px", layout_area.y, layout_area.h, layout_area.vcenter);
+    log_debug("Layout area: from y %i, %i px tall, centered at %i px", layout_area.y, layout_area.h, layout_area.vcenter);
 }
 
 // A function to work out a menu's grid on this screen without drawing anything, so the debug
@@ -1363,7 +1363,7 @@ void trim_title_fonts()
 }
 
 // A function to lay the menu on show out again after its grid, or the area it goes in, changed: the
-// area is worked out again first, so a new vertical centre or a clock that moved reaches it
+// area is worked out again first, so a new vertical center or a clock that moved reaches it
 void refresh_layout()
 {
     calculate_layout_area();
@@ -1382,7 +1382,7 @@ int show_home()
     return load_menu(default_menu, false, true);
 }
 
-// A function to fill the screen with a grey checkerboard. In the settings preview it stands for a
+// A function to fill the screen with a gray checkerboard. In the settings preview it stands for a
 // transparent background: a texture cannot show the desktop through.
 static void draw_checkerboard()
 {

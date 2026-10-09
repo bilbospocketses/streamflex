@@ -124,7 +124,7 @@ void title_fonts_keep(const int *sizes, int count)
 }
 
 // A function to load the next slideshow image that loads. It also runs on the slideshow thread, so
-// it touches nothing but the slideshow: textures, the draw colour and what is shown belong to the
+// it touches nothing but the slideshow: textures, the draw color and what is shown belong to the
 // main thread. It returns NULL when no image in the folder loads, and sets slideshow->only_one when
 // the only one that does is the image already on show; the main thread falls back from either.
 SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition)
@@ -197,7 +197,7 @@ double surface_luminance(SDL_Surface *surface)
     if (rgba == NULL)
         return -1.0;
     // A surface converted without flags is never RLE-encoded, so its pixels can be read unlocked
-    double luminance = colour_mean_luminance(rgba->pixels, rgba->w, rgba->h, rgba->pitch);
+    double luminance = color_mean_luminance(rgba->pixels, rgba->w, rgba->h, rgba->pitch);
     SDL_FreeSurface(rgba);
     return luminance;
 }
@@ -248,7 +248,7 @@ SDL_Texture *load_texture(SDL_Surface *surface)
 
 // A function to move an image's opaque pixels off the chroma key (RGBA bytes), always, since
 // Transparent mode can be chosen in settings after the image is loaded: on Windows it makes every
-// pixel of the key colour see-through. `what` names the image for the log.
+// pixel of the key color see-through. `what` names the image for the log.
 static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int pitch, const char *what)
 {
     int moved = chroma_keep_off(rgba, width, height, pitch,
@@ -469,8 +469,8 @@ int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo)
     scroll->rect_left.x = geo->screen_margin;
 
     // Grid indicators: the same arrow drawn a quarter turn round (see draw_screen), sized so
-    // its on-screen height is the screen margin and centred in the top and bottom margins.
-    // SDL rotates about the rect's centre, so the rect keeps the unrotated arrow's proportions,
+    // its on-screen height is the screen margin and centered in the top and bottom margins.
+    // SDL rotates about the rect's center, so the rect keeps the unrotated arrow's proportions,
     // and its width becomes the on-screen height.
     int grid_w = geo->screen_margin;
     int grid_h = grid_w * scroll->rect_right.h / scroll->rect_right.w;

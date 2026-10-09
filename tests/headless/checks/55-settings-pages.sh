@@ -6,7 +6,7 @@
 ARROW=$(printf ' \xE2\x80\xBA ')
 
 # A function to make the keys that walk one page: each row stepped right, left, left and right (an
-# on/off that is on ends on; one that is off ends on too, which opens the rows it greys), then down;
+# on/off that is on ends on; one that is off ends on too, which opens the rows it grays), then down;
 # 14 times, more rows than any page has
 walk() { local i; for i in $(seq 14); do printf 'Right Left Left Right Down '; done; }
 tour() {
@@ -53,7 +53,7 @@ ok=1
 result "settings: Show titles off and on opens the title font again, live" $ok
 echo "      the title font opened $opened times"
 
-# A greyed row's reason shows under the preview: the FPS limit while VSync is on. A run of its own,
+# A grayed row's reason shows under the preview: the FPS limit while VSync is on. A run of its own,
 # whose cursor rests on the row: the tour's keys come 100 ms apart, and a slow host draws no frame
 # while the cursor is there, so the note is never logged. VSync is on in the file, so no notice is
 # up to take the note's place.
@@ -62,7 +62,7 @@ CFG=$FX/f55-why.ini UNTIL='Settings: the note under the preview says Used only w
 ok=1
 grep -q 'Settings: the note under the preview says Used only while VSync is off' "$out/f55-why.log" \
     && ran_clean f55-why && ok=0
-result "settings: a greyed row says why under the preview (exit $(cat "$out/f55-why.code"))" $ok
+result "settings: a grayed row says why under the preview (exit $(cat "$out/f55-why.code"))" $ok
 
 # The clock switched off while its render thread is at work (the harness build's
 # STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits
@@ -170,9 +170,9 @@ diff "$FX/f55-odd.ini" "$cfg" | sed 's/^/      /'
 
 # A regression pin for the layout group (it passes without Task 6's screen code); its teeth come from
 # the mutant that drops refresh_layout() from run_refresh(), which leaves the box where it was.
-# A new vertical centre moves the grid on screen, not only in the log: the box the highlight's
-# colour (#FF00FF, which nothing else on screen has) spans in the preview is lower once Vertical
-# centre steps from 50% to 55%, and 55% is saved
+# A new vertical center moves the grid on screen, not only in the log: the box the highlight's
+# color (#FF00FF, which nothing else on screen has) spans in the preview is lower once Vertical
+# center steps from 50% to 55%, and 55% is saved
 highlight_box() {
     local name=$1 pid=$2 tag=$3 line=$4 shot=/tmp/box.xwd
     xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
@@ -192,14 +192,14 @@ ok=1
 [ -n "$top_before" ] && [ -n "$top_after" ] && [ "$top_after" -gt "$top_before" ] \
     && grep -q 'Settings: \[Layout\] VCenter 50% -> 55%' "$out/f55-vcenter.log" \
     && sed -n '/^\[Layout\]/,/^\[/p' "$cfg" | grep -qx 'VCenter=55%' && ran_clean f55-vcenter && ok=0
-result "settings: a new vertical centre moves the grid on screen, and saves (exit $(cat "$out/f55-vcenter.code"))" $ok
+result "settings: a new vertical center moves the grid on screen, and saves (exit $(cat "$out/f55-vcenter.code"))" $ok
 sed 's/^/      /' "$out/f55-vcenter.boxes" 2> /dev/null
 
 # The rows drawn follow the model's kinds: under the cursor, a picker row that steps (the default
 # menu) shows Left and Right arrows, and one that does not (the startup command) the › marker. On
-# the Clock page, off, every row under On is greyed with a reason, so the cursor may rest on each:
+# the Clock page, off, every row under On is grayed with a reason, so the cursor may rest on each:
 # with it on the second row the page has not scrolled to its end, and the caption says why the row
-# is greyed.
+# is grayed.
 LEFT_MARK=$(printf '\xE2\x80\xB9')
 RIGHT_MARK=$(printf '\xE2\x80\xBA')
 CFG=$FX/f55-frame.ini run_keys f55-rows Menu Return Down Down Down Down Down Down Down Down Down BackSpace \
@@ -213,7 +213,7 @@ grep -qF "Settings: the cursor's row reads Default menu: $LEFT_MARK Main $RIGHT_
     && sed -n '/Settings: page Settings.*Clock$/,/Settings closed/p' "$log" \
        | grep -q 'Settings: the note under the preview says The clock is off' \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f55-rows && ok=0
-result "settings: picker rows show their arrows or marker, and greyed rows neither scroll early nor hide why (exit $(cat "$out/f55-rows.code"))" $ok
+result "settings: picker rows show their arrows or marker, and grayed rows neither scroll early nor hide why (exit $(cat "$out/f55-rows.code"))" $ok
 grep -E "Settings: (the cursor's row reads (Default menu|Startup command|Show date)|rows [0-9]+ to [0-9]+ of 13)" "$log" | sed 's/^/      /'
 
 # The Device row names the pads present (the harness's virtual one): Right steps from Any to it, and

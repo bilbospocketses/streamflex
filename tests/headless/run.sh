@@ -417,7 +417,7 @@ preview_point() {
     echo "$((px + $1 * pw / 1920)),$((py + $2 * ph / 1080))"
 }
 
-# A function to wait up to 10 s for the screen to show the colours asked for, each x,y=r,g,b:
+# A function to wait up to 10 s for the screen to show the colors asked for, each x,y=r,g,b:
 # it takes a screenshot, reads the points and tries again until they match. Every reading, and
 # any error taking the screenshot, is kept in NAME.pixels under TAG, and the last screenshot in
 # NAME-TAG.xwd when they never match.
@@ -436,7 +436,7 @@ screen_shows() {
 }
 
 # A function for a +key (see run_keys), called with the run's NAME and PID: wait for the log line
-# LINE, then for the settings preview to show each colour asked for, written sx,sy=r,g,b with the
+# LINE, then for the settings preview to show each color asked for, written sx,sy=r,g,b with the
 # point in the launcher's scene (or @x,y=r,g,b, a point of the screen). Writes "TAG yes" or
 # "TAG no" to NAME.seen for the check to read. A preview whose place was never logged is "no",
 # and so is a probe with no points, which any screen would pass.

@@ -93,7 +93,7 @@ bool listpick_has(const ListPick *pick, const char *value)
 }
 
 // A function to put the cursor on the row that gives a value. A value no row gives is pinned
-// first, labelled `custom_row_label` (the caller's "Custom: ..."), so choosing it keeps it; a Custom
+// first, labeled `custom_row_label` (the caller's "Custom: ..."), so choosing it keeps it; a Custom
 // row pinned before goes. False when out of memory, with the cursor on the first row.
 bool listpick_select(ListPick *pick, const char *value, const char *custom_row_label)
 {
@@ -162,7 +162,7 @@ ListPickResult listpick_command(ListPick *pick, ListPickCommand command, int pag
             return LISTPICK_CHOSEN;
         }
         case LISTPICK_BACK:
-            return LISTPICK_CANCELLED;
+            return LISTPICK_CANCELED;
     }
     return pick->cursor != before ? LISTPICK_MOVED : LISTPICK_NONE;
 }

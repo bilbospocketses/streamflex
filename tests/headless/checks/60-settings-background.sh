@@ -1,4 +1,4 @@
-# The Background page: a preset colour, an image and a slideshow folder chosen in the folder
+# The Background page: a preset color, an image and a slideshow folder chosen in the folder
 # browser, the incomplete-mode rule, and switching modes while a slideshow is running. Pixel
 # checks read the preview off the screen (look, in run.sh) once the log says what it should show.
 
@@ -16,7 +16,7 @@ shows_checkerboard() {
         30,30=85,85,85 90,30=136,136,136 30,90=136,136,136 90,90=85,85,85
 }
 
-# Colour: step from Black to Charcoal, and the preview shows each
+# Color: step from Black to Charcoal, and the preview shows each
 cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-color Menu +shows_black Down Return Down Right +shows_charcoal BackSpace BackSpace
 ok=1
@@ -24,7 +24,7 @@ ok=1
     && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-color.log" \
     && grep -qx 'black yes' "$out/f60-color.seen" && grep -qx 'charcoal yes' "$out/f60-color.seen" \
     && ran_clean f60-color && ok=0
-result "settings: a preset colour is saved, and the preview shows it (exit $(cat "$out/f60-color.code"))" $ok
+result "settings: a preset color is saved, and the preview shows it (exit $(cat "$out/f60-color.code"))" $ok
 sed 's/^/      /' "$out/f60-color.seen"
 
 # The browser's highlighted image fills the preview once its decode is done: blue, green, red
@@ -36,7 +36,7 @@ grep -qx 'blue yes' "$out/f60-preview.seen" && grep -qx 'green yes' "$out/f60-pr
 result "settings: the preview shows the highlighted image (exit $(cat "$out/f60-preview.code"))" $ok
 sed 's/^/      /' "$out/f60-preview.seen"
 
-# Transparent shows the checkerboard; stepping back to Colour leaves nothing to save
+# Transparent shows the checkerboard; stepping back to Color leaves nothing to save
 CFG=$FX/f60-color.ini run_keys f60-transparent Menu Down Return Right Right Right +shows_checkerboard Left Left Left BackSpace BackSpace
 ok=1
 grep -qx 'checkerboard yes' "$out/f60-transparent.seen" && grep -q 'Settings: nothing changed' "$out/f60-transparent.log" \
@@ -45,12 +45,12 @@ result "settings: the Transparent preview is a checkerboard (exit $(cat "$out/f6
 sed 's/^/      /' "$out/f60-transparent.seen"
 
 # The same run stepped Mode through Image and Slideshow, twice each, with neither an image nor a
-# folder chosen yet. Each previews the colour, as designed: the debug log says so, and no error
+# folder chosen yet. Each previews the color, as designed: the debug log says so, and no error
 # about a config problem reaches stderr, since there is none.
 ok=1
 ! grep -qE "Background 'Image' setting|Couldn't load background image|Slideshow directory .* does not exist" "$out/f60-transparent.err" \
-    && grep -q 'Settings: no image chosen yet, the preview shows the colour' "$out/f60-transparent.log" \
-    && grep -q 'Settings: no slideshow folder chosen yet, the preview shows the colour' "$out/f60-transparent.log" && ok=0
+    && grep -q 'Settings: no image chosen yet, the preview shows the color' "$out/f60-transparent.log" \
+    && grep -q 'Settings: no slideshow folder chosen yet, the preview shows the color' "$out/f60-transparent.log" && ok=0
 result "settings: stepping Mode through Image and Slideshow with nothing chosen writes no error" $ok
 grep -E "Background 'Image' setting|Couldn't load background image|does not exist" "$out/f60-transparent.err" | sort | uniq -c | sed 's/^/      /'
 
@@ -101,13 +101,13 @@ grep -q 'Settings: OK waited for the decode of /home/tester/broken/b.png' "$out/
     && ! grep -q 'Settings: chose' "$out/f60-slowbroken.log" && ran_clean f60-slowbroken && ok=0
 result "settings: OK on a broken image during its decode waits, then refuses it (exit $(cat "$out/f60-slowbroken.code"))" $ok
 
-# Image with none chosen: leaving the page puts Colour back, so nothing is saved
+# Image with none chosen: leaving the page puts Color back, so nothing is saved
 cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-incomplete Menu Down Return Right BackSpace BackSpace
 ok=1
 cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
     && grep -q 'Settings: nothing changed' "$out/f60-incomplete.log" && ran_clean f60-incomplete && ok=0
-result "settings: Image with no image chosen goes back to Colour and saves nothing (exit $(cat "$out/f60-incomplete.code"))" $ok
+result "settings: Image with no image chosen goes back to Color and saves nothing (exit $(cat "$out/f60-incomplete.code"))" $ok
 
 # The same on a renderer without render targets (the harness build's
 # STREAMFLEX_TEST_NO_RENDER_TARGETS): the menu is drawn behind the settings, and the caption and
@@ -116,7 +116,7 @@ cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_NO_RENDER_TARGETS=1 CFG=$cfg run_keys f60-notargets Menu Down Return Right BackSpace BackSpace
 ok=1
 cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: the renderer has no render targets' "$out/f60-notargets.log" \
-    && grep -q 'Settings: the note under the preview says No image was chosen, so Mode went back to Colour' "$out/f60-notargets.log" \
+    && grep -q 'Settings: the note under the preview says No image was chosen, so Mode went back to Color' "$out/f60-notargets.log" \
     && ran_clean f60-notargets && ok=0
 result "settings: without render targets the caption and its note are still drawn (exit $(cat "$out/f60-notargets.code"))" $ok
 

@@ -10,7 +10,7 @@
 extern Config config;
 extern Geometry geo;
 
-// A function to put a value's colour into an SDL colour, leaving its alpha
+// A function to put a value's color into an SDL color, leaving its alpha
 static void store_rgb(SDL_Color *color, const SettingValue *value)
 {
     color->r = value->color.r;
@@ -18,7 +18,7 @@ static void store_rgb(SDL_Color *color, const SettingValue *value)
     color->b = value->color.b;
 }
 
-// A function to read an SDL colour into a value
+// A function to read an SDL color into a value
 static void read_rgb(SettingValue *value, SDL_Color color)
 {
     value->color.r = color.r;
@@ -47,7 +47,7 @@ static void read_percent(SettingValue *value, int number, bool percent)
     value->percent = percent;
 }
 
-// A function to derive a colour's input for derive_settings(), its alpha unused
+// A function to derive a color's input for derive_settings(), its alpha unused
 static DeriveColor derive_color(SDL_Color color)
 {
     return (DeriveColor) { color.r, color.g, color.b, 0 };

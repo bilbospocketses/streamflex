@@ -10,7 +10,7 @@ typedef struct {
     SDL_Rect time_rect;
     SDL_Rect date_rect;
     TextInfo text_info;
-    SDL_Color color;        // eff's clock colours, copied in init_clock(): text_info points at these,
+    SDL_Color color;        // eff's clock colors, copied in init_clock(): text_info points at these,
     SDL_Color shadow_color; // and the clock thread reads them, so nothing else may write them while it runs
     bool show_date;         // The clock's settings, copied in init_clock() for the same reason: the
     Alignment alignment;    // clock thread reads these, never config or eff, which settings change

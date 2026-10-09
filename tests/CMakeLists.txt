@@ -48,8 +48,8 @@ add_test(NAME config_save COMMAND test_config_save)
 
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
 # sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
-# through bindings.c's model (whose lines the tests parse with inidoc.c), and names a colour through
-# colorpick.c's swatches (whose contrast maths needs libm)
+# through bindings.c's model (whose lines the tests parse with inidoc.c), and names a color through
+# colorpick.c's swatches (whose contrast math needs libm)
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
@@ -70,7 +70,7 @@ add_executable(test_listpick test_listpick.c "${PROJECT_SOURCE_DIR}/src/listpick
 target_include_directories(test_listpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME listpick COMMAND test_listpick)
 
-# Unit tests for the colour picker's model and the contrast maths (pure; the maths needs libm)
+# Unit tests for the color picker's model and the contrast math (pure; the math needs libm)
 add_executable(test_colorpick test_colorpick.c "${PROJECT_SOURCE_DIR}/src/colorpick.c")
 target_include_directories(test_colorpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if (UNIX)
@@ -99,7 +99,7 @@ link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
-# (colorpick.c allocates nothing; settings.c names colours through it)
+# (colorpick.c allocates nothing; settings.c names colors through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"

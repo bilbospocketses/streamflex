@@ -1,5 +1,5 @@
 // The settings screen's pickers: the list picker (commands, the default menu, the device), the font
-// picker (a list picker of the installed font families, each drawn in its own face) and the colour
+// picker (a list picker of the installed font families, each drawn in its own face) and the color
 // picker, drawn in the settings column in place of a page, and the contrast warning. The
 // screen hands them what they draw with and how to apply a value (PickerHost). launcher.h, which has
 // no include guard, must come first (Menu).

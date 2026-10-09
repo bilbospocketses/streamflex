@@ -8,7 +8,7 @@
 #include <stdbool.h>
 
 #define DERIVE_MAX_CLOCK_MARGIN_PM 100        // The clock's margin: at most 10% of the screen height
-#define DERIVE_MIN_VCENTER_PM 250             // The vertical centre: 25% to 75% of the screen height
+#define DERIVE_MIN_VCENTER_PM 250             // The vertical center: 25% to 75% of the screen height
 #define DERIVE_MAX_VCENTER_PM 750
 #define DERIVE_MAX_SCROLL_OUTLINE_PM 10       // The scroll arrow's outline: at most 1% of the screen height
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
@@ -20,7 +20,7 @@ typedef struct {
     unsigned char a;
 } DeriveColor;
 
-// The configured values: as config.ini says, percentages in hundredths. A colour's `a` is ignored.
+// The configured values: as config.ini says, percentages in hundredths. A color's `a` is ignored.
 typedef struct DeriveInput {
     int screen_width;
     int screen_height;
@@ -67,7 +67,7 @@ typedef struct Effective {
     int highlight_outline_size;    // px, inside the smaller padding
     int highlight_rx;              // 0 when there is an outline (NanoSVG cannot draw both)
     int scroll_outline_size;       // px
-    DeriveColor title_color;       // Every colour below with its alpha from its opacity
+    DeriveColor title_color;       // Every color below with its alpha from its opacity
     DeriveColor title_shadow_color;
     DeriveColor overlay_color;
     DeriveColor highlight_fill;

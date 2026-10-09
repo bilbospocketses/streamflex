@@ -228,7 +228,7 @@ result "bindings: a pad's button held through its capture does not press until l
 rm -f /tmp/pad-a
 
 # The gamepad switched on while settings are open brings its floor with it: Remove of OK's only
-# button is greyed, and says why
+# button is grayed, and says why
 cfg=$(writable_config f62-gpoff)
 CFG=$cfg run_keys f62-gpon $TO_GAMEPAD Right Down Down Down Down Return Down Down Menu
 ok=1
@@ -244,7 +244,7 @@ grep -q "Settings: the cursor's row reads Background: " "$out/f62-word.log" && !
     && grep -q 'Settings: nothing changed' "$out/f62-word.log" && ran_clean f62-word && ok=0
 result "bindings: a command is read by its first word while settings are open (exit $(cat "$out/f62-word.code"))" $ok
 
-# A [Hotkeys] line with no name is listed; its Remove is greyed with why, and does nothing; its command
+# A [Hotkeys] line with no name is listed; its Remove is grayed with why, and does nothing; its command
 # changes and saves in its own line
 cfg=$(writable_config f62-empty)
 CFG=$cfg run_keys f62-empty $TO_KEYBOARD Down Return Down Down Return Up Return Down Down Return $SAVE

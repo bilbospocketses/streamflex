@@ -201,7 +201,7 @@ static void calculate_clock_positioning(Clock *clk, SDL_Rect *time_rect, SDL_Rec
 // A function to initialize the clock; non-zero when no font opens
 int init_clock(Clock *clk)
 {
-    // Initialize clock structure. Its colours are its own copies of eff's, which the clock thread
+    // Initialize clock structure. Its colors are its own copies of eff's, which the clock thread
     // reads while the main thread may derive eff again
     clk->color = (SDL_Color) { eff.clock_color.r, eff.clock_color.g, eff.clock_color.b, eff.clock_color.a };
     clk->shadow_color = (SDL_Color) { eff.clock_shadow_color.r, eff.clock_shadow_color.g,

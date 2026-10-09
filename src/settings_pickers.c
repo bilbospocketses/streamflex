@@ -46,7 +46,7 @@ SDL_COMPILE_TIME_ASSERT(key_f24, BIND_KEY_F24 == SDLK_F24);
 typedef enum {
     PICKER_NONE,
     PICKER_LIST,
-    PICKER_COLOUR,
+    PICKER_COLOR,
     PICKER_FONT               // A list picker whose list is NULL while the fonts load
 } PickerKind;
 
@@ -57,14 +57,14 @@ static SettingValue original;           // Its value when the picker opened: Bac
 static ListPick *list = NULL;
 static int list_first = 0;              // The list's first row on show
 static int list_page = 1;               // How many of its rows fit: Left and Right page this far
-static ColourPick colour;
+static ColorPick color_pick;
 static char note[512];                  // What the caption says, built as it is asked for
 static int shown_first = -1;            // The list's rows last on show, for the log...
 static int shown_last = -1;
 static char shown_cursor[LISTPICK_TEXT_MAX]; // ...and the label of the row under its cursor
-static bool cells_logged = false;       // The colour picker's cells were logged since it opened
-static char custom_shown[8];            // The Custom row's colour last drawn, for the log
-static SettingColor previewed;          // The colour the launcher shows while the colour picker is open
+static bool cells_logged = false;       // The color picker's cells were logged since it opened
+static char custom_shown[8];            // The Custom row's color last drawn, for the log
+static SettingColor previewed;          // The color the launcher shows while the color picker is open
 
 static int loading_logged = -1;         // The count "Loading fonts... (N)" last logged
 
@@ -94,14 +94,14 @@ void pickers_begin(const PickerHost *given)
     kind = PICKER_NONE;
 }
 
-// A function to close the picker on show, if any. No picker open means the slot holds the colour
-// the colour picker opened with: whatever the preview put in it goes, however the picker closes (a
+// A function to close the picker on show, if any. No picker open means the slot holds the color
+// the color picker opened with: whatever the preview put in it goes, however the picker closes (a
 // choice is made from that original). It is not applied here: as settings close, the fonts and the
 // screen it would be drawn with may be gone, and a Back or Home applies it before closing. The
 // font picker's samples go with it: they are drawn again when it next opens.
 static void close_picker(void)
 {
-    if (kind == PICKER_COLOUR)
+    if (kind == PICKER_COLOR)
         slot->value = original;
     if (kind != PICKER_NONE && slot != NULL)
         log_debug("Settings: closed the picker for [%s] %s", slot->def->section, slot->def->key);
@@ -142,7 +142,7 @@ static void forget_list_log(void)
     shown_cursor[0] = '\0';
 }
 
-// A function to add a command to the command picker once, labelled as the screen describes it;
+// A function to add a command to the command picker once, labeled as the screen describes it;
 // false when out of memory
 static bool add_command(ListPick *to, const char *command, const char *label)
 {
@@ -292,7 +292,7 @@ static void open_fonts(SettingSlot *s)
     kind = PICKER_FONT;
 }
 
-// A function to open the picker a setting's row asks for: the colour picker, the font picker, or
+// A function to open the picker a setting's row asks for: the color picker, the font picker, or
 // the list picker for the default menu, the device or a command
 void pickers_open(SettingSlot *s)
 {
@@ -304,11 +304,11 @@ void pickers_open(SettingSlot *s)
     slot = s;
     original = s->value;
     if (type == SET_TYPE_COLOR) {
-        colorpick_open(&colour, s->value.color);
+        colorpick_open(&color_pick, s->value.color);
         previewed = s->value.color;
         cells_logged = false;
         custom_shown[0] = '\0';
-        kind = PICKER_COLOUR;
+        kind = PICKER_COLOR;
     }
     else if (type == SET_TYPE_FONT)
         open_fonts(s);
@@ -695,7 +695,7 @@ void pickers_quit(void)
 static void choose(SettingValue value)
 {
     SettingSlot *s = slot;
-    close_picker();   // It puts back the original the colour picker's preview changed: the choice is made from it
+    close_picker();   // It puts back the original the color picker's preview changed: the choice is made from it
     SettingsEvent event = settings_choose_value(host.model, s, &value);
     if (event.kind == SETTINGS_EVENT_NONE)
         log_debug("Settings: [%s] %s is unchanged", s->def->section, s->def->key);
@@ -703,10 +703,10 @@ static void choose(SettingValue value)
         host.event(&event);
 }
 
-// A function to show a colour in the preview, live, without choosing it. A key that leaves the
-// colour as it is (a hex digit chosen, the editor opened or left) applies nothing: for the titles,
+// A function to show a color in the preview, live, without choosing it. A key that leaves the
+// color as it is (a hex digit chosen, the editor opened or left) applies nothing: for the titles,
 // each apply is a reload.
-static void preview_colour(SettingColor shown)
+static void preview_color(SettingColor shown)
 {
     if (shown.r == previewed.r && shown.g == previewed.g && shown.b == previewed.b)
         return;
@@ -717,12 +717,12 @@ static void preview_colour(SettingColor shown)
     log_debug("Settings: previewing #%02X%02X%02X", shown.r, shown.g, shown.b);
 }
 
-// A function to put back the colour the colour picker opened with, which the preview may have changed
-static void put_colour_back(void)
+// A function to put back the color the color picker opened with, which the preview may have changed
+static void put_color_back(void)
 {
     slot->value = original;
     host.apply(slot, true);
-    log_debug("Settings: the colour picker put [%s] %s back", slot->def->section, slot->def->key);
+    log_debug("Settings: the color picker put [%s] %s back", slot->def->section, slot->def->key);
 }
 
 // A function to choose a font row's family: its face is stored quietly first, then its file with
@@ -793,7 +793,7 @@ static void list_command(const char *command)
         host.event(&event);
         return;
     }
-    if (result == LISTPICK_CANCELLED)
+    if (result == LISTPICK_CANCELED)
         close_picker();
     else if (result == LISTPICK_CHOSEN && kind == PICKER_FONT)
         choose_font(listpick_chosen(list));
@@ -812,10 +812,10 @@ static void list_command(const char *command)
     }
 }
 
-// A function to act on a key in the colour picker
-static void colour_command(const char *command)
+// A function to act on a key in the color picker
+static void color_command(const char *command)
 {
-    ColourPickCommand key;
+    ColorPickCommand key;
     if (MATCH(command, SCMD_UP))
         key = COLORPICK_UP;
     else if (MATCH(command, SCMD_DOWN))
@@ -828,28 +828,28 @@ static void colour_command(const char *command)
         key = COLORPICK_OK;
     else
         key = COLORPICK_BACK;
-    ColourPickResult result = colorpick_command(&colour, key);
+    ColorPickResult result = colorpick_command(&color_pick, key);
     if (result == COLORPICK_MOVED)
-        preview_colour(colorpick_shown(&colour));
-    else if (result == COLORPICK_CANCELLED) {
-        put_colour_back();
+        preview_color(colorpick_shown(&color_pick));
+    else if (result == COLORPICK_CANCELED) {
+        put_color_back();
         close_picker();
     }
     else if (result == COLORPICK_CHOSEN) {
         SettingValue value = original;
-        value.color = colour.chosen;
+        value.color = color_pick.chosen;
         choose(value);
     }
 }
 
 // A function to act on a key while a picker is open. Home and the key that opened settings leave
-// the picker without choosing (the colour picker puts its colour back first, even from the hex
+// the picker without choosing (the color picker puts its color back first, even from the hex
 // editor, where Back would only leave the editor), then close settings as the pages would.
 void pickers_command(const char *command)
 {
     if (MATCH(command, SCMD_HOME) || MATCH(command, SCMD_SETTINGS)) {
-        if (kind == PICKER_COLOUR)
-            put_colour_back();
+        if (kind == PICKER_COLOR)
+            put_color_back();
         close_picker();
         SettingsEvent event = settings_command(host.model, MATCH(command, SCMD_HOME) ? SETTINGS_HOME : SETTINGS_CLOSE);
         host.event(&event);
@@ -862,8 +862,8 @@ void pickers_command(const char *command)
     }
     if (kind == PICKER_LIST || kind == PICKER_FONT)
         list_command(command);
-    else if (kind == PICKER_COLOUR)
-        colour_command(command);
+    else if (kind == PICKER_COLOR)
+        color_command(command);
 }
 
 // A function to draw a list row: in the font picker, a family's name in its own face over an empty
@@ -920,9 +920,9 @@ static void draw_list(int x, int top, int bottom)
     }
 }
 
-// A function to draw the colour picker: the swatches, the current one marked and the one under the
+// A function to draw the color picker: the swatches, the current one marked and the one under the
 // cursor outlined, then the Custom row, and in the hex editor each digit with the chosen one boxed
-static void draw_colour(int x, int top, int bottom)
+static void draw_color(int x, int top, int bottom)
 {
     int pad = host.margin / 2;
     int cell = (host.column_width - 2 * pad) / COLORPICK_COLUMNS;
@@ -931,10 +931,10 @@ static void draw_colour(int x, int top, int bottom)
     int fits = (bottom - top - pad - 2 * host.row_height) / COLORPICK_ROWS;
     if (cell > fits)
         cell = fits;
-    int current = colorpick_find(colour.original);
+    int current = colorpick_find(color_pick.original);
     if (!cells_logged) {
         cells_logged = true;
-        log_debug("Settings: the colour picker draws %i px cells from %i,%i, down to %i of %i", cell, x + pad, top,
+        log_debug("Settings: the color picker draws %i px cells from %i,%i, down to %i of %i", cell, x + pad, top,
             top + COLORPICK_ROWS * cell + pad + 2 * host.row_height, bottom);
     }
     for (int i = 0; i < COLORPICK_SWATCHES; i++) {
@@ -948,7 +948,7 @@ static void draw_colour(int x, int top, int bottom)
             SDL_SetRenderDrawColor(renderer, (Uint8) (0xFF - c.r), (Uint8) (0xFF - c.g), (Uint8) (0xFF - c.b), 0xFF);
             SDL_RenderFillRect(renderer, &mark);
         }
-        if (i == colour.cursor) {
+        if (i == color_pick.cursor) {
             SDL_Rect outline = { box.x - 3, box.y - 3, box.w + 6, box.h + 6 };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
             SDL_RenderDrawRect(renderer, &outline);
@@ -957,7 +957,7 @@ static void draw_colour(int x, int top, int bottom)
         }
     }
     int y = top + COLORPICK_ROWS * cell + pad;
-    SettingColor shown = colour.editing || colour.cursor == COLORPICK_CUSTOM ? colour.hex : colour.original;
+    SettingColor shown = color_pick.editing || color_pick.cursor == COLORPICK_CUSTOM ? color_pick.hex : color_pick.original;
     SettingsRow custom;
     memset(&custom, 0, sizeof(custom));
     custom.kind = SETTINGS_ROW_ACTION;
@@ -968,13 +968,13 @@ static void draw_colour(int x, int top, int bottom)
         copy_string(custom_shown, custom.value, sizeof(custom_shown));
         log_debug("Settings: the Custom row reads %s", custom_shown);
     }
-    y += host.row(&custom, colour.cursor == COLORPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
-    if (!colour.editing || y + host.row_height > bottom)
+    y += host.row(&custom, color_pick.cursor == COLORPICK_CUSTOM && !color_pick.editing, x, y, host.column_width, 0);
+    if (!color_pick.editing || y + host.row_height > bottom)
         return;
 
     // The hex editor: # and six digits in cells as wide as the widest digit, the chosen one boxed
     char digits[8];
-    snprintf(digits, sizeof(digits), "%02X%02X%02X", colour.hex.r, colour.hex.g, colour.hex.b);
+    snprintf(digits, sizeof(digits), "%02X%02X%02X", color_pick.hex.r, color_pick.hex.g, color_pick.hex.b);
     int w = 0;
     int h = 0;
     TTF_SizeUTF8(host.font_row, "W", &w, &h);
@@ -984,7 +984,7 @@ static void draw_colour(int x, int top, int bottom)
         char one[2] = { digits[i], '\0' };
         int cx = x + pad + (i + 1) * step;
         host.text(host.font_row, one, cx, y, step, 255, false);
-        if (i == colour.digit) {
+        if (i == color_pick.digit) {
             SDL_Rect box = { cx - pad / 2, y, step, h };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
             SDL_RenderDrawRect(renderer, &box);
@@ -1014,8 +1014,8 @@ void pickers_draw(int x, int top, int bottom)
 {
     if (kind == PICKER_LIST)
         draw_list(x, top, bottom);
-    else if (kind == PICKER_COLOUR)
-        draw_colour(x, top, bottom);
+    else if (kind == PICKER_COLOR)
+        draw_color(x, top, bottom);
     else if (kind == PICKER_FONT)
         draw_fonts(x, top, bottom);
 }
@@ -1033,17 +1033,17 @@ void pickers_path(char *out, size_t size)
 // 1280 x 720 and 1280 x 800 (the hex editor's keys are spelled out in docs/configuration.md)
 const char *pickers_hint(void)
 {
-    if (kind == PICKER_COLOUR && colour.editing)
+    if (kind == PICKER_COLOR && color_pick.editing)
         return "Arrows edit the digits" DOT "OK keeps" DOT "Back returns";
-    if (kind == PICKER_COLOUR)
+    if (kind == PICKER_COLOR)
         return "Arrows move" DOT "OK chooses" DOT "Back cancels";
     if (kind == PICKER_FONT && list == NULL)
         return "Back cancels";
     return "Left and right page" DOT "OK chooses" DOT "Back cancels";
 }
 
-// A function to warn when a title or clock colour stands out too little from what lies behind it:
-// the background colour or the image on show (its mean luminance), under the overlay when it is on.
+// A function to warn when a title or clock color stands out too little from what lies behind it:
+// the background color or the image on show (its mean luminance), under the overlay when it is on.
 // It says nothing for a transparent background, or an image not yet measured.
 void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
 {
@@ -1053,7 +1053,7 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
     double behind = 0.0;
     if (background_shown == BACKGROUND_COLOR) {
         SettingColor bg = { config.background_color.r, config.background_color.g, config.background_color.b };
-        behind = colour_luminance(bg);
+        behind = color_luminance(bg);
     }
     else if ((background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW) && background_luminance >= 0.0)
         behind = background_luminance;
@@ -1061,23 +1061,23 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
         return;
     if (config.background_overlay) {
         SettingColor over = { eff.overlay_color.r, eff.overlay_color.g, eff.overlay_color.b };
-        behind = colour_over(behind, over, eff.overlay_color.a);
+        behind = color_over(behind, over, eff.overlay_color.a);
     }
-    double ratio = colour_contrast(colour_luminance(color), behind);
+    double ratio = color_contrast(color_luminance(color), behind);
     if (ratio < COLORPICK_MIN_CONTRAST)
         snprintf(out, size, "Low contrast: %.1f:1 against the background; 3:1 or more reads well", ratio);
 }
 
 // A function to say what the caption says while a picker is open: why OK did nothing in a list; in
-// the colour picker, the colour under the cursor, and a contrast warning for it
+// the color picker, the color under the cursor, and a contrast warning for it
 const char *pickers_note(void)
 {
     note[0] = '\0';
     if (kind == PICKER_LIST && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
-    else if (kind == PICKER_COLOUR) {
-        SettingColor shown = colorpick_shown(&colour);
-        int index = colour.editing ? -1 : colorpick_find(shown);
+    else if (kind == PICKER_COLOR) {
+        SettingColor shown = colorpick_shown(&color_pick);
+        int index = color_pick.editing ? -1 : colorpick_find(shown);
         char warning[160];
         contrast_warning(slot->def->id, shown, warning, sizeof(warning));
         snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colorpick_name(index) : "Custom",
