@@ -8,6 +8,10 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-09
+
+Every setting is now on the settings screen, with color, font and command pickers, key and gamepad bindings, and an offer to restart when a change needs one. Checked by hand on Windows 11 and Ubuntu 26.04. A config written for 0.3.x reads and saves as before; on Linux, StreamFlex now needs SDL2 2.0.18 or later.
+
 ### Added
 - **Every setting on the settings screen.** Nine pages mirror `config.ini`: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver and Controls. Every change shows at once, and Back saves only what changed. A row that depends on a switch that is off is grayed, and says why.
 - **A color picker:** 24 named swatches, a hex editor for any other color, and a warning when a title or clock color stands out too little from the background.
