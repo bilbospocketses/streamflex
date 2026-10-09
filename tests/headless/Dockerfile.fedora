@@ -4,7 +4,9 @@
 # keys, xwd for the screenshots pixels.py reads, xrandr for the display's refresh rate, and
 # util-linux for setpriv and setarch. run.sh is the same for both images; see it for how they
 # are used.
-FROM fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+# Through mirror.gcr.io, Google's public Docker Hub mirror: Docker Hub rate-limits the unauthenticated
+# pulls of GitHub's runners. The digest is the same image's.
+FROM mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
 RUN dnf install -y --setopt=install_weak_deps=False \
       gcc make cmake pkgconf-pkg-config file git tar gawk findutils diffutils \
       libasan libubsan \

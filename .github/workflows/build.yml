@@ -109,9 +109,11 @@ jobs:
       matrix:
         config:
           # bookworm: bullseye is past end of life and its security mirror
-          # now 404s on package downloads.
+          # now 404s on package downloads. Every Docker Hub image here comes
+          # through mirror.gcr.io, Google's public Docker Hub mirror: Docker
+          # Hub rate-limits the runners' unauthenticated pulls.
           - name: Debian
-            docker_image: debian:bookworm
+            docker_image: mirror.gcr.io/library/debian:bookworm
             package_ext: .deb
 
     container:
@@ -166,8 +168,9 @@ jobs:
     strategy:
       fail-fast: false
 
+    # Through mirror.gcr.io, as the Linux job's image
     container:
-      image: debian:bookworm
+      image: mirror.gcr.io/library/debian:bookworm
 
     env:
       CMAKE_BUILD_TYPE: Release
@@ -212,8 +215,9 @@ jobs:
     strategy:
       fail-fast: false
 
+    # Through mirror.gcr.io, as the Linux job's image
     container:
-      image: archlinux:latest
+      image: mirror.gcr.io/library/archlinux:latest
 
     steps:
       - name: Install dependencies
@@ -263,6 +267,40 @@ jobs:
           .venv/bin/pip install --quiet --require-hashes -r branding/library/requirements.txt
           .venv/bin/python -m unittest discover -s branding/library -p "test_*.py" -v
           .venv/bin/python branding/library/check-library.py
+
+  # The lines a change adds and its commit messages use American spelling, as every repo's CI
+  # checks with the central gate (bilbospocketses/american-spelling), pinned by commit. Its
+  # allow list is central too: no allow file of ours exists. The gate refuses a shallow clone,
+  # so this checkout has the full history, and it reads only what was added since the
+  # merge-base with the base branch
+  spelling:
+    name: American spelling
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
+        env:
+          BASE: ${{ github.base_ref || github.event.repository.default_branch }}
+
+      - name: Check out the gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bilbospocketses/american-spelling
+          ref: 21ed7e5524c511d9ee584778d42b72e6ddaeba86 # v1.0.2
+          path: .american-spelling
+          persist-credentials: false
+
+      - name: Check American spelling
+        run: python .american-spelling/check-american-spelling.py --repo . --base "origin/${BASE}" --repo-slug "${SLUG}"
+        env:
+          BASE: ${{ github.base_ref || github.event.repository.default_branch }}
+          SLUG: ${{ github.repository }}
 
   # The unit tests again, built with AddressSanitizer and UBSan and the extra warnings, as the
   # local unit leg (CONTRIBUTING.md) runs them: the Linux job's Release build has no sanitizer, so
@@ -435,13 +473,13 @@ jobs:
           python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
 
   # Single required status check for the master branch ruleset. It passes only when every
-  # platform build, the icon library check, the sanitized unit tests, every headless shard and
-  # every merge succeeded;
+  # platform build, the icon library check, the spelling check, the sanitized unit tests, every
+  # headless shard and every merge succeeded;
   # `if: always()` makes it report a failure (rather than being skipped) when a job fails or is
   # canceled.
   build-and-test:
     runs-on: ubuntu-24.04
-    needs: [build_windows, build_linux, build_rpi, build_arch, library_check, unit_sanitizers, headless, headless_merge]
+    needs: [build_windows, build_linux, build_rpi, build_arch, library_check, spelling, unit_sanitizers, headless, headless_merge]
     if: always()
     steps:
       - name: Check platform builds

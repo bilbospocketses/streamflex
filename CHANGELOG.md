@@ -8,6 +8,10 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+### Changed
+- CI checks that added lines and commit messages use American spelling.
+- CI pulls the test images' bases, and the Linux, Raspberry Pi and Arch Linux build containers, through mirror.gcr.io.
+
 ### Fixed
 - The headless harness waits for the launcher to draw a frame after each key it presses. On a slow CI runner, several keys could be handled with no frame between them, so a check whose line only a drawn frame logs failed at random (seen in `63-settings-mappings.sh`).
 
