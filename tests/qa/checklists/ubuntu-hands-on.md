@@ -173,12 +173,12 @@ Take a mark before each part, and close settings after each part with Back (`But
 
 ## U5 and U6. The settings round trip, and Pictures through `user-dirs.dirs` (items 5 and 6)
 
-One settings visit, saved once. Open settings (Start or `compose`). The rows are *Background › Colour*, *Menus › 2 menus*, *Titles › Medium*, a divider and *Discard changes*. Each arrow below is the D-pad in pass A and an arrow key in pass B.
+One settings visit, saved once. Open settings (Start or `compose`). The rows are *Background › Color*, *Menus › 2 menus*, *Titles › Medium*, a divider and *Discard changes*. Each arrow below is the D-pad in pass A and an arrow key in pass B.
 
 1. **Background.** OK. Then:
-   - Down, Right: *Colour* becomes *Charcoal*. New line: `Settings: [Background] Color #000000 -> #1E1E1E`.
+   - Down, Right: *Color* becomes *Charcoal*. New line: `Settings: [Background] Color #000000 -> #1E1E1E`.
    - Up, then Right three times: Mode goes through *Image* and *Slideshow* to *Transparent*. The preview shows a **checkerboard**. **Frame** `U5-<pass>-checker.png`.
-   - Left three times, back to *Colour*: the preview is charcoal again.
+   - Left three times, back to *Color*: the preview is charcoal again.
 2. **Pictures (item 6).** Right (Mode becomes *Image*), Down, OK. **Frame** `U6-<pass>-browser.png`.
    - Expected: the browser opens in **`/home/qa/Bilder`**, not `~/Pictures`. New line: `Settings: browsing /home/qa/Bilder`. That is Batch B #99, reading `XDG_PICTURES_DIR` from `user-dirs.dirs`.
 3. **The picture folder.** Highlight `Été` and press OK.
@@ -221,14 +221,14 @@ One settings visit, saved once. Open settings (Start or `compose`). The rows are
 
 ## U8. The real Transparent window (item 8)
 
-On Linux, StreamFlex paints the chroma-key colour (`#010101`), and a compositor with a shader has to key it out. The documented way is picom on X11. **GNOME's compositor does not do this, so on this guest the desktop is not expected to show through.** This item records what the real window does, and checks that Transparent mode runs cleanly.
+On Linux, StreamFlex paints the chroma-key color (`#010101`), and a compositor with a shader has to key it out. The documented way is picom on X11. **GNOME's compositor does not do this, so on this guest the desktop is not expected to show through.** This item records what the real window does, and checks that Transparent mode runs cleanly.
 
 - **Inputs:** open settings; OK (*Background*); Right (Mode goes from *Slideshow* to *Transparent*); Back; Back (save). Wait 2 s. **Frame** `U8-<pass>-transparent.png`.
 - **Expected:**
   - New lines: `Background set up: Transparent`, and `Settings saved 1 change(s)`.
   - StreamFlex is still running and drawing its buttons.
-  - Record whether the desktop shows through (expected: no), and the colour of a background pixel away from the buttons (expected: about (1,1,1)).
-- **Then back:** open settings; OK; Left three times (*Colour*); Back; Back. **Frame** `U8-<pass>-colour.png`. The background is charcoal (30,30,30), and a new line reads `Background set up: Color`.
+  - Record whether the desktop shows through (expected: no), and the color of a background pixel away from the buttons (expected: about (1,1,1)).
+- **Then back:** open settings; OK; Left three times (*Color*); Back; Back. **Frame** `U8-<pass>-color.png`. The background is charcoal (30,30,30), and a new line reads `Background set up: Color`.
 - **PASS** when StreamFlex stays up through both changes and both lines appear. If the desktop does show through, record it as a surprise: no verdict change.
 
 ## U5c. A read-only config (as in the Windows W8)
@@ -251,7 +251,7 @@ On Linux, StreamFlex paints the chroma-key colour (`#010101`), and a compositor 
 
 - **Setup** (as root): `bash /root/sf-qa/ubuntu-guest.sh add-cafe-entry`. It prints the line it added to `[Main]`, for example `Entry5=Café;apps;gnome-text-editor "/home/qa/Été/café.txt"`.
 - **A long title.** As qa, add a title far too wide for its button after `Entry4` in `~/.config/streamflex/config.ini` (or the system copy, if the user file does not exist yet): `Entry8=Extraordinarily Wide Title WWWWWWWWWWWWWWWWWWWWWW;apps;gnome-text-editor`.
-- **Inputs:** launch. Main shows six buttons, the last one *Café*. **Frame** `U7-<pass>-longtitle.png`: the long title is cut to fit, and no letter is drawn past its button's edges or into a neighbour (zoom on both edges); FAIL otherwise. Then move Right onto *Café* (**Frame** `U7-<pass>-cafe.png`), and OK.
+- **Inputs:** launch. Main shows six buttons, the last one *Café*. **Frame** `U7-<pass>-longtitle.png`: the long title is cut to fit, and no letter is drawn past its button's edges or into a neighbor (zoom on both edges); FAIL otherwise. Then move Right onto *Café* (**Frame** `U7-<pass>-cafe.png`), and OK.
 - **Expected:**
   - An editor window opens `café.txt`, showing `StreamFlex café test`. **Frame** `U7-<pass>-editor.png`.
   - New lines include `Application detected`, and no `Could not` line.

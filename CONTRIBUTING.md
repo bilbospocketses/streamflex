@@ -21,7 +21,7 @@ There are two images and one `run.sh`. `Dockerfile` is Debian with SDL2 itself; 
 
 A second argument to `run.sh` picks the mode:
 
-- `run.sh <label>` runs every check in `checks/`, in name order, starting with `00-harness.sh`, which checks the harness's own helpers. The launcher is built with ASan and UBSan, and a compiler warning outside `src/external/` fails the run. Some checks also read the screen: `xwd` takes a screenshot and `pixels.py` reads chosen points, such as the settings preview's colour, image and Transparent checkerboard. The checks press keys with `xdotool`, except the function keys: `run.sh`'s `xdotool` function sends those through `key.py`, by keycode with no modifier, because Fedora's keymap makes `xdotool` hold Alt down for every F key, which a key capture would catch.
+- `run.sh <label>` runs every check in `checks/`, in name order, starting with `00-harness.sh`, which checks the harness's own helpers. The launcher is built with ASan and UBSan, and a compiler warning outside `src/external/` fails the run. Some checks also read the screen: `xwd` takes a screenshot and `pixels.py` reads chosen points, such as the settings preview's color, image and Transparent checkerboard. The checks press keys with `xdotool`, except the function keys: `run.sh`'s `xdotool` function sends those through `key.py`, by keycode with no modifier, because Fedora's keymap makes `xdotool` hold Alt down for every F key, which a key capture would catch.
 - `run.sh <label> scrollfail` runs item 11 only, with the scroll arrow's texture forced to fail, a path no config or input can reach.
 - `run.sh <label> leaks` runs every check again with LeakSanitizer on. Mesa's software driver is preloaded into the launcher so the blocks it holds at exit stay reachable, and there is no suppressions file: a run that leaks fails its check, and each leak is also listed at the end as a `LEAK` line that counts in `N failed`.
   - On Fedora, SDL3 (under sdl2-compat) leaks its X11 display data when StreamFlex stops on a fatal error before any window exists, and the leak pass counts that as a leak. A check of a fatal stop must therefore stop after the window opens: check 59's run of a pipe as a bundled font uses the clock's, which opens after the window, for that reason.
@@ -130,13 +130,13 @@ Use conventional-commit-style prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `
 
 - Keep PRs focused on one concern.
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change.
-- Update the relevant page in `docs/` when user-facing behaviour or configuration changes.
+- Update the relevant page in `docs/` when user-facing behavior or configuration changes.
 
 ## Reporting Bugs
 
 Open an issue with:
 
-- Expected vs actual behaviour
+- Expected vs actual behavior
 - OS and version (Windows 10/11, Linux distro, Raspberry Pi OS)
 - Your `config.ini` (or the relevant section of it)
 - Output from running with debug logging enabled (see the README's Debugging section)

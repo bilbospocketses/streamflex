@@ -1,6 +1,6 @@
 # StreamFlex 3b hands-on check: Ubuntu 26.04 GNOME/Wayland
 
-This is the Linux half of the hands-on check for sub-project 3b: every setting on the settings screen, the colour, font and command pickers, key and gamepad bindings, and the *Restart now?* question. It is run in the Ubuntu 26.04 guest of the 3a check (`ubuntu-hands-on.md`), by hand or by a QA harness, against the PR's CI **Debian build** `.deb`, after the Windows half (`windows-3b-hands-on.md`). The steps are the Windows ones, numbered the same; B8, B10, B11 and B12 are Windows only, and are not run here.
+This is the Linux half of the hands-on check for sub-project 3b: every setting on the settings screen, the color, font and command pickers, key and gamepad bindings, and the *Restart now?* question. It is run in the Ubuntu 26.04 guest of the 3a check (`ubuntu-hands-on.md`), by hand or by a QA harness, against the PR's CI **Debian build** `.deb`, after the Windows half (`windows-3b-hands-on.md`). The steps are the Windows ones, numbered the same; B8, B10, B11 and B12 are Windows only, and are not run here.
 
 ## How to read and run each step
 
@@ -86,27 +86,27 @@ The config file: the first save writes your own copy, `~/.config/streamflex/conf
   - New lines: `Settings: [Titles] Font ...OpenSans-Regular.ttf -> /usr/share/fonts/...` naming the system file (for DejaVu Serif, `/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf`).
 - Then Back, Back to close. The file's `[Titles]` reads `Font=` with that path, and has a `FontFace=` line only if the face chosen is a collection's later face (record which).
 
-## B5. A colour by hex
+## B5. A color by hex
 
 - **Inputs:**
-  1. Key **Menu**, Down to *Titles*, OK, Down to *Colour* (it reads *White*), OK. The colour picker shows 24 swatches, six across, with a *Custom #FFFFFF* row below; the cursor is on White, which is marked.
+  1. Key **Menu**, Down to *Titles*, OK, Down to *Color* (it reads *White*), OK. The color picker shows 24 swatches, six across, with a *Custom #FFFFFF* row below; the cursor is on White, which is marked.
   2. Down until the cursor is on the *Custom* row, then OK. The hex editor opens on `#FFFFFF`, its first digit boxed.
   3. Type `FFD700`: Right twice (to the third digit), Down twice (F to D); Right, Down 8 times (F to 7); Right, Up once (F wraps to 0); Right, Up once. The editor reads `#FFD700`. OK keeps it.
-  4. OK on *Colour* again. Move the cursor to Black, the first swatch, and stop there.
+  4. OK on *Color* again. Move the cursor to Black, the first swatch, and stop there.
   5. OK, to choose Black.
 - **Expected:**
-  - After step 3, the titles turn gold in the preview, and the *Colour* row reads *Custom #FFD700*. **Frame** `B5-gold.png`.
+  - After step 3, the titles turn gold in the preview, and the *Color* row reads *Custom #FFD700*. **Frame** `B5-gold.png`.
   - At step 4, the preview's titles are black, and the note under the preview reads *Black #000000 · Low contrast: 1.0:1 against the background; 3:1 or more reads well*. **Frame** `B5-black.png`.
-  - After step 5, with the cursor on the *Colour* row (*Black*), the note under the preview gives the same warning, without the name.
-- **Inputs:** 6. Put the gold back: OK on *Colour*, Down to *Custom* (the hex editor now starts at `#000000`), OK, and type `FFD700`: Down once (0 to F), Right, Down once, Right, Down 3 times (0 to D), Right, Up 7 times (0 to 7). OK keeps it. 7. Back, Back to save and close.
+  - After step 5, with the cursor on the *Color* row (*Black*), the note under the preview gives the same warning, without the name.
+- **Inputs:** 6. Put the gold back: OK on *Color*, Down to *Custom* (the hex editor now starts at `#000000`), OK, and type `FFD700`: Down once (0 to F), Right, Down once, Right, Down 3 times (0 to D), Right, Up 7 times (0 to 7). OK keeps it. 7. Back, Back to save and close.
 - **Expected:** the titles are gold again, the warning is gone, and they stay gold once settings close. The file's `[Titles]` reads `Color=#FFD700`.
 
 ## B6. Turn the clock on
 
-- **Inputs:** key **Menu**, Down to *Clock*, OK. Every row but *Show* is greyed; with the cursor on a greyed row the note says *The clock is off*. On *Show*, Right (On). Down to *Show date*, Right (On).
+- **Inputs:** key **Menu**, Down to *Clock*, OK. Every row but *Show* is grayed; with the cursor on a grayed row the note says *The clock is off*. On *Show*, Right (On). Down to *Show date*, Right (On).
 - **Expected:**
   - The clock appears in the preview at once, with the date, and the menu sits below it: no button or title overlaps the clock. New lines include `Layout area: from y <Y>`, with Y below the clock's date. **Frame** `B6`.
-  - The other rows are no longer greyed, but *Shadow colour*, which waits for *Shadows*.
+  - The other rows are no longer grayed, but *Shadow color*, which waits for *Shadows*.
 - Then Back, Back to save and close. The file's `[Clock]` reads `Enabled=true` and `ShowDate=true`.
 
 ## B7. Restart and compare
@@ -130,7 +130,7 @@ Not run on Linux: `:exit` is a Windows hotkey, and the command picker on Linux d
 
 ## B9. VSync live
 
-- **Inputs:** launch *StreamFlex Debug*. Take a mark. Key **Menu**, OK on *General*. Down to *VSync* (the sixth row), Left (Off). Down to *FPS limit*, which is no longer greyed, and Right (30).
+- **Inputs:** launch *StreamFlex Debug*. Take a mark. Key **Menu**, OK on *General*. Down to *VSync* (the sixth row), Left (Off). Down to *FPS limit*, which is no longer grayed, and Right (30).
 - **Expected:**
   - New lines: `Settings: [General] VSync true -> false`, then `Frame timing: FPS limit 30, 33 ms a frame`, with no restart. **Frame** `B9`.
   - Record the renderer's own VSync support: the `Video:` line from B0, and any `Frame timing: VSync wanted ..., the renderer gives ...` line, and whether an error line `The renderer refused VSync` or `The renderer would not turn VSync off` appears.
@@ -186,7 +186,7 @@ The exit hotkey after a change on the Keyboard page, the Menu key's name, and th
 | B2 Rebind a pad button | | |
 | B3 The safety floor | | |
 | B4 Pick a system font | | the font chosen, and any `FontFace` |
-| B5 A colour by hex | | |
+| B5 A color by hex | | |
 | B6 Turn the clock on | | |
 | B7 Restart and compare | | |
 | B8 The exit hotkey | N/A | Windows only |

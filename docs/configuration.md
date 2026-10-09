@@ -54,12 +54,12 @@ Holding the key or button opens settings once. Settings don't open while an appl
 ### Using it
 The settings are in a column on the left; the rest of the screen is a live preview of your launcher.
 - **Up and Down** move between rows.
-- **Left and Right** change the highlighted value. On a colour, the default menu or the gamepad's device they step through its choices; a font or a command is chosen with OK.
+- **Left and Right** change the highlighted value. On a color, the default menu or the gamepad's device they step through its choices; a font or a command is chosen with OK.
 - **OK** opens a row marked ›: a page, the [folder browser](#the-folder-browser), a [picker](#the-pickers) or a [binding](#key-and-button-bindings). On any other row it does what the row says, such as *Discard changes*.
 - **Back** goes back a page. On the first page, it saves your changes and closes settings.
 - **Menu** (or Start) closes settings from any page, saving your changes, except two: the *Couldn't save* page, where you choose *Try again* or *Leave without saving*, and the [restart question](#restart-now), where you choose *Yes* or *No*. A `:home` command does the same, then shows the menu set by `DefaultMenu`.
 
-A row that depends on a switch that is off, such as *Shadow colour* while *Shadows* is off, is greyed. It cannot be changed, but the cursor can rest on it, and the note under the preview says why.
+A row that depends on a switch that is off, such as *Shadow color* while *Shadows* is off, is grayed. It cannot be changed, but the cursor can rest on it, and the note under the preview says why.
 
 While settings are open, a hotkey or gamepad control works only when its command is one of the keys above (`:up`, `:down`, `:left`, `:right`, `:select`, `:back`, `:home` or `:settings`). Any other command, such as `:quit`, is ignored. The screensaver does not start while settings are open.
 
@@ -70,7 +70,7 @@ The first page has a row for each page below, in this order, and *Discard change
 - *Default menu* ([DefaultMenu](#defaultmenu)): your menus, in the order the config file has them.
 - *Wrap around* ([WrapEntries](#wrapentries)), *Reset on Back* ([ResetOnBack](#resetonback)), *Mouse select* ([MouseSelect](#mouseselect)) and *Block the OS screensaver* ([InhibitOSScreensaver](#inhibitosscreensaver)): On or Off.
 - *VSync* ([VSync](#vsync)): On or Off.
-- *FPS limit* ([FPSLimit](#fpslimit)): Off, 30, 60, 75, 120, 144, 165 or 240. Greyed while VSync is on.
+- *FPS limit* ([FPSLimit](#fpslimit)): Off, 30, 60, 75, 120, 144, 165 or 240. Grayed while VSync is on.
 - *After launching an app* ([OnLaunch](#onlaunch)): *Blank screen*, *Keep showing* or *Quit*.
 - *App timeout* ([ApplicationTimeout](#applicationtimeout)): 3, 5, 10, 15, 20 or 30 seconds.
 - *Startup command* and *Quit command* ([StartupCmd](#startupcmd), [QuitCmd](#quitcmd)): chosen in the [command picker](#the-command-picker). *None* removes the line.
@@ -78,13 +78,13 @@ The first page has a row for each page below, in this order, and *Discard change
 VSync and the FPS limit take effect at once, with no restart.
 
 #### The Background page
-- *Mode* ([Mode](#mode)): *Colour*, *Image*, *Slideshow* or *Transparent*. The rows under it follow the mode:
-  - Colour: *Colour* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [colour picker](#the-colour-picker). Every colour row names its colour as the colour picker does: by the swatch's name, such as *White*, when it is one of the picker's 24 swatches, and as *Custom #RRGGBB* when it is not.
+- *Mode* ([Mode](#mode)): *Color*, *Image*, *Slideshow* or *Transparent*. The rows under it follow the mode:
+  - Color: *Color* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [color picker](#the-color-picker). Every color row names its color as the color picker does: by the swatch's name, such as *White*, when it is one of the picker's 24 swatches, and as *Custom #RRGGBB* when it is not.
   - Image: *Image* ([Image](#image)), chosen in the [folder browser](#the-folder-browser).
   - Slideshow: *Folder* ([SlideshowDirectory](#slideshowdirectory)), chosen in the folder browser; *Change every* ([SlideshowImageDuration](#slideshowimageduration)): 5, 10, 15 or 30 seconds, or 1, 2, 5, 10, 30 or 60 minutes; and *Fade* ([SlideshowTransitionTime](#slideshowtransitiontime)): 0 to 3 seconds, in steps of 0.5.
-  - Transparent: a note that the desktop shows through, and *See-through colour* ([ChromaKeyColor](#chromakeycolor)).
+  - Transparent: a note that the desktop shows through, and *See-through color* ([ChromaKeyColor](#chromakeycolor)).
 - *Overlay* ([Overlay](#overlay)): On or Off.
-- *Overlay colour* ([OverlayColor](#overlaycolor)) and *Overlay opacity* ([OverlayOpacity](#overlayopacity)): 0% to 100%, in steps of 5. Both are greyed until Overlay is on.
+- *Overlay color* ([OverlayColor](#overlaycolor)) and *Overlay opacity* ([OverlayOpacity](#overlayopacity)): 0% to 100%, in steps of 5. Both are grayed until Overlay is on.
 
 If you choose Image or Slideshow but leave the Background page without choosing an image or folder, the mode goes back to what it was when you opened the page.
 
@@ -93,7 +93,7 @@ The grid of every menu (*All menus*, which is the `[Layout]` section) and of eac
 - *Rows* ([Rows](#rows)): 1 to 10.
 - *Columns* ([Columns](#columns)): 1 to 12.
 - *Largest button* ([IconSize](#iconsize)): 64, 96, 128, 160, 192, 256, 320, 384, 512, 768 or 1024 px. On *All menus*, *Fill* lets buttons grow as large as the grid allows.
-- On *All menus* only: *Icon spacing* ([IconSpacing](#iconspacing)): 0% to 10% of the screen width, in steps of 1; and *Vertical centre* ([VCenter](#vcenter)): 25% to 75%, in steps of 5.
+- On *All menus* only: *Icon spacing* ([IconSpacing](#iconspacing)): 0% to 10% of the screen width, in steps of 1; and *Vertical center* ([VCenter](#vcenter)): 25% to 75%, in steps of 5.
 
 On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again. A menu with no entries cannot be shown in the preview, but its grid can still be changed. The Menus page lists up to 62 menus; with more, it lists 61, and a note at its end counts the rest, whose grids you set in the config file.
 
@@ -101,48 +101,48 @@ On a menu's own page, the lowest step, *All menus*, makes that menu follow the s
 - *Size* ([FontSize](#fontsize)): Small, Medium or Large. Titles scale with each menu's buttons. A fixed size from your config file stays among the choices, shown as *Fixed*.
 - *Show titles* ([Enabled](#enabled)): On or Off.
 - *Font* ([Font](#font)): chosen in the [font picker](#the-font-picker).
-- *Colour* ([Color](#color-1)): the ten presets, or the colour picker. The note under the preview gives the [contrast warning](#the-contrast-warning).
+- *Color* ([Color](#color-1)): the ten presets, or the color picker. The note under the preview gives the [contrast warning](#the-contrast-warning).
 - *Opacity* ([Opacity](#opacity)): 0% to 100%, in steps of 5.
 - *Shadows* ([Shadows](#shadows)): On or Off.
-- *Shadow colour* ([ShadowColor](#shadowcolor)): greyed until Shadows is on.
+- *Shadow color* ([ShadowColor](#shadowcolor)): grayed until Shadows is on.
 - *Too long* ([OversizeMode](#oversizemode)): *Truncate* or *Shrink*. A `None` from your config file stays among the choices, shown as *Leave as is*.
 - *Padding* ([Padding](#padding)): 0% to 20%, in steps of 2.
 
-Every row but *Show titles* is greyed while titles are off.
+Every row but *Show titles* is grayed while titles are off.
 
 #### The Highlight page
 - *Show* ([Enabled](#enabled-1)): On or Off.
-- *Fill colour* ([FillColor](#fillcolor)), and *Fill opacity* ([FillOpacity](#fillopacity)): 0% to 100%, in steps of 5.
+- *Fill color* ([FillColor](#fillcolor)), and *Fill opacity* ([FillOpacity](#fillopacity)): 0% to 100%, in steps of 5.
 - *Outline size* ([OutlineSize](#outlinesize)): 0 to 10 px.
-- *Outline colour* ([OutlineColor](#outlinecolor)) and *Outline opacity* ([OutlineOpacity](#outlineopacity)): 0% to 100%, in steps of 5. Both are greyed while the outline's size is 0.
-- *Corner radius* ([CornerRadius](#cornerradius)): 0 to 100, in steps of 5. Greyed while there is an outline, since rounded corners cannot be drawn with one.
+- *Outline color* ([OutlineColor](#outlinecolor)) and *Outline opacity* ([OutlineOpacity](#outlineopacity)): 0% to 100%, in steps of 5. Both are grayed while the outline's size is 0.
+- *Corner radius* ([CornerRadius](#cornerradius)): 0 to 100, in steps of 5. Grayed while there is an outline, since rounded corners cannot be drawn with one.
 - *Vertical padding* ([VPadding](#vpadding)) and *Horizontal padding* ([HPadding](#hpadding)): 0 to 100 px, in steps of 5.
 
-Every row but *Show* is greyed while the highlight is off.
+Every row but *Show* is grayed while the highlight is off.
 
 #### The Scroll indicators page
 - *Show* ([Enabled](#enabled-2)): On or Off.
-- *Fill colour* ([FillColor](#fillcolor-1)).
+- *Fill color* ([FillColor](#fillcolor-1)).
 - *Outline size* ([OutlineSize](#outlinesize-1)): 0 to 10 px.
-- *Outline colour* ([OutlineColor](#outlinecolor-1)): greyed while the outline's size is 0.
+- *Outline color* ([OutlineColor](#outlinecolor-1)): grayed while the outline's size is 0.
 - *Opacity* ([Opacity](#opacity-1)): 0% to 100%, in steps of 5.
 
-Every row but *Show* is greyed while the scroll indicators are off.
+Every row but *Show* is grayed while the scroll indicators are off.
 
 #### The Clock page
 - *Show* ([Enabled](#enabled-3)) and *Show date* ([ShowDate](#showdate)): On or Off.
-- *Weekday* ([IncludeWeekday](#includeweekday)): On or Off. Greyed until Show date is on.
+- *Weekday* ([IncludeWeekday](#includeweekday)): On or Off. Grayed until Show date is on.
 - *Alignment* ([Alignment](#alignment)): Left or Right.
 - *Font* ([Font](#font-1)): chosen in the font picker.
 - *Size* ([FontSize](#fontsize-1)): 20 to 120, in steps of 5.
-- *Colour* ([FontColor](#fontcolor)): the ten presets, or the colour picker, with the contrast warning.
+- *Color* ([FontColor](#fontcolor)): the ten presets, or the color picker, with the contrast warning.
 - *Opacity* ([Opacity](#opacity-2)): 0% to 100%, in steps of 5.
-- *Shadows* ([Shadows](#shadows-1)), and *Shadow colour* ([ShadowColor](#shadowcolor-1)), which is greyed until Shadows is on.
+- *Shadows* ([Shadows](#shadows-1)), and *Shadow color* ([ShadowColor](#shadowcolor-1)), which is grayed until Shadows is on.
 - *Margin* ([Margin](#margin)): 0% to 10%, in steps of 1.
 - *Time* ([TimeFormat](#timeformat)): *14:05* (24hr), *2:05 PM* (12hr) or *Auto*.
-- *Date* ([DateFormat](#dateformat)): *Sep 28* (Big), *28 Sep* (Little) or *Auto*. Greyed until Show date is on.
+- *Date* ([DateFormat](#dateformat)): *Sep 28* (Big), *28 Sep* (Little) or *Auto*. Grayed until Show date is on.
 
-Every row but *Show* is greyed while the clock is off.
+Every row but *Show* is grayed while the clock is off.
 
 #### The Screensaver page
 - *On* ([Enabled](#enabled-4)): On or Off.
@@ -150,7 +150,7 @@ Every row but *Show* is greyed while the clock is off.
 - *Dim level* ([Intensity](#intensity)): 10% to 100%, in steps of 10. While this page is open, the preview is dimmed as the screensaver would dim the screen.
 - *Pause slideshow* ([PauseSlideshow](#pauseslideshow)): On or Off.
 
-Every row but *On* is greyed while the screensaver is off.
+Every row but *On* is grayed while the screensaver is off.
 
 #### The Controls page
 - *Keyboard*: the [hotkeys](#hotkeys). Its page lists them; see [Key and button bindings](#key-and-button-bindings).
@@ -160,7 +160,7 @@ Every row but *On* is greyed while the screensaver is off.
   - *Mappings file* ([ControllerMappingsFile](#controllermappingsfile)), chosen in the folder browser. It applies at next start: the note under the preview says *This applies at next start* when you choose one, the page says why, and settings offer to [restart StreamFlex](#restart-now) when you leave;
   - the gamepad's [controls](#key-and-button-bindings).
 
-  *Device* and *Mappings file* are greyed while the gamepad is off.
+  *Device* and *Mappings file* are grayed while the gamepad is off.
 
 #### The folder browser
 Choosing an image or a slideshow folder opens a folder browser. It starts in the folder of the image or slideshow you have now, or else in your Pictures folder (on Linux, the one your desktop names in its `user-dirs.dirs` file, whatever its language, such as `~/Bilder`), and its list of places reaches your home folder and your drives (on Linux, `/` and the drives and shares mounted in `/media` and `/mnt`).
@@ -173,21 +173,21 @@ The preview shows each image as you move over it, and the first image of a highl
 For the gamepad's *Mappings file*, the browser lists every file, not only images, and previews none of them. It lists files only, so a pipe or a device never appears.
 
 ### The pickers
-A row whose value is a colour, a font, a command, the default menu or the gamepad's device opens a picker with OK. The picker takes the place of the rows; the key hint at the bottom says which keys it takes. **Menu** and `:home` leave a picker without choosing, and close settings as they would from the page.
+A row whose value is a color, a font, a command, the default menu or the gamepad's device opens a picker with OK. The picker takes the place of the rows; the key hint at the bottom says which keys it takes. **Menu** and `:home` leave a picker without choosing, and close settings as they would from the page.
 
-#### The colour picker
-The colour picker shows 24 swatches, six across and four down:
-- Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A` and Burgundy `#4A1520`, the ten that Left and Right step through on a colour row;
-- White `#FFFFFF`, Light grey `#C8C8C8`, Grey `#808080` and Dark grey `#4A4A4A`;
+#### The color picker
+The color picker shows 24 swatches, six across and four down:
+- Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A` and Burgundy `#4A1520`, the ten that Left and Right step through on a color row;
+- White `#FFFFFF`, Light gray `#C8C8C8`, Gray `#808080` and Dark gray `#4A4A4A`;
 - Red `#D03030`, Orange `#E07020`, Amber `#F0B000`, Yellow `#F0E040`, Lime `#80C040`, Green `#30A050`, Cyan `#20B0C0`, Blue `#3070D0`, Indigo `#5048C0` and Pink `#D04890`.
 
-Below them is a *Custom #RRGGBB* row, for any other colour. The swatch of the colour you have now is marked.
-- **The arrows** move between the swatches, and down onto the Custom row. The preview shows the colour under the cursor as you move, and the note under the preview names it.
-- **OK** on a swatch chooses it. On the Custom row, OK opens the hex editor, which starts at the colour you have now: **Left and Right** choose a digit, **Up and Down** change it, wrapping between F and 0 either way, **OK** keeps the colour, and **Back** leaves the editor without choosing.
-- **Back** closes the picker without choosing, and puts the colour back as it was when the picker opened.
+Below them is a *Custom #RRGGBB* row, for any other color. The swatch of the color you have now is marked.
+- **The arrows** move between the swatches, and down onto the Custom row. The preview shows the color under the cursor as you move, and the note under the preview names it.
+- **OK** on a swatch chooses it. On the Custom row, OK opens the hex editor, which starts at the color you have now: **Left and Right** choose a digit, **Up and Down** change it, wrapping between F and 0 either way, **OK** keeps the color, and **Back** leaves the editor without choosing.
+- **Back** closes the picker without choosing, and puts the color back as it was when the picker opened.
 
 #### The contrast warning
-For the titles' and the clock's colour, the note under the preview warns when the colour stands out too little from what lies behind it: `Low contrast: 1.8:1 against the background; 3:1 or more reads well`. It warns below 3:1, the contrast ratio WCAG asks of large text. What lies behind is the background colour, or for an image or a slideshow, the image's mean luminance (its average brightness); when the overlay is on, it is laid over either. A transparent background gets no warning. The warning is advice only: the colour can still be chosen. It shows in the colour picker, for the colour under the cursor, and whenever the cursor rests on the colour's row.
+For the titles' and the clock's color, the note under the preview warns when the color stands out too little from what lies behind it: `Low contrast: 1.8:1 against the background; 3:1 or more reads well`. It warns below 3:1, the contrast ratio WCAG asks of large text. What lies behind is the background color, or for an image or a slideshow, the image's mean luminance (its average brightness); when the overlay is on, it is laid over either. A transparent background gets no warning. The warning is advice only: the color can still be chosen. It shows in the color picker, for the color under the cursor, and whenever the cursor rests on the color's row.
 
 #### The command picker
 The startup and quit commands, and a binding's command, are chosen from a list:
@@ -432,7 +432,7 @@ The gap between buttons, across and down, in pixels or percent of the screen wid
 Default: 5%
 
 ##### VCenter
-The vertical centre of the buttons, in percent of the screen height, which may have up to two decimals (`52.5%`). A value of 50% centres them halfway down the screen; a higher value lowers them and a lower value raises them. The centre is kept between 25% and 75% of the height: a value outside that is drawn at the nearer end. The rows that have buttons are centred on this line, but a tall grid is kept on the screen and below the clock.
+The vertical center of the buttons, in percent of the screen height, which may have up to two decimals (`52.5%`). A value of 50% centers them halfway down the screen; a higher value lowers them and a lower value raises them. The center is kept between 25% and 75% of the height: a value outside that is drawn at the nearer end. The rows that have buttons are centered on this line, but a tall grid is kept on the screen and below the clock.
 
 Default: 50%
 
@@ -566,7 +566,7 @@ Defines the amount of horizontal distance that the highlight cursor extends beyo
 Default: 30
 
 #### Scroll Indicators
-The settings in this section pertain to scroll indicators. Scroll indicators are arrows that show when a menu has more buttons than fit on the screen. A one-row menu shows them in the bottom left and/or bottom right corners. A grid shows them centred at the top and/or bottom of the screen, pointing up or down.
+The settings in this section pertain to scroll indicators. Scroll indicators are arrows that show when a menu has more buttons than fit on the screen. A one-row menu shows them in the bottom left and/or bottom right corners. A grid shows them centered at the top and/or bottom of the screen, pointing up or down.
 
 - [Enabled](#enabled-2)
 - [FillColor](#fillcolor-1)
@@ -872,7 +872,7 @@ Applies at next start: SDL can add mappings while running, but not take one back
 ### Controls
 The controls are defined in key=value pairs, where the key is the name of the axis or button that is pressed, and the value is the command that is to be run, which is typically a [special command](#special-commands). An axis is an analog stick or a trigger. For analog sticks, negative (-) represents left for the x axis and up for the y axis, and postive (+) represents right for the x axis and down for the y axis. 
 
-The [SDL GameController](https://wiki.libsdl.org/CategoryGameController) interface is an abstraction which conceptualizes a controller as having an Xbox-style layout. The mapping names in SDL are based on the *location* of the buttons on an Xbox controller, and may not correspond to the actual labelling of the buttons on your controller. For example, `ButtonA` is for the "bottom" button, `ButtonB` is for the "right" button of the 4 main control buttons. If you have a Playstation-style controller, those mapping names will correspond to the X button and the Circle button, respectively. 
+The [SDL GameController](https://wiki.libsdl.org/CategoryGameController) interface is an abstraction which conceptualizes a controller as having an Xbox-style layout. The mapping names in SDL are based on the *location* of the buttons on an Xbox controller, and may not correspond to the actual labeling of the buttons on your controller. For example, `ButtonA` is for the "bottom" button, `ButtonB` is for the "right" button of the 4 main control buttons. If you have a Playstation-style controller, those mapping names will correspond to the X button and the Circle button, respectively. 
 
 The default controls in StreamFlex allow the user to move the highlight cursor with the left stick or the DPad, select an entry by pressing A, and go back to the previous menu by pressing B. These controls are simple and will suffice for the vast majority of use cases. The settings screen's *Gamepad* page adds, changes and removes controls, capturing the button from the gamepad; see [Key and button bindings](#key-and-button-bindings).
 

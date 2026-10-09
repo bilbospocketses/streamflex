@@ -23,7 +23,7 @@ When reporting, please provide:
 
 ## Response Expectations
 
-- **Acknowledgement:** within **72 hours** of receipt
+- **Acknowledgment:** within **72 hours** of receipt
 - **Triage and initial assessment:** within one week
 - **Fix and disclosure timeline:** discussed with the reporter on a per-issue basis, depending on severity and complexity
 
@@ -37,6 +37,6 @@ In scope: the launcher itself — config file parsing, the icon library manifest
 
 Out of scope:
 - Vulnerabilities in third-party libraries (SDL2, SDL2_image, SDL2_ttf, inih, getopt) that are not specific to how streamflex uses them — report those to the library's maintainers.
-- Behaviour that follows from a user deliberately configuring the launcher to run a given command. The config file is trusted input written by the machine's owner.
+- Behavior that follows from a user deliberately configuring the launcher to run a given command. The config file is trusted input written by the machine's owner.
 
 Thanks for helping keep the project safe.
