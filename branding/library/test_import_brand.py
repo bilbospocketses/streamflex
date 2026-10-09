@@ -25,13 +25,13 @@ class ImportBrand(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def art(self, size, colour=(200, 30, 40, 255), mode="RGBA", round_logo=False):
+    def art(self, size, color=(200, 30, 40, 255), mode="RGBA", round_logo=False):
         width, height = size if isinstance(size, tuple) else (size, size)
         if round_logo:
             image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            ImageDraw.Draw(image).ellipse((50, 50, width - 51, height - 51), fill=colour)
+            ImageDraw.Draw(image).ellipse((50, 50, width - 51, height - 51), fill=color)
         else:
-            image = Image.new(mode, (width, height), colour if mode == "RGBA" else colour[:3])
+            image = Image.new(mode, (width, height), color if mode == "RGBA" else color[:3])
         path = self.dir / f"src-{width}x{height}-{mode}-{round_logo}.png"
         image.save(path)
         return path
@@ -47,7 +47,7 @@ class ImportBrand(unittest.TestCase):
             self.assertEqual(out.mode, "RGBA")
             self.assertEqual(out.size, (600, 600))
             self.assertEqual(out.getpixel((0, 0))[3], 0)        # corner: outside the outline
-            self.assertEqual(out.getpixel((300, 300))[3], 255)  # centre: inside
+            self.assertEqual(out.getpixel((300, 300))[3], 255)  # center: inside
             self.assertEqual(out.getpixel((300, 300))[:3], (200, 30, 40))
 
     def test_brands_ini_records_provenance_and_keeps_hand_edits(self):
@@ -88,7 +88,7 @@ class ImportBrand(unittest.TestCase):
 
     def test_near_opaque_art_counts_as_opaque(self):
         # Store art often carries alpha 254 from an encoder: not transparency, and not worth a --fill
-        self.run_import("near", self.art(512, colour=(10, 120, 200, 252)))
+        self.run_import("near", self.art(512, color=(10, 120, 200, 252)))
         with Image.open(self.library / "brands" / "near.png") as out:
             self.assertEqual(out.getpixel((256, 256)), (10, 120, 200, 255))
             self.assertEqual(out.getpixel((0, 0))[3], 0)
@@ -97,22 +97,22 @@ class ImportBrand(unittest.TestCase):
     def test_pixels_near_the_chroma_key_are_moved_off_it(self):
         # Transparent mode on Windows shows through #010101, and scaling averages pixels a step off it onto
         # it, so opaque art within one step of it becomes #030303; the edge of the outline, where the art is
-        # not fully opaque, keeps its colour, and art two steps off is left alone
-        for name, colour in (("keyed", (1, 1, 1)), ("black", (0, 0, 0)), ("dark", (2, 1, 0))):
-            info = self.run_import(name, self.art(512, colour=colour + (255,)))
+        # not fully opaque, keeps its color, and art two steps off is left alone
+        for name, color in (("keyed", (1, 1, 1)), ("black", (0, 0, 0)), ("dark", (2, 1, 0))):
+            info = self.run_import(name, self.art(512, color=color + (255,)))
             with Image.open(self.library / "brands" / f"{name}.png") as out:
                 self.assertEqual(out.getpixel((256, 256)), (3, 3, 3, 255), name)
                 self.assertEqual(ib.libtools.key_pixels(out), 0, name)
                 red, green, blue, alpha = out.split()
             edge = alpha.point(lambda v: 255 if 0 < v < 255 else 0)
             unchanged = edge
-            for band, level in zip((red, green, blue), colour):
+            for band, level in zip((red, green, blue), color):
                 unchanged = ImageChops.multiply(unchanged, band.point(lambda v, level=level: 255 if v == level else 0))
             edge_count = edge.histogram()[255]
             self.assertGreater(edge_count, 0, name)
             self.assertEqual(unchanged.histogram()[255], edge_count, name)
             self.assertGreater(info["off_key"], 0, name)
-        info = self.run_import("apart", self.art(512, colour=(3, 1, 1, 255)))
+        info = self.run_import("apart", self.art(512, color=(3, 1, 1, 255)))
         self.assertEqual(info["off_key"], 0)
         with Image.open(self.library / "brands" / "apart.png") as out:
             self.assertEqual(out.getpixel((256, 256)), (3, 1, 1, 255))

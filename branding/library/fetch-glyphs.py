@@ -1,4 +1,4 @@
-"""Vendor the Material Symbols glyphs the generic icons use, and their licence, into glyphs/.
+"""Vendor the Material Symbols glyphs the generic icons use, and their license, into glyphs/.
 
   python branding/library/fetch-glyphs.py
 

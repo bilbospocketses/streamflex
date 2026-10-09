@@ -1,4 +1,4 @@
-"""Write build/review.html: every library icon at 32, 48, 64, 128 and 256 px on light, grey, dark and photo
+"""Write build/review.html: every library icon at 32, 48, 64, 128 and 256 px on light, gray, dark and photo
 backgrounds, brand icons first, with 512-only brand art marked. Open it in a browser to judge the set by eye.
 Standard library only.
 """
@@ -11,7 +11,7 @@ import libtools  # noqa: E402
 
 SIZES = (32, 48, 64, 128, 256)
 BACKGROUNDS = {
-    "light": "#FFFFFF", "grey": "#808080", "dark": "#101418",
+    "light": "#FFFFFF", "gray": "#808080", "dark": "#101418",
     "photo": "linear-gradient(135deg,#c9d8e6 0%,#e9d9b8 45%,#7a9a6b 100%)",
 }
 

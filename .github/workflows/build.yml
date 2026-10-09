@@ -438,7 +438,7 @@ jobs:
   # platform build, the icon library check, the sanitized unit tests, every headless shard and
   # every merge succeeded;
   # `if: always()` makes it report a failure (rather than being skipped) when a job fails or is
-  # cancelled.
+  # canceled.
   build-and-test:
     runs-on: ubuntu-24.04
     needs: [build_windows, build_linux, build_rpi, build_arch, library_check, unit_sanitizers, headless, headless_merge]

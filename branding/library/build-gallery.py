@@ -47,7 +47,7 @@ image file, as before. See [Creating Menus](configuration#creating-menus).
 """
 
 BRAND_NOTE = """The service icons below are the trademarks and artwork of their owners, shown only to identify each
-service. They are not covered by StreamFlex's GPL-3.0 licence; see the
+service. They are not covered by StreamFlex's GPL-3.0 license; see the
 [brand notice](https://github.com/bilbospocketses/streamflex/blob/master/assets/icons/library/brands/NOTICE.md).
 
 """

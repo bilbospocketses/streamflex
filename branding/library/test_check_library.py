@@ -40,8 +40,8 @@ class CheckLibrary(unittest.TestCase):
         # it: five opaque pixels within one step in every channel are named and counted
         brand = next((self.library / "brands").glob("*.png"))
         image = Image.new("RGBA", (512, 512), (10, 20, 30, 255))
-        for x, colour in enumerate(((1, 1, 1), (0, 0, 0), (2, 2, 2), (0, 2, 1), (1, 1, 1))):
-            image.putpixel((200 + x, 256), colour + (255,))
+        for x, color in enumerate(((1, 1, 1), (0, 0, 0), (2, 2, 2), (0, 2, 1), (1, 1, 1))):
+            image.putpixel((200 + x, 256), color + (255,))
         image.putpixel((210, 256), (1, 1, 1, 254))   # not fully opaque: not counted
         image.putpixel((211, 256), (3, 1, 1, 255))   # two steps off in red: not counted
         image.save(brand)
