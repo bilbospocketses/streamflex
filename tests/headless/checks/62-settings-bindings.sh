@@ -605,3 +605,16 @@ for name in f62-capoff f62-capnopad; do
         && grep -q 'Settings: nothing changed' "$log" && ran_clean $name && ok=0
     result "bindings: a pad's capture with no pad to capture from says why, and starts nothing ($name, exit $(cat "$out/$name.code"))" $ok
 done
+
+# OK held on the Key row with the gamepad off: the refusal comes once for the press, its repeats wait
+# until it is let go (as a key held as a capture ends does), and OK pressed again refuses once more
+b62_hold_return_refused() { xdotool keydown Return; sleep 2; xdotool keyup Return; sleep 0.5; }
+CFG=$FX/f62-padoff.ini run_keys f62-capheld $TO_GAMEPAD Down Down Down Return +b62_hold_return_refused Return Menu
+log=$out/f62-capheld.log
+ok=1
+[ "$(grep -c 'Settings: the capture cannot start: Turn the gamepad on to capture a button' "$log")" = 2 ] \
+    && [ "$(sed -n '/Settings: the capture cannot start/,$p' "$log" | grep -c 'Key Return (#D) detected')" -gt 3 ] \
+    && ! grep -q 'Settings: capturing a' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-capheld && ok=0
+result "bindings: a held OK refused a pad's capture once, and a new press refuses again (exit $(cat "$out/f62-capheld.code"))" $ok
+echo "      refusals: $(grep -c 'Settings: the capture cannot start' "$log")"

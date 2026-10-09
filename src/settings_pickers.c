@@ -387,7 +387,7 @@ void pickers_key_name(int device, int code, char *out, size_t size)
 // A function to start capturing for a device. The key or pad control that started it (OK) is held
 // now: the key last pressed and not let go, or the first control held on a pad; its repeats and its
 // release are not captured. A pad's capture with no pad to capture from (the gamepad off, or no pad
-// open) does not start: the binding page says why.
+// open) does not start: the binding page says why, once for each press.
 void pickers_capture(int device)
 {
     const char *why = NULL;
@@ -396,6 +396,9 @@ void pickers_capture(int device)
     else if (device == BINDINGS_GAMEPAD && !gamepad_connected())
         why = "No gamepad is connected";
     if (why != NULL) {
+        // As when a pad's capture ends: the key held to start it waits until let go, so its repeats
+        // do not refuse again
+        keys_swallowed[1] = key_held;
         log_debug("Settings: the capture cannot start: %s", why);
         settings_capture_ended(host.model, why);
         return;
