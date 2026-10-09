@@ -61,8 +61,9 @@ const char *fonts_value_path(const char *value)
 }
 
 // A function to get a family's name drawn in its own face, from the cache. A face that cannot be
-// opened or drawn, or that is symbols, is kept as such, so it is tried once: NULL, and its row
-// draws in the settings' font. Each draw is logged, as it happens once per family on show.
+// opened or drawn, or that lacks common punctuation, is kept as such, so it is tried once: NULL,
+// and its row draws in the settings' font. Each draw is logged, as it happens once per family on
+// show.
 SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *name, int *w, int *h)
 {
     const char *path = fonts_value_path(value);
