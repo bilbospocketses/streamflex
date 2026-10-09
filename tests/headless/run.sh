@@ -339,6 +339,24 @@ run_keys() {
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }
 
+# A function to run run_keys on a second X display of SIZE (WxH), for a check of how settings fit a
+# screen the main display is not: SIZE, then the run's NAME and its keys as run_keys takes them
+run_keys_at() {
+    local size=$1 xvfb i word at=()
+    shift
+    Xvfb :97 -screen 0 "${size}x24" -ac > /dev/null 2>&1 &
+    xvfb=$!
+    for i in $(seq 100); do DISPLAY=:97 command xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+    for word in "${TESTER[@]}"; do
+        case $word in
+            DISPLAY=:99) at+=(DISPLAY=:97) ;;
+            *) at+=("$word") ;;
+        esac
+    done
+    ( export DISPLAY=:97; TESTER=("${at[@]}"); run_keys "$@" )
+    kill "$xvfb" 2> /dev/null; wait "$xvfb" 2> /dev/null
+}
+
 # A function to run a config until its log shows LINE, then send the keys as run_keys does
 run_after_line() {
     local name=$1 line=$2; shift 2

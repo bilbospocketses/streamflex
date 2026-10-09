@@ -75,7 +75,7 @@ ok=1
     && grep -q 'Settings: the note under the preview says Custom #000000' "$log" \
     && grep -q 'Settings: the note under the preview says Custom #200000' "$log" \
     && grep -qF "Settings: page Settings${ARROW}Background${ARROW}Colour" "$log" \
-    && grep -qF "Settings: the key hint reads Left and right choose a digit $P58_DOT Up and down change it $P58_DOT OK keeps $P58_DOT Back returns" "$log" \
+    && grep -qF "Settings: the key hint reads Arrows edit the digits $P58_DOT OK keeps $P58_DOT Back returns" "$log" \
     && grep -qF "Settings: the key hint reads Arrows move $P58_DOT OK chooses $P58_DOT Back cancels" "$log" \
     && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f60-colour.ini" "$cfg" && ran_clean f58-hexhome && ok=0
 result "pickers: the settings key leaves the hex editor keeping nothing, and the Custom row follows the cursor (exit $(cat "$out/f58-hexhome.code"))" $ok
@@ -144,10 +144,28 @@ line=$(grep -o 'Settings: the colour picker draws [0-9]* px cells from [0-9]*,[0
 read -r p58_end p58_bottom <<< "$(sed 's/.* down to \([0-9]*\) of \([0-9]*\)/\1 \2/' <<< "$line")"
 ok=1
 [ -n "${p58_bottom:-}" ] && [ "$p58_end" -le "$p58_bottom" ] \
-    && grep -qF "Settings: the key hint reads Left and right choose a digit $P58_DOT" "$log" \
+    && grep -qF "Settings: the key hint reads Arrows edit the digits $P58_DOT" "$log" \
     && ran_clean f58-short && ok=0
 result "pickers: on a short, wide screen the swatches end above the key hint (exit $(cat "$out/f58-short.code"))" $ok
 echo "      ${line:-the cells of the colour picker were never logged}"
+
+# The hex editor's one-line key hint fits the column, uncut, on the smallest screens: 1280 x 720,
+# the smallest the specs lay the screens out for, and 1280 x 800, whose taller text (a share of the
+# height) in the same column (a share of the width) fits closer still. Each runs on a second X
+# display of its size; the harness build logs each hint's width beside the column's.
+for p58_size in 1280x720 1280x800; do
+    name=f58-hint$p58_size
+    # shellcheck disable=SC2046
+    CFG=$FX/f60-colour.ini run_keys_at "$p58_size" "$name" Menu Down Return Down Return $(p58_downs 4) Return
+    log=$out/$name.log
+    line=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' "$log" | tail -1)
+    read -r p58_wide p58_column <<< "$(sed 's/.* is \([0-9]*\) px wide, in a column \([0-9]*\) px wide/\1 \2/' <<< "$line")"
+    ok=1
+    grep -qx "Resolution: *$p58_size" "$log" && grep -q 'Settings: the note under the preview says Custom #000000' "$log" \
+        && [ -n "${p58_column:-}" ] && [ "$p58_wide" -le "$p58_column" ] && ran_clean "$name" && ok=0
+    result "pickers: at $p58_size the hex editor's key hint fits the column (exit $(cat "$out/$name.code"))" $ok
+    echo "      $(grep -o 'Settings: the key hint reads .*' "$log" | tail -1): ${line:-no width logged}"
+done
 
 # Home (a hotkey for :home in these fixtures) and the settings key close the picker before they
 # close settings: with a save that fails (a read-only config), the failure page that follows takes

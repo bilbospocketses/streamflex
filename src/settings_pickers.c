@@ -1017,11 +1017,12 @@ void pickers_path(char *out, size_t size)
         snprintf(out + used, size - used, " \xE2\x80\xBA %s", slot->def->label);
 }
 
-// A function to give the key hint for the picker on show
+// A function to give the key hint for the picker on show, one line short enough for the column at
+// 1280 x 720 and 1280 x 800 (the hex editor's keys are spelled out in docs/configuration.md)
 const char *pickers_hint(void)
 {
     if (kind == PICKER_COLOUR && colour.editing)
-        return "Left and right choose a digit" DOT "Up and down change it" DOT "OK keeps" DOT "Back returns";
+        return "Arrows edit the digits" DOT "OK keeps" DOT "Back returns";
     if (kind == PICKER_COLOUR)
         return "Arrows move" DOT "OK chooses" DOT "Back cancels";
     if (kind == PICKER_FONT && list == NULL)

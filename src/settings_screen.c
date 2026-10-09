@@ -1256,6 +1256,14 @@ static void row_value_text(const SettingsRow *row, bool highlighted, char *out, 
         snprintf(out, size, "%s", row->value);
 }
 
+// A function to find how wide a row's value may draw: what its label leaves, and never less than
+// half the row, so a long label is cut before a value is (a binding's F9 leaves its command the row)
+static int value_room(const SettingsRow *row, int width)
+{
+    int pad = margin / 2;
+    return max_int(width / 2, width - text_width(font_row, row->label) - 3 * pad);
+}
+
 // A function to draw one row; returns the height it took. A note row takes at most note_room.
 static int draw_row(const SettingsRow *row, bool highlighted, int x, int y, int width, int note_room)
 {
@@ -1280,11 +1288,12 @@ static int draw_row(const SettingsRow *row, bool highlighted, int x, int y, int 
     }
     char value[320];
     row_value_text(row, highlighted, value, sizeof(value));
-    int value_width = min_int(text_width(font_row, value), width / 2);
+    int room = value_room(row, width);
+    int value_width = min_int(text_width(font_row, value), room);
     Uint8 label_alpha = row->enabled ? 255 : ALPHA_DIM;
     Uint8 value_alpha = !row->enabled ? ALPHA_DIM : highlighted ? 255 : ALPHA_VALUE;
     draw_text(font_row, row->label, x + pad, text_y, width - value_width - 3 * pad, label_alpha, false);
-    draw_text(font_row, value, x + width - pad, text_y, width / 2, value_alpha, true);
+    draw_text(font_row, value, x + width - pad, text_y, room, value_alpha, true);
     return row_height;
 }
 
@@ -1350,6 +1359,11 @@ static void draw_model_rows(SettingsRow *rows, int count, int x, int top, int bo
         if (strcmp(drawn, drawn_cursor) != 0) {
             copy_string(drawn_cursor, drawn, sizeof(drawn_cursor));
             log_debug("Settings: the cursor's row reads %s", drawn);
+#ifdef STREAMFLEX_TEST_HOOKS
+            // Only the headless harness builds this: whether the value fits the room draw_row() gives it
+            log_debug("Test hook: the cursor's row's value is %i px wide, with %i px to draw in",
+                      text_width(font_row, value), value_room(&rows[cursor], column_width));
+#endif
         }
     }
     if (first_row != shown_first || last != shown_last || count != shown_count) {
@@ -1418,6 +1432,10 @@ static void draw_column(SettingsRow *rows, int count)
     if (strcmp(hint, logged_hint) != 0) {
         copy_string(logged_hint, hint, sizeof(logged_hint));
         log_debug("Settings: the key hint reads %s", hint);
+#ifdef STREAMFLEX_TEST_HOOKS
+        // Only the headless harness builds this: whether the one-line hint fits the column
+        log_debug("Test hook: the key hint is %i px wide, in a column %i px wide", text_width(font_small, hint), column_width);
+#endif
     }
 }
 

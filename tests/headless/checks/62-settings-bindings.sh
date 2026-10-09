@@ -288,6 +288,45 @@ sed -n '/Settings: the bindings now hold 2 hotkeys/,$p' "$log" | grep -m1 'Hotke
     && ! grep -q '^Hotkey1=' "$cfg" && grep -qx 'Hotkey2=#4000003F;:exit' "$cfg" && ran_clean f62-exit && ok=0
 result "bindings: the rebuilt hotkeys keep the model's order, the first :exit first (exit $(cat "$out/f62-exit.code"))" $ok
 
+# A binding's row gives its command the room its key's short name leaves, so F5's :exit reads in
+# full, not cut at half the row: on this display (1920 x 1080), and on a second at 1280 x 800. The
+# harness build logs the value's width beside its room as the cursor reaches the row.
+for b62_size in 1920x1080 1280x800; do
+    name=f62-exitrow$b62_size
+    if [ "$b62_size" = 1920x1080 ]; then
+        # shellcheck disable=SC2086
+        CFG=$FX/f62-exit.ini run_keys "$name" $TO_KEYBOARD Down Menu
+    else
+        # shellcheck disable=SC2086
+        CFG=$FX/f62-exit.ini run_keys_at "$b62_size" "$name" $TO_KEYBOARD Down Menu
+    fi
+    log=$out/$name.log
+    line=$(awk -v row="Settings: the cursor's row reads F5: Close the app on show $RIGHT_MARK" '
+        index($0, row) == 1 { on = 1; next }
+        on && /^Test hook: the cursor.s row.s value is / { print; exit }' "$log")
+    read -r b62_wide b62_room <<< "$(sed 's/.* is \([0-9]*\) px wide, with \([0-9]*\) px to draw in/\1 \2/' <<< "$line")"
+    ok=1
+    grep -qx "Resolution: *$b62_size" "$log" && [ -n "${b62_room:-}" ] && [ "$b62_wide" -le "$b62_room" ] \
+        && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
+    result "bindings: at $b62_size a binding's row draws its command uncut beside a short key name (exit $(cat "$out/$name.code"))" $ok
+    echo "      ${line:-the width of the F5 row was never logged}"
+done
+# A long label still leaves its value the half of the row it always had: at 1280 x 800, Block the OS
+# screensaver's value gets half the column, whose width the key hint's line gives
+CFG=$FX/f62-exit.ini run_keys_at 1280x800 f62-longrow Menu Return Down Down Down Down Menu
+log=$out/f62-longrow.log
+line=$(awk -v row="Settings: the cursor's row reads Block the OS screensaver: " '
+    index($0, row) == 1 { on = 1; next }
+    on && /^Test hook: the cursor.s row.s value is / { print; exit }' "$log")
+b62_room=$(sed 's/.* with \([0-9]*\) px to draw in/\1/' <<< "$line")
+b62_column=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' "$log" | tail -1 \
+             | sed 's/.* in a column \([0-9]*\) px wide/\1/')
+ok=1
+[ -n "$line" ] && [ -n "$b62_column" ] && [ "$b62_room" = $((b62_column / 2)) ] \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-longrow && ok=0
+result "bindings: a long label still leaves its value half the row (exit $(cat "$out/f62-longrow.code"))" $ok
+echo "      ${line:-the width of the row was never logged}; the column: ${b62_column:-not logged}"
+
 # The binding's command picker cannot open out of memory: it says so, and the keys stay with the page
 CFG=$FX/f62-keys.ini STREAMFLEX_TEST_FAIL=list run_keys f62-cmdfail $TO_KEYBOARD Return Down Return Up Menu
 log=$out/f62-cmdfail.log
