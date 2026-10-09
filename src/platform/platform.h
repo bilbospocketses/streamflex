@@ -20,7 +20,9 @@ bool start_self(char **argv);        // A restart: after the teardown; false, lo
 #ifdef __unix__
 void make_directory(const char *directory);
 bool home_directory(char *buffer, size_t size);
+#ifdef __linux__
 void keep_name(const char *argv0);   // A restart's fresh copy: named after argv[0] again, not /proc/self/exe's "exe"
+#endif
 void print_usage(void);
 #endif
 
@@ -30,6 +32,7 @@ bool has_exit_hotkey(void);
 void set_exit_hotkey(SDL_Keycode keycode);
 SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey
 int unused_exit_hotkeys(SDL_Keycode *out, int max);   // The later :exit bindings, which nothing runs; how many
+SDL_Keycode refused_exit_hotkey(const char **why);    // The exit hotkey Windows would not register, and why; 0 when none
 void register_exit_hotkey(void);
 void clear_exit_hotkey(void);
 void check_exit_hotkey(SDL_SysWMmsg *msg);

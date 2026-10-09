@@ -27,6 +27,8 @@ extern SDL_SysWMinfo wm_info;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
 static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
+static SDL_Keycode refused_exit_code = 0;  // The exit hotkey's key when Windows would not register it...
+static char refused_exit_why[256];         // ...and Windows' reason
 #define UNUSED_EXITS_KEPT 16
 static SDL_Keycode unused_exits[UNUSED_EXITS_KEPT];   // :exit bindings after the exit hotkey, which nothing runs...
 static int unused_exit_count = 0;                     // ...and how many, past the ones kept too
@@ -424,13 +426,24 @@ int unused_exit_hotkeys(SDL_Keycode *out, int max)
     return unused_exit_count;
 }
 
-// A function to register the exit hotkey with Windows
+// A function to give the exit hotkey's SDL keycode when Windows would not register it, with
+// Windows' reason, for the debug log's list; 0 when it was registered or there is none
+SDL_Keycode refused_exit_hotkey(const char **why)
+{
+    *why = refused_exit_why;
+    return refused_exit_code;
+}
+
+// A function to register the exit hotkey with Windows. A refusal is kept, with its reason, so the
+// debug log's list still names the hotkey the bindings count.
 void register_exit_hotkey()
 {
     BOOL ret = RegisterHotKey(wm_info.info.win.window, 1, 0, exit_hotkey);
     if (!ret) {
+        windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
+        refused_exit_code = exit_hotkey_code;
         exit_hotkey = 0;
-        log_error("Failed to register exit hotkey with Windows");
+        log_error("Failed to register exit hotkey with Windows: %s", refused_exit_why);
     }
 }
 
@@ -440,6 +453,7 @@ void clear_exit_hotkey()
     if (exit_hotkey)
         UnregisterHotKey(wm_info.info.win.window, 1);
     exit_hotkey = 0;
+    refused_exit_code = 0;
     unused_exit_count = 0;
 }
 
