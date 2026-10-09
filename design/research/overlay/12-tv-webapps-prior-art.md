@@ -4,7 +4,7 @@ Researched 2026-09-28 by WebSearch/WebFetch only. Nothing was installed or run l
 
 Rating key: **VERIFIED** = primary/official source, or several independent recent sources. **REPORTED** = single, forum, README or secondary source. **UNKNOWN** = searched and found nothing usable.
 
-Limits of this pass: several primary pages were 403/503 to the fetcher (Netflix tech blog, Prime terms, HBO Max terms, Disney+ subscriber agreement, LTT thread). WebFetch summarises through a small model, so quoted clauses are as returned by it and should be re-read on the source page before being relied on. GitHub dates come from api.github.com `pushed_at`.
+Limits of this pass: several primary pages were 403/503 to the fetcher (Netflix tech blog, Prime terms, HBO Max terms, Disney+ subscriber agreement, LTT thread). WebFetch summarizes through a small model, so quoted clauses are as returned by it and should be re-read on the source page before being relied on. GitHub dates come from api.github.com `pushed_at`.
 
 ---
 
@@ -51,13 +51,13 @@ Limits of this pass: several primary pages were 403/503 to the fetcher (Netflix 
 
 ## 3. Prior art
 
-| Project | What | Licence | Last activity | Lessons / relevance |
+| Project | What | License | Last activity | Lessons / relevance |
 |---|---|---|---|---|
 | **HTLauncher** (ct06033/HTLauncher) | Google-TV-style launcher for Windows HTPCs, Electron. Netflix and Spotify run as **fullscreen Edge app windows with a bundled Chrome/Edge extension** that gives Back/Home semantics; YouTube via Edge with PS4 Leanback UA; on-screen keyboard for logins/search; spatial focus; every button remappable. | GPL-3.0 | Created 2026-09-09, pushed 2026-09-18, 0 stars | Closest match to the plan. Confirms architecture (real Edge + extension + launcher). GPL-3.0: cannot copy code into a non-GPL project. VERIFIED it exists and what README says; README claims are REPORTED. |
 | **VacuumTube** (shy1132) | Electron wrapper of YouTube Leanback with spoofed UA, adblock, SponsorBlock, controller support. | MIT | Pushed 2026-09-28, 1.1k stars, Win/Mac/Linux | Proves the YouTube shortcut is alive. Electron is fine here because no DRM. |
 | **flex-launcher** (complexlogic) | C-based HTPC app launcher, Windows and Linux, remote or gamepad, TV-friendly UI. | Unlicense | Pushed 2026-07-07, 525 stars | Good launcher-side reference; no page-level nav. |
 | **PC-Launcher** (PC-Launcher) | C#/.NET launcher opening Netflix/Disney+/Hulu URLs in the default browser, gamepad support. | MIT | Pushed 2025-04-14 (v1.0.0), 9 stars | Stale, small. Notes browser focus needs tweaking on some systems. |
-| **NetflixController** (FThompson) | Chrome extension: gamepad navigation, virtual keyboard, mutation observers, page handlers per Netflix page type (browse, player, search, title). | No licence file | Pushed 2020-10-26, 22 stars | Best documented per-page-handler design for Netflix; dead for 6 years so selectors will be stale. Its TODO lists "virtual mouse from right stick", which matches the cursor fallback idea. |
+| **NetflixController** (FThompson) | Chrome extension: gamepad navigation, virtual keyboard, mutation observers, page handlers per Netflix page type (browse, player, search, title). | No license file | Pushed 2020-10-26, 22 stars | Best documented per-page-handler design for Netflix; dead for 6 years so selectors will be stale. Its TODO lists "virtual mouse from right stick", which matches the cursor fallback idea. |
 | **NetflixNavigator** (cheald) | Gamepad API Chrome extension for Netflix HTPC use. | MIT | Old (CoffeeScript, Chrome 40+), 6 stars | Historical only. |
 | **netflix-navigator** (dutiyesh) / Chrome Web Store "Netflix Navigator" | Arrow-key browsing, Enter for info, S to search. Store rating 3.8. | Not checked | Not checked | Keyboard-only; users asked for Disney+/Prime. |
 | **netflix.player.controls** (andrewleech), **netflix-remote** (butttons, shelbymorris90) | Configurable keys in the player; phone-as-remote. | Not checked | Not checked | Player-side control precedents. |
@@ -88,7 +88,7 @@ Additional search gaps: no GitHub project was found doing multi-service spatial 
 | **YouTube** Terms | Prohibits automated means (robots, botnets, scrapers), circumventing or disabling parts of the service, and using the service except as permitted by the service. | Effective 2023-12-15 | VERIFIED (youtube.com/t/terms, fetched, partial quotes). A "Section 4.2 ... interface provided by YouTube" quote appeared only on an SEO-style page, so treat it as unverified. |
 | **Prime Video / Max / Hulu / Peacock / Paramount+ / Apple TV+** | Not obtained. Prime pages returned 404/503, HBO Max returned only an index page. | n/a | UNKNOWN. Needs manual read. |
 
-**Reading for this project:** none of these clauses names browser extensions, accessibility or input remapping. The "automated means" and "circumvent" clauses target scraping and DRM defeat. A remote-control overlay that maps keys to focus and click events is user-driven input, one action per key press. The clearer risk areas are (a) anything that programmatically triggers playback or navigation on its own (auto-play chains, skipping, background crawling of catalogues), (b) anything touching the media pipeline (Netflix errors if `video.currentTime` is set directly per 00, unverified here), and (c) framing or mirroring a service's UI inside your own shell (Disney clause). Spoofing a UA is not named in any fetched clause; the only UA-spoofing statement in the results (YouTube ToS "Section 4.2") is from an unreliable source.
+**Reading for this project:** none of these clauses names browser extensions, accessibility or input remapping. The "automated means" and "circumvent" clauses target scraping and DRM defeat. A remote-control overlay that maps keys to focus and click events is user-driven input, one action per key press. The clearer risk areas are (a) anything that programmatically triggers playback or navigation on its own (auto-play chains, skipping, background crawling of catalogs), (b) anything touching the media pipeline (Netflix errors if `video.currentTime` is set directly per 00, unverified here), and (c) framing or mirroring a service's UI inside your own shell (Disney clause). Spoofing a UA is not named in any fetched clause; the only UA-spoofing statement in the results (YouTube ToS "Section 4.2") is from an unreliable source.
 
 ### Enforcement precedent (bans for UI-only extensions)
 

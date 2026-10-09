@@ -51,7 +51,7 @@ Build it in layers:
 ### 3.2 Per-site adapters (the long tail)
 Keep a small JSON/JS config per service:
 - selectors for rows and tiles
-- row-by-row behaviour, so Up/Down moves between rows and remembers the column in each row, like a real TV UI
+- row-by-row behavior, so Up/Down moves between rows and remembers the column in each row, like a real TV UI
 - how to page carousels, since Netflix rows virtualize and you may need to click their arrow buttons
 - selectors for the player controls
 

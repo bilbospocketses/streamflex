@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-29
 **Status:** approved in brainstorming, awaiting spec review
-**Covers:** sub-project 3b of the overhaul (todo item 7): every `config.ini` setting that 3a left file-only, the colour picker, the font picker, and key and gamepad bindings.
+**Covers:** sub-project 3b of the overhaul (todo item 7): every `config.ini` setting that 3a left file-only, the color picker, the font picker, and key and gamepad bindings.
 **Builds on:** `design/specs/2026-09-27-settings-screen-design.md` (3a) as built on `feat/settings-screen`. **The implementation plan is written after 3a merges**, because it names exact functions and lines that 3a's fix wave is still changing.
 
 ## Context
@@ -25,21 +25,21 @@ A read-only map of every remaining setting (its parse, its consumers, and what a
 
 | Question | Decision |
 |---|---|
-| Settings holding free text (commands, the mappings file, fonts) | **Chosen from lists.** Commands come from a command picker, the mappings file from 3a's folder browser, and fonts from the font picker. A value in the file that matches nothing appears as *Custom: …* and is kept until the user steps off it, as 3a does for colours. `TimeFormat` and `DateFormat` are already choices (`24hr`/`12hr`/`Auto`, `Big`/`Little`/`Auto`) and need nothing new. |
-| The colour picker | **A grid of preset swatches, plus a hex editor.** Opacity stays its own row, and the caption gives an advisory contrast warning. |
-| How the pages are organised | **One page per config section.** Nine top-level rows mirror `config.ini` and the docs. |
+| Settings holding free text (commands, the mappings file, fonts) | **Chosen from lists.** Commands come from a command picker, the mappings file from 3a's folder browser, and fonts from the font picker. A value in the file that matches nothing appears as *Custom: …* and is kept until the user steps off it, as 3a does for colors. `TimeFormat` and `DateFormat` are already choices (`24hr`/`12hr`/`Auto`, `Big`/`Little`/`Auto`) and need nothing new. |
+| The color picker | **A grid of preset swatches, plus a hex editor.** Opacity stays its own row, and the caption gives an advisory contrast warning. |
+| How the pages are organized | **One page per config section.** Nine top-level rows mirror `config.ini` and the docs. |
 | Hotkeys and gamepad controls | **Full add, change and remove,** with a safety floor so navigation can never be lost. |
 | The font picker | **The installed system fonts, listed by family,** found with no new dependencies, each drawn in its own face. |
 | What the font picker writes | **The face's file path,** as today, plus a new optional `FontFace=` for a face inside a collection. Startup stays instant. A config moved to another machine falls back to the bundled font, as its image paths and commands already do. |
 | Binding capture | **Capture, then confirm, with a safety floor** (see **Bindings**). |
-| Architecture | **The settings table plus a shared list-picker model.** The colour picker has its own small model. The pickers' drawing and capture go in a new `settings_pickers.c`, so `settings_screen.c` (1,114 lines after 3a) keeps the pages. |
+| Architecture | **The settings table plus a shared list-picker model.** The color picker has its own small model. The pickers' drawing and capture go in a new `settings_pickers.c`, so `settings_screen.c` (1,114 lines after 3a) keeps the pages. |
 | Settings that cannot apply live | **The Linux SDL2 minimum rises from 2.0.14 to 2.0.18**, so VSync switches live (`SDL_RenderSetVSync()`). **`ControllerMappingsFile` alone applies at next start**, because SDL can add mappings but not remove them. Its row and the caption say so. |
 
 ## Pages and rows
 
 The top level: *General ›*, *Background ›*, *Menus ›*, *Titles ›*, *Highlight ›*, *Scroll indicators ›*, *Clock ›*, *Screensaver ›*, *Controls ›*, a divider, then *Discard changes*. Each row shows a summary of its page, as in 3a.
 
-Rows marked › open a picker; the rest step with Left and Right, with the limits below. **A row that depends on a switch that is off is greyed, not hidden,** so the column never jumps. For example, *Shadow colour* is greyed while *Shadows* is off. Every value the file holds that is not in a row's step list appears in its sorted place, or as *Custom*, as 3a's rows do.
+Rows marked › open a picker; the rest step with Left and Right, with the limits below. **A row that depends on a switch that is off is grayed, not hidden,** so the column never jumps. For example, *Shadow color* is grayed while *Shadows* is off. Every value the file holds that is not in a row's step list appears in its sorted place, or as *Custom*, as 3a's rows do.
 
 - **General:**
   - *Default menu* steps through the menus, in file order.
@@ -51,28 +51,28 @@ Rows marked › open a picker; the rest step with Left and Right, with the limit
 - **Background:**
   - 3a's rows stay.
   - *Overlay* is On/Off.
-  - *Overlay colour ›* opens the colour picker.
+  - *Overlay color ›* opens the color picker.
   - *Overlay opacity* runs 0-100% in steps of 5.
-  - *See-through colour ›* (`ChromaKeyColor`) is shown in Transparent mode only.
-- **Menus:** 3a's rows stay. The *All menus* page adds *Icon spacing* (0-10% of the screen width, in steps of 1) and *Vertical centre* (25-75%, in steps of 5).
+  - *See-through color ›* (`ChromaKeyColor`) is shown in Transparent mode only.
+- **Menus:** 3a's rows stay. The *All menus* page adds *Icon spacing* (0-10% of the screen width, in steps of 1) and *Vertical center* (25-75%, in steps of 5).
 - **Titles:**
   - *Size* is 3a's row.
   - *Show titles* and *Shadows* are On/Off.
   - *Font ›* opens the font picker.
-  - *Colour ›* and *Shadow colour ›* open the colour picker.
+  - *Color ›* and *Shadow color ›* open the color picker.
   - *Opacity* runs 0-100% in steps of 5.
   - *Too long* is Truncate or Shrink.
   - *Padding* runs 0-20% in steps of 2, with 3a's percentage meaning.
 - **Highlight:**
   - *Show* is On/Off.
-  - *Fill colour ›* and *Outline colour ›* open the colour picker.
+  - *Fill color ›* and *Outline color ›* open the color picker.
   - *Fill opacity* and *Outline opacity* run 0-100% in steps of 5.
   - *Outline size* runs 0-10 px.
   - *Corner radius* runs 0-100 in steps of 5.
   - *Vertical padding* and *Horizontal padding* run 0-100 px in steps of 5.
 - **Scroll indicators:**
   - *Show* is On/Off.
-  - *Fill colour ›* and *Outline colour ›* open the colour picker.
+  - *Fill color ›* and *Outline color ›* open the color picker.
   - *Outline size* runs 0-10 px.
   - *Opacity* runs 0-100% in steps of 5.
 - **Clock:**
@@ -80,7 +80,7 @@ Rows marked › open a picker; the rest step with Left and Right, with the limit
   - *Alignment* steps through its modes.
   - *Font ›* opens the font picker.
   - *Size* runs 20-120 in steps of 5.
-  - *Colour ›* and *Shadow colour ›* open the colour picker.
+  - *Color ›* and *Shadow color ›* open the color picker.
   - *Opacity* runs 0-100% in steps of 5.
   - *Margin* runs 0-10% in steps of 1.
   - *Time* shows as *14:05*, *2:05 PM* or *Auto*.
@@ -104,7 +104,7 @@ Rows marked › open a picker; the rest step with Left and Right, with the limit
 - `:settings`, `:quit`, `:shutdown`, `:restart` and `:sleep`;
 - *Open submenu: <name>* for every menu;
 - on Windows only, `:exit`;
-- then every command the menus' entries run, each labelled with its entry's title and deduplicated.
+- then every command the menus' entries run, each labeled with its entry's title and deduplicated.
 
 ## Applying every setting live
 
@@ -170,17 +170,17 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
 - OK chooses and Back cancels.
 - It serves the command picker, the font picker and the *Default menu* and *Device* lists.
 
-### The colour picker (`src/colorpick.c`)
+### The color picker (`src/colorpick.c`)
 
-- OK on a colour row opens a **6 × 4 grid of named swatches**, moved with all four arrows. The swatches are:
+- OK on a color row opens a **6 × 4 grid of named swatches**, moved with all four arrows. The swatches are:
   - 3a's ten presets: Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A` and Burgundy `#4A1520`;
-  - four neutrals: White `#FFFFFF`, Light grey `#C8C8C8`, Grey `#808080` and Dark grey `#4A4A4A`;
+  - four neutrals: White `#FFFFFF`, Light gray `#C8C8C8`, Gray `#808080` and Dark gray `#4A4A4A`;
   - ten accents: Red `#D03030`, Orange `#E07020`, Amber `#F0B000`, Yellow `#F0E040`, Lime `#80C040`, Green `#30A050`, Cyan `#20B0C0`, Blue `#3070D0`, Indigo `#5048C0` and Pink `#D04890`.
-- The preview shows the highlighted swatch as it moves, and the current colour is marked.
-- **The last row, *Custom #RRGGBB*,** opens the hex editor. Left and Right choose a digit, Up and Down step it through 0-F with wrapping, OK keeps the colour, and Back cancels.
-- Colours stay `#RRGGBB` in the file, as `hex_to_color()` reads them.
-- **The contrast warning** is advisory: a title or clock colour below 3:1 contrast (WCAG) against what lies behind it puts a warning in the caption. What lies behind it is:
-  - the background colour composited with the overlay;
+- The preview shows the highlighted swatch as it moves, and the current color is marked.
+- **The last row, *Custom #RRGGBB*,** opens the hex editor. Left and Right choose a digit, Up and Down step it through 0-F with wrapping, OK keeps the color, and Back cancels.
+- Colors stay `#RRGGBB` in the file, as `hex_to_color()` reads them.
+- **The contrast warning** is advisory: a title or clock color below 3:1 contrast (WCAG) against what lies behind it puts a warning in the caption. What lies behind it is:
+  - the background color composited with the overlay;
   - for an image or slideshow, the image's mean luminance, measured when it is decoded.
 
 ### The font picker (`src/fontlist.c`, with platform listing)
@@ -222,7 +222,7 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
   - a negative `[Clock] FontSize` is refused with a log line;
   - `:exit` on Linux logs that it is Windows-only.
 
-  Invalid values otherwise keep today's behaviour: they are ignored, with a log line.
+  Invalid values otherwise keep today's behavior: they are ignored, with a log line.
 - **List mode in `inidoc`.** Settings follow inih's rule that the last key wins, but `[Hotkeys]` ignores its key names and `[Gamepad]` allows a label twice. `inidoc` gains:
   - `inidoc_list(section)`: the section's lines in order, excluding `[Gamepad]`'s `Enabled`, `DeviceIndex` and `ControllerMappingsFile`;
   - `inidoc_list_set(line, key, value)`;
@@ -253,11 +253,11 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
 
 ### Unit tests (CTest, no SDL: Windows, Debian and Pi CI)
 
-- **`test_settings`** (extended): every new key text → value → text; the step lists and limits; the greyed-row rules; the three bug fixes.
+- **`test_settings`** (extended): every new key text → value → text; the step lists and limits; the grayed-row rules; the three bug fixes.
 - **`test_derive`** (new): `derive_settings()` gives the same result twice; a value clamped and then raised is restored; every percentage and opacity conversion is checked.
 - **`test_listpick`**, **`test_colorpick`** and **`test_fontlist`** (new):
   - the list picker's paging and its *Custom* row;
-  - the colour grid's movement, the hex digits stepping and wrapping, and *Custom*;
+  - the color grid's movement, the hex digits stepping and wrapping, and *Custom*;
   - grouping into families, choosing the Regular style, and collections, with a fake listing.
 - **`test_bindings`** (new): the safety floor, refusing unknown keys, `HotkeyN` numbering, and the 10 s revert's state machine.
 - **`test_inidoc`** (extended): list mode, and a list save after a hand edit.
@@ -267,14 +267,14 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
 - Every page is opened and every row stepped once.
 - Each feature is switched off and on and has a value changed, under ASan. **The leak pass proves that stopping a feature frees everything.**
 - A binding is captured with `xdotool`, confirmed and saved, and the file's line is checked. The 10 s revert is checked too.
-- A colour is entered through the hex editor, and a pixel check confirms the preview shows it.
+- A color is entered through the hex editor, and a pixel check confirms the preview shows it.
 - The font picker is run against a fixture fonts folder.
 
 ### Hands-on (qa-harness, before the 3b merge)
 
 The Windows 11 and Ubuntu guests, with a remote-style key driver and the virtual pad:
 - rebind a key and a pad button;
-- pick a system font, and a colour by hex;
+- pick a system font, and a color by hex;
 - turn the clock on;
 - restart, and confirm that everything stuck and the rest of the file is unchanged.
 
@@ -290,7 +290,7 @@ The Windows 11 and Ubuntu guests, with a remote-style key driver and the virtual
   - the corrected `FPSLimit` minimum;
   - `:exit` being Windows-only.
 - **`CHANGELOG.md`:**
-  - *Added:* every setting on the settings screen, the colour and font pickers, and bindings;
+  - *Added:* every setting on the settings screen, the color and font pickers, and bindings;
   - *Changed:* the Linux SDL2 minimum is now 2.0.18;
   - *Fixed:* the three bugs.
 - **`CONTRIBUTING.md`:** the new modules and tests.
