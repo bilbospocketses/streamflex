@@ -149,13 +149,18 @@ static void font_value(const char *path, int face, char *out, size_t size)
 // A function to write the value of the font a setting uses now: the file and face the titles or
 // the clock opened (the configured one, or the bundled font they fell back to), as the family that
 // holds that face writes it; a face no family holds (a file outside the folders listed) as itself.
-// The clock's row is greyed while the clock is off, and a clock that is on has opened its font
-// (init_clock() failing quits through log_fatal), so clk is there.
+// A file load_font() opened by a relative path (the Windows config's .\assets\fonts\..., from the
+// working folder, or joined to the executable's folder) is found by the full path it opened, which
+// is how the list names the bundled fonts. The clock's row is grayed while the clock is off, and a
+// clock that is on has opened its font (init_clock() failing quits through log_fatal), so clk is there.
 void fonts_value_in_use(SettingId id, char *out, size_t size)
 {
     const TextInfo *info = id == SET_ID_TITLE_FONT ? &title_info : &clk->text_info;
     const char *path = info->font_path != NULL ? info->font_path : "";
     int family = fontlist_find(fonts, path, info->font_face);
+    char full[FONT_VALUE_MAX];
+    if (family < 0 && fileio_full_path(path, full, sizeof(full)))
+        family = fontlist_find(fonts, full, info->font_face);
     if (family >= 0)
         font_value(fontlist_path(fonts, family), fontlist_face(fonts, family), out, size);
     else

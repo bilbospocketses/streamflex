@@ -205,6 +205,28 @@ grep -q "Titles: opened $TESTER_HOME/fonts/deeper/Roboto-Regular.ttf (face 0)\|T
 result "fonts: a font in use that its family does not write starts the cursor on its family (exit $(cat "$out/f59-member.code"))" $ok
 echo "      the cursor read: ${reads:-nothing}"
 
+# The bundled font named by a relative path, as the Windows config names it (.\assets\fonts\...):
+# the cursor starts on its family, with no Custom row (7 rows, the fixture folder's 7 families),
+# whether the path opened from the working folder (StreamFlex started in its own folder, as the
+# Windows shortcut starts it) or beside the executable (started from a folder without it, where
+# the loader joins it to the executable's folder). The file's value stays as it was.
+for p59_where in /work/build:./assets/fonts/OpenSans-Regular.ttf "$TESTER_HOME:/work/build/./assets/fonts/OpenSans-Regular.ttf"; do
+    IFS=: read -r p59_dir p59_opened <<< "$p59_where"
+    name=f59-rel$([ "$p59_dir" = /work/build ] && echo work || echo exe)
+    cfg=$(f59_config "$name" "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=./assets/fonts/OpenSans-Regular.ttf\n$F59_MAIN")
+    # shellcheck disable=SC2086
+    ( cd "$p59_dir" && STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg run_keys "$name" $TITLES_FONT +wait_fonts Menu )
+    log=$out/$name.log
+    reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')
+    ok=1
+    grep -qxF "Title font: $p59_opened (face 0)" "$log" && [ "$reads" = 'Open Sans|' ] \
+        && grep -q "Settings: the list shows rows 0 to [0-9]* of 7$" "$log" \
+        && [ "$(f59_key "$cfg" Titles Font)" = ./assets/fonts/OpenSans-Regular.ttf ] \
+        && grep -q 'Settings: nothing changed' "$log" && ran_clean "$name" && ok=0
+    result "fonts: the bundled font by a relative path, opened from $p59_dir, starts the cursor on its family (exit $(cat "$out/$name.code"))" $ok
+    echo "      the cursor read: ${reads:-nothing}; $(grep -o 'Title font: .*' "$log"); $(grep -o 'Settings: the list shows rows .*' "$log" | head -1)"
+done
+
 # While the files are listed (STREAMFLEX_TEST_FONT_DELAY_MS holds the listing back) the picker says
 # Loading fonts... (0), Back is its only key, and opening it again lists nothing twice. The files are
 # read with the picker closed, and it then opens at once on the font in use.
