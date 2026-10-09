@@ -48,6 +48,7 @@ void fileio_base_name(const char *path, char *out, size_t size);   // The last n
 #ifdef _WIN32
 #include <wchar.h>
 wchar_t *fileio_wide(const char *text);   // For other Windows calls that take a path or command
+bool fileio_command_with(wchar_t *out, size_t size, const wchar_t *line, const wchar_t *argument);   // A restart's command line
 #endif
 
 typedef struct {

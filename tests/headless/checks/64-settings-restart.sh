@@ -102,6 +102,11 @@ ok=1
 [ "$startups" = 1 ] && [ "$quits" = 1 ] \
     && [ "$(grep -c 'Restarted, so the StartupCmd does not run again' "$log")" = 2 ] && ran_clean f64-yes && ok=0
 result "restart: neither restart runs QuitCmd, nor either fresh copy StartupCmd ($startups StartupCmd, $quits QuitCmd)" $ok
+ok=1
+[ "$(grep -cx 'Restarted, so the window is brought to the front' "$log")" = 2 ] \
+    && precedes "$log" 'Restarting StreamFlex to apply the mappings file' 'Restarted, so the window is brought to the front' \
+    && ran_clean f64-yes && ok=0
+result "restart: each fresh copy brings its window to the front, and the first start does not" $ok
 
 # No, after closing with the settings key: settings close as before, saved, with no restart
 cfg=$(writable_config f64-restart)

@@ -26,7 +26,10 @@ extern Config config;
 extern SDL_SysWMinfo wm_info;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
+static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
 static wchar_t self_path[32768];   // The program a restart starts, found before anything is torn down
+static wchar_t self_line[32768];   // Its command line, which CreateProcessW may write to
+static PROCESS_INFORMATION fresh;  // The fresh copy a restart made, waiting until this one is torn down
 
 
 // A function to determine if a file exists on the filesystem
@@ -291,36 +294,61 @@ bool find_self(const char *argv0)
     return true;
 }
 
-// A function to start a fresh copy of the program find_self() found, with the command line this one
-// was started with and --restarted after it (unless it has it already, from a restart before); false,
-// logged, when it could not start. The arguments are Windows' own command line, never rebuilt.
-bool start_self(char **argv)
+// A function to make a restart's fresh copy before anything is torn down: the program find_self()
+// found, with the command line this one was started with and --restarted after it (unless it has it
+// already, from a restart before). It waits, suspended, until start_self() lets it run once this
+// copy's window and :exit hotkey are gone. It is made, and allowed the foreground, while this copy
+// is still in front: Windows lets a new process take the foreground only when the one in front
+// gives it, and once this window is gone the window under it is in front. False, logged, when it
+// could not be made. The arguments are Windows' own command line, never rebuilt.
+bool make_self(void)
 {
-    UNUSED(argv);
-    const wchar_t *given = GetCommandLineW();
-    const wchar_t *flag = config.restarted ? L"" : L" --restarted";
-    size_t size = wcslen(given) + wcslen(flag) + 1;
-    wchar_t *line = malloc(size * sizeof(wchar_t));   // CreateProcessW may write to it
-    if (line == NULL) {
-        log_error("Could not restart StreamFlex: out of memory");
+    if (!fileio_command_with(self_line, sizeof(self_line) / sizeof(self_line[0]), GetCommandLineW(),
+                             config.restarted ? NULL : L"--restarted")) {
+        log_error("Could not restart StreamFlex: %s", fileio_last_error());
         return false;
     }
-    wcscpy_s(line, size, given);
-    wcscat_s(line, size, flag);
     STARTUPINFOW startup = { .cb = (DWORD) sizeof(STARTUPINFOW) };
-    PROCESS_INFORMATION process;
-    BOOL started = CreateProcessW(self_path, line, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &process);
-    DWORD code = GetLastError();
-    free(line);
-    if (!started) {
+    if (!CreateProcessW(self_path, self_line, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &startup, &fresh)) {
         char why[256];
-        windows_error_text(code, why, sizeof(why));
+        windows_error_text(GetLastError(), why, sizeof(why));
         log_error("Could not restart StreamFlex: it did not start: %s", why);
         return false;
     }
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
+    if (AllowSetForegroundWindow(fresh.dwProcessId))
+        log_debug("Restart: the fresh copy (pid %lu) may take the foreground", (unsigned long) fresh.dwProcessId);
+    else {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_debug("Restart: Windows would not let the fresh copy (pid %lu) take the foreground: %s",
+                  (unsigned long) fresh.dwProcessId, why);
+    }
     return true;
+}
+
+// A function to let the fresh copy make_self() made run, once this one is torn down; false, logged,
+// when it could not, and the copy is ended
+bool start_self(char **argv)
+{
+    UNUSED(argv);
+    bool started = ResumeThread(fresh.hThread) != (DWORD) -1;
+    if (!started) {
+        char why[256];
+        windows_error_text(GetLastError(), why, sizeof(why));
+        log_error("Could not restart StreamFlex: it did not start: %s", why);
+        TerminateProcess(fresh.hProcess, EXIT_FAILURE);
+    }
+    CloseHandle(fresh.hThread);
+    CloseHandle(fresh.hProcess);
+    return started;
+}
+
+// A function to bring a restart's fresh copy to the front with the keyboard, which the copy before
+// it allowed (make_self()); true when Windows put it in front
+bool take_foreground(void)
+{
+    HWND hwnd = wm_info.info.win.window;
+    return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
 }
 
 // A function to get the shutdown privilege from Windows
@@ -368,8 +396,15 @@ void set_exit_hotkey(SDL_Keycode keycode)
     if (exit_hotkey) 
         return;
     exit_hotkey = sdl_to_win32_keycode(keycode);
+    exit_hotkey_code = keycode;
     if (!exit_hotkey)
         log_error("Invalid exit hotkey keycode %X", keycode);
+}
+
+// A function to give the exit hotkey's SDL keycode, for the debug log's list of hotkeys; 0 when there is none
+SDL_Keycode exit_hotkey_keycode()
+{
+    return exit_hotkey ? exit_hotkey_code : 0;
 }
 
 // A function to register the exit hotkey with Windows

@@ -466,6 +466,34 @@ static void test_wide(void)
     CHECK(strstr(fileio_last_error(), "UTF-8") != NULL);
 }
 
+// A function to check a restart's command line: the arguments given, then --restarted after one
+// space. A program started through Windows' shell can have a space after its last argument
+// (Windows PowerShell's Start-Process leaves one), which is not doubled; a line with none gets its
+// one space, and no argument leaves the line as given less that space. A line that does not fit is
+// refused, and nothing is written.
+static void test_command_with(void)
+{
+    wchar_t out[64];
+    CHECK(fileio_command_with(out, 64, L"\"C:\\StreamFlex\\streamflex.exe\" -d ", L"--restarted"));
+    CHECK(wcscmp(out, L"\"C:\\StreamFlex\\streamflex.exe\" -d --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"\"C:\\StreamFlex\\streamflex.exe\" ", L"--restarted"));
+    CHECK(wcscmp(out, L"\"C:\\StreamFlex\\streamflex.exe\" --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d \t ", L"--restarted"));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d", L"--restarted"));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+    wmemset(out, L'x', 64);   // So an end left unwritten shows
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d --restarted ", NULL));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+
+    // 17 characters and the end fit 18 exactly; one more does not
+    CHECK(fileio_command_with(out, 18, L"a.exe -d ", L"--restar"));
+    CHECK(wcscmp(out, L"a.exe -d --restar") == 0);
+    CHECK(!fileio_command_with(out, 18, L"a.exe -d ", L"--restart"));
+    CHECK(out[0] == L'\0');
+    CHECK_STR(fileio_last_error(), "the command line is too long");
+}
+
 #define TEST_PIPE "\\\\.\\pipe\\streamflex-test-fileio"
 
 // A function to test that only a file on a disk is a regular file. The null device by both its
@@ -1120,6 +1148,7 @@ int main(void)
     test_replace_waits_for_a_held_file();
     test_replace_keeps_a_hidden_target_hidden();
     test_wide();
+    test_command_with();
     test_devices_and_pipes();
     test_make_dirs_on_a_share();
     test_places_keep_the_process_error_mode();

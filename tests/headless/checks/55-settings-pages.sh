@@ -93,6 +93,14 @@ ok=1
 grep -q 'Frame timing: FPS limit 30, 33 ms a frame' "$out/f55-frame.log" \
     && grep -qx 'VSync=false' "$cfg" && grep -qx 'FPSLimit=30' "$cfg" && ran_clean f55-frame && ok=0
 result "settings: VSync and the FPS limit apply live and save (exit $(cat "$out/f55-frame.code"))" $ok
+# Between the two, VSync is off with no FPS limit yet: frames keep the display's rate (Xvfb's 0 Hz
+# reads as 60), and the log says so rather than calling it VSync
+ok=1
+in_range "$out/f55-frame.log" 'Settings: [General] VSync true -> false' 'Frame timing: FPS limit 30' \
+        "Frame timing: VSync is off, but no FPS limit is set, so frames keep the display's 60 Hz, 16 ms a frame" \
+    && ! in_range "$out/f55-frame.log" 'Settings: [General] VSync true -> false' 'Frame timing: FPS limit 30' 'Frame timing: VSync at' \
+    && ran_clean f55-frame && ok=0
+result "settings: VSync off with no FPS limit logs that frames keep the display's rate (exit $(cat "$out/f55-frame.code"))" $ok
 grep -E 'Frame timing|VSync' "$out/f55-frame.log" | sed 's/^/      /'
 
 # The pad's D-pad Left held on the FPS limit from 75: its first press steps to 60, and its first
@@ -114,6 +122,14 @@ precedes "$log" 'Settings: [General] FPSLimit 75 -> 60' 'Settings: [General] FPS
 result "settings: a held pad's repeats go on past a step that shortens their delay (exit $(cat "$out/f55-padfps.code"))" $ok
 grep -E 'FPSLimit|Frame timing' "$log" | sed 's/^/      /'
 rm -f /tmp/pad-left
+
+# Only VSync off with no FPS limit logs frames keeping the display's rate: VSync on (f55-frame as it
+# starts) and VSync off with a limit above the display's rate (f55-padfps's 75, as it starts) are
+# still VSync at that rate
+ok=1
+[ "$(grep -m1 '^Frame timing: ' "$out/f55-frame.log")" = 'Frame timing: VSync at 60 Hz, 16 ms a frame' ] \
+    && [ "$(grep -m1 '^Frame timing: ' "$out/f55-padfps.log")" = 'Frame timing: VSync at 60 Hz, 16 ms a frame' ] && ok=0
+result "settings: VSync on, or a limit above the display's rate, still logs VSync at the display's rate" $ok
 
 # The default menu changed to Games: :home (a Home hotkey) closes settings to Games, and it saves
 cfg=$(writable_config f55-default)

@@ -216,6 +216,31 @@ wchar_t *fileio_wide(const char *text)
 {
     return to_wide(text);
 }
+
+// A function to write a command line with one more argument after it, one space between; NULL adds
+// none. The spaces after the line's last argument go first: a program started through Windows'
+// shell can have one there (Windows PowerShell's Start-Process leaves it), which would make two.
+// False, with out empty, when it does not fit.
+bool fileio_command_with(wchar_t *out, size_t size, const wchar_t *line, const wchar_t *argument)
+{
+    size_t length = wcslen(line);
+    while (length > 0 && (line[length - 1] == L' ' || line[length - 1] == L'\t'))
+        length--;
+    size_t extra = argument != NULL ? 1 + wcslen(argument) : 0;
+    if (length + extra >= size) {
+        if (size > 0)
+            out[0] = L'\0';
+        set_error("the command line is too long");
+        return false;
+    }
+    memcpy(out, line, length * sizeof(wchar_t));
+    if (argument != NULL) {
+        out[length] = L' ';
+        memcpy(out + length + 1, argument, (extra - 1) * sizeof(wchar_t));
+    }
+    out[length + extra] = L'\0';
+    return true;
+}
 #endif
 
 // A function to open a file whose path is UTF-8

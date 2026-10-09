@@ -25,6 +25,7 @@
 static void init_sdl(void);
 static void init_sdl_image(void);
 static void create_window(void);
+static void raise_restarted_window(void);
 static void init_sdl_ttf(void);
 static int load_menu(Menu *menu, bool set_back_menu, bool reset_position);
 static int load_menu_by_name(const char *menu_name, bool set_back_menu, bool reset_position);
@@ -315,7 +316,10 @@ void apply_frame_timing()
     update_slideshow_timing();
     if (screensaver != NULL)
         screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
-    if (wanted)
+    if (wanted && !config.vsync && config.fps_limit < MIN_FPS_LIMIT)
+        log_debug("Frame timing: VSync is off, but no FPS limit is set, so frames keep the display's %i Hz, %u ms a frame",
+                  rate, refresh_period);
+    else if (wanted)
         log_debug("Frame timing: VSync at %i Hz, %u ms a frame", rate, refresh_period);
     else
         log_debug("Frame timing: FPS limit %i, %u ms a frame", config.fps_limit, refresh_period);
@@ -382,6 +386,21 @@ static void create_window()
 #ifdef _WIN32
     SDL_VERSION(&wm_info.version);
     SDL_GetWindowWMInfo(window, &wm_info);
+#endif
+}
+
+// A function to bring a restart's fresh copy to the front, with the keyboard: on Windows the copy
+// before it gave it the foreground, which a new process cannot take otherwise, and the log says
+// whether Windows put it in front
+static void raise_restarted_window()
+{
+    log_debug("Restarted, so the window is brought to the front");
+    SDL_RaiseWindow(window);
+#ifdef _WIN32
+    if (take_foreground())
+        log_debug("Restart: the window is in front, with the keyboard");
+    else
+        log_error("Restart: Windows kept the window behind another, so it has no keyboard until it is brought to the front");
 #endif
 }
 
@@ -2288,12 +2307,13 @@ static void release_last(void)
 
 // A function to restart StreamFlex, to apply the settings named (as the restart prompt words them)
 // that wait for the next start. A restart is not a quit: QuitCmd does not run, and the fresh copy,
-// started with --restarted, runs no StartupCmd. The program is found before anything is torn down,
-// and when it cannot be, this comes back with the reason logged and StreamFlex running on. Then
-// everything quit() tears down goes but the log, which says what became of the start: on Linux the
-// program takes this process's place (exec), on Windows a fresh copy starts once this one's window
-// and :exit hotkey are gone, and this one ends. A start that fails ends StreamFlex with an error,
-// to be started by hand.
+// started with --restarted, runs no StartupCmd. The program is found before anything is torn down
+// (on Windows its fresh copy is made then too, waiting, while this one can still give it the
+// foreground), and when it cannot be, this comes back with the reason logged and StreamFlex running
+// on. Then everything quit() tears down goes but the log, which says what became of the start: on
+// Linux the program takes this process's place (exec), on Windows the fresh copy runs once this
+// one's window and :exit hotkey are gone, and this one ends. A start that fails ends StreamFlex
+// with an error, to be started by hand.
 void restart_streamflex(const char *names)
 {
     if (start_argv == NULL) {
@@ -2302,6 +2322,10 @@ void restart_streamflex(const char *names)
     }
     if (!find_self(start_argv[0]))
         return;
+#ifdef _WIN32
+    if (!make_self())
+        return;
+#endif
     log_debug("Restarting StreamFlex to apply %s", names);
 #ifdef _WIN32
     clear_exit_hotkey();
@@ -2368,6 +2392,8 @@ int main(int argc, char *argv[])
     // Initialize Nanosvg, create window and renderer
     init_svg();
     create_window();
+    if (config.restarted)
+        raise_restarted_window();
 
     // Initialize timing
     ticks.main = SDL_GetTicks();

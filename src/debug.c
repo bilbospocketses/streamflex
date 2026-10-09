@@ -309,7 +309,13 @@ void debug_gamepad(GamepadControl *gamepad_controls)
 
 void debug_hotkeys(Hotkey *hotkeys)
 {
-    if (hotkeys == NULL) {
+    // On Windows the exit hotkey is not in the list: Windows holds it (register_exit_hotkey())
+#ifdef _WIN32
+    SDL_Keycode exit_code = exit_hotkey_keycode();
+#else
+    SDL_Keycode exit_code = 0;
+#endif
+    if (hotkeys == NULL && exit_code == 0) {
         log_debug("No hotkeys detected");
         return;
     }
@@ -319,6 +325,10 @@ void debug_hotkeys(Hotkey *hotkeys)
         log_debug("Hotkey %i Keycode: %X", index, i->keycode);
         log_debug("Hotkey %i Command: %s", index, i->cmd);
         index++;
+    }
+    if (exit_code != 0) {
+        log_debug("Hotkey %i Keycode: %X", index, exit_code);
+        log_debug("Hotkey %i Command: %s (the exit hotkey, which Windows holds)", index, SCMD_EXIT);
     }
     log_debug("");
 }
