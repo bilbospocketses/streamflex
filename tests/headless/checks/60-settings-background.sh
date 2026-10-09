@@ -17,18 +17,18 @@ shows_checkerboard() {
 }
 
 # Colour: step from Black to Charcoal, and the preview shows each
-cfg=$(writable_config f60-colour)
-CFG=$cfg run_keys f60-colour Menu +shows_black Down Return Down Right +shows_charcoal BackSpace BackSpace
+cfg=$(writable_config f60-color)
+CFG=$cfg run_keys f60-color Menu +shows_black Down Return Down Right +shows_charcoal BackSpace BackSpace
 ok=1
-[ "$(changed_lines "$FX/f60-colour.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
-    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-colour.log" \
-    && grep -qx 'black yes' "$out/f60-colour.seen" && grep -qx 'charcoal yes' "$out/f60-colour.seen" \
-    && ran_clean f60-colour && ok=0
-result "settings: a preset colour is saved, and the preview shows it (exit $(cat "$out/f60-colour.code"))" $ok
-sed 's/^/      /' "$out/f60-colour.seen"
+[ "$(changed_lines "$FX/f60-color.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
+    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-color.log" \
+    && grep -qx 'black yes' "$out/f60-color.seen" && grep -qx 'charcoal yes' "$out/f60-color.seen" \
+    && ran_clean f60-color && ok=0
+result "settings: a preset colour is saved, and the preview shows it (exit $(cat "$out/f60-color.code"))" $ok
+sed 's/^/      /' "$out/f60-color.seen"
 
 # The browser's highlighted image fills the preview once its decode is done: blue, green, red
-CFG=$FX/f60-colour.ini run_keys f60-preview Menu Down Return Right Down Return +shows_blue Down +shows_green Down +shows_red Menu
+CFG=$FX/f60-color.ini run_keys f60-preview Menu Down Return Right Down Return +shows_blue Down +shows_green Down +shows_red Menu
 ok=1
 grep -qx 'blue yes' "$out/f60-preview.seen" && grep -qx 'green yes' "$out/f60-preview.seen" \
     && grep -qx 'red yes' "$out/f60-preview.seen" && grep -q 'Settings: nothing changed' "$out/f60-preview.log" \
@@ -37,7 +37,7 @@ result "settings: the preview shows the highlighted image (exit $(cat "$out/f60-
 sed 's/^/      /' "$out/f60-preview.seen"
 
 # Transparent shows the checkerboard; stepping back to Colour leaves nothing to save
-CFG=$FX/f60-colour.ini run_keys f60-transparent Menu Down Return Right Right Right +shows_checkerboard Left Left Left BackSpace BackSpace
+CFG=$FX/f60-color.ini run_keys f60-transparent Menu Down Return Right Right Right +shows_checkerboard Left Left Left BackSpace BackSpace
 ok=1
 grep -qx 'checkerboard yes' "$out/f60-transparent.seen" && grep -q 'Settings: nothing changed' "$out/f60-transparent.log" \
     && ran_clean f60-transparent && ok=0
@@ -67,19 +67,19 @@ grep -q "Background 'Image' setting not specified in config file" "$out/f60-noim
 result "a config's Image or Slideshow mode with nothing chosen still errors at startup (exit $(cat "$out/f60-noimage.code"))" $ok
 
 # Image: Mode to Image, open the browser (it starts in Pictures), take the second image
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-image Menu Down Return Right Down Return Down Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Image' "$cfg" && grep -qx 'Image=/home/tester/Pictures/green.png' "$cfg" \
     && grep -q 'Settings saved 2 change(s)' "$out/f60-image.log" && ran_clean f60-image && ok=0
 result "settings: an image chosen in the folder browser is saved (exit $(cat "$out/f60-image.code"))" $ok
-diff "$FX/f60-colour.ini" "$cfg" | sed 's/^/      /'
+diff "$FX/f60-color.ini" "$cfg" | sed 's/^/      /'
 
 # OK while the highlighted image is still decoding: the test hook (STREAMFLEX_TEST_DECODE_DELAY_MS,
 # in the harness's build only) makes each decode take 4 s, so OK lands while blue.png, the image
 # highlighted first, is still decoding and green.png waits behind it. OK waits for both, and
 # chooses green, the one highlighted, only once green's decode is done.
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_DECODE_DELAY_MS=4000 CFG=$cfg UNTIL='Settings saved' \
     run_keys f60-slowdecode Menu Down Return Right Down Return Down Return BackSpace BackSpace
 ok=1
@@ -102,26 +102,26 @@ grep -q 'Settings: OK waited for the decode of /home/tester/broken/b.png' "$out/
 result "settings: OK on a broken image during its decode waits, then refuses it (exit $(cat "$out/f60-slowbroken.code"))" $ok
 
 # Image with none chosen: leaving the page puts Colour back, so nothing is saved
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-incomplete Menu Down Return Right BackSpace BackSpace
 ok=1
-cmp -s "$FX/f60-colour.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
+cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
     && grep -q 'Settings: nothing changed' "$out/f60-incomplete.log" && ran_clean f60-incomplete && ok=0
 result "settings: Image with no image chosen goes back to Colour and saves nothing (exit $(cat "$out/f60-incomplete.code"))" $ok
 
 # The same on a renderer without render targets (the harness build's
 # STREAMFLEX_TEST_NO_RENDER_TARGETS): the menu is drawn behind the settings, and the caption and
 # its note are drawn all the same
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_NO_RENDER_TARGETS=1 CFG=$cfg run_keys f60-notargets Menu Down Return Right BackSpace BackSpace
 ok=1
-cmp -s "$FX/f60-colour.ini" "$cfg" && grep -q 'Settings: the renderer has no render targets' "$out/f60-notargets.log" \
+cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: the renderer has no render targets' "$out/f60-notargets.log" \
     && grep -q 'Settings: the note under the preview says No image was chosen, so Mode went back to Colour' "$out/f60-notargets.log" \
     && ran_clean f60-notargets && ok=0
 result "settings: without render targets the caption and its note are still drawn (exit $(cat "$out/f60-notargets.code"))" $ok
 
 # Slideshow: Mode to Slideshow, open the browser on the Folder row, use Pictures
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-slideshow Menu Down Return Right Right Down Return Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Slideshow' "$cfg" && grep -qx 'SlideshowDirectory=/home/tester/Pictures' "$cfg" \

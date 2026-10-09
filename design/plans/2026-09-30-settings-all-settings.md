@@ -10,7 +10,7 @@
 - **A start, stop and reload for each feature** (overlay, highlight, scroll indicators, clock, screensaver, gamepad) in `launcher.c`. Startup calls the same `start` the settings screen does.
 - **New pure modules,** each unit-tested without SDL:
   - `listpick.c`, the shared list picker;
-  - `colourpick.c`, the swatch grid and hex editor, with the contrast maths;
+  - `colorpick.c`, the swatch grid and hex editor, with the contrast maths;
   - `fontlist.c`, which groups font faces into families;
   - `bindings.c`, the binding lists, the safety floor and the capture state machine.
 - **`inidoc` gains list mode,** and `config_save` gains list edits, for `[Hotkeys]` and `[Gamepad]`.
@@ -90,7 +90,7 @@ The spec was written against `feat/settings-screen` before 3a's fix wave. Each o
   Stage named files only; never `git add -A`. Commit messages are conventional (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `refactor:`) with no AI attribution. The PR is squash-merged.
 - **The pure modules must not include SDL, `launcher.h` or any SDL-using header:**
   - 3a's `fileio.c`, `inidoc.c`, `config_save.c`, `settings.c`, `browser.c` and `layout.c`;
-  - 3b's new `derive.c`, `listpick.c`, `colourpick.c`, `fontlist.c` and `bindings.c`.
+  - 3b's new `derive.c`, `listpick.c`, `colorpick.c`, `fontlist.c` and `bindings.c`.
 
   They may include `<launcher_config.h>` (macros only). Each test executable links them without SDL. They allocate through `alloc.h`, and each one that allocates joins `test_alloc`.
 - **Use no SDL API newer than 2.0.18,** no SDL_image API newer than 2.0.5, and no SDL_ttf API newer than 2.0.15.
@@ -241,7 +241,7 @@ These five input classes are the most likely to bite someone using this, and the
 | `src/derive.h`, `src/derive.c` | new | `derive_settings()`: configured values to the ones the launcher draws with |
 | `src/config_fields.h`, `src/config_fields.c` | new | The only code that moves a `SettingValue` into `Config` or a menu, or back; the built-in defaults; `derive_input()` |
 | `src/listpick.h`, `src/listpick.c` | new | The shared list picker's model |
-| `src/colourpick.h`, `src/colourpick.c` | new | The swatch grid, the hex editor, luminance and contrast |
+| `src/colorpick.h`, `src/colorpick.c` | new | The swatch grid, the hex editor, luminance and contrast |
 | `src/fontlist.h`, `src/fontlist.c` | new | Font faces grouped into families; the face a family writes |
 | `src/fontscan.h`, `src/fontscan.c` | new | Finding font files: Windows' registry, Linux's folders; the listing thread |
 | `src/bindings.h`, `src/bindings.c` | new | The binding lists, the safety floor, confirmations, the capture state machine, list edits for the save |
@@ -258,7 +258,7 @@ These five input classes are the most likely to bite someone using this, and the
 | `src/platform/platform.h`, `win32.c` | modify | `clear_exit_hotkey()` |
 | `src/CMakeLists.txt`, `CMakeLists.txt` | modify | New sources; `advapi32` on Windows; the SDL 2.0.18 floor |
 | `config/config_settings.cmake`, `config/launcher_config.h.in` | modify | `FontFace` keys; default opacities as macros |
-| `tests/CMakeLists.txt`, `tests/test_*.c` | new/modify | `test_derive`, `test_listpick`, `test_colourpick`, `test_fontlist`, `test_bindings`; `test_settings`, `test_inidoc`, `test_config_save`, `test_browser`, `test_alloc` extended |
+| `tests/CMakeLists.txt`, `tests/test_*.c` | new/modify | `test_derive`, `test_listpick`, `test_colorpick`, `test_fontlist`, `test_bindings`; `test_settings`, `test_inidoc`, `test_config_save`, `test_browser`, `test_alloc` extended |
 | `tests/headless/checks/*.sh`, `tests/headless/fixtures/*` | new/modify | The General row's extra `Down`; the new checks and fixtures |
 | `docs/configuration.md`, `docs/compilation.md`, `CHANGELOG.md`, `CONTRIBUTING.md` | modify | Documentation |
 | `tests/qa/checklists/*.md` | modify | The hands-on rows for 3b |
@@ -3061,7 +3061,7 @@ In `debug_settings()`, with `char text[SETTING_TEXT_MAX];` declared at its top:
 Build and run the unit tests (Global Constraints). Expected: `100% tests passed`. The MSVC `/W4 /WX` build is only in CI, so also run the **Linux unit tests** with the label `t3`: `warnings outside src/external: 0`.
 
 Run the headless harness with the label `t3`. Expected:
-- `0 failed`: the four new checks pass, and every 3a check still passes (`f12-padding`'s `OutlineSize: 5`, `f14-junk`'s `Invalid MaxButtons value '7x'`, `f15-limits`, `f40-*`, `f60-colour`'s pixels).
+- `0 failed`: the four new checks pass, and every 3a check still passes (`f12-padding`'s `OutlineSize: 5`, `f14-junk`'s `Invalid MaxButtons value '7x'`, `f15-limits`, `f40-*`, `f60-color`'s pixels).
 - The leak pass (label `t3-leaks`) is also `0 failed`: `TextInfo`'s path is freed for both fonts.
 
 Then run both again on Fedora (labels `t3-fedora` and `t3-fedora-leaks`), in parallel with the Debian runs where the host's memory allows.
@@ -5798,7 +5798,7 @@ git -C C:/Users/jscha/source/repos/streamflex add src/listpick.h src/listpick.c 
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the shared list picker's model"
 ```
 
-### Task 8: The colour picker's model and the contrast maths (`colourpick.c`)
+### Task 8: The colour picker's model and the contrast maths (`colorpick.c`)
 
 A pure model of the colour picker:
 - a 6 × 4 grid of the spec's 24 named swatches, moved with all four arrows;
@@ -5807,29 +5807,29 @@ A pure model of the colour picker:
 Back on the grid cancels, and the preview goes back to the colour the picker opened with. The same module holds the contrast warning's maths: WCAG relative luminance, the contrast ratio, the mean luminance of an image's pixels, and a colour laid over a background at an opacity.
 
 **Files:**
-- Create: `src/colourpick.h`, `src/colourpick.c`
-- Modify: `tests/CMakeLists.txt` (`test_colourpick`, linked with `m` on Unix)
-- Test: `tests/test_colourpick.c`
+- Create: `src/colorpick.h`, `src/colorpick.c`
+- Modify: `tests/CMakeLists.txt` (`test_colorpick`, linked with `m` on Unix)
+- Test: `tests/test_colorpick.c`
 
 **Interfaces:**
 - Consumes: `SettingColor` (`settings.h`).
 - Produces:
 
 ```c
-#define COLOURPICK_COLUMNS 6
-#define COLOURPICK_ROWS 4
-#define COLOURPICK_SWATCHES 24
-#define COLOURPICK_CUSTOM 24                   // The cursor on the Custom #RRGGBB row
-#define COLOURPICK_MIN_CONTRAST 3.0            // WCAG's 3:1 for large text
-typedef enum { COLOURPICK_UP, COLOURPICK_DOWN, COLOURPICK_LEFT, COLOURPICK_RIGHT, COLOURPICK_OK, COLOURPICK_BACK } ColourPickCommand;
-typedef enum { COLOURPICK_NONE, COLOURPICK_MOVED, COLOURPICK_CHOSEN, COLOURPICK_CANCELLED } ColourPickResult;
+#define COLORPICK_COLUMNS 6
+#define COLORPICK_ROWS 4
+#define COLORPICK_SWATCHES 24
+#define COLORPICK_CUSTOM 24                   // The cursor on the Custom #RRGGBB row
+#define COLORPICK_MIN_CONTRAST 3.0            // WCAG's 3:1 for large text
+typedef enum { COLORPICK_UP, COLORPICK_DOWN, COLORPICK_LEFT, COLORPICK_RIGHT, COLORPICK_OK, COLORPICK_BACK } ColourPickCommand;
+typedef enum { COLORPICK_NONE, COLORPICK_MOVED, COLORPICK_CHOSEN, COLORPICK_CANCELLED } ColourPickResult;
 typedef struct { int cursor; int column; bool editing; int digit; SettingColor original; SettingColor hex; SettingColor chosen; } ColourPick;
-void colourpick_open(ColourPick *pick, SettingColor current);
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command);
-SettingColor colourpick_shown(const ColourPick *pick);
-const char *colourpick_name(int index);
-SettingColor colourpick_swatch(int index);
-int colourpick_find(SettingColor color);
+void colorpick_open(ColourPick *pick, SettingColor current);
+ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command);
+SettingColor colorpick_shown(const ColourPick *pick);
+const char *colorpick_name(int index);
+SettingColor colorpick_swatch(int index);
+int colorpick_find(SettingColor color);
 double colour_luminance(SettingColor color);
 double colour_contrast(double a, double b);
 double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
@@ -5838,14 +5838,14 @@ double colour_over(double below, SettingColor over, int alpha);
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/test_colourpick.c`:
+Create `tests/test_colorpick.c`:
 
 ```c
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
 #include "check.h"
-#include "colourpick.h"
+#include "colorpick.h"
 
 // A function to make a colour
 static SettingColor rgb(unsigned char r, unsigned char g, unsigned char b)
@@ -5869,80 +5869,80 @@ static bool near(double a, double b)
 // A function to test the swatches: 24, in the spec's order, with names
 static void test_swatches(void)
 {
-    CHECK_STR(colourpick_name(0), "Black");
-    CHECK(same(colourpick_swatch(0), rgb(0x00, 0x00, 0x00)));
-    CHECK_STR(colourpick_name(9), "Burgundy");
-    CHECK(same(colourpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
-    CHECK_STR(colourpick_name(10), "White");
-    CHECK_STR(colourpick_name(13), "Dark grey");
-    CHECK_STR(colourpick_name(14), "Red");
-    CHECK(same(colourpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
-    CHECK_STR(colourpick_name(23), "Pink");
-    CHECK(same(colourpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6D)), -1);
+    CHECK_STR(colorpick_name(0), "Black");
+    CHECK(same(colorpick_swatch(0), rgb(0x00, 0x00, 0x00)));
+    CHECK_STR(colorpick_name(9), "Burgundy");
+    CHECK(same(colorpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
+    CHECK_STR(colorpick_name(10), "White");
+    CHECK_STR(colorpick_name(13), "Dark grey");
+    CHECK_STR(colorpick_name(14), "Red");
+    CHECK(same(colorpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
+    CHECK_STR(colorpick_name(23), "Pink");
+    CHECK(same(colorpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6D)), -1);
 }
 
 // A function to test moving through the grid, onto the Custom row and back
 static void test_grid(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
     CHECK_INT(pick.cursor, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The row's end
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_NONE);      // The grid's top
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The row's end
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_NONE);      // The grid's top
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 4);
-    CHECK(same(colourpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
+    CHECK(same(colorpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
     for (int i = 0; i < 3; i++)
-        CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
+        CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Row 4, column 5: Indigo
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the colour it opened with
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_NONE);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);   // One wide row
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the colour it opened with
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_NONE);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);   // One wide row
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Back to the column it left
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x50, 0x48, 0xC0)));
 
     // Back on the grid cancels, and the preview goes back
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_CANCELLED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_CANCELLED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
 }
 
 // A function to test the hex editor: digits chosen, stepped with wrapping, kept or left
 static void test_hex(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);
     CHECK(pick.editing);
     CHECK_INT(pick.digit, 0);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);    // The first digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);    // The first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
     for (int i = 0; i < 5; i++)
-        colourpick_command(&pick, COLOURPICK_RIGHT);
+        colorpick_command(&pick, COLORPICK_RIGHT);
     CHECK_INT(pick.digit, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The last digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The last digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
+    colorpick_command(&pick, COLORPICK_DOWN);
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
 
     // Back leaves the editor, not the picker; OK in it keeps the colour
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_MOVED);
     CHECK(!pick.editing);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);   // Opens on the edited colour
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);   // Opens on the edited colour
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x22, 0x34, 0x5E)));
 }
 
@@ -5998,57 +5998,57 @@ Add to `tests/CMakeLists.txt`, after `test_listpick`:
 
 ```cmake
 # Unit tests for the colour picker's model and the contrast maths (pure; the maths needs libm)
-add_executable(test_colourpick test_colourpick.c "${PROJECT_SOURCE_DIR}/src/colourpick.c")
-target_include_directories(test_colourpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_executable(test_colorpick test_colorpick.c "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+target_include_directories(test_colorpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if (UNIX)
-  target_link_libraries(test_colourpick m)
+  target_link_libraries(test_colorpick m)
 endif ()
-add_test(NAME colourpick COMMAND test_colourpick)
+add_test(NAME colorpick COMMAND test_colorpick)
 ```
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Reconfigure (Global Constraints). Expected: the configure fails with `Cannot find source file: .../src/colourpick.c`.
+Reconfigure (Global Constraints). Expected: the configure fails with `Cannot find source file: .../src/colorpick.c`.
 
-- [ ] **Step 3: Write `colourpick.h` and `colourpick.c`**
+- [ ] **Step 3: Write `colorpick.h` and `colorpick.c`**
 
-Create `src/colourpick.h`:
+Create `src/colorpick.h`:
 
 ```c
 // The colour picker's model: a 6 x 4 grid of named swatches moved with all four arrows, and below it
 // a Custom #RRGGBB row whose hex editor steps one digit at a time; and the contrast warning's maths
 // (WCAG relative luminance and contrast, an image's mean luminance, a colour laid over another).
 // Pure: no SDL, no globals, no allocation. settings_pickers.c draws it.
-#ifndef COLOURPICK_H
-#define COLOURPICK_H
+#ifndef COLORPICK_H
+#define COLORPICK_H
 
 #include <stdbool.h>
 #include "settings.h"
 
-#define COLOURPICK_COLUMNS 6
-#define COLOURPICK_ROWS 4
-#define COLOURPICK_SWATCHES 24
-#define COLOURPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
-#define COLOURPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
+#define COLORPICK_COLUMNS 6
+#define COLORPICK_ROWS 4
+#define COLORPICK_SWATCHES 24
+#define COLORPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
+#define COLORPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
 
 typedef enum {
-    COLOURPICK_UP,
-    COLOURPICK_DOWN,
-    COLOURPICK_LEFT,
-    COLOURPICK_RIGHT,
-    COLOURPICK_OK,
-    COLOURPICK_BACK
+    COLORPICK_UP,
+    COLORPICK_DOWN,
+    COLORPICK_LEFT,
+    COLORPICK_RIGHT,
+    COLORPICK_OK,
+    COLORPICK_BACK
 } ColourPickCommand;
 
 typedef enum {
-    COLOURPICK_NONE,
-    COLOURPICK_MOVED,      // What the preview shows may have changed
-    COLOURPICK_CHOSEN,     // `chosen` holds the colour
-    COLOURPICK_CANCELLED
+    COLORPICK_NONE,
+    COLORPICK_MOVED,      // What the preview shows may have changed
+    COLORPICK_CHOSEN,     // `chosen` holds the colour
+    COLORPICK_CANCELLED
 } ColourPickResult;
 
 typedef struct {
-    int cursor;              // 0-23 a swatch, row by row; COLOURPICK_CUSTOM the Custom row
+    int cursor;              // 0-23 a swatch, row by row; COLORPICK_CUSTOM the Custom row
     int column;              // The column Up goes back to from the Custom row
     bool editing;            // The hex editor is open
     int digit;               // 0-5: the digit of #RRGGBB that Up and Down step
@@ -6057,12 +6057,12 @@ typedef struct {
     SettingColor chosen;     // The colour OK chose
 } ColourPick;
 
-void colourpick_open(ColourPick *pick, SettingColor current);
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command);
-SettingColor colourpick_shown(const ColourPick *pick);
-const char *colourpick_name(int index);
-SettingColor colourpick_swatch(int index);
-int colourpick_find(SettingColor color);
+void colorpick_open(ColourPick *pick, SettingColor current);
+ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command);
+SettingColor colorpick_shown(const ColourPick *pick);
+const char *colorpick_name(int index);
+SettingColor colorpick_swatch(int index);
+int colorpick_find(SettingColor color);
 double colour_luminance(SettingColor color);
 double colour_contrast(double a, double b);
 double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch);
@@ -6071,12 +6071,12 @@ double colour_over(double below, SettingColor over, int alpha);
 #endif
 ```
 
-Create `src/colourpick.c`:
+Create `src/colorpick.c`:
 
 ```c
 #include <math.h>
 #include <string.h>
-#include "colourpick.h"
+#include "colorpick.h"
 
 #define SAMPLES 64   // The most points across and down an image's mean luminance reads
 
@@ -6084,7 +6084,7 @@ Create `src/colourpick.c`:
 static const struct {
     const char *name;
     SettingColor color;
-} SWATCHES[COLOURPICK_SWATCHES] = {
+} SWATCHES[COLORPICK_SWATCHES] = {
     { "Black",      { 0x00, 0x00, 0x00 } },
     { "Charcoal",   { 0x1E, 0x1E, 0x1E } },
     { "Graphite",   { 0x33, 0x38, 0x3D } },
@@ -6112,22 +6112,22 @@ static const struct {
 };
 
 // A function to get a swatch's name
-const char *colourpick_name(int index)
+const char *colorpick_name(int index)
 {
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].name : "";
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].name : "";
 }
 
 // A function to get a swatch's colour
-SettingColor colourpick_swatch(int index)
+SettingColor colorpick_swatch(int index)
 {
     SettingColor black = { 0, 0, 0 };
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].color : black;
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].color : black;
 }
 
 // A function to find a colour among the swatches; -1 when it is none of them
-int colourpick_find(SettingColor color)
+int colorpick_find(SettingColor color)
 {
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
         const SettingColor *s = &SWATCHES[i].color;
         if (s->r == color.r && s->g == color.g && s->b == color.b)
             return i;
@@ -6136,15 +6136,15 @@ int colourpick_find(SettingColor color)
 }
 
 // A function to open the picker on a colour: the cursor on its swatch, else on the Custom row
-void colourpick_open(ColourPick *pick, SettingColor current)
+void colorpick_open(ColourPick *pick, SettingColor current)
 {
     memset(pick, 0, sizeof(*pick));
     pick->original = current;
     pick->hex = current;
     pick->chosen = current;
-    int found = colourpick_find(current);
-    pick->cursor = found >= 0 ? found : COLOURPICK_CUSTOM;
-    pick->column = found >= 0 ? found % COLOURPICK_COLUMNS : 0;
+    int found = colorpick_find(current);
+    pick->cursor = found >= 0 ? found : COLORPICK_CUSTOM;
+    pick->column = found >= 0 ? found % COLORPICK_COLUMNS : 0;
 }
 
 // A function to step one hex digit of a colour (0 the red's first, 5 the blue's second) up or
@@ -6163,87 +6163,87 @@ static SettingColor step_digit(SettingColor color, int digit, int direction)
 static ColourPickResult edit(ColourPick *pick, ColourPickCommand command)
 {
     switch (command) {
-        case COLOURPICK_LEFT:
+        case COLORPICK_LEFT:
             if (pick->digit == 0)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit--;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_RIGHT:
+            return COLORPICK_MOVED;
+        case COLORPICK_RIGHT:
             if (pick->digit == 5)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit++;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_UP:
-        case COLOURPICK_DOWN:
-            pick->hex = step_digit(pick->hex, pick->digit, command == COLOURPICK_UP ? 1 : -1);
-            return COLOURPICK_MOVED;
-        case COLOURPICK_OK:
+            return COLORPICK_MOVED;
+        case COLORPICK_UP:
+        case COLORPICK_DOWN:
+            pick->hex = step_digit(pick->hex, pick->digit, command == COLORPICK_UP ? 1 : -1);
+            return COLORPICK_MOVED;
+        case COLORPICK_OK:
             pick->chosen = pick->hex;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             pick->editing = false;
-            return COLOURPICK_MOVED;
+            return COLORPICK_MOVED;
     }
-    return COLOURPICK_NONE;
+    return COLORPICK_NONE;
 }
 
 // A function to act on one key: move through the grid and onto the Custom row, open the hex
 // editor, choose, or cancel
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command)
+ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command)
 {
     if (pick->editing)
         return edit(pick, command);
     int before = pick->cursor;
-    int row = pick->cursor / COLOURPICK_COLUMNS;
-    int column = pick->cursor % COLOURPICK_COLUMNS;
+    int row = pick->cursor / COLORPICK_COLUMNS;
+    int column = pick->cursor % COLORPICK_COLUMNS;
     switch (command) {
-        case COLOURPICK_LEFT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column > 0)
+        case COLORPICK_LEFT:
+            if (pick->cursor != COLORPICK_CUSTOM && column > 0)
                 pick->cursor--;
             break;
-        case COLOURPICK_RIGHT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column < COLOURPICK_COLUMNS - 1)
+        case COLORPICK_RIGHT:
+            if (pick->cursor != COLORPICK_CUSTOM && column < COLORPICK_COLUMNS - 1)
                 pick->cursor++;
             break;
-        case COLOURPICK_UP:
-            if (pick->cursor == COLOURPICK_CUSTOM)
-                pick->cursor = (COLOURPICK_ROWS - 1) * COLOURPICK_COLUMNS + pick->column;
+        case COLORPICK_UP:
+            if (pick->cursor == COLORPICK_CUSTOM)
+                pick->cursor = (COLORPICK_ROWS - 1) * COLORPICK_COLUMNS + pick->column;
             else if (row > 0)
-                pick->cursor -= COLOURPICK_COLUMNS;
+                pick->cursor -= COLORPICK_COLUMNS;
             break;
-        case COLOURPICK_DOWN:
-            if (pick->cursor == COLOURPICK_CUSTOM)
+        case COLORPICK_DOWN:
+            if (pick->cursor == COLORPICK_CUSTOM)
                 break;
-            if (row < COLOURPICK_ROWS - 1)
-                pick->cursor += COLOURPICK_COLUMNS;
+            if (row < COLORPICK_ROWS - 1)
+                pick->cursor += COLORPICK_COLUMNS;
             else {
                 pick->column = column;
-                pick->cursor = COLOURPICK_CUSTOM;
+                pick->cursor = COLORPICK_CUSTOM;
             }
             break;
-        case COLOURPICK_OK:
-            if (pick->cursor == COLOURPICK_CUSTOM) {
+        case COLORPICK_OK:
+            if (pick->cursor == COLORPICK_CUSTOM) {
                 pick->editing = true;
                 pick->digit = 0;
-                return COLOURPICK_MOVED;
+                return COLORPICK_MOVED;
             }
             pick->chosen = SWATCHES[pick->cursor].color;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             pick->cursor = before;
             pick->editing = false;
-            return COLOURPICK_CANCELLED;
+            return COLORPICK_CANCELLED;
     }
-    if (pick->cursor != COLOURPICK_CUSTOM)
-        pick->column = pick->cursor % COLOURPICK_COLUMNS;
-    return pick->cursor != before ? COLOURPICK_MOVED : COLOURPICK_NONE;
+    if (pick->cursor != COLORPICK_CUSTOM)
+        pick->column = pick->cursor % COLORPICK_COLUMNS;
+    return pick->cursor != before ? COLORPICK_MOVED : COLORPICK_NONE;
 }
 
 // A function to say what the preview shows: the swatch under the cursor; on the Custom row, the hex
 // editor's colour (the colour the picker opened with, until it is edited)
-SettingColor colourpick_shown(const ColourPick *pick)
+SettingColor colorpick_shown(const ColourPick *pick)
 {
-    if (pick->cursor == COLOURPICK_CUSTOM)
+    if (pick->cursor == COLORPICK_CUSTOM)
         return pick->hex;
     return SWATCHES[pick->cursor].color;
 }
@@ -6299,18 +6299,18 @@ double colour_over(double below, SettingColor over, int alpha)
 }
 ```
 
-Add `colourpick.c` and `colourpick.h` to `src/CMakeLists.txt`'s `SOURCES`, after `listpick.h`.
+Add `colorpick.c` and `colorpick.h` to `src/CMakeLists.txt`'s `SOURCES`, after `listpick.h`.
 
 The mean-luminance test's `0.25`: one white pixel (luminance 1) and three black (0) average to 0.25. `near()` allows 0.001.
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Reconfigure, build and run the unit tests: `100% tests passed`, with `colourpick` among them. Run the **Linux unit tests** (label `t8`): `warnings outside src/external: 0`.
+Reconfigure, build and run the unit tests: `100% tests passed`, with `colorpick` among them. Run the **Linux unit tests** (label `t8`): `warnings outside src/external: 0`.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git -C C:/Users/jscha/source/repos/streamflex add src/colourpick.h src/colourpick.c src/CMakeLists.txt tests/test_colourpick.c tests/CMakeLists.txt
+git -C C:/Users/jscha/source/repos/streamflex add src/colorpick.h src/colorpick.c src/CMakeLists.txt tests/test_colorpick.c tests/CMakeLists.txt
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: the colour picker's model and the contrast maths"
 ```
 
@@ -6402,7 +6402,7 @@ Create `tests/headless/checks/58-settings-pickers.sh`:
 # and it saves
 shows_hex() { look "$1" "$2" hex 'Settings: previewing #102030' 30,30=16,32,48; }
 hex_keys="Down Down Down Down Return Up Right Right Up Up Right Right Up Up Up"
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f58-hex Menu Down Return Down Return $hex_keys +shows_hex Return BackSpace BackSpace
 ok=1
 grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #000000 -> #102030' "$out/f58-hex.log" \
@@ -6410,7 +6410,7 @@ grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #0000
 result "pickers: a colour typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
 
 # Back in the colour picker puts the colour back: nothing is saved
-CFG=$FX/f60-colour.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
+CFG=$FX/f60-color.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
 ok=1
 grep -q 'Settings: previewing #33383D' "$out/f58-colourback.log" && grep -q 'Settings: nothing changed' "$out/f58-colourback.log" \
     && ran_clean f58-colourback && ok=0
@@ -6429,12 +6429,12 @@ result "pickers: a command and a default menu chosen from their lists save (exit
 grep -E 'Settings: (the command picker|\[General\])' "$out/f58-command.log" | sed 's/^/      /'
 
 # Titles > Colour: black titles on the black background are 1:1, and the caption says so
-CFG=$FX/f60-colour.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
+CFG=$FX/f60-color.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
 ok=1
 grep -q 'Settings: the note under the preview says White #FFFFFF' "$out/f58-contrast.log" \
     && ! grep -q 'Low contrast' "$out/f58-contrast.log" && ran_clean f58-contrast && ok=0
 result "pickers: white titles on black raise no contrast warning (exit $(cat "$out/f58-contrast.code"))" $ok
-CFG=$FX/f60-colour.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
+CFG=$FX/f60-color.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
 ok=1
 grep -q 'Settings: the note under the preview says Black #000000 · Low contrast: 1.0:1 against the background' "$out/f58-lowcontrast.log" \
     && ran_clean f58-lowcontrast && ok=0
@@ -6462,7 +6462,7 @@ Run the headless harness with the label `t9-red`. Expected: the five new checks 
 
 - [ ] **Step 3: Measure what lies behind the text: an image's mean luminance**
 
-In `src/image.h`, declare `double surface_luminance(SDL_Surface *surface);` after `load_texture_from_file`. In `src/image.c`, add `#include "colourpick.h"`, and add above `load_texture_from_file()`:
+In `src/image.h`, declare `double surface_luminance(SDL_Surface *surface);` after `load_texture_from_file`. In `src/image.c`, add `#include "colorpick.h"`, and add above `load_texture_from_file()`:
 
 ```c
 // A function to measure a decoded image's mean relative luminance, for the contrast warning: at
@@ -6624,7 +6624,7 @@ Create `src/settings_pickers.c`:
 #include "settings.h"
 #include "settings_pickers.h"
 #include "listpick.h"
-#include "colourpick.h"
+#include "colorpick.h"
 #include "util.h"
 #include "debug.h"
 
@@ -6768,7 +6768,7 @@ void pickers_open(SettingSlot *s)
     slot = s;
     original = s->value;
     if (s->def->type == SET_TYPE_COLOR) {
-        colourpick_open(&colour, s->value.color);
+        colorpick_open(&colour, s->value.color);
         kind = PICKER_COLOUR;
     }
     else if (s->def->type == SET_TYPE_MENU || s->def->type == SET_TYPE_DEVICE || s->def->type == SET_TYPE_COMMAND)
@@ -6837,27 +6837,27 @@ static void colour_command(const char *command)
 {
     ColourPickCommand key;
     if (MATCH(command, SCMD_UP))
-        key = COLOURPICK_UP;
+        key = COLORPICK_UP;
     else if (MATCH(command, SCMD_DOWN))
-        key = COLOURPICK_DOWN;
+        key = COLORPICK_DOWN;
     else if (MATCH(command, SCMD_LEFT))
-        key = COLOURPICK_LEFT;
+        key = COLORPICK_LEFT;
     else if (MATCH(command, SCMD_RIGHT))
-        key = COLOURPICK_RIGHT;
+        key = COLORPICK_RIGHT;
     else if (MATCH(command, SCMD_SELECT))
-        key = COLOURPICK_OK;
+        key = COLORPICK_OK;
     else
-        key = COLOURPICK_BACK;
-    ColourPickResult result = colourpick_command(&colour, key);
-    if (result == COLOURPICK_MOVED)
-        preview_colour(colourpick_shown(&colour));
-    else if (result == COLOURPICK_CANCELLED) {
+        key = COLORPICK_BACK;
+    ColourPickResult result = colorpick_command(&colour, key);
+    if (result == COLORPICK_MOVED)
+        preview_colour(colorpick_shown(&colour));
+    else if (result == COLORPICK_CANCELLED) {
         slot->value = original;
         host.apply(slot, true);
         log_debug("Settings: the colour picker put [%s] %s back", slot->def->section, slot->def->key);
         close_picker();
     }
-    else if (result == COLOURPICK_CHOSEN) {
+    else if (result == COLORPICK_CHOSEN) {
         SettingValue value = original;
         value.color = colour.chosen;
         choose(value);
@@ -6915,11 +6915,11 @@ static void draw_list(int x, int top, int bottom)
 static void draw_colour(int x, int top, int bottom)
 {
     int pad = host.margin / 2;
-    int cell = (host.column_width - 2 * pad) / COLOURPICK_COLUMNS;
-    int current = colourpick_find(colour.original);
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
-        SettingColor c = colourpick_swatch(i);
-        SDL_Rect box = { x + pad + (i % COLOURPICK_COLUMNS) * cell + 3, top + (i / COLOURPICK_COLUMNS) * cell + 3,
+    int cell = (host.column_width - 2 * pad) / COLORPICK_COLUMNS;
+    int current = colorpick_find(colour.original);
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
+        SettingColor c = colorpick_swatch(i);
+        SDL_Rect box = { x + pad + (i % COLORPICK_COLUMNS) * cell + 3, top + (i / COLORPICK_COLUMNS) * cell + 3,
                          cell - 6, cell - 6 };
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0xFF);
         SDL_RenderFillRect(renderer, &box);
@@ -6936,15 +6936,15 @@ static void draw_colour(int x, int top, int bottom)
             SDL_RenderDrawRect(renderer, &inner);
         }
     }
-    int y = top + COLOURPICK_ROWS * cell + pad;
-    SettingColor shown = colour.editing || colour.cursor == COLOURPICK_CUSTOM ? colour.hex : colour.original;
+    int y = top + COLORPICK_ROWS * cell + pad;
+    SettingColor shown = colour.editing || colour.cursor == COLORPICK_CUSTOM ? colour.hex : colour.original;
     SettingsRow custom;
     memset(&custom, 0, sizeof(custom));
     custom.kind = SETTINGS_ROW_ACTION;
     custom.enabled = true;
     snprintf(custom.label, sizeof(custom.label), "Custom");
     snprintf(custom.value, sizeof(custom.value), "#%02X%02X%02X", shown.r, shown.g, shown.b);
-    y += host.row(&custom, colour.cursor == COLOURPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
+    y += host.row(&custom, colour.cursor == COLORPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
     if (!colour.editing || y + host.row_height > bottom)
         return;
 
@@ -7018,7 +7018,7 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
         behind = colour_over(behind, over, eff.overlay_color.a);
     }
     double ratio = colour_contrast(colour_luminance(color), behind);
-    if (ratio < COLOURPICK_MIN_CONTRAST)
+    if (ratio < COLORPICK_MIN_CONTRAST)
         snprintf(out, size, "Low contrast: %.1f:1 against the background; 3:1 or more reads well", ratio);
 }
 
@@ -7030,11 +7030,11 @@ const char *pickers_note(void)
     if (kind == PICKER_LIST && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
     else if (kind == PICKER_COLOUR) {
-        SettingColor shown = colourpick_shown(&colour);
-        int index = colour.editing ? -1 : colourpick_find(shown);
+        SettingColor shown = colorpick_shown(&colour);
+        int index = colour.editing ? -1 : colorpick_find(shown);
         char warning[160];
         contrast_warning(slot->def->id, shown, warning, sizeof(warning));
-        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colourpick_name(index) : "Custom",
+        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colorpick_name(index) : "Custom",
             shown.r, shown.g, shown.b, warning[0] != '\0' ? DOT : "", warning);
     }
     return note;
@@ -7046,7 +7046,7 @@ Add `settings_pickers.c` and `settings_pickers.h` to `src/CMakeLists.txt`'s `SOU
 - [ ] **Step 6: Hand picker rows to the pickers**
 
 In `src/settings_screen.c`:
-- Add `#include "settings_pickers.h"` after `#include "settings_screen.h"`, and `#include "colourpick.h"`.
+- Add `#include "settings_pickers.h"` after `#include "settings_screen.h"`, and `#include "colorpick.h"`.
 - In `settings_open()`, after `measure_layout();`, set the pickers up:
 
 ```c
@@ -7112,7 +7112,7 @@ static const char *row_warning(void)
 
 Build and run the unit tests: `100% tests passed`. Run the **Linux unit tests** (label `t9`): `warnings outside src/external: 0`.
 
-Run the headless harness (labels `t9`, `t9-fedora`) and the leak pass (`t9-leaks`, `t9-fedora-leaks`). Expected: `0 failed` in each. The five new checks pass, and every earlier check still does. `f60-colour` steps the colour with `Right`, which a picker row still does.
+Run the headless harness (labels `t9`, `t9-fedora`) and the leak pass (`t9-leaks`, `t9-fedora-leaks`). Expected: `0 failed` in each. The five new checks pass, and every earlier check still does. `f60-color` steps the colour with `Right`, which a picker row still does.
 
 - [ ] **Step 8: Commit**
 
@@ -7248,7 +7248,7 @@ int main(void)
 }
 ```
 
-Add to `tests/CMakeLists.txt`, after `test_colourpick`:
+Add to `tests/CMakeLists.txt`, after `test_colorpick`:
 
 ```cmake
 # Unit tests for grouping font faces into families (pure)
@@ -7301,7 +7301,7 @@ chown -R tester:tester "$TESTER_HOME/fonts"
 # Titles > Font: the list loads, the cursor starts on the font in use (Open Sans, the fifth family),
 # and four Ups choose DejaVu Sans, the first
 wait_fonts() { wait_line 'Fonts: found' "$2"; sleep 1; }
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-fonts Menu Down Down Down Return Down Down Return +wait_fonts Up Up Up Up Return BackSpace BackSpace
 log=$out/f59-fonts.log
@@ -7849,7 +7849,7 @@ void fontscan_free(FontScan *scan)
 ```
 
 In `src/CMakeLists.txt`:
-- add `fontlist.c`, `fontlist.h`, `fontscan.c` and `fontscan.h` to `SOURCES`, after `colourpick.h`;
+- add `fontlist.c`, `fontlist.h`, `fontscan.c` and `fontscan.h` to `SOURCES`, after `colorpick.h`;
 - add `advapi32` to the Windows link list, after `uuid` (the registry's API).
 
 - [ ] **Step 5: Add the font picker to the pickers**
@@ -11201,7 +11201,7 @@ Under `## [Unreleased]`, keeping its existing `### Changed` lines, add:
 
 - [ ] **Step 3: Update `CONTRIBUTING.md`'s project structure and tests**
 
-In **## Project Structure** (lines 44-46), add the new modules to the settings screen's list: `settings_pickers.c`, `listpick.c`, `colourpick.c`, `fontlist.c`, `fontscan.c`, `bindings.c`, `config_fields.c`, `derive.c`. Line 11's pure modules gain `derive`, `listpick`, `colourpick`, `fontlist` and `bindings`. Name the new unit tests: `test_derive`, `test_listpick`, `test_colourpick`, `test_fontlist` and `test_bindings`.
+In **## Project Structure** (lines 44-46), add the new modules to the settings screen's list: `settings_pickers.c`, `listpick.c`, `colorpick.c`, `fontlist.c`, `fontscan.c`, `bindings.c`, `config_fields.c`, `derive.c`. Line 11's pure modules gain `derive`, `listpick`, `colorpick`, `fontlist` and `bindings`. Name the new unit tests: `test_derive`, `test_listpick`, `test_colorpick`, `test_fontlist` and `test_bindings`.
 
 - [ ] **Step 4: Write the hands-on checklists for sf-test**
 

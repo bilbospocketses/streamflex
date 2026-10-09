@@ -34,8 +34,8 @@ set(SOURCES
   config_fields.h
   listpick.c
   listpick.h
-  colourpick.c
-  colourpick.h
+  colorpick.c
+  colorpick.h
   fontlist.c
   fontlist.h
   fontscan.c

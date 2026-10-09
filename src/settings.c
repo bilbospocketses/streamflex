@@ -7,7 +7,7 @@
 #include "fileio.h"
 #include "inidoc.h"
 #include "alloc.h"
-#include "colourpick.h"
+#include "colorpick.h"
 #include <launcher_config.h>
 
 #define ARROW " \xE2\x80\xBA "   // U+203A with a space either side, between the pages in the page path
@@ -579,8 +579,8 @@ typedef struct {
 // A function to find a colour among the presets; -1 when it is not one
 static int preset_index(SettingColor color)
 {
-    for (int i = 0; i < COLOURPICK_PRESETS; i++) {
-        SettingColor preset = colourpick_swatch(i);
+    for (int i = 0; i < COLORPICK_PRESETS; i++) {
+        SettingColor preset = colorpick_swatch(i);
         if (preset.r == color.r && preset.g == color.g && preset.b == color.b)
             return i;
     }
@@ -698,9 +698,9 @@ static int build_candidates(const SettingDef *def, const SettingValue *current, 
                 add_candidate(def, list, &count, number_candidate(TITLE_STEPS[i], true));
             break;
         case SET_TYPE_COLOR:
-            for (int i = 0; i < COLOURPICK_PRESETS; i++) {
+            for (int i = 0; i < COLORPICK_PRESETS; i++) {
                 Candidate c = number_candidate(0, false);
-                c.color = colourpick_swatch(i);
+                c.color = colorpick_swatch(i);
                 add_candidate(def, list, &count, c);
             }
             break;
@@ -808,9 +808,9 @@ void setting_describe(const SettingDef *def, const SettingValue *value, const Se
             break;
         case SET_TYPE_COLOR: {
             // Named as the colour picker names it: any of its swatches, not only the presets
-            int swatch = colourpick_find(value->color);
+            int swatch = colorpick_find(value->color);
             if (swatch >= 0)
-                snprintf(out, size, "%s", colourpick_name(swatch));
+                snprintf(out, size, "%s", colorpick_name(swatch));
             else
                 snprintf(out, size, "Custom #%02X%02X%02X", value->color.r, value->color.g, value->color.b);
             break;

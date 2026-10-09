@@ -9,7 +9,7 @@
 mkdir -p /mnt/nas
 cp "$TESTER_HOME/Pictures/red.png" /mnt/nas/
 chmod -R a+rX /mnt/nas
-XDG_PICTURES_DIR=/mnt/nas CFG=$FX/f60-colour.ini run_keys f65-network Menu Down Return Right Down Return Menu
+XDG_PICTURES_DIR=/mnt/nas CFG=$FX/f60-color.ini run_keys f65-network Menu Down Return Right Down Return Menu
 ok=1
 grep -qE 'Settings: browsing /home/tester$' "$out/f65-network.log" && ! grep -q 'Settings: browsing /mnt' "$out/f65-network.log" \
     && grep -q 'Settings: nothing changed' "$out/f65-network.log" && ran_clean f65-network && ok=0
@@ -69,7 +69,7 @@ result "settings: a folder the browser runs out of memory opening says so (exit 
 grep -E "Settings: (browsing|Can't)" "$out/f65-command.log" | sed 's/^/      /'
 
 # A save that cannot keep the file's permissions succeeds, and the log says what was lost
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_FAIL=keep CFG=$cfg run_keys f65-keep Menu Down Return Down Right BackSpace BackSpace
 ok=1
 grep -qx 'Color=#1E1E1E' "$cfg" \

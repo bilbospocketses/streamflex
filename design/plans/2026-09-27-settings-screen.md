@@ -8750,7 +8750,7 @@ This task finishes the Background page:
 
 **Files:**
 - Modify: `src/settings_screen.c`, `src/launcher.h`, `src/launcher.c`
-- Create: `tests/headless/checks/60-settings-background.sh`; fixtures `f60-colour.ini`, `f60-running.ini`
+- Create: `tests/headless/checks/60-settings-background.sh`; fixtures `f60-color.ini`, `f60-running.ini`
 
 **Interfaces:**
 - Consumes: `browser_*` and `fileio_places()` (Task 8); `inidoc_check()` (Task 3); `settings_choose()` (Task 6); the Task 10 screen.
@@ -8764,32 +8764,32 @@ This task finishes the Background page:
 # writable_config and changed_lines come from 50-settings.sh, which runs first.
 
 # Colour: step from Black to Charcoal
-cfg=$(writable_config f60-colour)
-CFG=$cfg run_keys f60-colour Menu Return Down Right BackSpace BackSpace
+cfg=$(writable_config f60-color)
+CFG=$cfg run_keys f60-color Menu Return Down Right BackSpace BackSpace
 ok=1
-[ "$(changed_lines "$FX/f60-colour.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
-    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-colour.log" && sanitizer_clean f60-colour && ok=0
+[ "$(changed_lines "$FX/f60-color.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
+    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-color.log" && sanitizer_clean f60-color && ok=0
 result "settings: a preset colour is saved" $ok
 
 # Image: Mode to Image, open the browser (it starts in Pictures), take the second image
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-image Menu Return Right Down Return Down Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Image' "$cfg" && grep -qx 'Image=/home/tester/Pictures/green.png' "$cfg" \
     && grep -q 'Settings saved 2 change(s)' "$out/f60-image.log" && sanitizer_clean f60-image && ok=0
 result "settings: an image chosen in the folder browser is saved" $ok
-diff "$FX/f60-colour.ini" "$cfg" | sed 's/^/      /'
+diff "$FX/f60-color.ini" "$cfg" | sed 's/^/      /'
 
 # Image with none chosen: leaving the page puts Colour back, so nothing is saved
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-incomplete Menu Return Right BackSpace BackSpace
 ok=1
-cmp -s "$FX/f60-colour.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
+cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
     && grep -q 'Settings: nothing changed' "$out/f60-incomplete.log" && sanitizer_clean f60-incomplete && ok=0
 result "settings: Image with no image chosen goes back to Colour and saves nothing" $ok
 
 # Slideshow: Mode to Slideshow, open the browser on the Folder row, use Pictures
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-slideshow Menu Return Right Right Down Return Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Slideshow' "$cfg" && grep -qx 'SlideshowDirectory=/home/tester/Pictures' "$cfg" \
@@ -8807,7 +8807,7 @@ result "settings: switching modes while a slideshow runs frees it cleanly" $ok
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
 ```
 
-`tests/headless/fixtures/f60-colour.ini`:
+`tests/headless/fixtures/f60-color.ini`:
 
 ```ini
 [General]
@@ -9232,7 +9232,7 @@ Expected: no new warnings, and `100% tests passed, 0 tests failed out of 9`. The
 - [ ] **Step 6: Commit**
 
 ```powershell
-git -C C:/Users/jscha/source/repos/streamflex add src/settings_screen.c src/launcher.h src/launcher.c tests/headless/checks/60-settings-background.sh tests/headless/fixtures/f60-colour.ini tests/headless/fixtures/f60-running.ini
+git -C C:/Users/jscha/source/repos/streamflex add src/settings_screen.c src/launcher.h src/launcher.c tests/headless/checks/60-settings-background.sh tests/headless/fixtures/f60-color.ini tests/headless/fixtures/f60-running.ini
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: choose a background image or slideshow folder with the remote"
 ```
 

@@ -10,7 +10,7 @@
 #include "settings_fonts.h"
 #include "bindings.h"
 #include "listpick.h"
-#include "colourpick.h"
+#include "colorpick.h"
 #include "fileio.h"
 #include "image.h"
 #include "test_hooks.h"
@@ -304,7 +304,7 @@ void pickers_open(SettingSlot *s)
     slot = s;
     original = s->value;
     if (type == SET_TYPE_COLOR) {
-        colourpick_open(&colour, s->value.color);
+        colorpick_open(&colour, s->value.color);
         previewed = s->value.color;
         cells_logged = false;
         custom_shown[0] = '\0';
@@ -817,25 +817,25 @@ static void colour_command(const char *command)
 {
     ColourPickCommand key;
     if (MATCH(command, SCMD_UP))
-        key = COLOURPICK_UP;
+        key = COLORPICK_UP;
     else if (MATCH(command, SCMD_DOWN))
-        key = COLOURPICK_DOWN;
+        key = COLORPICK_DOWN;
     else if (MATCH(command, SCMD_LEFT))
-        key = COLOURPICK_LEFT;
+        key = COLORPICK_LEFT;
     else if (MATCH(command, SCMD_RIGHT))
-        key = COLOURPICK_RIGHT;
+        key = COLORPICK_RIGHT;
     else if (MATCH(command, SCMD_SELECT))
-        key = COLOURPICK_OK;
+        key = COLORPICK_OK;
     else
-        key = COLOURPICK_BACK;
-    ColourPickResult result = colourpick_command(&colour, key);
-    if (result == COLOURPICK_MOVED)
-        preview_colour(colourpick_shown(&colour));
-    else if (result == COLOURPICK_CANCELLED) {
+        key = COLORPICK_BACK;
+    ColourPickResult result = colorpick_command(&colour, key);
+    if (result == COLORPICK_MOVED)
+        preview_colour(colorpick_shown(&colour));
+    else if (result == COLORPICK_CANCELLED) {
         put_colour_back();
         close_picker();
     }
-    else if (result == COLOURPICK_CHOSEN) {
+    else if (result == COLORPICK_CHOSEN) {
         SettingValue value = original;
         value.color = colour.chosen;
         choose(value);
@@ -925,21 +925,21 @@ static void draw_list(int x, int top, int bottom)
 static void draw_colour(int x, int top, int bottom)
 {
     int pad = host.margin / 2;
-    int cell = (host.column_width - 2 * pad) / COLOURPICK_COLUMNS;
+    int cell = (host.column_width - 2 * pad) / COLORPICK_COLUMNS;
     // The swatches, the Custom row and the hex editor's row all end above the key hint, so a short,
     // wide screen gets smaller swatches
-    int fits = (bottom - top - pad - 2 * host.row_height) / COLOURPICK_ROWS;
+    int fits = (bottom - top - pad - 2 * host.row_height) / COLORPICK_ROWS;
     if (cell > fits)
         cell = fits;
-    int current = colourpick_find(colour.original);
+    int current = colorpick_find(colour.original);
     if (!cells_logged) {
         cells_logged = true;
         log_debug("Settings: the colour picker draws %i px cells from %i,%i, down to %i of %i", cell, x + pad, top,
-            top + COLOURPICK_ROWS * cell + pad + 2 * host.row_height, bottom);
+            top + COLORPICK_ROWS * cell + pad + 2 * host.row_height, bottom);
     }
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
-        SettingColor c = colourpick_swatch(i);
-        SDL_Rect box = { x + pad + (i % COLOURPICK_COLUMNS) * cell + 3, top + (i / COLOURPICK_COLUMNS) * cell + 3,
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
+        SettingColor c = colorpick_swatch(i);
+        SDL_Rect box = { x + pad + (i % COLORPICK_COLUMNS) * cell + 3, top + (i / COLORPICK_COLUMNS) * cell + 3,
                          cell - 6, cell - 6 };
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0xFF);
         SDL_RenderFillRect(renderer, &box);
@@ -956,8 +956,8 @@ static void draw_colour(int x, int top, int bottom)
             SDL_RenderDrawRect(renderer, &inner);
         }
     }
-    int y = top + COLOURPICK_ROWS * cell + pad;
-    SettingColor shown = colour.editing || colour.cursor == COLOURPICK_CUSTOM ? colour.hex : colour.original;
+    int y = top + COLORPICK_ROWS * cell + pad;
+    SettingColor shown = colour.editing || colour.cursor == COLORPICK_CUSTOM ? colour.hex : colour.original;
     SettingsRow custom;
     memset(&custom, 0, sizeof(custom));
     custom.kind = SETTINGS_ROW_ACTION;
@@ -968,7 +968,7 @@ static void draw_colour(int x, int top, int bottom)
         copy_string(custom_shown, custom.value, sizeof(custom_shown));
         log_debug("Settings: the Custom row reads %s", custom_shown);
     }
-    y += host.row(&custom, colour.cursor == COLOURPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
+    y += host.row(&custom, colour.cursor == COLORPICK_CUSTOM && !colour.editing, x, y, host.column_width, 0);
     if (!colour.editing || y + host.row_height > bottom)
         return;
 
@@ -1064,7 +1064,7 @@ void contrast_warning(SettingId id, SettingColor color, char *out, size_t size)
         behind = colour_over(behind, over, eff.overlay_color.a);
     }
     double ratio = colour_contrast(colour_luminance(color), behind);
-    if (ratio < COLOURPICK_MIN_CONTRAST)
+    if (ratio < COLORPICK_MIN_CONTRAST)
         snprintf(out, size, "Low contrast: %.1f:1 against the background; 3:1 or more reads well", ratio);
 }
 
@@ -1076,11 +1076,11 @@ const char *pickers_note(void)
     if (kind == PICKER_LIST && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
     else if (kind == PICKER_COLOUR) {
-        SettingColor shown = colourpick_shown(&colour);
-        int index = colour.editing ? -1 : colourpick_find(shown);
+        SettingColor shown = colorpick_shown(&colour);
+        int index = colour.editing ? -1 : colorpick_find(shown);
         char warning[160];
         contrast_warning(slot->def->id, shown, warning, sizeof(warning));
-        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colourpick_name(index) : "Custom",
+        snprintf(note, sizeof(note), "%s #%02X%02X%02X%s%s", index >= 0 ? colorpick_name(index) : "Custom",
             shown.r, shown.g, shown.b, warning[0] != '\0' ? DOT : "", warning);
     }
     // When nothing else is said, a capture or the 10 s count down, from when the clocks last ran (this

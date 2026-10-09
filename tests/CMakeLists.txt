@@ -49,10 +49,10 @@ add_test(NAME config_save COMMAND test_config_save)
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
 # sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
 # through bindings.c's model (whose lines the tests parse with inidoc.c), and names a colour through
-# colourpick.c's swatches (whose contrast maths needs libm)
+# colorpick.c's swatches (whose contrast maths needs libm)
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
-  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colourpick.c")
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_settings)
 if (UNIX)
@@ -71,12 +71,12 @@ target_include_directories(test_listpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME listpick COMMAND test_listpick)
 
 # Unit tests for the colour picker's model and the contrast maths (pure; the maths needs libm)
-add_executable(test_colourpick test_colourpick.c "${PROJECT_SOURCE_DIR}/src/colourpick.c")
-target_include_directories(test_colourpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_executable(test_colorpick test_colorpick.c "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+target_include_directories(test_colorpick PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if (UNIX)
-  target_link_libraries(test_colourpick m)
+  target_link_libraries(test_colorpick m)
 endif ()
-add_test(NAME colourpick COMMAND test_colourpick)
+add_test(NAME colorpick COMMAND test_colorpick)
 
 # Unit tests for grouping font faces into families (pure; names compare through fileio.c's helpers)
 add_executable(test_fontlist test_fontlist.c "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
@@ -99,11 +99,11 @@ link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
-# (colourpick.c allocates nothing; settings.c names colours through it)
+# (colorpick.c allocates nothing; settings.c names colours through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
-  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colourpick.c")
+  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
 if (UNIX)

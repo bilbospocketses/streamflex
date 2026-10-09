@@ -5,7 +5,7 @@
 # and it saves
 shows_hex() { look "$1" "$2" hex 'Settings: previewing #102030' 30,30=16,32,48; }
 hex_keys="Down Down Down Down Return Up Right Right Up Up Right Right Up Up Up"
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f58-hex Menu Down Return Down Return $hex_keys +shows_hex Return BackSpace BackSpace
 ok=1
 grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #000000 -> #102030' "$out/f58-hex.log" \
@@ -13,7 +13,7 @@ grep -qx 'Color=#102030' "$cfg" && grep -q 'Settings: \[Background\] Color #0000
 result "pickers: a colour typed in the hex editor shows in the preview and saves (exit $(cat "$out/f58-hex.code"))" $ok
 
 # Back in the colour picker puts the colour back: nothing is saved
-CFG=$FX/f60-colour.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
+CFG=$FX/f60-color.ini run_keys f58-colourback Menu Down Return Down Return Right Right BackSpace BackSpace BackSpace
 ok=1
 grep -q 'Settings: previewing #33383D' "$out/f58-colourback.log" && grep -q 'Settings: nothing changed' "$out/f58-colourback.log" \
     && ran_clean f58-colourback && ok=0
@@ -32,12 +32,12 @@ result "pickers: a command and a default menu chosen from their lists save (exit
 grep -E 'Settings: (the command picker|\[General\])' "$out/f58-command.log" | sed 's/^/      /'
 
 # Titles > Colour: black titles on the black background are 1:1, and the caption says so
-CFG=$FX/f60-colour.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
+CFG=$FX/f60-color.ini run_keys f58-contrast Menu Down Down Down Return Down Down Down Return Menu
 ok=1
 grep -q 'Settings: the note under the preview says White #FFFFFF' "$out/f58-contrast.log" \
     && ! grep -q 'Low contrast' "$out/f58-contrast.log" && ran_clean f58-contrast && ok=0
 result "pickers: white titles on black raise no contrast warning (exit $(cat "$out/f58-contrast.code"))" $ok
-CFG=$FX/f60-colour.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
+CFG=$FX/f60-color.ini run_keys f58-lowcontrast Menu Down Down Down Return Down Down Down Return Up Up Up Left Left Left Left Menu
 ok=1
 grep -q 'Settings: the note under the preview says Black #000000 · Low contrast: 1.0:1 against the background' "$out/f58-lowcontrast.log" \
     && ran_clean f58-lowcontrast && ok=0
@@ -65,7 +65,7 @@ result "pickers: the background colour's picker warns of no contrast" $ok
 # (nothing is saved); Back leaves the editor for the grid, where the Custom row keeps the colour typed
 # while the cursor is on it and shows the colour the picker opened with while it is not. In the
 # editor the note calls a colour Custom, even one a swatch has (#000000 as it opens).
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 # shellcheck disable=SC2046
 CFG=$cfg run_keys f58-hexhome Menu Down Return Down Return $(p58_downs 4) Return Up BackSpace Up Down Return Up Menu
 log=$out/f58-hexhome.log
@@ -77,7 +77,7 @@ ok=1
     && grep -qF "Settings: page Settings${ARROW}Background${ARROW}Colour" "$log" \
     && grep -qF "Settings: the key hint reads Arrows edit the digits $P58_DOT OK keeps $P58_DOT Back returns" "$log" \
     && grep -qF "Settings: the key hint reads Arrows move $P58_DOT OK chooses $P58_DOT Back cancels" "$log" \
-    && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f60-colour.ini" "$cfg" && ran_clean f58-hexhome && ok=0
+    && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f60-color.ini" "$cfg" && ran_clean f58-hexhome && ok=0
 result "pickers: the settings key leaves the hex editor keeping nothing, and the Custom row follows the cursor (exit $(cat "$out/f58-hexhome.code"))" $ok
 echo "      the Custom row read: ${custom:-nothing}"
 
@@ -87,7 +87,7 @@ echo "      the Custom row read: ${custom:-nothing}"
 # is forgotten as the picker opens again: Teal, the last colour previewed before Back, is previewed
 # again by the first Down in the picker opened anew.
 # shellcheck disable=SC2046
-CFG=$FX/f60-colour.ini run_keys f58-digits Menu Down Return Down Return $(p58_downs 4) Return Right Right Left Up \
+CFG=$FX/f60-color.ini run_keys f58-digits Menu Down Return Down Return $(p58_downs 4) Return Right Right Left Up \
     BackSpace Up Up Up BackSpace Return Down BackSpace BackSpace BackSpace
 log=$out/f58-digits.log
 previews=$(grep -o 'Settings: previewing #[0-9A-F]*' "$log" | sed 's/.* //' | tr '\n' ' ')
@@ -116,7 +116,7 @@ p58_swatches() {
     fi
     echo "swatches $seen" >> "$out/$name.seen"
 }
-CFG=$FX/f60-colour.ini run_keys f58-swatches Menu Down Down Down Return Down Down Down Return +p58_swatches Menu
+CFG=$FX/f60-color.ini run_keys f58-swatches Menu Down Down Down Return Down Down Down Return +p58_swatches Menu
 ok=1
 grep -qx 'swatches yes' "$out/f58-swatches.seen" && ran_clean f58-swatches && ok=0
 result "pickers: the swatches are drawn in their colours, the current one marked and the cursor's outlined (exit $(cat "$out/f58-swatches.code"))" $ok
@@ -137,7 +137,7 @@ for word in "${TESTER[@]}"; do
 done
 # shellcheck disable=SC2046
 ( export DISPLAY=:98; TESTER=("${p58_short[@]}")
-  CFG=$FX/f60-colour.ini run_keys f58-short Menu Down Return Down Return $(p58_downs 4) Return )
+  CFG=$FX/f60-color.ini run_keys f58-short Menu Down Return Down Return $(p58_downs 4) Return )
 kill "$p58_xvfb" 2> /dev/null; wait "$p58_xvfb" 2> /dev/null
 log=$out/f58-short.log
 line=$(grep -o 'Settings: the colour picker draws [0-9]* px cells from [0-9]*,[0-9]*, down to [0-9]* of [0-9]*' "$log" | tail -1)
@@ -156,7 +156,7 @@ echo "      ${line:-the cells of the colour picker were never logged}"
 for p58_size in 1280x720 1280x800; do
     name=f58-hint$p58_size
     # shellcheck disable=SC2046
-    CFG=$FX/f60-colour.ini run_keys_at "$p58_size" "$name" Menu Down Return Down Return $(p58_downs 4) Return
+    CFG=$FX/f60-color.ini run_keys_at "$p58_size" "$name" Menu Down Return Down Return $(p58_downs 4) Return
     log=$out/$name.log
     line=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' "$log" | tail -1)
     read -r p58_wide p58_column <<< "$(sed 's/.* is \([0-9]*\) px wide, in a column \([0-9]*\) px wide/\1 \2/' <<< "$line")"
@@ -176,7 +176,7 @@ for p58_size in 1280x720 1280x800; do
     # The folder browser's, as it opens from Background > Image (Mode turned to Image first): the
     # first hint logged after it says where it is browsing
     name=f58-browse$p58_size
-    CFG=$FX/f60-colour.ini run_keys_at "$p58_size" "$name" Menu Down Return Right Down Return
+    CFG=$FX/f60-color.ini run_keys_at "$p58_size" "$name" Menu Down Return Right Down Return
     log=$out/$name.log
     p58_browsing=$(sed -n '/^Settings: browsing /,$p' "$log")
     line=$(grep -o 'Test hook: the key hint is [0-9]* px wide, in a column [0-9]* px wide' <<< "$p58_browsing" | head -1)

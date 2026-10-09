@@ -2,37 +2,37 @@
 // a Custom #RRGGBB row whose hex editor steps one digit at a time; and the contrast warning's maths
 // (WCAG relative luminance and contrast, an image's mean luminance, a colour laid over another).
 // Pure: no SDL, no globals, no allocation. settings_pickers.c draws it.
-#ifndef COLOURPICK_H
-#define COLOURPICK_H
+#ifndef COLORPICK_H
+#define COLORPICK_H
 
 #include <stdbool.h>
 #include "settings.h"
 
-#define COLOURPICK_COLUMNS 6
-#define COLOURPICK_ROWS 4
-#define COLOURPICK_SWATCHES 24
-#define COLOURPICK_PRESETS 10              // The first ten swatches: 3a's presets, which Left and Right step
-#define COLOURPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
-#define COLOURPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
+#define COLORPICK_COLUMNS 6
+#define COLORPICK_ROWS 4
+#define COLORPICK_SWATCHES 24
+#define COLORPICK_PRESETS 10              // The first ten swatches: 3a's presets, which Left and Right step
+#define COLORPICK_CUSTOM 24               // The cursor on the Custom #RRGGBB row
+#define COLORPICK_MIN_CONTRAST 3.0        // WCAG's 3:1: below it the caption warns
 
 typedef enum {
-    COLOURPICK_UP,
-    COLOURPICK_DOWN,
-    COLOURPICK_LEFT,
-    COLOURPICK_RIGHT,
-    COLOURPICK_OK,
-    COLOURPICK_BACK
+    COLORPICK_UP,
+    COLORPICK_DOWN,
+    COLORPICK_LEFT,
+    COLORPICK_RIGHT,
+    COLORPICK_OK,
+    COLORPICK_BACK
 } ColourPickCommand;
 
 typedef enum {
-    COLOURPICK_NONE,
-    COLOURPICK_MOVED,      // What the preview shows may have changed
-    COLOURPICK_CHOSEN,     // `chosen` holds the colour
-    COLOURPICK_CANCELLED
+    COLORPICK_NONE,
+    COLORPICK_MOVED,      // What the preview shows may have changed
+    COLORPICK_CHOSEN,     // `chosen` holds the colour
+    COLORPICK_CANCELLED
 } ColourPickResult;
 
 typedef struct {
-    int cursor;              // 0-23 a swatch, row by row; COLOURPICK_CUSTOM the Custom row
+    int cursor;              // 0-23 a swatch, row by row; COLORPICK_CUSTOM the Custom row
     int column;              // The column Up goes back to from the Custom row
     bool editing;            // The hex editor is open
     int digit;               // 0-5: the digit of #RRGGBB that Up and Down step
@@ -41,12 +41,12 @@ typedef struct {
     SettingColor chosen;     // The colour OK chose
 } ColourPick;
 
-void colourpick_open(ColourPick *pick, SettingColor current);
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command);
-SettingColor colourpick_shown(const ColourPick *pick);
-const char *colourpick_name(int index);
-SettingColor colourpick_swatch(int index);
-int colourpick_find(SettingColor color);
+void colorpick_open(ColourPick *pick, SettingColor current);
+ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command);
+SettingColor colorpick_shown(const ColourPick *pick);
+const char *colorpick_name(int index);
+SettingColor colorpick_swatch(int index);
+int colorpick_find(SettingColor color);
 double colour_luminance(SettingColor color);
 double colour_contrast(double a, double b);
 // rgba: RGBA32 bytes, R at byte 0 (SDL_PIXELFORMAT_RGBA32), alpha ignored; pitch is bytes per row, at

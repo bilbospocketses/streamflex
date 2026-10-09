@@ -170,7 +170,7 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
 - OK chooses and Back cancels.
 - It serves the command picker, the font picker and the *Default menu* and *Device* lists.
 
-### The colour picker (`src/colourpick.c`)
+### The colour picker (`src/colorpick.c`)
 
 - OK on a colour row opens a **6 × 4 grid of named swatches**, moved with all four arrows. The swatches are:
   - 3a's ten presets: Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A` and Burgundy `#4A1520`;
@@ -255,7 +255,7 @@ Each picker is a pure model (no SDL types, no rendering and no globals, as 3a's 
 
 - **`test_settings`** (extended): every new key text → value → text; the step lists and limits; the greyed-row rules; the three bug fixes.
 - **`test_derive`** (new): `derive_settings()` gives the same result twice; a value clamped and then raised is restored; every percentage and opacity conversion is checked.
-- **`test_listpick`**, **`test_colourpick`** and **`test_fontlist`** (new):
+- **`test_listpick`**, **`test_colorpick`** and **`test_fontlist`** (new):
   - the list picker's paging and its *Custom* row;
   - the colour grid's movement, the hex digits stepping and wrapping, and *Custom*;
   - grouping into families, choosing the Regular style, and collections, with a fake listing.

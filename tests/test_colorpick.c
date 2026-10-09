@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "check.h"
-#include "colourpick.h"
+#include "colorpick.h"
 
 // A function to make a colour
 static SettingColor rgb(unsigned char r, unsigned char g, unsigned char b)
@@ -26,50 +26,50 @@ static bool near(double a, double b)
 // A function to test the swatches: 24, in the spec's order, with names
 static void test_swatches(void)
 {
-    CHECK_STR(colourpick_name(0), "Black");
-    CHECK(same(colourpick_swatch(0), rgb(0x00, 0x00, 0x00)));
-    CHECK_STR(colourpick_name(9), "Burgundy");
-    CHECK(same(colourpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
-    CHECK_STR(colourpick_name(10), "White");
-    CHECK_STR(colourpick_name(13), "Dark grey");
-    CHECK_STR(colourpick_name(14), "Red");
-    CHECK(same(colourpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
-    CHECK_STR(colourpick_name(23), "Pink");
-    CHECK(same(colourpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
-    CHECK_INT(colourpick_find(rgb(0x07, 0x60, 0x6D)), -1);
+    CHECK_STR(colorpick_name(0), "Black");
+    CHECK(same(colorpick_swatch(0), rgb(0x00, 0x00, 0x00)));
+    CHECK_STR(colorpick_name(9), "Burgundy");
+    CHECK(same(colorpick_swatch(9), rgb(0x4A, 0x15, 0x20)));
+    CHECK_STR(colorpick_name(10), "White");
+    CHECK_STR(colorpick_name(13), "Dark grey");
+    CHECK_STR(colorpick_name(14), "Red");
+    CHECK(same(colorpick_swatch(14), rgb(0xD0, 0x30, 0x30)));
+    CHECK_STR(colorpick_name(23), "Pink");
+    CHECK(same(colorpick_swatch(23), rgb(0xD0, 0x48, 0x90)));
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6C)), 6);        // Teal
+    CHECK_INT(colorpick_find(rgb(0x07, 0x60, 0x6D)), -1);
 }
 
 // A function to test moving through the grid, onto the Custom row and back
 static void test_grid(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy, the sixth swatch
     CHECK_INT(pick.cursor, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The row's end
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_NONE);      // The grid's top
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The row's end
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_NONE);      // The grid's top
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 4);
-    CHECK(same(colourpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
+    CHECK(same(colorpick_shown(&pick), rgb(0x12, 0x1A, 0x2E)));   // The preview follows: Midnight
     for (int i = 0; i < 3; i++)
-        CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
+        CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Row 4, column 5: Indigo
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the colour it opened with
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_NONE);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);   // One wide row
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));   // Custom shows the colour it opened with
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_NONE);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);   // One wide row
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 22);                                    // Back to the column it left
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x50, 0x48, 0xC0)));
 
     // Back on the grid cancels, and the preview goes back
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
-    colourpick_command(&pick, COLOURPICK_LEFT);                  // Column 5, so Back must restore it too
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_CANCELLED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));
+    colorpick_command(&pick, COLORPICK_LEFT);                  // Column 5, so Back must restore it too
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_CANCELLED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x0B, 0x1F, 0x3A)));
     CHECK_INT(pick.cursor, 5);                                     // Back on Navy's swatch, not on Custom
     CHECK_INT(pick.column, 5);
 }
@@ -78,31 +78,31 @@ static void test_grid(void)
 static void test_hex(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x5F));               // Not a swatch: the cursor on Custom
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);
     CHECK(pick.editing);
     CHECK_INT(pick.digit, 0);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);    // The first digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);    // The first digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));   // 1 -> 2 in the red's first digit
     for (int i = 0; i < 5; i++)
-        colourpick_command(&pick, COLOURPICK_RIGHT);
+        colorpick_command(&pick, COLORPICK_RIGHT);
     CHECK_INT(pick.digit, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);   // The last digit
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    colourpick_command(&pick, COLOURPICK_DOWN);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);   // The last digit
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x50)));   // F wraps to 0
+    colorpick_command(&pick, COLORPICK_DOWN);
+    colorpick_command(&pick, COLORPICK_DOWN);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));   // 0 wraps to F, then E
 
     // Back leaves the editor, not the picker; OK in it keeps the colour
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_MOVED);
     CHECK(!pick.editing);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_MOVED);   // Opens on the edited colour
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_OK), COLOURPICK_CHOSEN);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_MOVED);   // Opens on the edited colour
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5E)));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_OK), COLORPICK_CHOSEN);
     CHECK(same(pick.chosen, rgb(0x22, 0x34, 0x5E)));
 }
 
@@ -161,24 +161,24 @@ static const struct {
 // A function to test every swatch against the spec, the ends of the table, and the header's values
 static void test_swatch_table(void)
 {
-    CHECK_INT((int) (sizeof(SPEC) / sizeof(SPEC[0])), COLOURPICK_SWATCHES);
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
-        CHECK_STR(colourpick_name(i), SPEC[i].name);
-        CHECK(same(colourpick_swatch(i), SPEC[i].color));
-        CHECK_INT(colourpick_find(SPEC[i].color), i);   // Each found at its own place: no two alike
+    CHECK_INT((int) (sizeof(SPEC) / sizeof(SPEC[0])), COLORPICK_SWATCHES);
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
+        CHECK_STR(colorpick_name(i), SPEC[i].name);
+        CHECK(same(colorpick_swatch(i), SPEC[i].color));
+        CHECK_INT(colorpick_find(SPEC[i].color), i);   // Each found at its own place: no two alike
     }
 
     // Outside the table: no name, and black
-    CHECK_STR(colourpick_name(-1), "");
-    CHECK_STR(colourpick_name(COLOURPICK_SWATCHES), "");
-    CHECK(same(colourpick_swatch(-1), rgb(0, 0, 0)));
-    CHECK(same(colourpick_swatch(COLOURPICK_SWATCHES), rgb(0, 0, 0)));
+    CHECK_STR(colorpick_name(-1), "");
+    CHECK_STR(colorpick_name(COLORPICK_SWATCHES), "");
+    CHECK(same(colorpick_swatch(-1), rgb(0, 0, 0)));
+    CHECK(same(colorpick_swatch(COLORPICK_SWATCHES), rgb(0, 0, 0)));
 
-    CHECK_INT(COLOURPICK_COLUMNS, 6);
-    CHECK_INT(COLOURPICK_ROWS, 4);
-    CHECK_INT(COLOURPICK_SWATCHES, 24);
-    CHECK_INT(COLOURPICK_CUSTOM, 24);
-    double threshold = COLOURPICK_MIN_CONTRAST;
+    CHECK_INT(COLORPICK_COLUMNS, 6);
+    CHECK_INT(COLORPICK_ROWS, 4);
+    CHECK_INT(COLORPICK_SWATCHES, 24);
+    CHECK_INT(COLORPICK_CUSTOM, 24);
+    double threshold = COLORPICK_MIN_CONTRAST;
     CHECK(near(threshold, 3.0));                          // WCAG's 3:1
 }
 
@@ -187,32 +187,32 @@ static void test_swatch_table(void)
 static void test_grid_moves(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy: row 1, column 6
+    colorpick_open(&pick, rgb(0x0B, 0x1F, 0x3A));               // Navy: row 1, column 6
     CHECK_INT(pick.column, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_MOVED);
     CHECK_INT(pick.column, 4);                                     // The column follows the cursor
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 5);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 17);                                    // Yellow
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 11);                                    // Light grey
-    CHECK(same(colourpick_shown(&pick), rgb(0xC8, 0xC8, 0xC8)));
+    CHECK(same(colorpick_shown(&pick), rgb(0xC8, 0xC8, 0xC8)));
 
     // Left at a row's start stays: it does not wrap to the row above
-    colourpick_open(&pick, rgb(0x07, 0x60, 0x6C));               // Teal: row 2, column 1
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_NONE);
+    colorpick_open(&pick, rgb(0x07, 0x60, 0x6C));               // Teal: row 2, column 1
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_NONE);
     CHECK_INT(pick.cursor, 6);
 
     // A colour that is not a swatch: the cursor on Custom, where Right does nothing and Up goes to
     // the first column of the last row
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x56));
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_NONE);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x56));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_NONE);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
     CHECK_INT(pick.cursor, 18);
-    CHECK(same(colourpick_shown(&pick), rgb(0x80, 0xC0, 0x40)));   // Lime
+    CHECK(same(colorpick_shown(&pick), rgb(0x80, 0xC0, 0x40)));   // Lime
 }
 
 // A function to test Back on the Custom row after an edit: the picker cancels and the preview goes
@@ -220,15 +220,15 @@ static void test_grid_moves(void)
 static void test_cancel_edit(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x5F));
-    colourpick_command(&pick, COLOURPICK_OK);
-    colourpick_command(&pick, COLOURPICK_UP);
-    CHECK(same(colourpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_MOVED);   // Out of the editor
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_BACK), COLOURPICK_CANCELLED);
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x5F));
+    colorpick_command(&pick, COLORPICK_OK);
+    colorpick_command(&pick, COLORPICK_UP);
+    CHECK(same(colorpick_shown(&pick), rgb(0x22, 0x34, 0x5F)));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_MOVED);   // Out of the editor
+    CHECK_INT(colorpick_command(&pick, COLORPICK_BACK), COLORPICK_CANCELLED);
     CHECK(!pick.editing);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    CHECK(same(colourpick_shown(&pick), rgb(0x12, 0x34, 0x5F)));
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    CHECK(same(colorpick_shown(&pick), rgb(0x12, 0x34, 0x5F)));
 }
 
 // A function to test the hex editor on every digit, Left moving back, a reopened editor starting on
@@ -236,34 +236,34 @@ static void test_cancel_edit(void)
 static void test_hex_digits(void)
 {
     ColourPick pick;
-    colourpick_open(&pick, rgb(0x12, 0x34, 0x56));
-    colourpick_command(&pick, COLOURPICK_OK);
+    colorpick_open(&pick, rgb(0x12, 0x34, 0x56));
+    colorpick_command(&pick, COLORPICK_OK);
     const SettingColor after[6] = {
         { 0x22, 0x34, 0x56 }, { 0x23, 0x34, 0x56 }, { 0x23, 0x44, 0x56 },
         { 0x23, 0x45, 0x56 }, { 0x23, 0x45, 0x66 }, { 0x23, 0x45, 0x67 }
     };
     for (int digit = 0; digit < 6; digit++) {
         if (digit > 0)
-            CHECK_INT(colourpick_command(&pick, COLOURPICK_RIGHT), COLOURPICK_MOVED);
+            CHECK_INT(colorpick_command(&pick, COLORPICK_RIGHT), COLORPICK_MOVED);
         CHECK_INT(pick.digit, digit);
-        CHECK_INT(colourpick_command(&pick, COLOURPICK_UP), COLOURPICK_MOVED);
-        CHECK(same(colourpick_shown(&pick), after[digit]));
+        CHECK_INT(colorpick_command(&pick, COLORPICK_UP), COLORPICK_MOVED);
+        CHECK(same(colorpick_shown(&pick), after[digit]));
     }
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_LEFT), COLOURPICK_MOVED);
+    CHECK_INT(colorpick_command(&pick, COLORPICK_LEFT), COLORPICK_MOVED);
     CHECK_INT(pick.digit, 4);
-    CHECK_INT(colourpick_command(&pick, COLOURPICK_DOWN), COLOURPICK_MOVED);
-    CHECK(same(colourpick_shown(&pick), rgb(0x23, 0x45, 0x57)));
+    CHECK_INT(colorpick_command(&pick, COLORPICK_DOWN), COLORPICK_MOVED);
+    CHECK(same(colorpick_shown(&pick), rgb(0x23, 0x45, 0x57)));
 
     // An unknown command changes nothing, in the editor or on the grid
-    CHECK_INT(colourpick_command(&pick, (ColourPickCommand) 99), COLOURPICK_NONE);
+    CHECK_INT(colorpick_command(&pick, (ColourPickCommand) 99), COLORPICK_NONE);
     CHECK(pick.editing);
     CHECK_INT(pick.digit, 4);
 
     // Leaving the editor and opening it again starts on the first digit
-    colourpick_command(&pick, COLOURPICK_BACK);
-    CHECK_INT(colourpick_command(&pick, (ColourPickCommand) 99), COLOURPICK_NONE);
-    CHECK_INT(pick.cursor, COLOURPICK_CUSTOM);
-    colourpick_command(&pick, COLOURPICK_OK);
+    colorpick_command(&pick, COLORPICK_BACK);
+    CHECK_INT(colorpick_command(&pick, (ColourPickCommand) 99), COLORPICK_NONE);
+    CHECK_INT(pick.cursor, COLORPICK_CUSTOM);
+    colorpick_command(&pick, COLORPICK_OK);
     CHECK_INT(pick.digit, 0);
 }
 

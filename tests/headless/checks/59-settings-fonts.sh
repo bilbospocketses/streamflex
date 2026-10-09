@@ -11,7 +11,7 @@ chown -R tester:tester "$TESTER_HOME/fonts"
 # Titles > Font: the list loads, the cursor starts on the font in use (Open Sans, the fifth family),
 # and four Ups choose DejaVu Sans, the first
 wait_fonts() { wait_line 'Fonts: found' "$2"; sleep 1; }
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-fonts Menu Down Down Down Return Down Down Return +wait_fonts Up Up Up Up Return BackSpace BackSpace
 log=$out/f59-fonts.log
@@ -126,7 +126,7 @@ result "fonts: quitting lets go of the font list kept for the session" $ok
 # A face inside a collection: Open Sanz is face 1 of pair.ttc, after every bundled family (Open Sanz
 # then Qoboto, by name). Choosing it writes the collection and FontFace=1, which the titles open;
 # the picker opened again shows at once, with no second listing, its cursor on the face in use.
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 # shellcheck disable=SC2086
 STREAMFLEX_TEST_FONT_DIRS=$F59/ttc CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-ttc $TITLES_FONT +wait_fonts Down Down Down Return Return BackSpace BackSpace BackSpace
@@ -292,7 +292,7 @@ mkdir -p "$TESTER_HOME/f59-book/bold" "$TESTER_HOME/f59-book/book"
 python3 "$HERE/make_fonts.py" rename /work/assets/fonts/DejaVuSans.ttf "$TESTER_HOME/f59-book/book/sanz.ttf" Sans Sanz
 python3 "$HERE/make_fonts.py" rename "$TESTER_HOME/f59-book/book/sanz.ttf" "$TESTER_HOME/f59-book/bold/sanz-bold.ttf" Book Bold
 chown -R tester:tester "$TESTER_HOME/f59-book"
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 # shellcheck disable=SC2086
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/f59-book/bold:$TESTER_HOME/f59-book/book CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-book $TITLES_FONT +wait_fonts Down Down Down Return BackSpace BackSpace
@@ -317,7 +317,7 @@ python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/halfa.ttf" Halfa "Half
 python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/halfb.ttf" Halfb "HalfbA0$(printf '\xe2\x80\x99')"
 python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/typo.ttf" Typo "TypoAa0$(printf '\xe2\x80\x99\xe2\x80\x93')"
 chown -R tester:tester "$TESTER_HOME/f59-sym"
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 # shellcheck disable=SC2086
 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/f59-sym CFG=$cfg UNTIL='Settings saved' \
     run_keys f59-symbols $TITLES_FONT +wait_fonts Down Down Down Return BackSpace BackSpace
@@ -339,7 +339,7 @@ grep -E 'font picker (drew|draws) (Dingy|Halfa|Halfb|Typo)|Titles: opened' "$log
 # Loading fonts... (0), Back is its only key, and opening it again lists nothing twice. The files are
 # read with the picker closed, and it then opens at once on the font in use.
 # shellcheck disable=SC2086
-STREAMFLEX_TEST_FONT_DELAY_MS=8000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+STREAMFLEX_TEST_FONT_DELAY_MS=8000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
     run_keys f59-loading $TITLES_FONT Up Return BackSpace Return BackSpace +wait_fonts Return Menu
 log=$out/f59-loading.log
 LOADING=$(printf 'Loading fonts\xE2\x80\xA6 (0)')
@@ -357,7 +357,7 @@ grep -E 'Fonts:|font picker reads|key hint reads|picker for \[Titles\]' "$log" |
 
 # Quitting while the files are still listed waits for the listing's thread, then exits cleanly
 # shellcheck disable=SC2086
-STREAMFLEX_TEST_FONT_DELAY_MS=5000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+STREAMFLEX_TEST_FONT_DELAY_MS=5000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
     run_keys f59-quitscan $TITLES_FONT
 log=$out/f59-quitscan.log
 ok=1
@@ -372,7 +372,7 @@ result "fonts: quitting while the fonts are listed waits for the listing (exit $
 # way back up.
 f59_lose_rob000() { rm -f "$F59/many/rob000.ttf"; }
 # shellcheck disable=SC2086
-STREAMFLEX_TEST_FONT_DIRS=$F59/many CFG=$FX/f60-colour.ini run_keys f59-samples $TITLES_FONT +wait_fonts BackSpace \
+STREAMFLEX_TEST_FONT_DIRS=$F59/many CFG=$FX/f60-color.ini run_keys f59-samples $TITLES_FONT +wait_fonts BackSpace \
     +f59_lose_rob000 Return Right Right Right Right Right Left Left Left Left Left Left Menu
 log=$out/f59-samples.log
 drew=$(f59_count 'Settings: the font picker drew DejaVu Sans in its own face' "$log")
@@ -408,7 +408,7 @@ for scan in 'ext:ext:9 families in 11 files' 'hidden:hidden:7 families in 8 file
         *) dirs=$F59/$dirs ;;
     esac
     # shellcheck disable=SC2086
-    STREAMFLEX_TEST_FONT_DIRS=$dirs CFG=$FX/f60-colour.ini run_keys "f59-$name" $TITLES_FONT +wait_fonts Menu
+    STREAMFLEX_TEST_FONT_DIRS=$dirs CFG=$FX/f60-color.ini run_keys "f59-$name" $TITLES_FONT +wait_fonts Menu
     log=$out/f59-$name.log
     ok=1
     grep -qE "^Fonts: found $found, skipped 0 \\(" "$log" && ran_clean "f59-$name" && ok=0
@@ -430,7 +430,7 @@ for root in /usr/share/fonts /usr/local/share/fonts "$TESTER_HOME/.local/share/f
     system=$((system + n))
 done
 # shellcheck disable=SC2086
-CFG=$FX/f60-colour.ini run_keys f59-system $TITLES_FONT +wait_fonts Menu
+CFG=$FX/f60-color.ini run_keys f59-system $TITLES_FONT +wait_fonts Menu
 ok=1
 grep -qE "^Fonts: found [0-9]+ families in $((system + 7)) files" "$out/f59-system.log" && ran_clean f59-system && ok=0
 result "fonts: with no test folders the scan reads the system's and the user's fonts (exit $(cat "$out/f59-system.code"))" $ok
@@ -535,7 +535,7 @@ grep 'Settings' "$log" | head -4 | sed 's/^/      /'
 for fail in list:f60 rows:f60 select:custom; do
     IFS=: read -r step fixture <<< "$fail"
     name=f59-fail$step
-    if [ "$fixture" = custom ]; then cfg=$TESTER_HOME/cfg/f59-custom.ini; else cfg=$FX/f60-colour.ini; fi
+    if [ "$fixture" = custom ]; then cfg=$TESTER_HOME/cfg/f59-custom.ini; else cfg=$FX/f60-color.ini; fi
     # shellcheck disable=SC2086
     STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg \
         run_keys "$name" $TITLES_FONT +wait_fonts Return Down Menu
@@ -551,7 +551,7 @@ done
 for step in fontlist fontscan fontfolder fontthread; do
     name=f59-fail$step
     # shellcheck disable=SC2086
-    STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+    STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
         run_keys "$name" $TITLES_FONT Return Down Menu
     log=$out/$name.log
     ok=1
@@ -579,7 +579,7 @@ for fail in 'faces:reading the faces' 'fontadd:listing the font files'; do
     IFS=: read -r step what <<< "$fail"
     name=f59-fail$step
     # shellcheck disable=SC2086
-    STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+    STREAMFLEX_TEST_FAIL=$step STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
         run_keys "$name" $TITLES_FONT +f59_lost1 Return +f59_lost2 Down Menu
     log=$out/$name.log
     ok=1
@@ -596,7 +596,7 @@ done
 # reads in the settings' font, and nothing is drawn or logged in its own face. The hook, tried each
 # frame, says it fails once.
 # shellcheck disable=SC2086
-STREAMFLEX_TEST_FAIL=sample STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-colour.ini \
+STREAMFLEX_TEST_FAIL=sample STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
     run_keys f59-failsample $TITLES_FONT +wait_fonts Down Menu
 log=$out/f59-failsample.log
 reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')

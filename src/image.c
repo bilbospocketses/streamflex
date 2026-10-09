@@ -10,7 +10,7 @@
 #include <launcher_config.h>
 #include "image.h"
 #include "chroma.h"
-#include "colourpick.h"
+#include "colorpick.h"
 #include "fileio.h"
 #include "util.h"
 #include "debug.h"

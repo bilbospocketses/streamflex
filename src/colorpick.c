@@ -1,14 +1,14 @@
 #include <math.h>
 #include <string.h>
-#include "colourpick.h"
+#include "colorpick.h"
 
 #define SAMPLES 64   // The most points across and down an image's mean luminance reads
 
-// The swatches, row by row: 3a's ten presets (COLOURPICK_PRESETS), four neutrals, then ten accents
+// The swatches, row by row: 3a's ten presets (COLORPICK_PRESETS), four neutrals, then ten accents
 static const struct {
     const char *name;
     SettingColor color;
-} SWATCHES[COLOURPICK_SWATCHES] = {
+} SWATCHES[COLORPICK_SWATCHES] = {
     { "Black",      { 0x00, 0x00, 0x00 } },
     { "Charcoal",   { 0x1E, 0x1E, 0x1E } },
     { "Graphite",   { 0x33, 0x38, 0x3D } },
@@ -36,22 +36,22 @@ static const struct {
 };
 
 // A function to get a swatch's name
-const char *colourpick_name(int index)
+const char *colorpick_name(int index)
 {
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].name : "";
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].name : "";
 }
 
 // A function to get a swatch's colour
-SettingColor colourpick_swatch(int index)
+SettingColor colorpick_swatch(int index)
 {
     SettingColor black = { 0, 0, 0 };
-    return index >= 0 && index < COLOURPICK_SWATCHES ? SWATCHES[index].color : black;
+    return index >= 0 && index < COLORPICK_SWATCHES ? SWATCHES[index].color : black;
 }
 
 // A function to find a colour among the swatches; -1 when it is none of them
-int colourpick_find(SettingColor color)
+int colorpick_find(SettingColor color)
 {
-    for (int i = 0; i < COLOURPICK_SWATCHES; i++) {
+    for (int i = 0; i < COLORPICK_SWATCHES; i++) {
         const SettingColor *s = &SWATCHES[i].color;
         if (s->r == color.r && s->g == color.g && s->b == color.b)
             return i;
@@ -60,15 +60,15 @@ int colourpick_find(SettingColor color)
 }
 
 // A function to open the picker on a colour: the cursor on its swatch, else on the Custom row
-void colourpick_open(ColourPick *pick, SettingColor current)
+void colorpick_open(ColourPick *pick, SettingColor current)
 {
     memset(pick, 0, sizeof(*pick));
     pick->original = current;
     pick->hex = current;
     pick->chosen = current;
-    int found = colourpick_find(current);
-    pick->cursor = found >= 0 ? found : COLOURPICK_CUSTOM;
-    pick->column = found >= 0 ? found % COLOURPICK_COLUMNS : 0;
+    int found = colorpick_find(current);
+    pick->cursor = found >= 0 ? found : COLORPICK_CUSTOM;
+    pick->column = found >= 0 ? found % COLORPICK_COLUMNS : 0;
 }
 
 // A function to step one hex digit of a colour (0 the red's first, 5 the blue's second) up or
@@ -87,87 +87,87 @@ static SettingColor step_digit(SettingColor color, int digit, int direction)
 static ColourPickResult edit(ColourPick *pick, ColourPickCommand command)
 {
     switch (command) {
-        case COLOURPICK_LEFT:
+        case COLORPICK_LEFT:
             if (pick->digit == 0)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit--;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_RIGHT:
+            return COLORPICK_MOVED;
+        case COLORPICK_RIGHT:
             if (pick->digit == 5)
-                return COLOURPICK_NONE;
+                return COLORPICK_NONE;
             pick->digit++;
-            return COLOURPICK_MOVED;
-        case COLOURPICK_UP:
-        case COLOURPICK_DOWN:
-            pick->hex = step_digit(pick->hex, pick->digit, command == COLOURPICK_UP ? 1 : -1);
-            return COLOURPICK_MOVED;
-        case COLOURPICK_OK:
+            return COLORPICK_MOVED;
+        case COLORPICK_UP:
+        case COLORPICK_DOWN:
+            pick->hex = step_digit(pick->hex, pick->digit, command == COLORPICK_UP ? 1 : -1);
+            return COLORPICK_MOVED;
+        case COLORPICK_OK:
             pick->chosen = pick->hex;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             pick->editing = false;
-            return COLOURPICK_MOVED;
+            return COLORPICK_MOVED;
     }
-    return COLOURPICK_NONE;
+    return COLORPICK_NONE;
 }
 
 // A function to act on one key: move through the grid and onto the Custom row, open the hex
 // editor, choose, or cancel
-ColourPickResult colourpick_command(ColourPick *pick, ColourPickCommand command)
+ColourPickResult colorpick_command(ColourPick *pick, ColourPickCommand command)
 {
     if (pick->editing)
         return edit(pick, command);
     int before = pick->cursor;
-    int row = pick->cursor / COLOURPICK_COLUMNS;
-    int column = pick->cursor % COLOURPICK_COLUMNS;
+    int row = pick->cursor / COLORPICK_COLUMNS;
+    int column = pick->cursor % COLORPICK_COLUMNS;
     switch (command) {
-        case COLOURPICK_LEFT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column > 0)
+        case COLORPICK_LEFT:
+            if (pick->cursor != COLORPICK_CUSTOM && column > 0)
                 pick->cursor--;
             break;
-        case COLOURPICK_RIGHT:
-            if (pick->cursor != COLOURPICK_CUSTOM && column < COLOURPICK_COLUMNS - 1)
+        case COLORPICK_RIGHT:
+            if (pick->cursor != COLORPICK_CUSTOM && column < COLORPICK_COLUMNS - 1)
                 pick->cursor++;
             break;
-        case COLOURPICK_UP:
-            if (pick->cursor == COLOURPICK_CUSTOM)
-                pick->cursor = (COLOURPICK_ROWS - 1) * COLOURPICK_COLUMNS + pick->column;
+        case COLORPICK_UP:
+            if (pick->cursor == COLORPICK_CUSTOM)
+                pick->cursor = (COLORPICK_ROWS - 1) * COLORPICK_COLUMNS + pick->column;
             else if (row > 0)
-                pick->cursor -= COLOURPICK_COLUMNS;
+                pick->cursor -= COLORPICK_COLUMNS;
             break;
-        case COLOURPICK_DOWN:
-            if (pick->cursor == COLOURPICK_CUSTOM)
+        case COLORPICK_DOWN:
+            if (pick->cursor == COLORPICK_CUSTOM)
                 break;
-            if (row < COLOURPICK_ROWS - 1)
-                pick->cursor += COLOURPICK_COLUMNS;
+            if (row < COLORPICK_ROWS - 1)
+                pick->cursor += COLORPICK_COLUMNS;
             else {
                 pick->column = column;
-                pick->cursor = COLOURPICK_CUSTOM;
+                pick->cursor = COLORPICK_CUSTOM;
             }
             break;
-        case COLOURPICK_OK:
-            if (pick->cursor == COLOURPICK_CUSTOM) {
+        case COLORPICK_OK:
+            if (pick->cursor == COLORPICK_CUSTOM) {
                 pick->editing = true;
                 pick->digit = 0;
-                return COLOURPICK_MOVED;
+                return COLORPICK_MOVED;
             }
             pick->chosen = SWATCHES[pick->cursor].color;
-            return COLOURPICK_CHOSEN;
-        case COLOURPICK_BACK:
+            return COLORPICK_CHOSEN;
+        case COLORPICK_BACK:
             // Cancel: the picker as it opened, so the preview goes back to the original colour
-            colourpick_open(pick, pick->original);
-            return COLOURPICK_CANCELLED;
+            colorpick_open(pick, pick->original);
+            return COLORPICK_CANCELLED;
     }
-    if (pick->cursor != COLOURPICK_CUSTOM)
-        pick->column = pick->cursor % COLOURPICK_COLUMNS;
-    return pick->cursor != before ? COLOURPICK_MOVED : COLOURPICK_NONE;
+    if (pick->cursor != COLORPICK_CUSTOM)
+        pick->column = pick->cursor % COLORPICK_COLUMNS;
+    return pick->cursor != before ? COLORPICK_MOVED : COLORPICK_NONE;
 }
 
 // A function to say what the preview shows: the swatch under the cursor; on the Custom row, the hex
 // editor's colour (the colour the picker opened with, until it is edited)
-SettingColor colourpick_shown(const ColourPick *pick)
+SettingColor colorpick_shown(const ColourPick *pick)
 {
-    if (pick->cursor == COLOURPICK_CUSTOM)
+    if (pick->cursor == COLORPICK_CUSTOM)
         return pick->hex;
     return SWATCHES[pick->cursor].color;
 }
@@ -194,7 +194,7 @@ double colour_contrast(double a, double b)
 }
 
 // A function to give an image's mean relative luminance, read at most SAMPLES points across and down;
-// 0 for an empty image. The contract is colourpick.h's.
+// 0 for an empty image. The contract is colorpick.h's.
 double colour_mean_luminance(const unsigned char *rgba, int width, int height, int pitch)
 {
     if (width <= 0 || height <= 0)
