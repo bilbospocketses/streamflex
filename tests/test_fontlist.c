@@ -156,6 +156,9 @@ static void test_upright_face(void)
     }
     CHECK(fontlist_add(list, "/f/r-bo.ttf", 0, "Rho", "Bold Oblique", false));
     CHECK(fontlist_add(list, "/f/r-o.ttf", 0, "Rho", "Oblique", false));
+    // A family whose only face is Bold, and one whose only face is Italic: each still has its face
+    CHECK(fontlist_add(list, "/f/s.ttc", 2, "Sigma", "Bold", false));
+    CHECK(fontlist_add(list, "/f/t.ttc", 1, "Tau", "Italic", false));
     fontlist_finish(list);
 
     CHECK_STR(fontlist_path(list, family(list, "DejaVu Serif")), "/f/DejaVuSerif.ttf");
@@ -176,6 +179,10 @@ static void test_upright_face(void)
         CHECK_STR(fontlist_path(list, family(list, name)), "/f/light.ttf");
     }
     CHECK_STR(fontlist_path(list, family(list, "Rho")), "/f/r-o.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Sigma")), "/f/s.ttc");
+    CHECK_INT(fontlist_face(list, family(list, "Sigma")), 2);
+    CHECK_STR(fontlist_path(list, family(list, "Tau")), "/f/t.ttc");
+    CHECK_INT(fontlist_face(list, family(list, "Tau")), 1);
     fontlist_free(list);
 }
 
