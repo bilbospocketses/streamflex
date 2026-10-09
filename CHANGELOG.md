@@ -8,6 +8,9 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+### Fixed
+- The headless harness waits for the launcher to draw a frame after each key it presses. On a slow CI runner, several keys could be handled with no frame between them, so a check whose line only a drawn frame logs failed at random (seen in `63-settings-mappings.sh`).
+
 ## [0.4.0] - 2026-10-09
 
 Every setting is now on the settings screen, with color, font and command pickers, key and gamepad bindings, and an offer to restart when a change needs one. Checked by hand on Windows 11 and Ubuntu 26.04. A config written for 0.3.x reads and saves as before; on Linux, StreamFlex now needs SDL2 2.0.18 or later.

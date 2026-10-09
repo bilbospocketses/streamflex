@@ -450,8 +450,9 @@ echo "      captures started: $(grep -c 'Settings: capturing a key' "$log")"
 
 # The 10 s over while the launcher is held up (stopped here, as a long frame would hold it): Up, pressed
 # in that time and read on the first frame after, comes too late, since the clocks run before a frame's
-# keys; the change goes back
-b62_stop_up() { kill -STOP "$2"; sleep 11; xdotool key Up; sleep 0.5; kill -CONT "$2"; sleep 2; }
+# keys; the change goes back. Up is sent with no wait for its frame (frame_pid empty): the launcher is
+# stopped until after it, and the 2 s after the CONT see its frame drawn.
+b62_stop_up() { kill -STOP "$2"; sleep 11; frame_pid= xdotool key Up; sleep 0.5; kill -CONT "$2"; sleep 2; }
 cfg=$(writable_config f62-up)
 CFG=$cfg run_keys f62-stop $TO_KEYBOARD Return Return Up Return Down Return $QUIT +b62_stop_up $SAVE
 log=$out/f62-stop.log

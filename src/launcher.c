@@ -1491,6 +1491,19 @@ static void test_frame_report(bool paced)
         log_debug("Test hook: %u frames in %u ms, %u of them paced", frames, now - start, paced_frames);
     }
 }
+
+static bool test_key_undrawn = false;   // A key was handled since the last frame was shown
+
+// A function only the headless harness builds: it logs the first frame shown after a key was
+// handled, once that frame is on screen, so the harness can wait for each key's frame before it
+// sends the next key
+static void test_frame_after_key()
+{
+    if (!test_key_undrawn)
+        return;
+    test_key_undrawn = false;
+    log_debug("Test hook: a frame was drawn after a key");
+}
 #endif
 
 // A function to show the frame, and without VSync wait out the rest of its time
@@ -1508,6 +1521,7 @@ void present_frame()
     }
 #ifdef STREAMFLEX_TEST_HOOKS
     test_frame_report(paced);
+    test_frame_after_key();
 #endif
 }
 
@@ -2460,6 +2474,9 @@ int main(int argc, char *argv[])
                 case SDL_KEYDOWN:
                     ticks.last_input = ticks.main;
                     handle_keypress(&event.key.keysym, event.key.repeat != 0);
+#ifdef STREAMFLEX_TEST_HOOKS
+                    test_key_undrawn = true;
+#endif
                     break;
 
                 case SDL_KEYUP:
