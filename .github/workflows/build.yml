@@ -168,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
 
-    # Through mirror.gcr.io, as the Linux job's image
+    # Through mirror.gcr.io, as the Linux job's image.
     container:
       image: mirror.gcr.io/library/debian:bookworm
 
@@ -215,7 +215,7 @@ jobs:
     strategy:
       fail-fast: false
 
-    # Through mirror.gcr.io, as the Linux job's image
+    # Through mirror.gcr.io, Google's public Docker Hub mirror, as above.
     container:
       image: mirror.gcr.io/library/archlinux:latest
 
