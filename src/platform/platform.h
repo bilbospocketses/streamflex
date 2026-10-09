@@ -20,6 +20,7 @@ bool start_self(char **argv);        // A restart: after the teardown; false, lo
 #ifdef __unix__
 void make_directory(const char *directory);
 bool home_directory(char *buffer, size_t size);
+void keep_name(const char *argv0);   // A restart's fresh copy: named after argv[0] again, not /proc/self/exe's "exe"
 void print_usage(void);
 #endif
 

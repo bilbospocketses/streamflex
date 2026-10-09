@@ -2367,6 +2367,10 @@ int main(int argc, char *argv[])
 
     // Handle command line arguments, find config file
     handle_arguments(argc, argv, &config_file_path);
+#ifdef __unix__
+    if (config.restarted)
+        keep_name(argv[0]);   // Started through /proc/self/exe, which names the process "exe"
+#endif
     if (start_argv != NULL && !config.restarted)
         start_argv[argc] = "--restarted";
 

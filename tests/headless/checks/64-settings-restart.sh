@@ -46,17 +46,20 @@ f64_wait_count() {
 }
 
 # A function for a +key, called with the run's NAME and PID: wait for the Nth start-up's program
-# loop, then keep the command line the PID runs now and how many of its files are the log
+# loop, then keep the command line the PID runs now, its name (comm, which pgrep and ps read) and
+# how many of its files are the log
 f64_fresh() {
     local name=$1 pid=$2 n=$3
     if f64_wait_count 'Begin program loop' "$n" "$pid"; then
         tr '\0' ' ' < "/proc/$pid/cmdline" > "$out/$name.cmdline$n"
+        cat "/proc/$pid/comm" > "$out/$name.comm$n"
         # As the launcher's own user: root in the container may not read another user's fds
         setpriv --reuid=tester --regid=tester --init-groups -- find "/proc/$pid/fd" -lname "$LOG" | wc -l \
             > "$out/$name.logfds$n"
     fi
     sleep 1
 }
+f64_fresh1() { f64_fresh "$1" "$2" 1; }
 f64_fresh2() { f64_fresh "$1" "$2" 2; }
 f64_fresh3() { f64_fresh "$1" "$2" 3; }
 
@@ -69,7 +72,7 @@ f64_after() {
 # fresh copy, which already has --restarted, back to the old file
 f64_clear_marks
 cfg=$(writable_config f64-restart)
-CFG=$cfg run_keys f64-yes $TO_MAPPINGS Up Return $F64_SAVE Return +f64_fresh2 \
+CFG=$cfg run_keys f64-yes +f64_fresh1 $TO_MAPPINGS Up Return $F64_SAVE Return +f64_fresh2 \
     $TO_MAPPINGS Down Return $F64_SAVE Return +f64_fresh3
 log=$out/f64-yes.log
 startups=$(f64_marks startup)
@@ -107,6 +110,12 @@ ok=1
     && precedes "$log" 'Restarting StreamFlex to apply the mappings file' 'Restarted, so the window is brought to the front' \
     && ran_clean f64-yes && ok=0
 result "restart: each fresh copy brings its window to the front, and the first start does not" $ok
+# Started again through /proc/self/exe, each fresh copy keeps the name streamflex (its comm, which
+# pgrep -x, pkill and ps read), not "exe"
+ok=1
+for n in 1 2 3; do [ "$(cat "$out/f64-yes.comm$n" 2> /dev/null)" = streamflex ] || ok=2; done
+[ $ok = 1 ] && ran_clean f64-yes && ok=0
+result "restart: each fresh copy keeps the process name streamflex ($(cat "$out"/f64-yes.comm[123] 2> /dev/null | tr '\n' ' '))" $ok
 
 # No, after closing with the settings key: settings close as before, saved, with no restart
 cfg=$(writable_config f64-restart)
@@ -169,6 +178,15 @@ grep -q 'Restart: the program is /home/tester/r64-bin/streamflex$' "$log" \
     && [ "$(cat "$out/f64-path.cmdline2" 2> /dev/null)" = "streamflex -c $cfg -d --restarted " ] \
     && ran_clean f64-path && ok=0
 result "restart: with no /proc/self/exe and a bare argv[0], it restarts by the PATH (exit $(cat "$out/f64-path.code"))" $ok
+
+# Through /proc/self/exe with argv[0] a bare name (started through the PATH): the fresh copy takes
+# that name back, streamflex, as its process name
+cfg=$(writable_config f64-restart)
+exe=streamflex PATH=$TESTER_HOME/r64-bin:$PATH CFG=$cfg run_keys f64-bare $TO_MAPPINGS Up Return $F64_SAVE Return +f64_fresh2
+ok=1
+grep -q 'Restart: the program is /proc/self/exe$' "$out/f64-bare.log" \
+    && [ "$(cat "$out/f64-bare.comm2" 2> /dev/null)" = streamflex ] && ran_clean f64-bare && ok=0
+result "restart: with a bare argv[0], the copy started through /proc/self/exe is named streamflex ($(cat "$out/f64-bare.comm2" 2> /dev/null))" $ok
 
 # The same with the PATH's copy gone before Yes: nowhere to restart from, so the reason is logged,
 # nothing is torn down, and settings close with StreamFlex running on

@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
 #include <signal.h>
 #include <SDL.h>
 #include <ini.h>
@@ -296,6 +297,18 @@ bool find_self(const char *argv0)
     }
     log_debug("Restart: the program is %s", self_path);
     return true;
+}
+
+// A function to give a restart's fresh copy its program's name back. find_self() execs through
+// /proc/self/exe, which runs this very file even after an upgrade has replaced or removed it, and
+// the kernel then names the process after that path's last name, "exe": the name pgrep, pkill and
+// ps read (/proc/<pid>/comm). The name becomes argv[0]'s last name again, as the first start had it.
+void keep_name(const char *argv0)
+{
+    const char *name = strrchr(argv0, '/');
+    name = name != NULL ? name + 1 : argv0;
+    if (prctl(PR_SET_NAME, name, 0, 0, 0) != 0)
+        log_error("Restart: the process could not be named %s again: %s", name, strerror(errno));
 }
 
 // A function to start the program find_self() found in this process's place (exec), with the
