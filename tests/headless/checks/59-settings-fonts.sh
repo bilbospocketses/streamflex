@@ -227,6 +227,27 @@ for p59_where in /work/build:./assets/fonts/OpenSans-Regular.ttf "$TESTER_HOME:/
     echo "      the cursor read: ${reads:-nothing}; $(grep -o 'Title font: .*' "$log"); $(grep -o 'Settings: the list shows rows .*' "$log" | head -1)"
 done
 
+# A family whose regular face is named Book, as DejaVu's is: DejaVu Sanz (DejaVu Sans renamed),
+# its Bold in the first folder read and its Book in the second, so the Bold is found first.
+# Choosing the family writes the Book file. It is the eighth row, after the 7 bundled families.
+rm -rf "$TESTER_HOME/f59-book"
+mkdir -p "$TESTER_HOME/f59-book/bold" "$TESTER_HOME/f59-book/book"
+python3 "$HERE/make_fonts.py" rename /work/assets/fonts/DejaVuSans.ttf "$TESTER_HOME/f59-book/book/sanz.ttf" Sans Sanz
+python3 "$HERE/make_fonts.py" rename "$TESTER_HOME/f59-book/book/sanz.ttf" "$TESTER_HOME/f59-book/bold/sanz-bold.ttf" Book Bold
+chown -R tester:tester "$TESTER_HOME/f59-book"
+cfg=$(writable_config f60-colour)
+# shellcheck disable=SC2086
+STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/f59-book/bold:$TESTER_HOME/f59-book/book CFG=$cfg UNTIL='Settings saved' \
+    run_keys f59-book $TITLES_FONT +wait_fonts Down Down Down Return BackSpace BackSpace
+log=$out/f59-book.log
+reads=$(f59_reads "$log" 'Settings: opened the picker for [Titles] Font')
+ok=1
+grep -qE '^Fonts: found 8 families in 9 files, skipped 0 \(' "$log" && [ "$reads" = 'Open Sans|Roboto|Source Sans Pro|DejaVu Sanz|' ] \
+    && [ "$(f59_key "$cfg" Titles Font)" = "$TESTER_HOME/f59-book/book/sanz.ttf" ] && [ -z "$(f59_key "$cfg" Titles FontFace)" ] \
+    && grep -q "Titles: opened $TESTER_HOME/f59-book/book/sanz.ttf (face 0)" "$log" && ran_clean f59-book && ok=0
+result "fonts: a family whose regular face is named Book writes that face, not its Bold found first (exit $(cat "$out/f59-book.code"))" $ok
+echo "      the cursor read: ${reads:-nothing}; $(grep -E '^(Fonts: found|Settings: \[Titles\] Font)' "$log" | tr '\n' ';')"
+
 # While the files are listed (STREAMFLEX_TEST_FONT_DELAY_MS holds the listing back) the picker says
 # Loading fonts... (0), Back is its only key, and opening it again lists nothing twice. The files are
 # read with the picker closed, and it then opens at once on the font in use.

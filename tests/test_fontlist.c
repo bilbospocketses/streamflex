@@ -37,12 +37,12 @@ static void test_families(void)
     CHECK_STR(fontlist_family(list, 2), "Noto Sans CJK");
     CHECK_INT(family(list, "roboto"), 3);                    // The first spelling seen names it
 
-    // Regular when the family has one (a collection's face 3 here); otherwise its first face
+    // Regular when the family has one (a collection's face 3 here); DejaVu's regular style is Book
     int noto = family(list, "Noto Sans CJK");
     CHECK_STR(fontlist_path(list, noto), "/f/Noto.ttc");
     CHECK_INT(fontlist_face(list, noto), 3);
     int dejavu = family(list, "DejaVu Sans");
-    CHECK_STR(fontlist_path(list, dejavu), "/f/DejaVuSans-Bold.ttf");   // No Regular: the first face
+    CHECK_STR(fontlist_path(list, dejavu), "/f/DejaVuSans.ttf");   // Book, not the Bold seen first
     CHECK_INT(fontlist_face(list, dejavu), 0);
     CHECK_STR(fontlist_path(list, family(list, "roboto")), "/f/roboto.ttf");
 
@@ -98,6 +98,84 @@ static void test_rules(void)
     CHECK(fontlist_family(list, 5) == NULL);
     CHECK(fontlist_path(list, 5) == NULL);
     CHECK_INT(fontlist_face(list, -1), 0);
+    fontlist_free(list);
+}
+
+// A function to test which face a family writes when none is named Regular (Ubuntu's DejaVu and
+// URW fonts): Book, Normal, Roman, Plain and Standard count as regular, though Regular still wins;
+// else an upright, normal-weight face (Light, Condensed); else a bold or a slanted one before one
+// that is both. Faces as good as each other keep the first seen.
+static void test_upright_face(void)
+{
+    FontList *list = fontlist_create();
+    // DejaVu Serif in the order fontconfig lists its files: Book last
+    CHECK(fontlist_add(list, "/f/DejaVuSerif-Bold.ttf", 0, "DejaVu Serif", "Bold", false));
+    CHECK(fontlist_add(list, "/f/DejaVuSerif-BoldItalic.ttf", 0, "DejaVu Serif", "Bold Italic", false));
+    CHECK(fontlist_add(list, "/f/DejaVuSerif-Italic.ttf", 0, "DejaVu Serif", "Italic", false));
+    CHECK(fontlist_add(list, "/f/DejaVuSerif.ttf", 0, "DejaVu Serif", "Book", false));
+    // DejaVu Sans Mono, which the list drew bold oblique
+    CHECK(fontlist_add(list, "/f/Mono-BoldOblique.ttf", 0, "DejaVu Sans Mono", "Bold Oblique", false));
+    CHECK(fontlist_add(list, "/f/Mono-Oblique.ttf", 0, "DejaVu Sans Mono", "Oblique", false));
+    CHECK(fontlist_add(list, "/f/Mono.ttf", 0, "DejaVu Sans Mono", "book", false));
+    CHECK(fontlist_add(list, "/f/Mono-Bold.ttf", 0, "DejaVu Sans Mono", "Bold", false));
+    // A Regular after a Book still wins
+    CHECK(fontlist_add(list, "/f/g-book.ttf", 0, "Gamma", "Book", false));
+    CHECK(fontlist_add(list, "/f/g.ttf", 0, "Gamma", "Regular", false));
+    // Roman and Normal
+    CHECK(fontlist_add(list, "/f/p-bold.ttf", 0, "P052", "Bold", false));
+    CHECK(fontlist_add(list, "/f/p-roman.ttf", 0, "P052", "Roman", false));
+    CHECK(fontlist_add(list, "/f/n-italic.ttf", 0, "Nu", "Italic", false));
+    CHECK(fontlist_add(list, "/f/n.ttf", 0, "Nu", "Normal", false));
+    // No regular-like style: the upright, normal-weight face
+    CHECK(fontlist_add(list, "/f/l-bi.ttf", 0, "Lambda", "Bold Italic", false));
+    CHECK(fontlist_add(list, "/f/l-li.ttf", 0, "Lambda", "Light Italic", false));
+    CHECK(fontlist_add(list, "/f/l.ttf", 0, "Lambda", "Light", false));
+    CHECK(fontlist_add(list, "/f/l-b.ttf", 0, "Lambda", "Bold", false));
+    // Bold before Bold Italic; SemiBold and Black count as bold; Italic and Bold tie, the first kept
+    CHECK(fontlist_add(list, "/f/k-bi.ttf", 0, "Kappa", "Bold Italic", false));
+    CHECK(fontlist_add(list, "/f/k-sb.ttf", 0, "Kappa", "SemiBold", false));
+    CHECK(fontlist_add(list, "/f/m-black.ttf", 0, "Mu", "Black", false));
+    CHECK(fontlist_add(list, "/f/m-ci.ttf", 0, "Mu", "Condensed Italic", false));
+    CHECK(fontlist_add(list, "/f/o-i.ttf", 0, "Omega", "Italic", false));
+    CHECK(fontlist_add(list, "/f/o-b.ttf", 0, "Omega", "Bold", false));
+    // Each other name for regular after an upright Medium, which it beats; each word for heavy or
+    // slanted before an upright Light, which beats it; one both heavy and slanted before one that
+    // is only slanted
+    static const char *const regular[] = { "Book", "Normal", "Roman", "Plain", "Standard" };
+    static const char *const beaten[] = { "Black", "Bold", "Heavy", "Demi", "Italic", "Oblique", "Slanted" };
+    char name[32];
+    for (size_t i = 0; i < sizeof(regular) / sizeof(regular[0]); i++) {
+        snprintf(name, sizeof(name), "R %s", regular[i]);
+        CHECK(fontlist_add(list, "/f/medium.ttf", 0, name, "Medium", false));
+        CHECK(fontlist_add(list, "/f/regular.ttf", 0, name, regular[i], false));
+    }
+    for (size_t i = 0; i < sizeof(beaten) / sizeof(beaten[0]); i++) {
+        snprintf(name, sizeof(name), "B %s", beaten[i]);
+        CHECK(fontlist_add(list, "/f/beaten.ttf", 0, name, beaten[i], false));
+        CHECK(fontlist_add(list, "/f/light.ttf", 0, name, "Light", false));
+    }
+    CHECK(fontlist_add(list, "/f/r-bo.ttf", 0, "Rho", "Bold Oblique", false));
+    CHECK(fontlist_add(list, "/f/r-o.ttf", 0, "Rho", "Oblique", false));
+    fontlist_finish(list);
+
+    CHECK_STR(fontlist_path(list, family(list, "DejaVu Serif")), "/f/DejaVuSerif.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "DejaVu Sans Mono")), "/f/Mono.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Gamma")), "/f/g.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "P052")), "/f/p-roman.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Nu")), "/f/n.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Lambda")), "/f/l.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Kappa")), "/f/k-sb.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Mu")), "/f/m-black.ttf");
+    CHECK_STR(fontlist_path(list, family(list, "Omega")), "/f/o-i.ttf");
+    for (size_t i = 0; i < sizeof(regular) / sizeof(regular[0]); i++) {
+        snprintf(name, sizeof(name), "R %s", regular[i]);
+        CHECK_STR(fontlist_path(list, family(list, name)), "/f/regular.ttf");
+    }
+    for (size_t i = 0; i < sizeof(beaten) / sizeof(beaten[0]); i++) {
+        snprintf(name, sizeof(name), "B %s", beaten[i]);
+        CHECK_STR(fontlist_path(list, family(list, name)), "/f/light.ttf");
+    }
+    CHECK_STR(fontlist_path(list, family(list, "Rho")), "/f/r-o.ttf");
     fontlist_free(list);
 }
 
@@ -180,6 +258,7 @@ int main(void)
     test_families();
     test_empty();
     test_rules();
+    test_upright_face();
     test_add_after_finish();
     test_font_files();
 #ifndef _WIN32

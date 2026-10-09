@@ -1,6 +1,7 @@
 // The font picker's list: font faces, as a scan found them, grouped into families by name (ignoring
-// case), each family writing its Regular face, else the first face seen. The bundled fonts sort
-// first, then every family by name. Pure: no SDL, no globals; memory comes from alloc.h.
+// case), each family writing its Regular face, else its regular face by another name (Book, Roman),
+// else its upright, normal-weight one, by its style's words; of faces as good, the first seen. The
+// bundled fonts sort first, then every family by name. Pure: no SDL, no globals; memory comes from alloc.h.
 #ifndef FONTLIST_H
 #define FONTLIST_H
 
@@ -20,7 +21,7 @@ void fontlist_finish(FontList *list);                 // Sorts the families: bun
                                                       // found (every family there) until it is called again
 int fontlist_count(const FontList *list);
 const char *fontlist_family(const FontList *list, int index);
-const char *fontlist_path(const FontList *list, int index);   // The face a family writes: Regular, else its first
+const char *fontlist_path(const FontList *list, int index);   // The face a family writes: Regular, else as above
 int fontlist_face(const FontList *list, int index);
 int fontlist_find(const FontList *list, const char *path, int face);   // The family holding a face; -1
 

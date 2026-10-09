@@ -8,7 +8,7 @@ typedef struct {
     char *name;
     char *path;       // The face it writes
     int face;
-    bool regular;     // That face is its Regular
+    int rank;         // That face's style_rank(): a face that ranks lower takes its place
     bool bundled;     // One of its faces is a bundled font
 } Family;
 
@@ -42,6 +42,51 @@ static int compare_names(const char *a, const char *b)
         b++;
     }
     return fileio_lower(*a) - fileio_lower(*b);
+}
+
+// A function to tell whether a style holds a word, without regard to ASCII case
+static bool has_word(const char *style, const char *word)
+{
+    size_t length = strlen(word);
+    for (; *style != '\0'; style++) {
+        size_t k = 0;
+        while (k < length && style[k] != '\0' && fileio_lower(style[k]) == fileio_lower(word[k]))
+            k++;
+        if (k == length)
+            return true;
+    }
+    return false;
+}
+
+// A function to rank a face's style as the one its family writes, lower first: 0 Regular; 1 a style
+// that names the regular face otherwise (DejaVu's Book, URW's Roman); 2 any other upright face of
+// normal weight (Light, Condensed); 3 a bold or a slanted face; 4 one both bold and slanted. The
+// style's words stand in for the face's weight and slant, which SDL_ttf does not give.
+static int style_rank(const char *style)
+{
+    static const char *const regular[] = { "Book", "Normal", "Roman", "Plain", "Standard" };
+    static const char *const heavy[] = { "bold", "black", "heavy", "demi" };
+    static const char *const slanted[] = { "italic", "oblique", "slanted" };
+    if (compare_names(style, "Regular") == 0)
+        return 0;
+    for (size_t i = 0; i < sizeof(regular) / sizeof(regular[0]); i++) {
+        if (compare_names(style, regular[i]) == 0)
+            return 1;
+    }
+    int rank = 2;
+    for (size_t i = 0; i < sizeof(heavy) / sizeof(heavy[0]); i++) {
+        if (has_word(style, heavy[i])) {
+            rank++;
+            break;
+        }
+    }
+    for (size_t i = 0; i < sizeof(slanted) / sizeof(slanted[0]); i++) {
+        if (has_word(style, slanted[i])) {
+            rank++;
+            break;
+        }
+    }
+    return rank;
 }
 
 // A function to tell a font file by its extension: TrueType or OpenType, single or a collection
@@ -119,11 +164,12 @@ static bool grow_families(FontList *list)
     return true;
 }
 
-// A function to add a face: to its family, found by name, or to a new one. A Regular face becomes
-// the one its family writes, in place of any other. False when out of memory, with nothing added.
+// A function to add a face: to its family, found by name, or to a new one. A face whose style ranks
+// before the family's face (style_rank()) becomes the one its family writes; of two that rank the
+// same, the first seen stays. False when out of memory, with nothing added.
 bool fontlist_add(FontList *list, const char *path, int face, const char *family, const char *style, bool bundled)
 {
-    bool regular = compare_names(style, "Regular") == 0;
+    int rank = style_rank(style);
     int index = -1;
     for (int i = 0; i < list->family_count && index < 0; i++) {
         if (compare_names(list->families[i].name, family) == 0)
@@ -145,17 +191,17 @@ bool fontlist_add(FontList *list, const char *path, int face, const char *family
     }
     if (index < 0) {
         index = list->family_count++;
-        list->families[index] = (Family) { .name = name, .path = family_path, .face = face, .regular = regular,
+        list->families[index] = (Family) { .name = name, .path = family_path, .face = face, .rank = rank,
                                            .bundled = bundled };
     }
     else {
         Family *f = &list->families[index];
         f->bundled = f->bundled || bundled;
-        if (regular && !f->regular) {
+        if (rank < f->rank) {
             alloc_free(f->path);
             f->path = family_path;
             f->face = face;
-            f->regular = true;
+            f->rank = rank;
         }
         else
             alloc_free(family_path);
