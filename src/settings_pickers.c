@@ -727,9 +727,17 @@ static void put_colour_back(void)
 // A function to choose a font row's family: its face is stored quietly first, then its file with
 // the refresh that opens it (the pages store the font and run the title font's or the clock's group
 // once). The same file's other face leaves the font's own value as it was, so the refresh is run
-// here. `chosen` is copied before the list goes.
+// here. `chosen` is copied before the list goes. The row of the font in use (where the cursor
+// started) changes nothing, though the file names it otherwise: the Windows config's relative
+// .\assets\fonts\... would become the list's full path.
 static void choose_font(const char *chosen)
 {
+    char in_use[FONT_VALUE_MAX];
+    fonts_value_in_use(slot->def->id, in_use, sizeof(in_use));
+    if (strcmp(chosen, in_use) == 0) {
+        choose(original);
+        return;
+    }
     SettingValue font = original;
     int face = atoi(chosen);
     snprintf(font.text, sizeof(font.text), "%s", fonts_value_path(chosen));

@@ -227,6 +227,19 @@ for p59_where in /work/build:./assets/fonts/OpenSans-Regular.ttf "$TESTER_HOME:/
     echo "      the cursor read: ${reads:-nothing}; $(grep -o 'Title font: .*' "$log"); $(grep -o 'Settings: the list shows rows .*' "$log" | head -1)"
 done
 
+# OK on the row the cursor starts on, the font in use, changes nothing, though the file names it by
+# a relative path and the row by its full one: no write, and the file's value stays as it was
+cfg=$(f59_config f59-relok "[General]\nDefaultMenu=Main\n\n[Titles]\nFont=./assets/fonts/OpenSans-Regular.ttf\n$F59_MAIN")
+# shellcheck disable=SC2086
+( cd /work/build && STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$cfg run_keys f59-relok $TITLES_FONT +wait_fonts Return Menu )
+log=$out/f59-relok.log
+ok=1
+grep -q 'Settings: \[Titles\] Font is unchanged' "$log" && ! grep -q 'Settings: \[Titles\] Font .* -> ' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" \
+    && [ "$(f59_key "$cfg" Titles Font)" = ./assets/fonts/OpenSans-Regular.ttf ] && ran_clean f59-relok && ok=0
+result "fonts: OK on the font in use, named by a relative path, changes nothing (exit $(cat "$out/f59-relok.code"))" $ok
+grep -E 'Settings: (\[Titles\]|nothing changed|saved)' "$log" | sed 's/^/      /'
+
 # A family whose regular face is named Book, as DejaVu's is: DejaVu Sanz (DejaVu Sans renamed),
 # its Bold in the first folder read and its Book in the second, so the Bold is found first.
 # Choosing the family writes the Book file. It is the eighth row, after the 7 bundled families.
@@ -247,6 +260,36 @@ grep -qE '^Fonts: found 8 families in 9 files, skipped 0 \(' "$log" && [ "$reads
     && grep -q "Titles: opened $TESTER_HOME/f59-book/book/sanz.ttf (face 0)" "$log" && ran_clean f59-book && ok=0
 result "fonts: a family whose regular face is named Book writes that face, not its Bold found first (exit $(cat "$out/f59-book.code"))" $ok
 echo "      the cursor read: ${reads:-nothing}; $(grep -E '^(Fonts: found|Settings: \[Titles\] Font)' "$log" | tr '\n' ';')"
+
+# A symbol font, as Linux's D050000L is: Dingy has glyphs for its own name and "Aa0" (as a dingbat
+# font mapping ASCII does) but none for U+2019 or U+2013, so its row's name is drawn in the
+# settings' font, as are Halfa's, with the en dash alone, and Halfb's, with the quote alone. Typo,
+# with both, draws its name in its own face (the control), as the bundled fonts do. Chosen, Dingy
+# still gives the titles its own face. Dingy is the eighth row.
+rm -rf "$TESTER_HOME/f59-sym"
+mkdir -p "$TESTER_HOME/f59-sym"
+python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/dingy.ttf" Dingy DingyAa0
+python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/halfa.ttf" Halfa "HalfaA0$(printf '\xe2\x80\x93')"
+python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/halfb.ttf" Halfb "HalfbA0$(printf '\xe2\x80\x99')"
+python3 "$HERE/make_fonts.py" blank "$TESTER_HOME/f59-sym/typo.ttf" Typo "TypoAa0$(printf '\xe2\x80\x99\xe2\x80\x93')"
+chown -R tester:tester "$TESTER_HOME/f59-sym"
+cfg=$(writable_config f60-colour)
+# shellcheck disable=SC2086
+STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/f59-sym CFG=$cfg UNTIL='Settings saved' \
+    run_keys f59-symbols $TITLES_FONT +wait_fonts Down Down Down Return BackSpace BackSpace
+log=$out/f59-symbols.log
+ok=1
+grep -qE '^Fonts: found 11 families in 11 files, skipped 0 \(' "$log" \
+    && [ "$(f59_count "Settings: the font picker draws Dingy in the settings' font: its face is symbols" "$log")" = 1 ] \
+    && grep -q "Settings: the font picker draws Halfa in the settings' font" "$log" \
+    && grep -q "Settings: the font picker draws Halfb in the settings' font" "$log" \
+    && ! grep -qE 'Settings: the font picker drew (Dingy|Halfa|Halfb)' "$log" \
+    && grep -q 'Settings: the font picker drew Typo in its own face' "$log" \
+    && grep -q 'Settings: the font picker drew Open Sans in its own face' "$log" \
+    && grep -q "Titles: opened $TESTER_HOME/f59-sym/dingy.ttf (face 0)" "$log" \
+    && [ "$(f59_key "$cfg" Titles Font)" = "$TESTER_HOME/f59-sym/dingy.ttf" ] && ran_clean f59-symbols && ok=0
+result "fonts: a symbol font's row is named in the settings' font, and its face still sets the titles (exit $(cat "$out/f59-symbols.code"))" $ok
+grep -E 'font picker (drew|draws) (Dingy|Halfa|Halfb|Typo)|Titles: opened' "$log" | sed 's/^/      /'
 
 # While the files are listed (STREAMFLEX_TEST_FONT_DELAY_MS holds the listing back) the picker says
 # Loading fonts... (0), Back is its only key, and opening it again lists nothing twice. The files are
