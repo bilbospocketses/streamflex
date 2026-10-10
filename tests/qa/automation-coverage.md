@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 57 |
-| Row halves | 59 |
-| Verdicts per release (row x desktop) | 185 |
+| Rows | 108 |
+| Row halves | 136 |
+| Verdicts per release (row x desktop) | 435 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 2 (8 verdicts) |
+| `streamflex-headless` halves | 33 (132 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 57 (177 verdicts) |
-| **Automated today** | 2 of 59 halves; 8 of 185 verdicts (4 %) |
+| `manual` halves | 103 (303 verdicts) |
+| **Automated today** | 33 of 136 halves; 132 of 435 verdicts (30 %) |
 
 <!-- summary:end -->
 
@@ -64,6 +64,52 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.29 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
 | 1.29 | `[Win]` | manual | qa-harness item 75, planned |
 | 1.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.1 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
+| 2.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.2 | `[All]` | manual | qa-harness item 75, planned |
+| 2.3 | `[All]` | manual | qa-harness item 75, planned |
+| 2.4 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-area` |
+| 2.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.5 | `[All]` | manual | qa-harness item 75, planned |
+| 2.6 | `[All]` | manual | qa-harness item 75, planned |
+| 2.7 | `[All]` | manual | qa-harness item 75, planned |
+| 2.8 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
+| 2.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.9 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
+| 2.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.10 | `[All]` | manual | qa-harness item 75, planned |
+| 2.11 | `[All]` | manual | qa-harness item 75, planned |
+| 2.12 | `[All]` | manual | qa-harness item 75, planned |
+| 2.13 | `[All]` | manual | qa-harness item 75, planned |
+| 2.14 | `[All]` | manual | qa-harness item 75, planned |
+| 2.15 | `[All]` | manual | qa-harness item 75, planned |
+| 2.16 | `[All]` | manual | qa-harness item 75, planned |
+| 2.17 | `[All]` | manual | qa-harness item 75, planned |
+| 2.18 | `[All]` | manual | qa-harness item 75, planned |
+| 2.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-titlefonts` |
+| 2.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.20 | `[All]` | manual | qa-harness item 75, planned |
+| 2.21 | `[All]` | manual | qa-harness item 75, planned |
+| 2.22 | `[All]` | manual | qa-harness item 75, planned |
+| 2.23 | `[All]` | manual | qa-harness item 75, planned |
+| 2.24 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
+| 2.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.25 | `[All]` | manual | qa-harness item 75, planned |
+| 2.26 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-large` |
+| 2.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.27 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-dense` |
+| 2.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.28 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-fixed` |
+| 2.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.29 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-notitles` |
+| 2.29 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.30 | `[All]` | manual | qa-harness item 75, planned |
+| 2.31 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-shrink-large` |
+| 2.31 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.32 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-noshadow`, `45-shadows.sh` run `f45-shadow` |
+| 2.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.33 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-shadowlong` |
+| 2.33 | `[Win]` | manual | qa-harness item 75, planned |
 | 3.1 | `[All]` | manual | qa-harness item 75, planned |
 | 3.2 | `[All]` | manual | qa-harness item 75, planned |
 | 3.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -92,5 +138,36 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 13.13 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.14 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.15 | `[Linux]` | manual | qa-harness item 75, planned |
+| 14.1 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-all` |
+| 14.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.2 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-fps10` |
+| 14.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.3 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-values` |
+| 14.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.4 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-values` |
+| 14.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.5 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-values` |
+| 14.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.6 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-fontface` |
+| 14.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.7 | `[Linux]` | streamflex-headless | `25-menus.sh` run `f25-split` |
+| 14.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.8 | `[Linux]` | streamflex-headless | `25-menus.sh` run `f25-empty` |
+| 14.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.9 | `[Linux]` | streamflex-headless | `25-menus.sh` run `f25-empty` |
+| 14.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.10 | `[Linux]` | streamflex-headless | `25-menus.sh` run `f25-empty` |
+| 14.10 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.11 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-exit` |
+| 14.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.12 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-exit` |
+| 14.13 | `[Linux]` | streamflex-headless | `15-home.sh` run `f15-nohome` |
+| 14.14 | `[Linux]` | streamflex-headless | `15-home.sh` run `f15-nohome` |
+| 14.15 | `[Linux]` | streamflex-headless | `46-region.sh` run `f46-clock` |
+| 14.16 | `[Linux]` | streamflex-headless | `46-region.sh` run `f46-lang` |
+| 14.17 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-padswap` |
+| 14.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.18 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-padswap` |
+| 14.18 | `[Win]` | manual | qa-harness item 75, planned |
 
 ## Findings
