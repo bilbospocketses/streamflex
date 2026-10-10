@@ -14,6 +14,7 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ### Fixed
 - The headless harness waits for the launcher to draw a frame after each key it presses. On a slow CI runner, several keys could be handled with no frame between them, so a check whose line only a drawn frame logs failed at random (seen in `63-settings-mappings.sh`).
+- On Windows, an exit hotkey that Windows refused because another program held its key is tried again: every 5 seconds, when StreamFlex comes back to the front, and when settings close. Once the key is free it is registered, and the log says so once (`Registered the exit hotkey with Windows: the key is free now`), so the hotkey works without a restart. It had stayed dead until StreamFlex restarted or the bindings changed.
 
 ## [0.4.0] - 2026-10-09
 

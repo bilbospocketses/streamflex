@@ -34,6 +34,7 @@ SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey
 int unused_exit_hotkeys(SDL_Keycode *out, int max);   // The later :exit bindings, which nothing runs; how many
 SDL_Keycode refused_exit_hotkey(const char **why);    // The exit hotkey Windows would not register, and why; 0 when none
 void register_exit_hotkey(void);
+bool retry_exit_hotkey(bool at_once);   // The exit hotkey Windows refused, tried again when due; true when taken now
 void clear_exit_hotkey(void);
 void check_exit_hotkey(SDL_SysWMmsg *msg);
 void set_foreground_window(void);

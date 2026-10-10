@@ -15,6 +15,7 @@
 #include "../fileio.h"
 #include "../alloc.h"
 #include "../browser.h"
+#include "../derive.h"
 
 static void parse_command(char *cmd, char *file, size_t file_size, char **params);
 static char *path_basename(const char *path);
@@ -28,7 +29,8 @@ bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
 static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
 static SDL_Keycode refused_exit_code = 0;  // The exit hotkey's key when Windows would not register it...
-static char refused_exit_why[256];         // ...and Windows' reason
+static char refused_exit_why[256];         // ...and Windows' reason...
+static Uint32 refused_exit_ticks = 0;      // ...and when it was last tried
 #define UNUSED_EXITS_KEPT 16
 static SDL_Keycode unused_exits[UNUSED_EXITS_KEPT];   // :exit bindings after the exit hotkey, which nothing runs...
 static int unused_exit_count = 0;                     // ...and how many, past the ones kept too
@@ -442,9 +444,33 @@ void register_exit_hotkey()
     if (!ret) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         refused_exit_code = exit_hotkey_code;
+        refused_exit_ticks = SDL_GetTicks();
         exit_hotkey = 0;
         log_error("Failed to register exit hotkey with Windows: %s", refused_exit_why);
     }
+}
+
+// A function to try the exit hotkey Windows refused again, every DERIVE_EXIT_RETRY_MS or `at_once`
+// (the window came to the front, settings closed), for when its key has been let go. Taken, it is
+// said once; refused again, nothing more is logged, but Windows' latest reason is kept for the debug
+// log's list. True when it was taken just now.
+bool retry_exit_hotkey(bool at_once)
+{
+    Uint32 now = SDL_GetTicks();
+    if (!derive_exit_retry_due(refused_exit_code != 0, at_once, now, refused_exit_ticks))
+        return false;
+    refused_exit_ticks = now;
+    UINT key = sdl_to_win32_keycode(refused_exit_code);
+    if (!RegisterHotKey(wm_info.info.win.window, 1, 0, key)) {
+        windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
+        return false;
+    }
+    exit_hotkey = key;
+    refused_exit_code = 0;
+    refused_exit_why[0] = '\0';
+    // At the refusal's level, so a log without -d that has the refusal has its end too
+    log_error("Registered the exit hotkey with Windows: the key is free now");
+    return true;
 }
 
 // A function to let go of the exit hotkey, before settings bind it again

@@ -23,9 +23,7 @@
 #include "util.h"
 #include "debug.h"
 #include "test_hooks.h"
-#ifdef __unix__
 #include "platform/platform.h"
-#endif
 
 extern Config config;
 extern Geometry geo;
@@ -796,6 +794,9 @@ static void close_settings(void)
     free_screen();
     log_debug("Settings closed");
     trim_title_fonts();
+#ifdef _WIN32
+    retry_exit_hotkey(true);   // Whether or not anything changed: its key may have been let go meanwhile
+#endif
 }
 
 // A function to log what the save could not make as asked (config_save's notes, one a line). A change

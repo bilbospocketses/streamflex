@@ -12,6 +12,7 @@
 #define DERIVE_MAX_VCENTER_PM 750
 #define DERIVE_MAX_SCROLL_OUTLINE_PM 10       // The scroll arrow's outline: at most 1% of the screen height
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
+#define DERIVE_EXIT_RETRY_MS 5000             // A refused Windows exit hotkey is tried again this often
 
 typedef struct {
     unsigned char r;
@@ -82,5 +83,6 @@ typedef struct Effective {
 int derive_alpha(int hundredths);
 void derive_settings(const DeriveInput *in, Effective *out);
 unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval);
+bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try);
 
 #endif

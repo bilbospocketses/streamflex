@@ -310,8 +310,24 @@ static void test_repeated_count(void)
     CHECK_INT(repeats, 10);
 }
 
+// A function to test when a refused Windows exit hotkey is tried again: only while refused, every
+// DERIVE_EXIT_RETRY_MS of the clock, or at once (focus gained, settings closed); SDL's ticks wrap
+static void test_exit_retry_due(void)
+{
+    CHECK(!derive_exit_retry_due(false, false, 20000, 0));        // Registered: never
+    CHECK(!derive_exit_retry_due(false, true, 20000, 0));         // Registered: not even at once
+    CHECK(!derive_exit_retry_due(true, false, 4999, 0));          // Refused, short of 5 s
+    CHECK(derive_exit_retry_due(true, false, 5000, 0));           // Refused, 5 s on
+    CHECK(derive_exit_retry_due(true, false, 12345, 1000));       // Refused, well past
+    CHECK(!derive_exit_retry_due(true, false, 1000, 1000));       // Refused, tried this tick
+    CHECK(derive_exit_retry_due(true, true, 1000, 1000));         // Refused, at once: whenever last tried
+    CHECK(!derive_exit_retry_due(true, false, 1000, 0xFFFFFC17)); // 2 s across the wrap
+    CHECK(derive_exit_retry_due(true, false, 4000, 0xFFFFFC17));  // 5 s across the wrap
+}
+
 int main(void)
 {
+    test_exit_retry_due();
     test_repeated_count();
     test_defaults();
     test_twice();
