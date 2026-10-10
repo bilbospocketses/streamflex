@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 469 |
-| Row halves | 707 |
-| Verdicts per release (row x desktop) | 2118 |
+| Rows | 470 |
+| Row halves | 708 |
+| Verdicts per release (row x desktop) | 2123 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
 | `streamflex-headless` halves | 255 (1020 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 452 (1098 verdicts) |
-| **Automated today** | 255 of 707 halves; 1020 of 2118 verdicts (48 %) |
+| `manual` halves | 453 (1103 verdicts) |
+| **Automated today** | 255 of 708 halves; 1020 of 2123 verdicts (48 %) |
 
 <!-- summary:end -->
 
@@ -695,6 +695,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 12.6 | `[All]` | manual | qa-harness item 75, planned |
 | 12.7 | `[Linux]` | manual | qa-harness item 75, planned |
 | 12.8 | `[All]` | manual | qa-harness item 75, planned |
+| 12.9 | `[All]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
