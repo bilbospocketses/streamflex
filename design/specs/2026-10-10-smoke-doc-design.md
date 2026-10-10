@@ -24,8 +24,11 @@ Nothing outside `tests/qa/` references a W, U or B step id (checked by grep acro
 | Id scheme | **`<module>.<n>`**, optionally followed by **one** lowercase letter (`5.3a`) **or** `-` plus `[a-z][a-z0-9-]*` (`4.2-system-gui`), never both. Stable and gappy: never renumbered, never reused. |
 | Platform tags | **Nine, one per row:** `[Win]`, `[Ubuntu]` (GNOME), `[Kubuntu]`, `[Fedora]` (Workstation), `[Fedora-KDE]`, and the groups `[GNOME]` (Ubuntu + Fedora), `[KDE]` (Kubuntu + Fedora-KDE), `[Linux]` (all four Linux desktops), `[All]` (all five). A behavior whose expectation differs by desktop is split into one row per expectation. |
 | Coverage register | **One line per row half:** a set of desktops sharing one owner. Owners: `streamflex-ctest`, `streamflex-headless`, `qa-harness`, `manual`. |
-| Results | **A committed file per release**, `tests/qa/results/vX.Y.Z.md`: one line per row, one column per desktop. |
-| Who writes qa-harness's cells | **qa-harness emits them.** It keeps a JSON record per run and renders the cells for the halves it owns, plus findings lines, and hands that fragment to the StreamFlex session through ClaudeScratch. StreamFlex commits it. qa-harness never pushes to this repo. |
+| Results | **A committed file per release**, `tests/qa/results/vX.Y.Z.md`: one line per row, one column per desktop. A fail is `F<n>` and an unmeasured half `S<n>`, each written up under the table. |
+| What holds a release | **Any `F` or `S` inside a row's tag.** Each is resolved (fixed, or measured), or the user decides to ship with it and the results file records that decision. |
+| qa-harness credit | **Only once an arc exists.** Until item 75 names the arc that runs a half, the half's owner is `manual`. |
+| The Fedora build | **A build from StreamFlex's own CI**, named in the results header by run id and sha256, until StreamFlex ships an `.rpm` (item 25). The CI job that uploads it is added under item 25, when the lane first needs it. |
+| Who writes qa-harness's cells | **qa-harness emits them.** It keeps a JSON record per run and renders the cells for the halves it owns, plus its findings and not-measured entries, and hands that fragment to the StreamFlex session through ClaudeScratch. StreamFlex commits it. qa-harness never pushes to this repo. |
 | The CI gate | **ws-scrcpy-web's rule plus a structure lint**, in a workflow of its own, required on master. |
 | Gate language | **Python 3.12, standard library only.** StreamFlex's CI already runs Python and has no Node. |
 
@@ -42,7 +45,7 @@ Nothing outside `tests/qa/` references a W, U or B step id (checked by grep acro
 
 Windows 11, Ubuntu GNOME, Kubuntu, Fedora Workstation, Fedora KDE. Each block says:
 
-- how the build gets onto the desktop (the Windows zip; the `.deb` on Ubuntu and Kubuntu; a source build on the Fedoras until StreamFlex ships an `.rpm`, which todo item 25 leaves open);
+- how the build gets onto the desktop (the Windows zip; the `.deb` on Ubuntu and Kubuntu; on the Fedoras, a build from StreamFlex's own CI, named in the results header by run id and sha256, until StreamFlex ships an `.rpm`, which todo item 25 leaves open). The tested binary is always one StreamFlex produced, never one compiled inside the guest;
 - where the config lives (`C:\StreamFlex` beside the zip's executable; `~/.config/streamflex` on Linux);
 - the input method (SendInput and the ViGEm Xbox 360 pad on Windows; HMP `sendkey` and `tests/qa/virtual-gamepad.py` on Linux), including the facts the old README recorded: the Windows Menu key is `VK_APPS` with `KEYEVENTF_EXTENDEDKEY`, never `VK_MENU`; held keys need repeated key-downs under SendInput; which HMP key name reaches SDL as which Menu code;
 - how logs are captured (`-d`, which also records the `Video:` line naming the driver and renderer).
@@ -85,7 +88,7 @@ The same as ws-scrcpy-web's, so qa-harness's row parser carries over:
 
 - **Index by module:** links to every row.
 - **Retired ids:** a list of every id ever retired. The lint refuses an id on this list.
-- **Global pass criteria:** a release passes when every row has a verdict on every desktop its tag covers, and none is `F`. Every `SKIP` is named, with its reason, in the results file.
+- **Global pass criteria:** a release passes when every row has a verdict on every desktop its tag covers, and none is `F<n>` or `S<n>`. An unmeasured half is not a pass: it holds the release exactly as a fail does, until it is measured or the user decides to ship with it, and the results file records that decision.
 
 ## The coverage register: `tests/qa/automation-coverage.md`
 
@@ -105,7 +108,7 @@ A block at the top, between `<!-- summary:begin -->` and `<!-- summary:end -->` 
 - **Owner:**
   - `streamflex-ctest`: a unit test proves it; the last column names the test file and function.
   - `streamflex-headless`: the headless harness proves it; the last column names the check file and the run name (`f58-hex`). The `result` label text is not used, because it carries a changing `(exit N)` suffix.
-  - `qa-harness`: the five-desktop lane proves it; the last column names the lane and arc, **never a qa-harness file path** (qa-harness is private, so a path would dangle in this public repo). Until item 75 has the arc, it says "five-desktop lane, planned".
+  - `qa-harness`: the five-desktop lane proves it; the last column names the lane and arc, **never a qa-harness file path** (qa-harness is private, so a path would dangle in this public repo). **A half is `qa-harness` only once the arc exists.** Until item 75 names the arc that runs it, the half's owner is `manual`, with "qa-harness item 75, planned" in the last column, so neither the summary's automated count nor a results file credits qa-harness with cells nothing can produce yet. The half moves to `qa-harness` in the PR that names the arc.
   - `manual`: checked by hand; the last column says why it cannot be automated (a real TV or pad, a judgment by eye).
 - **Where it runs, or why not** is never empty. Partial coverage is stated there in words.
 
@@ -121,16 +124,17 @@ Per-module notes on coverage gaps, as ws-scrcpy-web keeps them. They record; the
 
 ### Format
 
-- **Header:** the StreamFlex tag and commit tested, the date, and one line per desktop: the OS and version, plus the base image digest when qa-harness ran it (qa-harness supplies its lock digests). The header also cites the `build-and-test` run id the automated cells come from.
+- **Header:** the StreamFlex tag and commit tested, the date, and one line per desktop: the OS and version, plus the base image digest when qa-harness ran it (qa-harness supplies its lock digests). The header also cites the `build-and-test` run id the automated cells come from, and, for the Fedoras, the CI run id and sha256 of the build that was installed.
 - **Table:** `| Row | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |`, one line per row id. A cell is one of:
   - `x`: pass;
   - `F<n>`: fail, with a finding id (`F1`);
+  - `S<n>`: not measured, with a skip id (`S1`);
   - `-`: the desktop is outside the row's tag;
-  - `SKIP: NOT MEASURED -- <reason>`;
   - `x (vA.B.C)`: carried forward from an earlier release's pass (patch releases only, below).
 
-  An empty cell is never a pass.
+  An empty cell is never a pass. A skip's reason never goes in the cell: the harness's reasons are long and often contain `|`, which would break the table row.
 - **Findings:** `F1`, `F2`, ... each states what failed and what was seen, links its evidence (log or frame), and says where the fix went (a PR number or a patch release), or records the user's decision to ship with it.
+- **Not measured:** `S1`, `S2`, ... each gives the full reason the half was not measured (qa-harness's `NOT MEASURED -- <reason>` text, verbatim), and either where it was measured afterwards or the user's decision to ship with it.
 
 ### Who fills which cells
 
@@ -140,7 +144,7 @@ Per-module notes on coverage gaps, as ws-scrcpy-web keeps them. They record; the
 
 ### The release flow
 
-The results file is committed in the release PR (the version-bump PR), before the tag. A release with an unresolved `F` is not cut: it is fixed first, or the user decides to ship with it and the finding records that. A patch release gets its own file. It may carry forward rows its change cannot affect, written `x (vA.B.C)`, with the reason stated once in the header.
+The results file is committed in the release PR (the version-bump PR), before the tag. A release with an unresolved `F` or `S` is not cut: a fail is fixed and a skip is measured first, or the user decides to ship with it and its entry records that. A patch release gets its own file. It may carry forward rows its change cannot affect, written `x (vA.B.C)`, with the reason stated once in the header.
 
 ## The gate and the lint: `tests/qa/check-smoke.py`
 
@@ -176,8 +180,10 @@ Fails on any of:
 - a row whose register halves do not cover its tag's desktops exactly once each;
 - a register line for a row the doc does not have;
 - an owner outside the four, or an empty "where" cell;
+- a `streamflex-headless` half whose "where" cell does not name an existing `tests/headless/checks/*.sh` file and a run name that appears in that file (the first argument of a `run_*` call, such as `run_keys f58-hex`);
+- a `streamflex-ctest` half whose "where" cell does not name an existing `tests/test_*.c` file and a function defined in it;
 - a stale generated summary;
-- in any results file: a malformed cell, an `F<n>` with no matching finding, or a `-` inside the row's tag;
+- in any results file: a malformed cell, an `F<n>` with no matching finding, an `S<n>` with no matching "Not measured" entry, or a `-` inside the row's tag;
 - in a results file named with `--complete <file>`: a row of the doc with no line, or a cell left empty inside the row's tag. Every other results file is checked for form only, so a committed file stays frozen as the doc grows past it. In CI, `gate` passes `--complete` for each results file the PR adds or changes (it already has the PR's file list), so the release PR's file must be complete against the doc it ships with; locally, run `lint --complete tests/qa/results/vX.Y.Z.md` before opening the release PR.
 
 ### `lint --write`
@@ -228,6 +234,6 @@ The SDL3 port follows (merge spec PR #42, write its plan). Its build PR adds the
 
 ## Out of scope
 
-- Packaging an `.rpm` (item 25's open question). Pre-flight builds from source on the Fedoras until that is decided.
+- Packaging an `.rpm` (item 25's open question), and the CI job that uploads the Fedora build the lane installs meanwhile: that job is added under item 25, when the lane first needs it.
 - qa-harness's lane itself (its item 75), its JSON record and its renderer. This spec fixes only the interface: row ids, tags, the register's halves and the results cell grammar.
 - Back-filling results for v0.3.x and v0.4.x.
