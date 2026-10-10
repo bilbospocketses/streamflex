@@ -160,6 +160,8 @@ A PR that changes a watched path either changes `tests/qa/smoke-test.md` or carr
 
 A marker with an empty reason does not count. `gate` then runs the lint's completeness check on every `tests/qa/results/*.md` the PR adds or changes. The PR's file list (including the pre-rename path of a renamed file) and its **current** body are read through `gh api`, so editing the body and re-running the check sees the edit. The reason is printed as data, never as a format string.
 
+`gate` also compares the PR's doc with the base branch's, read through `gh api` at the PR's base commit: an id the base doc holds as a row must still be a row or be on the retired list, so a deleted row's id can never come back for another claim, even before a results file names it. A base with no doc is not checked, and a failed read fails closed.
+
 **Watched paths:**
 
 - `src/`, except `src/test_hooks.c` and `src/test_hooks.h`;
