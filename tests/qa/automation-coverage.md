@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 408 |
-| Row halves | 623 |
-| Verdicts per release (row x desktop) | 1886 |
-| `streamflex-ctest` halves | 2 (10 verdicts) |
-| `streamflex-headless` halves | 230 (920 verdicts) |
+| Rows | 414 |
+| Row halves | 634 |
+| Verdicts per release (row x desktop) | 1916 |
+| `streamflex-ctest` halves | 0 (0 verdicts) |
+| `streamflex-headless` halves | 235 (940 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 391 (956 verdicts) |
-| **Automated today** | 232 of 623 halves; 930 of 1886 verdicts (49 %) |
+| `manual` halves | 399 (976 verdicts) |
+| **Automated today** | 235 of 634 halves; 940 of 1916 verdicts (49 %) |
 
 <!-- summary:end -->
 
@@ -372,6 +372,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 7.40 | `[Win]` | manual | qa-harness item 75, planned |
 | 7.41 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-plug` |
 | 7.41 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.42 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-longrow` |
+| 7.42 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.1 | `[All]` | manual | qa-harness item 75, planned |
 | 8.2 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-loading` |
 | 8.2 | `[Win]` | manual | qa-harness item 75, planned |
@@ -418,7 +420,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 8.28 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.29 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
 | 8.29 | `[Win]` | manual | qa-harness item 75, planned |
-| 8.30 | `[All]` | streamflex-ctest | `test_colorpick.c` `test_hex` |
+| 8.30 | `[All]` | manual | qa-harness item 75, planned |
 | 8.31 | `[All]` | manual | qa-harness item 75, planned |
 | 8.32 | `[All]` | manual | qa-harness item 75, planned |
 | 8.33 | `[All]` | manual | qa-harness item 75, planned |
@@ -501,6 +503,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 8.73 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.74 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-slide` |
 | 8.74 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.75 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-fade` |
+| 8.75 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.1 | `[All]` | manual | qa-harness item 75, planned |
 | 9.2 | `[All]` | manual | qa-harness item 75, planned |
 | 9.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -516,7 +520,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.8 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.9 | `[All]` | manual | qa-harness item 75, planned |
 | 9.10 | `[All]` | manual | qa-harness item 75, planned |
-| 9.11 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.11 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind`, with `62-settings-bindings.sh` run `f62-confirm` |
 | 9.11 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.12 | `[All]` | manual | qa-harness item 75, planned |
 | 9.13 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-pad` |
@@ -528,7 +532,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.17 | `[All]` | manual | qa-harness item 75, planned |
 | 9.18 | `[All]` | manual | qa-harness item 75, planned |
 | 9.19 | `[All]` | manual | qa-harness item 75, planned |
-| 9.20 | `[All]` | streamflex-ctest | `test_bindings.c` `test_floor` |
+| 9.20 | `[All]` | manual | qa-harness item 75, planned |
 | 9.21 | `[All]` | manual | qa-harness item 75, planned |
 | 9.22 | `[All]` | manual | qa-harness item 75, planned |
 | 9.23 | `[All]` | manual | qa-harness item 75, planned |
@@ -609,8 +613,15 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.62 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.63 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-broken` |
 | 9.63 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.64 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-longrow` |
-| 9.64 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.64 | `[All]` | manual | qa-harness item 75, planned |
+| 9.65 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-note` |
+| 9.65 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.66 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-note` |
+| 9.66 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.67 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-skipnote` |
+| 9.67 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.68 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-mixnote` |
+| 9.68 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
