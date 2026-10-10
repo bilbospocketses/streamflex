@@ -39,7 +39,7 @@ die() { echo "ubuntu-guest: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "run this as root"
 [ -n "$QA_HOME" ] || die "no user $QA_USER"
 as_qa() { runuser -u "$QA_USER" -- "$@"; }
-# chown to the user and their group, spelled out: "user:" alone is not honoured by every coreutils
+# chown to the user and their group, spelled out: "user:" alone is not honored by every coreutils
 give() { chown "$QA_USER:$QA_GROUP" "$@"; }
 
 facts() {

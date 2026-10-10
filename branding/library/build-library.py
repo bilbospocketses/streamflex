@@ -106,17 +106,17 @@ def linear_to_hex(rgb):
     return "#" + "".join(f"{round(encode(x) * 255):02X}" for x in rgb)
 
 
-def hex_to_linear(hex_colour):
-    values = [int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+def hex_to_linear(hex_color):
+    values = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
     return [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in values]
 
 
-def contrast_with_white(hex_colour):
-    luminance = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), hex_to_linear(hex_colour)))
+def contrast_with_white(hex_color):
+    luminance = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), hex_to_linear(hex_color)))
     return 1.05 / (luminance + 0.05)
 
 
-def plate_colour(group, slot):
+def plate_color(group, slot):
     if group == "media":
         h = 25 + slot * 360 / 13
         return linear_to_hex(lch_to_linear(LIGHTNESS, math.floor(max_chroma(LIGHTNESS, h) * VIVID), h))
@@ -135,14 +135,14 @@ def glyph_paths(glyph):
     return paths
 
 
-def generic_svg(colour, paths, trim):
+def generic_svg(color, paths, trim):
     scale = CANVAS * GLYPH_BOX / 960 * trim
     x = (CANVAS - 960 * scale) / 2
     y = x + 960 * scale                  # the glyph's y runs from -960 to 0
     body = "".join(f'<path d="{d}" fill="#FFFFFF"/>' for d in paths)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS}" height="{CANVAS}" '
             f'viewBox="0 0 {CANVAS} {CANVAS}">\n'
-            f'<rect width="{CANVAS}" height="{CANVAS}" rx="{RADIUS:g}" ry="{RADIUS:g}" fill="{colour}"/>\n'
+            f'<rect width="{CANVAS}" height="{CANVAS}" rx="{RADIUS:g}" ry="{RADIUS:g}" fill="{color}"/>\n'
             f'<g transform="translate({x:.3f} {y:.3f}) scale({scale:.6f})">{body}</g>\n'
             f'</svg>\n')
 
@@ -151,10 +151,10 @@ NOTICE_HEAD = """# Brand icons
 
 Every icon in this folder is the trademark and artwork of the company named beside it. StreamFlex includes
 them only to identify each service on its launcher button. They are not covered by StreamFlex's GPL-3.0
-licence.
+license.
 
 Near-black pixels in them (#000000 to #020202) are lifted to #030303, so no opaque pixel is within one step
-of the colour key of Windows' Transparent mode (#010101), and scaling these icons (checked at 128, 256 and
+of the color key of Windows' Transparent mode (#010101), and scaling these icons (checked at 128, 256 and
 512 px) blends no opaque pixels onto it.
 
 If you own one of these marks and want it removed, open an issue at
@@ -196,10 +196,10 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         if not libtools.NAME_RE.match(name) or name in names:
             errors.append(f"generic '{name}': invalid or repeated name")
         names.add(name)
-        colour = plate_colour(group, slot)
-        if contrast_with_white(colour) < MIN_CONTRAST:
-            errors.append(f"generic '{name}': plate {colour} gives white only {contrast_with_white(colour):.2f}:1")
-        outputs[f"generic/{name}.svg"] = generic_svg(colour, glyph_paths(glyph), trim)
+        color = plate_color(group, slot)
+        if contrast_with_white(color) < MIN_CONTRAST:
+            errors.append(f"generic '{name}': plate {color} gives white only {contrast_with_white(color):.2f}:1")
+        outputs[f"generic/{name}.svg"] = generic_svg(color, glyph_paths(glyph), trim)
         manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"]
 
     rows = []

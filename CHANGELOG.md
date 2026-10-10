@@ -9,17 +9,76 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 ## [Unreleased]
 
 ### Changed
+- The configuration guide's Exit Hotkey section says what happens when another program holds the key: Windows refuses it, and StreamFlex keeps trying until the key is free.
+- A CI run on master or on a release tag no longer runs the sanitized unit tests and the headless shards again when the PR it came from already passed them on the same files, so cutting a release takes about 40 minutes instead of about 75.
+
+## [0.4.1] - 2026-10-10
+
+On Windows, an exit hotkey that another program held when StreamFlex started now starts working once that program lets go of the key, with no restart. Checked by hand on Windows 11. CI now checks for American spelling and pulls its images through mirror.gcr.io, and the headless tests no longer fail at random on a slow runner.
+
+### Changed
+- CI checks that added lines and commit messages use American spelling.
+- CI pulls the test images' bases, and the Linux, Raspberry Pi and Arch Linux build containers, through mirror.gcr.io.
+
+### Fixed
+- The headless harness waits for the launcher to draw a frame after each key it presses. On a slow CI runner, several keys could be handled with no frame between them, so a check whose line only a drawn frame logs failed at random (seen in `63-settings-mappings.sh`).
+- On Windows, an exit hotkey that Windows refused because another program held its key is tried again: every 5 seconds, when StreamFlex comes back to the front, and when settings close. Once the key is free it is registered, and the log says so once (`Registered the exit hotkey with Windows: the key is free now`), so the hotkey works without a restart. It had stayed dead until StreamFlex restarted or the bindings changed.
+
+## [0.4.0] - 2026-10-09
+
+Every setting is now on the settings screen, with color, font and command pickers, key and gamepad bindings, and an offer to restart when a change needs one. Checked by hand on Windows 11 and Ubuntu 26.04. A config written for 0.3.x reads and saves as before; on Linux, StreamFlex now needs SDL2 2.0.18 or later.
+
+### Added
+- **Every setting on the settings screen.** Nine pages mirror `config.ini`: General, Background, Menus, Titles, Highlight, Scroll indicators, Clock, Screensaver and Controls. Every change shows at once, and Back saves only what changed. A row that depends on a switch that is off is grayed, and says why.
+- **A color picker:** 24 named swatches, a hex editor for any other color, and a warning when a title or clock color stands out too little from the background.
+- **A font picker:** the installed fonts by family, each drawn in its own face. A face inside a font collection is written as the new `FontFace` key.
+- **A command picker** for the startup and quit commands and for bindings: the special commands, every submenu, and every command the menus already run.
+- **Key and gamepad bindings:** add, change and remove hotkeys and gamepad controls from the remote. Capture a key or button, and keep it. The arrows, OK and Back always keep their meaning. Taking Up, Down or the Menu key over must be confirmed within 10 seconds, or it goes back. While a change waits for that, no binding's page opens.
+- **Restart now?** After a save that wrote a setting that applies at next start (the gamepad's mappings file), settings offer to restart StreamFlex: Yes, under the cursor, or No (Back too). A restart runs no `QuitCmd`, and the restarted copy no `StartupCmd`. The gamepad's mappings file is chosen in the folder browser, which lists every file for it.
+- A gamepad capture needs a pad to capture from: with the gamepad off, or on with no pad connected, *Key* says why (*Turn the gamepad on to capture a button*, *No gamepad is connected*) once for each press, instead of waiting 5 seconds for a press that cannot come.
+- A held D-pad or stick keeps repeating on *FPS limit* or *VSync* when a step changes the frame timing under it, at its usual pace.
+- On Windows, the copy a restart starts comes to the front with the keyboard: the copy before it hands it the foreground. Its command line is the original one with `--restarted` after one space.
+- The font picker starts on the bundled font, with no *Custom* row, when the config names it by a relative path, as the Windows config does (`.\assets\fonts\...`). OK on that row changes nothing, so the file keeps its relative path. When the configured font file is gone, the picker starts on the bundled font the titles fell back to, and OK there writes that font, so the dead path leaves the config.
+- The font picker names a family whose face has no glyph for U+2019 or U+2013 (a symbol font such as Linux's D050000L, or a face with no Latin punctuation) in the settings' font, not in its own face. Chosen, it still sets the titles' face.
+- Choosing a family in the font picker writes its regular face when that face is named *Book*, *Roman* or *Normal* (DejaVu's and URW's fonts on Linux), not its bold or oblique one; with no regular face, its upright, normal-weight one.
+- On Linux, a restarted StreamFlex keeps its process name, `streamflex`, so `pgrep`, `pkill` and `ps` find it: starting again through `/proc/self/exe` had named it `exe`.
+- The hex editor's, the first page's and the folder browser's key hints fit the settings column at 1280 x 720 and 1280 x 800: *Arrows edit the digits · OK keeps · Back returns*, *Left and right change · OK opens · Back saves*, and *Left and right page · OK chooses · Back goes up*.
+- A row's value may use the room its label leaves, so a binding's command reads in full beside a short key name (*F9*, *Close the app on show*).
+- The debug log's list of hotkeys (`-d`) includes the Windows exit hotkey (marked as not registered, with Windows' reason, when Windows refuses it), and any later `:exit` binding marked as not used (only the first is the exit hotkey), and the frame timing line says when VSync is off with no FPS limit set, so frames keep the display's rate.
+- The debug log (`-d`) says when a binding's line was changed or removed by hand while settings were open, and adds, for a change written as a new line, that the first line on a key or button is the one that runs.
+- Headless tests for every page, every picker, the bindings (check 62), the mappings file (63) and the restart (64). The harness sends function keys through `tests/headless/key.py`, since Fedora's keymap makes `xdotool` hold Alt down for them. `tests/headless/run-shards.ps1` runs the four passes in shards on 8 containers, and `merge.py` adds each pass's shards up into one result.
+- CI also runs the unit tests built with AddressSanitizer and UBSan, in the Debian headless image, as part of the required `build-and-test` gate.
+
+### Changed
+- **The Linux SDL2 minimum is now 2.0.18,** for switching VSync without a restart.
+- **The built-in highlight fill is one step less opaque** (alpha `0x3F`, not `0x40`), which is what `FillOpacity=25%` has always given.
+- **Invalid config values are logged and ignored,** as `Invalid <key> value '<value>' in [<section>], ignoring it`, and the default is kept. `IconSpacing=40px` is no longer read as 40.
+- A percentage setting may have up to two decimals (`12.5%`).
+- **American spelling throughout:** the settings screen, its notes and the log say *Color*, *Gray*, *Vertical center*, *grayed* and *canceled*, and so do the docs, the code and its file names (`colorpick.c`). The config's keys and values were American already (`Color`, `VCenter`, `Mode=Color`), so a config file reads and saves exactly as before.
+- CI runs each headless pass in two shards, one job each, merged per pass by `merge.py`.
 - The configuration guide's Transparent section says that icons are kept clear of the chroma key color, and that text and configured colors are not, so those are what the key must avoid.
 - The research for a later sub-project, a 10-foot overlay for the DRM streaming sites in a real browser, is in `design/research/overlay/`.
+
+### Fixed
+- **`FPSLimit=10` works.** The documented minimum was refused, and anything up to 10 left VSync on.
+- **A negative `[Clock] FontSize` is refused with a log line.** It used to wrap to a huge size.
+- **`:exit` outside a Windows hotkey says why it does nothing,** where it used to do nothing silently.
+- **Gamepads plugged in after another was removed are tracked correctly,** and the clock's background render is handed over safely.
+- **A renderer that refuses VSync no longer runs the main loop uncapped,** and an `FPSLimit` is honored even when the renderer will not turn VSync off: StreamFlex paces each frame itself, and logs that it does.
+- **A clock whose background thread cannot start renders in place** instead of freezing.
+- **After a launched application exits, each gamepad is reopened at its current device index.** It used to be reopened at a stale one, and could get another pad.
+- Repeating `DefaultMenu`, `StartupCmd`, `QuitCmd`, `Font` or `ControllerMappingsFile` in the config no longer leaks the earlier value.
+- A BSD build compiles: the call that keeps a restarted StreamFlex's process name (`prctl`) and its header are Linux-only.
+- The docs: the gamepad is on by default (the README and the docs home page said it was off), `PauseSlideshow` follows the background's `Mode` (not `BackgroundMode`), and `SlideshowTransitionTime`'s built-in default is 1.5 seconds, at most 3. With more than 62 menus, the Menus page lists 61 and a note.
 
 ## [0.3.1] - 2026-09-29
 
 Fixes for what the hands-on check of 0.3.0 found on Windows 11 and Ubuntu 26.04: holes in icons in Transparent mode on Windows, a relative config path in settings' messages, and false errors while choosing a background. A config written for 0.3.0 works unchanged.
 
 ### Fixed
-- **Transparent mode on Windows no longer punches holes in icons.** Windows shows through every pixel of the window that is exactly the chroma key colour (`#010101` unless `ChromaKeyColor` says otherwise), so icon art containing that colour turned partly see-through, and so did dark pixels that scaling blended onto it; the built-in Plex icon had a diagonal line and specks of it. Every icon, PNG or SVG, now has its opaque pixels within one step of the key lifted two steps off it as it loads (near-black becomes `#030303`), whatever the background mode, so no opaque pixel of an icon is within one step of the key, and dark art that was near it can no longer be averaged onto it when the icon is scaled. The built-in Plex, Hulu, Spotify, Twitch and Amazon Music icons are lifted the same way (none of them blends onto the key when scaled), and the icon library's check refuses brand art that is not.
+- **Transparent mode on Windows no longer punches holes in icons.** Windows shows through every pixel of the window that is exactly the chroma key color (`#010101` unless `ChromaKeyColor` says otherwise), so icon art containing that color turned partly see-through, and so did dark pixels that scaling blended onto it; the built-in Plex icon had a diagonal line and specks of it. Every icon, PNG or SVG, now has its opaque pixels within one step of the key lifted two steps off it as it loads (near-black becomes `#030303`), whatever the background mode, so no opaque pixel of an icon is within one step of the key, and dark art that was near it can no longer be averaged onto it when the icon is scaled. The built-in Plex, Hulu, Spotify, Twitch and Amazon Music icons are lifted the same way (none of them blends onto the key when scaled), and the icon library's check refuses brand art that is not.
 - Settings and their messages name the config file by its full path. Started from its own folder, StreamFlex showed `Couldn't save to .\config.ini: ...` on screen and logged `.\config.ini`; it now says `C:\StreamFlex\config.ini`. When the full path differs from the path the file was found by (`.\config.ini`, or on Linux a link given with `-c`), the debug log's `Config file found:` line gives both: `.\config.ini (C:\StreamFlex\config.ini)`.
-- Choosing *Image* or *Slideshow* in settings before picking an image or folder no longer logs errors blaming the config file (on Linux they also reached the terminal). The preview shows the colour until one is chosen, and the debug log says so. A config that sets such a mode without an image or folder still reports it at startup.
+- Choosing *Image* or *Slideshow* in settings before picking an image or folder no longer logs errors blaming the config file (on Linux they also reached the terminal). The preview shows the color until one is chosen, and the debug log says so. A config that sets such a mode without an image or folder still reports it at startup.
 - The debug log (`-d`) names every folder the settings' folder browser moves into, not only the one it opens in.
 - The configuration guide and the hands-on checklists name the Menu key by its keycodes: SDL logs `#40000065` as `Application` or `Menu` depending on its version.
 
@@ -49,7 +108,7 @@ The second part of the overhaul: a settings screen, opened with the remote's Men
 - The default config's `OversizeMode` is `Truncate`, so every title in a menu is the same size.
 - **The Windows zip no longer ships `vcruntime140.dll`, or any other DLL.** StreamFlex is now built with the static C runtime, like the libraries it links, so it needs no Visual C++ runtime DLL and imports only Windows's own. Before, the link mixed three C runtimes (warning LNK4098).
 - CI runs on `ubuntu-24.04` instead of `ubuntu-latest`, which GitHub moves to Ubuntu 26 from October 19, 2026. Every job now names its runner image (Windows was already `windows-2022` and Raspberry Pi `ubuntu-24.04-arm`), so a new image arrives in its own deliberate change rather than under a build that had not changed.
-- **SVG icons draw more of what they ask for.** The SVG code StreamFlex builds in (nanosvg) is updated to its latest version: shapes styled by class from a `<style>` block get their colours, `paint-order` is followed, the last dash of a dashed outline gets its proper corners, and neither a malformed `rgb()` colour nor a gradient whose numbers work out to not-a-number reads past the end of its data any more.
+- **SVG icons draw more of what they ask for.** The SVG code StreamFlex builds in (nanosvg) is updated to its latest version: shapes styled by class from a `<style>` block get their colors, `paint-order` is followed, the last dash of a dashed outline gets its proper corners, and neither a malformed `rgb()` color nor a gradient whose numbers work out to not-a-number reads past the end of its data any more.
 
 ### Fixed
 - The docs caught up with the icon library and the font fix. The configuration guide lists SVG among the supported image formats, says a relative `Font` path is also looked for next to the executable and that library icons don't depend on the working directory, and names the entry's middle field `icon` throughout. The README, the docs home page and the default config's comments point to the library; `CONTRIBUTING.md` counts the Icon library check in the required gate and points to the library's own tests; `SECURITY.md` includes the library manifest in scope. The setup guide's contents also named a section "Maintaining Controls" instead of "Maintaining Contrast".
@@ -68,9 +127,9 @@ The second part of the overhaul: a settings screen, opened with the remote's Men
 - **File paths with non-ASCII characters work on Windows**, such as a config, log, icon library or slideshow folder under a user folder named `José`, and a command or shortcut whose path has such a character launches.
 - **A menu section that appears twice keeps all its entries.** Its later entries and grid settings went to the menu read in between.
 - **An empty menu entry (`Entry2=`) after another entry no longer crashes StreamFlex at startup.** It is skipped.
-- `Mode=Slideshow` without a `SlideshowDirectory` handed the file system a null path at startup, which could crash StreamFlex; it now falls back to the colour background. A slideshow folder with a single image no longer rewrites the `Image` setting.
+- `Mode=Slideshow` without a `SlideshowDirectory` handed the file system a null path at startup, which could crash StreamFlex; it now falls back to the color background. A slideshow folder with a single image no longer rewrites the `Image` setting.
 - **A slideshow folder with no images, or only one, no longer corrupts memory at startup.** The fade speed was written into the slideshow after it had been freed.
-- **A slideshow folder whose files all fail to load no longer hangs StreamFlex at startup.** It falls back to the colour background.
+- **A slideshow folder whose files all fail to load no longer hangs StreamFlex at startup.** It falls back to the color background.
 - **A running slideshow that runs out of images falls back safely.** With one image left, its loader thread made a texture off the main thread; with none, it freed the slideshow and then wrote into it. The fall-back now happens on the main thread.
 - **A `QuitCmd` is no longer freed twice when StreamFlex quits**, which could crash it on the way out.
 - Invalid `Mode`, `Color`, `SlideshowImageDuration` and `SlideshowTransitionTime` values in `[Background]`, and invalid `FontSize` and `Padding` values, are logged; they were ignored without a word. The background `Color` refuses a value with a stray character (`#12345G`) instead of half-reading it.
@@ -120,8 +179,8 @@ The first part of the overhaul. Menus can be grids of several rows, buttons grow
 On Linux the app icon now comes in the small sizes that menus and panels use. Everything else here is about the icon's source and tooling; the launcher behaves exactly as in 0.1.2.
 
 ### Added
-- The app icon's source is in the repository under `branding/icon/`. `build-svg.py` holds its geometry and colours and writes the two vector masters, and `build-icon.ps1` renders, packs, installs and verifies all four icon files. Run on the committed source, it reproduces the 0.1.2 icon byte for byte, so a later icon change can be regenerated rather than redrawn.
-- Three icon tools sit beside it. `review-sheet.py` lays every icon size out on light and dark backgrounds, with pixel zooms of the small sizes, for judging a design by eye. `render-check.py` renders the icon in Chromium and Inkscape and measures the difference, a portability check for design changes. `palette.py` re-derives the icon's colours from the logo banner.
+- The app icon's source is in the repository under `branding/icon/`. `build-svg.py` holds its geometry and colors and writes the two vector masters, and `build-icon.ps1` renders, packs, installs and verifies all four icon files. Run on the committed source, it reproduces the 0.1.2 icon byte for byte, so a later icon change can be regenerated rather than redrawn.
+- Three icon tools sit beside it. `review-sheet.py` lays every icon size out on light and dark backgrounds, with pixel zooms of the small sizes, for judging a design by eye. `render-check.py` renders the icon in Chromium and Inkscape and measures the difference, a portability check for design changes. `palette.py` re-derives the icon's colors from the logo banner.
 - On Windows, `build-icon.ps1` also checks that the icon reads correctly through WIC (Explorer's decoder) and GDI+, and that `rc.exe` compiles it.
 - The full-resolution logo original (2816×1536) is in the repository as `branding/logo/streamflex-logo.jpg`. The README and docs banner is a downscale of it.
 - The Windows build instructions in the compilation guide now reproduce the CI build: Visual Studio 2022, vcpkg pinned to the version CI uses, and CI's generator and library settings. The `build` directory is ignored by git.
@@ -160,18 +219,18 @@ First release under the name StreamFlex. The launcher behaves exactly as in 0.1.
 
 ## [0.1.0] - 2026-09-26
 
-First release of the independent project. Versioning restarts at 0.1.0; the project stays below 1.0 until its major overhaul is in place. There are no changes to the launcher's behaviour or configuration compared with the original v2.2 — this release is about licensing, packaging, and the build.
+First release of the independent project. Versioning restarts at 0.1.0; the project stays below 1.0 until its major overhaul is in place. There are no changes to the launcher's behavior or configuration compared with the original v2.2 — this release is about licensing, packaging, and the build.
 
 ### Added
 - Arch Linux package (`.pkg.tar.zst`), built with makepkg from the existing PKGBUILD template.
 - Every release package now ships with Sigstore build provenance attestations, so a download can be verified with `gh attestation verify <file> -R bilbospocketses/flex-launcher`.
-- The packages include the licence text: `LICENSE.txt` in the Windows zip, and `/usr/share/licenses/flex-launcher/LICENSE` in the Linux packages.
+- The packages include the license text: `LICENSE.txt` in the Windows zip, and `/usr/share/licenses/flex-launcher/LICENSE` in the Linux packages.
 - Documentation site at https://bilbospocketses.github.io/flex-launcher/, built from `docs/` and deployed by the `pages.yml` workflow.
 - `SECURITY.md` with a private vulnerability reporting flow, `CONTRIBUTING.md` including a release procedure, and `.github/CODEOWNERS`.
 - CI: a `build-and-test` gate (the required status check for `master`) that passes only when the Windows, Debian, Raspberry Pi, and Arch builds all succeed; a single `Release` job that dry-runs on every pull request; OpenSSF Scorecard; CodeQL; Dependabot for GitHub Actions with auto-merge.
 
 ### Changed
-- **Licence: GNU General Public License v3.0**, replacing the Unlicense. The original project's code was public domain, which permits relicensing; the original author is credited in the README.
+- **License: GNU General Public License v3.0**, replacing the Unlicense. The original project's code was public domain, which permits relicensing; the original author is credited in the README.
 - **Linux packages now need Debian 12 / Ubuntu 22.04 / Raspberry Pi OS 12 (Bookworm) or newer.** They are built on Debian 12 instead of Debian 11, which is past end of life.
 - The Debian packages' dependencies, including the minimum glibc, are now computed from the built binary by `dpkg-shlibdeps`. Previously they declared `libc6 (>= 2.31)` while the binary needed glibc 2.34, so the package would install on systems where it could not run.
 - The Debian packages carry epoch 1 (`1:0.1.0`), so apt treats them as newer than the original project's 2.2 packages despite the lower version number.

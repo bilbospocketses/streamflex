@@ -1,5 +1,5 @@
 """Review sheet: every frame composited at native size on white, Explorer #f3f3f3 and a dark taskbar tone,
-plus a 4-6x nearest-neighbour zoom of the small frames so the pixel grid can be judged. This is how the
+plus a 4-6x nearest-neighbor zoom of the small frames so the pixel grid can be judged. This is how the
 design was reviewed. Run after build-icon.ps1, which writes the frames to build/frames/. Writes
 build/review_native.png and build/review_zoom.png. Needs Python with numpy + opencv-python.
 """

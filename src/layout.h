@@ -6,8 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define LAYOUT_MIN_BUTTON 32          // Same as MIN_ICON_SIZE in launcher.h
-#define LAYOUT_MAX_BUTTON 1024        // Same as MAX_ICON_SIZE in launcher.h
+#define LAYOUT_MIN_BUTTON 32          // Smallest button, and smallest IconSize
+#define LAYOUT_MAX_BUTTON 1024        // Largest button, and largest IconSize
 #define LAYOUT_MAX_TITLE_POINTS 512   // Largest fixed FontSize
 #define LAYOUT_MAX_TITLE_PERCENT 100  // Largest FontSize percentage
 #define LAYOUT_MAX_PADDING_PERCENT 50 // Largest title Padding percentage
@@ -50,7 +50,7 @@ typedef struct {
     int y;
     int w;
     int h;
-    int vcenter;     // Vertical centre of the button block, in px from the top of the screen
+    int vcenter;     // Vertical center of the button block, in px from the top of the screen
 } LayoutArea;
 
 // The computed layout of one menu
@@ -58,8 +58,8 @@ typedef struct {
     int rows;          // After any reduction to fit the screen
     int columns;
     int button;        // Square button size in px
-    int x_advance;     // Distance between neighbouring buttons' x
-    int y_advance;     // Distance between neighbouring rows' y
+    int x_advance;     // Distance between neighboring buttons' x
+    int y_advance;     // Distance between neighboring rows' y
     int x_origin;      // Top-left of the first visible slot
     int y_origin;
     int hpad;          // Highlight padding after capping

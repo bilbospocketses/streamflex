@@ -1,6 +1,6 @@
 # Vendored code
 
-Third-party sources StreamFlex builds in, as they came from upstream apart from the local changes listed below. The policy, from `CONTRIBUTING.md`: take the latest upstream and read what changed; patch a CodeQL alert only where the patch changes no behaviour; mark every patch with a `// streamflex:` comment and list it here; never patch a compiler warning, but silence the file where it is included (`#pragma warning(push, 0)` in `src/image.c` and `tests/test_library_svg.c`).
+Third-party sources StreamFlex builds in, as they came from upstream apart from the local changes listed below. The policy, from `CONTRIBUTING.md`: take the latest upstream and read what changed; patch a CodeQL alert only where the patch changes no behavior; mark every patch with a `// streamflex:` comment and list it here; never patch a compiler warning, but silence the file where it is included (`#pragma warning(push, 0)` in `src/image.c` and `tests/test_library_svg.c`).
 
 ## nanosvg
 
@@ -8,7 +8,7 @@ SVG parser (`nanosvg.h`) and rasterizer (`nanosvgrast.h`), used for SVG icons, t
 
 - **Upstream:** https://github.com/memononen/nanosvg
 - **Commit:** `239e102ec2c691f2902e20ace2ed36ee4a35cfe6` (2026-07-09, "Prevent zero size malloc when parsing file (#291)")
-- **Licence:** zlib, in the header of each file. The licence asks for altered versions to be plainly marked; the `// streamflex:` comments and this file do that.
+- **License:** zlib, in the header of each file. The license asks for altered versions to be plainly marked; the `// streamflex:` comments and this file do that.
 
 | File | Upstream path | Upstream blob | Ours |
 |---|---|---|---|

@@ -7,7 +7,7 @@ PURPOSE
     controls (ButtonStart opens settings, ButtonA selects, ButtonB goes back, the
     D-pad moves). The device copies a wired Xbox 360 pad as the kernel's xpad driver
     presents it (USB, 045e:028e, the same button, stick, trigger and hat codes), so
-    SDL's game-controller layer recognises it: through SDL's mapping database entry
+    SDL's game-controller layer recognizes it: through SDL's mapping database entry
     for that pad, and through SDL's own Linux mapping for a pad with BTN_A and friends.
 
 USAGE (as root)

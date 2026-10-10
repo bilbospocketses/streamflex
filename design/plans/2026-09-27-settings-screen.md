@@ -34,7 +34,7 @@ Each of these was a wrong or loose assumption about the code. The plan follows t
    - So the parser accepts both names, and the sample config ships `Truncate`.
    - This changes the sample config. The user approved it on 2026-09-28.
 5. **The exact-integer title fit is a binary search** over the button size, not a closed form followed by pixel steps. It gives the same largest fitting button, is simpler, and is exact by construction.
-6. **A value on entry stays in its row's steps for the whole visit.** The spec says a custom colour or fixed title size appears "until the user steps off it". Keeping it reachable means the user can always step back to it without Discard, and the rule is the same for every type.
+6. **A value on entry stays in its row's steps for the whole visit.** The spec says a custom color or fixed title size appears "until the user steps off it". Keeping it reachable means the user can always step back to it without Discard, and the rule is the same for every type.
 7. **The title font cache is bounded (16 sizes) and evicts the oldest,** instead of pruning when settings close. Memory stays bounded either way, and nothing depends on which menus happen to be loaded.
 8. **`init_slideshow()` overwrote `config.background_image`** when a slideshow folder held one image. With the new `background_shown` (what is on screen, as opposed to what the config chose), no fallback rewrites a setting any more. The settings screen needs that: it must show the user's choice, not the fallback.
 9. **`make_window_transparent()` had no prototype.** `platform.h` declares `set_window_transparent()`, which does not exist, so `launcher.c` has been calling an undeclared function. `platform.h` now declares `make_window_transparent()` and the new `make_window_opaque()`.
@@ -104,7 +104,7 @@ Three smaller faults in the same functions are fixed with them: `start_process()
   - *Largest button* steps: *Fill*, then 64, 96, 128, 160, 192, 256, 320, 384, 512, 768 and 1024 px.
   - *Change every* steps: 5, 10, 15 and 30 s, then 1, 2, 5, 10, 30 and 60 min.
   - *Fade* steps: 0 to 3 s in 0.5 s steps.
-  - **Colour presets:** Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A`, Burgundy `#4A1520`.
+  - **Color presets:** Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A`, Burgundy `#4A1520`.
   - The settings column is 20% to 32% of the screen width.
   - The Windows replace retries for about a second: 10 attempts, 100 ms apart.
 - **The menu key** is `SDLK_APPLICATION`: `xdotool key Menu` sends it, and so do Windows' `VK_APPS` and most HTPC remotes' Menu button.
@@ -134,7 +134,7 @@ These five input classes are the most likely to bite someone using this, and not
 | `tests/headless/run.sh` | new | Builds with ASan and UBSan, starts Xvfb, provides the run helpers, sources `checks/*.sh`, exits non-zero on any failure |
 | `tests/headless/checks/*.sh` | new | One file per area: grid items (10), refresh rate (20), menu parsing (25), backgrounds (30), titles (40), settings (50, 60) |
 | `tests/headless/fixtures/*.ini` | new | The fixture configs |
-| `tests/headless/make_images.py` | new | Writes small solid-colour PNGs for the background checks |
+| `tests/headless/make_images.py` | new | Writes small solid-color PNGs for the background checks |
 | `.gitattributes` | new | Keeps the harness scripts LF on a Windows checkout |
 | `src/fileio.h`, `src/fileio.c` | new | UTF-8 file access on every platform, the safe replace, folder listing, places; a UTF-16 copy for other Windows calls |
 | `src/inidoc.h`, `src/inidoc.c` | new | `config.ini` as editable lines |
@@ -3020,7 +3020,7 @@ git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: save settings int
 #define LAYOUT_MAX_TITLE_PERCENT 100
 #define LAYOUT_MAX_PADDING_PERCENT 50
 
-// LayoutParams gains, after vpad (existing positional initialisers leave them 0):
+// LayoutParams gains, after vpad (existing positional initializers leave them 0):
     int title_padding;     // A fixed title Padding in px, capped at half the button; 0 without titles
     int title_padding_pct; // Padding as a percentage of the button; 0 = fixed (title_padding)
     int title_size_pct;    // FontSize as a percentage of the button; 0 = fixed (its line height is title_block)
@@ -3542,7 +3542,7 @@ typedef struct {
     SettingsPage target;         // LINK rows
     int menu;                    // LINK rows to a menu's page: its index; -1 for All menus
     SettingsAction action;       // ACTION rows
-    bool enabled;                // False: shown greyed, and the cursor skips it
+    bool enabled;                // False: shown grayed, and the cursor skips it
 } SettingsRow;
 
 typedef enum {
@@ -3752,7 +3752,7 @@ static void test_steps(void)
     CHECK_INT(stepped(SET_ID_LAYOUT_ICON_SIZE, below, &odd, 1, 1).number, 200);
     CHECK_INT(stepped(SET_ID_LAYOUT_ICON_SIZE, odd, &odd, 1, 1).number, 256);
 
-    // Colours: a custom colour from the file first, then the presets in order
+    // Colors: a custom color from the file first, then the presets in order
     SettingValue custom = parsed(SET_ID_BACKGROUND_COLOR, "#123456");
     value = stepped(SET_ID_BACKGROUND_COLOR, custom, &custom, 1, 1);
     CHECK_STR(formatted(SET_ID_BACKGROUND_COLOR, &value), "#000000");
@@ -3806,7 +3806,7 @@ static void test_descriptions(void)
     CHECK_STR(described(SET_ID_MENU_ICON_SIZE, &inherit, &cap), "All menus (256 px)");
     CHECK_STR(described(SET_ID_LAYOUT_ICON_SIZE, &cap, NULL), "256 px");
     value = parsed(SET_ID_BACKGROUND_MODE, "Color");
-    CHECK_STR(described(SET_ID_BACKGROUND_MODE, &value, NULL), "Colour");
+    CHECK_STR(described(SET_ID_BACKGROUND_MODE, &value, NULL), "Color");
     value = parsed(SET_ID_BACKGROUND_COLOR, "#1E1E1E");
     CHECK_STR(described(SET_ID_BACKGROUND_COLOR, &value, NULL), "Charcoal");
     value = parsed(SET_ID_BACKGROUND_COLOR, "#123456");
@@ -3879,7 +3879,7 @@ static void test_top_and_menus(void)
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 5);
     CHECK_STR(rows[0].label, "Background");
-    CHECK_STR(rows[0].value, "Colour");
+    CHECK_STR(rows[0].value, "Color");
     CHECK_STR(rows[1].label, "Menus");
     CHECK_STR(rows[1].value, "2 menus");
     CHECK_STR(rows[2].label, "Titles");
@@ -3890,7 +3890,7 @@ static void test_top_and_menus(void)
     CHECK_INT(settings_cursor(state), 0);
     CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_MOVED);
     CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_MOVED);
-    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is greyed
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);   // Discard is grayed
     CHECK_INT(settings_cursor(state), 2);
     settings_command(state, SETTINGS_UP);
 
@@ -3937,7 +3937,7 @@ static void test_top_and_menus(void)
     CHECK(settings_changed(settings_slot(state, SET_ID_MENU_ROWS, 1)));
     CHECK_INT(settings_command(state, SETTINGS_LEFT).kind, SETTINGS_EVENT_NONE);
 
-    // Back at the top, Discard is offered; it puts every value back and greys out again
+    // Back at the top, Discard is offered; it puts every value back and grays out again
     settings_command(state, SETTINGS_BACK);
     settings_command(state, SETTINGS_BACK);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
@@ -3967,8 +3967,8 @@ static void test_background_page(void)
     CHECK_INT(settings_page(state), SETTINGS_PAGE_BACKGROUND);
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_INT(count, 2);
-    CHECK_STR(rows[0].value, "Colour");
-    CHECK_STR(rows[1].label, "Colour");
+    CHECK_STR(rows[0].value, "Color");
+    CHECK_STR(rows[1].label, "Color");
     CHECK_STR(rows[1].value, "Black");
 
     // Image with none chosen: Back puts the mode back, and says why
@@ -4102,7 +4102,7 @@ Expected: the build fails at the link step: `setting_def`, `setting_parse` and t
 
 // The background modes, in ModeBackground's order (launcher.h): the file's names and the screen's
 static const char *const MODE_NAMES[] = { "Color", "Image", "Slideshow", "Transparent" };
-static const char *const MODE_LABELS[] = { "Colour", "Image", "Slideshow", "Transparent" };
+static const char *const MODE_LABELS[] = { "Color", "Image", "Slideshow", "Transparent" };
 #define MODE_IMAGE 1
 #define MODE_SLIDESHOW 2
 
@@ -4133,7 +4133,7 @@ static const char *const MENU_NOTE = "The lowest step, All menus, follows the sh
 
 static const SettingDef DEFS[SET_ID_COUNT] = {
     { SET_ID_BACKGROUND_MODE, "Mode", "Background", SETTING_BACKGROUND_MODE, NULL, SET_TYPE_CHOICE, 0, 3, false, SET_REFRESH_BACKGROUND },
-    { SET_ID_BACKGROUND_COLOR, "Colour", "Background", SETTING_BACKGROUND_COLOR, NULL, SET_TYPE_COLOR, 0, 0, false, SET_REFRESH_BACKGROUND },
+    { SET_ID_BACKGROUND_COLOR, "Color", "Background", SETTING_BACKGROUND_COLOR, NULL, SET_TYPE_COLOR, 0, 0, false, SET_REFRESH_BACKGROUND },
     { SET_ID_BACKGROUND_IMAGE, "Image", "Background", SETTING_BACKGROUND_IMAGE, NULL, SET_TYPE_PATH, 0, 0, false, SET_REFRESH_BACKGROUND },
     { SET_ID_SLIDESHOW_DIRECTORY, "Folder", "Background", SETTING_SLIDESHOW_DIRECTORY, NULL, SET_TYPE_PATH, 0, 0, false, SET_REFRESH_BACKGROUND },
     { SET_ID_SLIDESHOW_DURATION, "Change every", "Background", SETTING_SLIDESHOW_IMAGE_DURATION, NULL, SET_TYPE_SECONDS, 5, 3600, false, SET_REFRESH_NONE },
@@ -4313,7 +4313,7 @@ typedef struct {
 
 #define MAX_CANDIDATES 48
 
-// A function to find a colour among the presets; -1 when it is not one
+// A function to find a color among the presets; -1 when it is not one
 static int preset_index(SettingColor color)
 {
     for (int i = 0; i < LENGTH(PRESETS); i++) {
@@ -4323,7 +4323,7 @@ static int preset_index(SettingColor color)
     return -1;
 }
 
-// A function to give a step its place: following the default first, then a custom colour or a
+// A function to give a step its place: following the default first, then a custom color or a
 // fixed title size, then the rest in order
 static long sort_key(const SettingDef *def, const Candidate *c)
 {
@@ -4716,7 +4716,7 @@ static SettingsRow note_row(const char *text)
     return row;
 }
 
-// A function to summarise a menu's grid (columns x rows), or say it follows All menus
+// A function to summarize a menu's grid (columns x rows), or say it follows All menus
 static void grid_summary(SettingsState *state, int menu, char *out, size_t size)
 {
     const SettingValue *rows = &settings_slot(state, SET_ID_LAYOUT_ROWS, -1)->value;
@@ -6892,7 +6892,7 @@ void show_home(void);                    // what :home does
 - [ ] **Step 1: Give the harness pictures.** In `tests/headless/Dockerfile`, add `python3` to the `apt-get install` line after `libgl1-mesa-dri`. Create `tests/headless/make_images.py`:
 
 ```python
-"""Write three small solid-colour PNGs for the headless background checks.
+"""Write three small solid-color PNGs for the headless background checks.
 
 Usage: python3 make_images.py <folder>
 """
@@ -6938,7 +6938,7 @@ chown -R tester:tester "$TESTER_HOME"
 ```bash
 # The background's startup paths, which now all go through reload_background(): an image, a
 # missing image, a slideshow, a slideshow folder with one image, one with none, and none at all.
-# The setting is kept as chosen even when the launcher falls back to the colour.
+# The setting is kept as chosen even when the launcher falls back to the color.
 
 run_quick f30-image
 ok=1
@@ -6951,7 +6951,7 @@ ok=1
 [ "$(cat "$out/f30-missing.code")" = 0 ] && grep -q "Couldn't load background image" "$out/f30-missing.log" \
     && grep -A2 'Background ===' "$out/f30-missing.log" | grep -qE 'Mode:\s+Image$' \
     && sanitizer_clean f30-missing && ok=0
-result "a missing image falls back to the colour, and the setting stays Image" $ok
+result "a missing image falls back to the color, and the setting stays Image" $ok
 
 run_quick f30-slideshow
 ok=1
@@ -6970,7 +6970,7 @@ run_quick f30-empty
 ok=1
 [ "$(cat "$out/f30-empty.code")" = 0 ] && grep -q "No images found in slideshow directory" "$out/f30-empty.log" \
     && sanitizer_clean f30-empty && ok=0
-result "an empty slideshow folder falls back to the colour" $ok
+result "an empty slideshow folder falls back to the color" $ok
 
 run_quick f30-nodir
 ok=1
@@ -7033,7 +7033,7 @@ void show_home(void);
 (put `#define SCMD_SETTINGS` with the other special commands, after `SCMD_SLEEP`, rather than at the end). In `src/launcher.c`, after `Menu *current_menu = NULL;`, add:
 
 ```c
-ModeBackground background_shown       = BACKGROUND_COLOR; // What is on screen: the colour when the chosen background failed
+ModeBackground background_shown       = BACKGROUND_COLOR; // What is on screen: the color when the chosen background failed
 ```
 
 In `set_draw_color()`, replace both `config.background_mode` with `background_shown`.
@@ -7058,7 +7058,7 @@ void quit_slideshow()
 Replace `init_slideshow()` with:
 
 ```c
-// A function to scan the slideshow folder. What is shown falls back to the colour, or to a single
+// A function to scan the slideshow folder. What is shown falls back to the color, or to a single
 // image, when the folder is missing or holds fewer than two images; the settings are left alone.
 static void init_slideshow()
 {
@@ -7120,7 +7120,7 @@ void update_slideshow_timing()
 }
 
 // A function to set the background up for config.background_mode: at startup, and whenever the
-// settings screen changes it. What is shown (background_shown) falls back to the colour when an
+// settings screen changes it. What is shown (background_shown) falls back to the color when an
 // image or slideshow cannot be used; the setting itself stays as it was chosen.
 void reload_background()
 {
@@ -7360,7 +7360,7 @@ Append to `tests/headless/checks/30-backgrounds.sh`:
 ```bash
 # The slideshow loader. It runs on its own thread, so when its folder stops giving it two pictures
 # it only reports, and the main thread falls back: to the one picture that still loads, or to the
-# colour. The Mode setting stays Slideshow.
+# color. The Mode setting stays Slideshow.
 
 # A function to run a slideshow fixture that keeps running: wait until its first picture is up,
 # run the rest of the arguments as a command (which may take the pictures away), then give the
@@ -7389,7 +7389,7 @@ ok=1
     && grep -q "Could not load any image from slideshow directory /home/tester/broken" "$out/f30-broken.log" \
     && grep -q "Background set up: Color" "$out/f30-broken.log" \
     && sanitizer_clean f30-broken && ok=0
-result "a slideshow whose files all fail to load falls back to the colour instead of hanging (exit $(cat "$out/f30-broken.code"))" $ok
+result "a slideshow whose files all fail to load falls back to the color instead of hanging (exit $(cat "$out/f30-broken.code"))" $ok
 
 # While running: the only picture that loads is the one on show
 run_slideshow f30-mixed true
@@ -7408,7 +7408,7 @@ ok=1
 [ "$(cat "$out/f30-vanish.code")" = 0 ] \
     && grep -q "Could not load any image from slideshow directory /home/tester/vanish" "$out/f30-vanish.log" \
     && sanitizer_clean f30-vanish && ok=0
-result "a running slideshow whose pictures vanish falls back to the colour (exit $(cat "$out/f30-vanish.code"))" $ok
+result "a running slideshow whose pictures vanish falls back to the color (exit $(cat "$out/f30-vanish.code"))" $ok
 grep -m2 -E 'runtime error|AddressSanitizer' "$out/f30-vanish.err" | sed 's/^/      /'
 ```
 
@@ -7437,7 +7437,7 @@ Entry1=One;apps;:quit
 Expected:
 - `f30-broken` fails with exit 137, after about 35 s: the startup load loops forever, so `timeout`'s TERM at 30 s is only queued as a quit event, and its KILL 5 s later ends it.
 - `f30-vanish` fails with a non-zero exit, and `AddressSanitizer: heap-use-after-free` under it: the loader thread freed the slideshow and then stored its result in it.
-- `f30-mixed` fails on its log line: today's reads "Changing background to single image mode", logged from the loader thread after it made a texture there. The harness cannot see which thread made a texture; this check pins the fall-back's behaviour, and the task's review checks the thread rule by reading.
+- `f30-mixed` fails on its log line: today's reads "Changing background to single image mode", logged from the loader thread after it made a texture there. The harness cannot see which thread made a texture; this check pins the fall-back's behavior, and the task's review checks the thread rule by reading.
 - Every other line still passes.
 
 - [ ] **Step 12: The loader only loads; the main thread falls back.** In `src/launcher.h`, add to `Slideshow`, after `SDL_Texture *transition_texture;`:
@@ -7450,7 +7450,7 @@ In `src/image.c`, replace `load_next_slideshow_background()` whole with:
 
 ```c
 // A function to load the next slideshow image that loads. It also runs on the slideshow thread, so
-// it touches nothing but the slideshow: textures, the draw colour and what is shown belong to the
+// it touches nothing but the slideshow: textures, the draw color and what is shown belong to the
 // main thread. It returns NULL when no image in the folder loads, and sets slideshow->only_one when
 // the only one that does is the image already on show; the main thread falls back from either.
 SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition)
@@ -7493,7 +7493,7 @@ In `src/launcher.c`:
 
   ```c
   // A function to stop a slideshow that can no longer show two images, on the main thread: show the
-  // one image that still loads (surface, the same image as the one on show), or the colour when none
+  // one image that still loads (surface, the same image as the one on show), or the color when none
   // does. The Mode setting stays Slideshow, so the folder is tried again when the background is next
   // set up.
   static void fall_back_from_slideshow(SDL_Surface *surface)
@@ -7604,7 +7604,7 @@ The SDL side of the screen:
 - **Changes** go into the running launcher as they are made.
 - **Closing:** Back at the top saves and closes, Discard undoes, and a failed save shows its rows.
 
-This task covers every page except the folder browser. The Background page's Mode, Colour, Change every and Fade rows all work. OK on its Image and Folder rows does nothing until Task 11 adds the browser.
+This task covers every page except the folder browser. The Background page's Mode, Color, Change every and Fade rows all work. OK on its Image and Folder rows does nothing until Task 11 adds the browser.
 
 **Files:**
 - Create: `src/settings_screen.h`, `src/settings_screen.c`
@@ -7874,7 +7874,7 @@ extern LayoutGeometry layout;
 #define MAX_COLUMN_RATIO 0.32F
 #define TEXT_CACHE_SIZE 96
 #define ALPHA_VALUE 180            // A row's value
-#define ALPHA_DIM 110              // Greyed rows, the page path and the key hint
+#define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
 #define ALPHA_FILL 40              // The highlighted row
 #define ALPHA_OUTLINE 220
 #define ALPHA_DIVIDER 46
@@ -8215,7 +8215,7 @@ static bool open_fonts(void)
 static void measure_layout(void)
 {
     static const char *const labels[] = {
-        "Background", "Menus", "Titles", "Discard changes", "Mode", "Colour", "Image", "Folder",
+        "Background", "Menus", "Titles", "Discard changes", "Mode", "Color", "Image", "Folder",
         "Change every", "Fade", "Rows", "Columns", "Largest button", "Size", "All menus", "Try again",
         "Leave without saving", "Use this folder"
     };
@@ -8750,7 +8750,7 @@ This task finishes the Background page:
 
 **Files:**
 - Modify: `src/settings_screen.c`, `src/launcher.h`, `src/launcher.c`
-- Create: `tests/headless/checks/60-settings-background.sh`; fixtures `f60-colour.ini`, `f60-running.ini`
+- Create: `tests/headless/checks/60-settings-background.sh`; fixtures `f60-color.ini`, `f60-running.ini`
 
 **Interfaces:**
 - Consumes: `browser_*` and `fileio_places()` (Task 8); `inidoc_check()` (Task 3); `settings_choose()` (Task 6); the Task 10 screen.
@@ -8759,37 +8759,37 @@ This task finishes the Background page:
 - [ ] **Step 1: Write the failing headless checks.** Create `tests/headless/checks/60-settings-background.sh`:
 
 ```bash
-# The Background page: a preset colour, an image and a slideshow folder chosen in the folder
+# The Background page: a preset color, an image and a slideshow folder chosen in the folder
 # browser, the incomplete-mode rule, and switching modes while a slideshow is running.
 # writable_config and changed_lines come from 50-settings.sh, which runs first.
 
-# Colour: step from Black to Charcoal
-cfg=$(writable_config f60-colour)
-CFG=$cfg run_keys f60-colour Menu Return Down Right BackSpace BackSpace
+# Color: step from Black to Charcoal
+cfg=$(writable_config f60-color)
+CFG=$cfg run_keys f60-color Menu Return Down Right BackSpace BackSpace
 ok=1
-[ "$(changed_lines "$FX/f60-colour.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
-    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-colour.log" && sanitizer_clean f60-colour && ok=0
-result "settings: a preset colour is saved" $ok
+[ "$(changed_lines "$FX/f60-color.ini" "$cfg")" = 2 ] && grep -qx 'Color=#1E1E1E' "$cfg" \
+    && grep -q 'Settings: \[Background\] Color #000000 -> #1E1E1E' "$out/f60-color.log" && sanitizer_clean f60-color && ok=0
+result "settings: a preset color is saved" $ok
 
 # Image: Mode to Image, open the browser (it starts in Pictures), take the second image
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-image Menu Return Right Down Return Down Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Image' "$cfg" && grep -qx 'Image=/home/tester/Pictures/green.png' "$cfg" \
     && grep -q 'Settings saved 2 change(s)' "$out/f60-image.log" && sanitizer_clean f60-image && ok=0
 result "settings: an image chosen in the folder browser is saved" $ok
-diff "$FX/f60-colour.ini" "$cfg" | sed 's/^/      /'
+diff "$FX/f60-color.ini" "$cfg" | sed 's/^/      /'
 
-# Image with none chosen: leaving the page puts Colour back, so nothing is saved
-cfg=$(writable_config f60-colour)
+# Image with none chosen: leaving the page puts Color back, so nothing is saved
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-incomplete Menu Return Right BackSpace BackSpace
 ok=1
-cmp -s "$FX/f60-colour.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
+cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: \[Background\] Mode Image -> Color' "$out/f60-incomplete.log" \
     && grep -q 'Settings: nothing changed' "$out/f60-incomplete.log" && sanitizer_clean f60-incomplete && ok=0
-result "settings: Image with no image chosen goes back to Colour and saves nothing" $ok
+result "settings: Image with no image chosen goes back to Color and saves nothing" $ok
 
 # Slideshow: Mode to Slideshow, open the browser on the Folder row, use Pictures
-cfg=$(writable_config f60-colour)
+cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-slideshow Menu Return Right Right Down Return Return BackSpace BackSpace
 ok=1
 grep -qx 'Mode=Slideshow' "$cfg" && grep -qx 'SlideshowDirectory=/home/tester/Pictures' "$cfg" \
@@ -8807,7 +8807,7 @@ result "settings: switching modes while a slideshow runs frees it cleanly" $ok
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
 ```
 
-`tests/headless/fixtures/f60-colour.ini`:
+`tests/headless/fixtures/f60-color.ini`:
 
 ```ini
 [General]
@@ -8840,7 +8840,7 @@ Entry1=One;apps;:quit
 - [ ] **Step 2: Run the harness and watch them fail**
 
 Expected:
-- **Fail:** the colour check can already pass (the Colour row works since Task 10), but the image, slideshow and incomplete checks fail. OK on the Image or Folder row does nothing, so no image is chosen.
+- **Fail:** the color check can already pass (the Color row works since Task 10), but the image, slideshow and incomplete checks fail. OK on the Image or Folder row does nothing, so no image is chosen.
 - **Incomplete-mode check:** it fails on its `Mode Image -> Color` line only if the rule misfires; read its log before assuming.
 - **Running-slideshow check:** it should already pass. It pins Task 9's `reload_background()` against a live slideshow thread.
 
@@ -8853,7 +8853,7 @@ SDL_Texture *background_override      = NULL; // The image being browsed in sett
 Before `draw_scene()`, add:
 
 ```c
-// A function to fill the screen with a grey checkerboard. In the settings preview it stands for a
+// A function to fill the screen with a gray checkerboard. In the settings preview it stands for a
 // transparent background: a texture cannot show the desktop through.
 static void draw_checkerboard()
 {
@@ -9232,7 +9232,7 @@ Expected: no new warnings, and `100% tests passed, 0 tests failed out of 9`. The
 - [ ] **Step 6: Commit**
 
 ```powershell
-git -C C:/Users/jscha/source/repos/streamflex add src/settings_screen.c src/launcher.h src/launcher.c tests/headless/checks/60-settings-background.sh tests/headless/fixtures/f60-colour.ini tests/headless/fixtures/f60-running.ini
+git -C C:/Users/jscha/source/repos/streamflex add src/settings_screen.c src/launcher.h src/launcher.c tests/headless/checks/60-settings-background.sh tests/headless/fixtures/f60-color.ini tests/headless/fixtures/f60-running.ini
 git -C C:/Users/jscha/source/repos/streamflex commit -m "feat: choose a background image or slideshow folder with the remote"
 ```
 
@@ -9287,7 +9287,7 @@ The settings are in a column on the left; the rest of the screen is a live previ
 While settings are open, other hotkeys and commands wait until they close.
 
 ### What it changes
-- **Background:** a colour, an image, a slideshow of a folder of images, or transparent. For an image or a folder, a folder browser starts in your Pictures folder and can reach your home folder and your drives; the preview shows each image as you move over it. A slideshow folder needs at least two images.
+- **Background:** a color, an image, a slideshow of a folder of images, or transparent. For an image or a folder, a folder browser starts in your Pictures folder and can reach your home folder and your drives; the preview shows each image as you move over it. A slideshow folder needs at least two images.
 - **Menus:** the grid of every menu (*All menus*, which is the `[Layout]` section) and of each menu on its own: rows, columns and the largest a button may grow. On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again.
 - **Titles:** Small, Medium or Large. Titles scale with each menu's buttons; see [FontSize](#fontsize).
 
@@ -9366,7 +9366,7 @@ Add to `### Fixed`:
 - **`OversizeMode=Truncate` works.** The parser only knew `Truncated`, so the documented spelling was ignored.
 - **StreamFlex starts on a display that reports no refresh rate**, as Xvfb, some VMs and remote desktops do. It divided by zero before drawing anything; it now uses 60 Hz and logs it.
 - **File paths with non-ASCII characters work on Windows**, such as a config, log, icon library or slideshow folder under a user folder named `José`.
-- `Mode=Slideshow` without a `SlideshowDirectory` crashed at startup; it now falls back to the colour background. A slideshow folder with a single image no longer rewrites the `Image` setting.
+- `Mode=Slideshow` without a `SlideshowDirectory` crashed at startup; it now falls back to the color background. A slideshow folder with a single image no longer rewrites the `Image` setting.
 - Invalid `Mode`, `Color`, `SlideshowImageDuration`, `SlideshowTransitionTime`, `FontSize` and `Padding` values are logged; they were ignored without a word. `Color` refuses a value with a stray character (`#12345G`) instead of half-reading it.
 ```
 
@@ -9439,7 +9439,7 @@ Compare-Object (Get-Content C:/Users/jscha/ClaudeScratch/streamflex-headless-out
 
 - [ ] **Step 4: The hands-on check, through the qa-harness project,** as for PRs #24 and #27. Hand this checklist to that project's session. Its Windows 11 guest runs this PR's CI Windows zip, driven by SendInput keys and the ViGEm virtual Xbox pad. Ask for a frame for each step and the `streamflex.log`:
   1. Start StreamFlex with the shipped config. Press **Start** on the pad: settings open, with the column on the left and the menu in the preview.
-  2. **Background:** step Mode through Colour (step the colour), Image, Slideshow and Transparent (checkerboard in the preview), then back to Colour.
+  2. **Background:** step Mode through Color (step the color), Image, Slideshow and Transparent (checkerboard in the preview), then back to Color.
   3. **Image:** choose Mode Image, open the browser, and go into a folder with a non-ASCII name (make `C:\Users\<user>\Pictures\Été` with two images first). Move over the images and watch the preview follow; choose one.
   4. **Menus:** open All menus and step Columns from 4 to 6; watch the preview's buttons shrink and their titles follow. Open System and step its Rows.
   5. **Titles:** step Size from Medium to Large and back to Small, watching the preview.

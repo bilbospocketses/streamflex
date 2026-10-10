@@ -66,9 +66,27 @@ const char *fileio_last_warning(void)
 }
 
 // A function to tell a path separator, in either style
-static bool is_separator(char c)
+bool fileio_is_separator(char c)
 {
     return c == '/' || c == '\\';
+}
+
+// A function to lower-case an ASCII letter, for comparing names and extensions
+int fileio_lower(char c)
+{
+    return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : (unsigned char) c;
+}
+
+// A function to find the last name in a path, ignoring a trailing separator
+void fileio_base_name(const char *path, char *out, size_t size)
+{
+    size_t length = strlen(path);
+    while (length > 1 && fileio_is_separator(path[length - 1]))
+        length--;
+    size_t start = length;
+    while (start > 0 && !fileio_is_separator(path[start - 1]))
+        start--;
+    snprintf(out, size, "%.*s", (int) (length - start), path + start);
 }
 
 // A function to describe a C library error in a few words
@@ -198,6 +216,31 @@ wchar_t *fileio_wide(const char *text)
 {
     return to_wide(text);
 }
+
+// A function to write a command line with one more argument after it, one space between; NULL adds
+// none. The spaces after the line's last argument go first: a program started through Windows'
+// shell can have one there (Windows PowerShell's Start-Process leaves it), which would make two.
+// False, with out empty, when it does not fit.
+bool fileio_command_with(wchar_t *out, size_t size, const wchar_t *line, const wchar_t *argument)
+{
+    size_t length = wcslen(line);
+    while (length > 0 && (line[length - 1] == L' ' || line[length - 1] == L'\t'))
+        length--;
+    size_t extra = argument != NULL ? 1 + wcslen(argument) : 0;
+    if (length + extra >= size) {
+        if (size > 0)
+            out[0] = L'\0';
+        set_error("the command line is too long");
+        return false;
+    }
+    memcpy(out, line, length * sizeof(wchar_t));
+    if (argument != NULL) {
+        out[length] = L' ';
+        memcpy(out + length + 1, argument, (extra - 1) * sizeof(wchar_t));
+    }
+    out[length + extra] = L'\0';
+    return true;
+}
 #endif
 
 // A function to open a file whose path is UTF-8
@@ -301,6 +344,77 @@ bool fileio_is_dir(const char *path)
     }
     return true;
 #endif
+}
+
+// What is at a path: a regular file, something else that is there, or nothing that could be found
+typedef enum {
+    PATH_FILE,      // A regular file, or a link to one
+    PATH_OTHER,     // There, and not a regular file: a folder, pipe, socket or device ("not a regular file")
+    PATH_UNKNOWN    // Not found, or not looked at; the reason says which
+} PathKind;
+
+// A function to find what is at a path. On Windows the path is opened with no data access and the
+// handle asked what it is: only a file on a disk is a regular file. Names alone cannot say: which
+// are devices (NUL, CON, COM1, and on older versions nul.png) differs between versions, and the
+// \\.\ and \\?\ prefixes reach devices and pipes by any name. An open with no data access reads
+// nothing, so it never waits on a pipe or a device: a listening pipe is connected to and let go at
+// once, and one whose every instance is taken says so (ERROR_PIPE_BUSY). The console (CON) refuses
+// an open with no data access (ERROR_INVALID_PARAMETER). Both are there, and neither is a file.
+static PathKind path_kind(const char *path)
+{
+#ifdef _WIN32
+    wchar_t *wide = to_wide(path);
+    if (wide == NULL)
+        return PATH_UNKNOWN;
+    HANDLE handle = CreateFileW(wide, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    DWORD code = GetLastError();
+    alloc_free(wide);
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (code == ERROR_PIPE_BUSY || code == ERROR_INVALID_PARAMETER) {
+            set_error("not a regular file");
+            return PATH_OTHER;
+        }
+        set_windows_error(code);
+        return PATH_UNKNOWN;
+    }
+    // A raw volume (\\.\C:) is on a disk too, but has no file information
+    BY_HANDLE_FILE_INFORMATION info;
+    bool regular = GetFileType(handle) == FILE_TYPE_DISK && GetFileInformationByHandle(handle, &info)
+                   && (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+    CloseHandle(handle);
+    if (!regular) {
+        set_error("not a regular file");
+        return PATH_OTHER;
+    }
+    return PATH_FILE;
+#else
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        set_errno_error(errno);
+        return PATH_UNKNOWN;
+    }
+    if (!S_ISREG(info.st_mode)) {
+        set_error("not a regular file");
+        return PATH_OTHER;
+    }
+    return PATH_FILE;
+#endif
+}
+
+// A function to tell whether a path is a regular file, or a link to one: never a folder, pipe, socket
+// or device, whose read could wait for good. When not, it says why.
+bool fileio_is_file(const char *path)
+{
+    return path_kind(path) == PATH_FILE;
+}
+
+// A function to tell whether something is at a path that is not a regular file, and so must not be
+// opened; when so, it says why. A path with nothing there is not refused, so what opens it next can
+// say in its own words why it could not.
+bool fileio_not_a_file(const char *path)
+{
+    return path_kind(path) == PATH_OTHER;
 }
 
 // A function to tell whether an existing file can be opened for writing
@@ -537,10 +651,10 @@ bool fileio_make_dirs(const char *path)
     // be made
     size_t start = 1;
 #ifdef _WIN32
-    if (length >= 2 && is_separator(buffer[0]) && is_separator(buffer[1])) {
+    if (length >= 2 && fileio_is_separator(buffer[0]) && fileio_is_separator(buffer[1])) {
         int parts = 0;
         for (start = 2; start < length && parts < 2; start++) {
-            if (is_separator(buffer[start]))
+            if (fileio_is_separator(buffer[start]))
                 parts++;
         }
 
@@ -554,7 +668,7 @@ bool fileio_make_dirs(const char *path)
     }
 #endif
     for (size_t i = start; i < length; i++) {
-        if (is_separator(buffer[i]) && buffer[i - 1] != ':') {
+        if (fileio_is_separator(buffer[i]) && buffer[i - 1] != ':') {
             char separator = buffer[i];
             buffer[i] = '\0';
             if (!make_dir(buffer)) {
@@ -861,7 +975,8 @@ static bool link_leads_to_network(const char *link)
 
 // A function to add one entry to a growing list, which takes over `name`; false when out of memory,
 // with the reason set and the list as it was
-static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *name, bool is_dir, bool hidden)
+static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *name, bool is_dir, bool is_file,
+                      bool hidden)
 {
     if (name == NULL)
         return false;
@@ -876,7 +991,7 @@ static bool add_entry(FileioEntry **entries, int *count, int *capacity, char *na
         *entries = bigger;
         *capacity = grown;
     }
-    (*entries)[*count] = (FileioEntry) { .name = name, .is_dir = is_dir, .hidden = hidden };
+    (*entries)[*count] = (FileioEntry) { .name = name, .is_dir = is_dir, .is_file = is_file, .hidden = hidden };
     (*count)++;
     return true;
 }
@@ -896,7 +1011,7 @@ int fileio_list(const char *folder, FileioEntry **entries)
         set_error("out of memory");
         return -1;
     }
-    bool separator = length > 0 && is_separator(folder[length - 1]);
+    bool separator = length > 0 && fileio_is_separator(folder[length - 1]);
     snprintf(pattern, length + 3, "%s%s*", folder, separator ? "" : "\\");
     wchar_t *wide = to_wide(pattern);
     alloc_free(pattern);
@@ -914,8 +1029,8 @@ int fileio_list(const char *folder, FileioEntry **entries)
     }
     while (ok) {
         if (wcscmp(data.cFileName, L".") != 0 && wcscmp(data.cFileName, L"..") != 0) {
-            ok = add_entry(entries, &count, &capacity, to_utf8(data.cFileName),
-                           (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0,
+            bool is_dir = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            ok = add_entry(entries, &count, &capacity, to_utf8(data.cFileName), is_dir, !is_dir,
                            (data.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0);
             if (!ok)
                 break;
@@ -984,6 +1099,7 @@ int fileio_list(const char *folder, FileioEntry **entries)
         // beyond it.
         unsigned char kind = fault == FILEIO_FAULT_NO_KIND ? (unsigned char) DT_UNKNOWN : entry->d_type;
         bool is_dir = kind == DT_DIR;
+        bool is_file = kind == DT_REG;
         if (kind == DT_LNK || kind == DT_UNKNOWN) {
             size_t size = folder_length + strlen(entry->d_name) + 2;
             char *full = alloc_malloc(size);
@@ -1010,15 +1126,20 @@ int fileio_list(const char *folder, FileioEntry **entries)
             else if (kind == DT_UNKNOWN && lstat(full, &info) == 0) {
                 link = S_ISLNK(info.st_mode);
                 is_dir = S_ISDIR(info.st_mode);
+                is_file = S_ISREG(info.st_mode);
             }
-            if (link)
-                is_dir = link_leads_to_network(full) || (stat(full, &info) == 0 && S_ISDIR(info.st_mode));
+            if (link) {
+                bool network = link_leads_to_network(full);
+                bool found = !network && stat(full, &info) == 0;
+                is_dir = network || (found && S_ISDIR(info.st_mode));
+                is_file = found && S_ISREG(info.st_mode);
+            }
             alloc_free(full);
         }
         char *name = alloc_strdup(entry->d_name);
         if (name == NULL)
             set_error("out of memory");
-        ok = add_entry(entries, &count, &capacity, name, is_dir, entry->d_name[0] == '.');
+        ok = add_entry(entries, &count, &capacity, name, is_dir, is_file, entry->d_name[0] == '.');
     }
     closedir(dir);
 #endif
@@ -1094,7 +1215,7 @@ static int finish_places(PlaceList *list, FileioPlace **places)
 // drive, so it cannot wait on the network.
 static bool is_network_path(const char *path)
 {
-    if (is_separator(path[0]) && is_separator(path[1]))
+    if (fileio_is_separator(path[0]) && fileio_is_separator(path[1]))
         return true;
     if (path[0] == '\0' || path[1] != ':')
         return false;

@@ -46,6 +46,41 @@ permissions:
   statuses: read
 
 jobs:
+  # Decides whether this run may promote the tests its PR already passed instead of running them
+  # again. The master ruleset makes a PR be up to date with master before it merges, so the
+  # squash commit's tree is the tree of the PR's head: on v0.4.1, PR #50's head 1342207 and the
+  # squash commit 0aebb36 are both tree 6284842e. The master push and the tag push then ran the
+  # sanitized unit tests and the eight headless shards on files that had already passed, and a
+  # release took about 76 minutes where about 41 do. promote-check.sh says `promoted=true` only on
+  # a push whose commit is the merge commit of one merged PR into master, with that PR head's
+  # tree, whose own build-and-test passed; anything else, an API error included, says false, and
+  # a promote job that fails or reports nothing runs everything. The platform builds, the icon
+  # library and spelling checks, and Release still run on every event.
+  promote:
+    name: Promote
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    outputs:
+      promoted: ${{ steps.check.outputs.promoted }}
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check whether the PR's tests can be promoted
+        id: check
+        run: bash .github/scripts/promote-check.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+
   build_windows:
     name: Windows
     runs-on: windows-2022
@@ -94,7 +129,7 @@ jobs:
           }
           "icon library found beside streamflex.exe in $($zip.Name)"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Windows build
@@ -109,9 +144,11 @@ jobs:
       matrix:
         config:
           # bookworm: bullseye is past end of life and its security mirror
-          # now 404s on package downloads.
+          # now 404s on package downloads. Every Docker Hub image here comes
+          # through mirror.gcr.io, Google's public Docker Hub mirror: Docker
+          # Hub rate-limits the runners' unauthenticated pulls.
           - name: Debian
-            docker_image: debian:bookworm
+            docker_image: mirror.gcr.io/library/debian:bookworm
             package_ext: .deb
 
     container:
@@ -148,7 +185,7 @@ jobs:
             grep -q "\./$want\$" <<< "$contents" || { echo "::error::$want is not in the package"; exit 1; }
           done
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload Package
         with:
           name: Debian build
@@ -166,8 +203,9 @@ jobs:
     strategy:
       fail-fast: false
 
+    # Through mirror.gcr.io, as the Linux job's image.
     container:
-      image: debian:bookworm
+      image: mirror.gcr.io/library/debian:bookworm
 
     env:
       CMAKE_BUILD_TYPE: Release
@@ -195,7 +233,7 @@ jobs:
             grep -q "\./$want\$" <<< "$contents" || { echo "::error::$want is not in the package"; exit 1; }
           done
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Raspberry Pi build
@@ -212,8 +250,9 @@ jobs:
     strategy:
       fail-fast: false
 
+    # Through mirror.gcr.io, Google's public Docker Hub mirror, as above.
     container:
-      image: archlinux:latest
+      image: mirror.gcr.io/library/archlinux:latest
 
     steps:
       - name: Install dependencies
@@ -234,7 +273,7 @@ jobs:
       - name: Show package metadata
         run: pacman -Qip build/*.pkg.tar.zst
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Arch Linux build
@@ -264,31 +303,126 @@ jobs:
           .venv/bin/python -m unittest discover -s branding/library -p "test_*.py" -v
           .venv/bin/python branding/library/check-library.py
 
+  # The lines a change adds and its commit messages use American spelling, as every repo's CI
+  # checks with the central gate (bilbospocketses/american-spelling), pinned by commit. Its
+  # allow list is central too: no allow file of ours exists. The gate refuses a shallow clone,
+  # so this checkout has the full history, and it reads only what was added since the
+  # merge-base with the base branch
+  spelling:
+    name: American spelling
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
+        env:
+          BASE: ${{ github.base_ref || github.event.repository.default_branch }}
+
+      - name: Check out the gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bilbospocketses/american-spelling
+          ref: 21ed7e5524c511d9ee584778d42b72e6ddaeba86 # v1.0.2
+          path: .american-spelling
+          persist-credentials: false
+
+      - name: Check American spelling
+        run: python .american-spelling/check-american-spelling.py --repo . --base "origin/${BASE}" --repo-slug "${SLUG}"
+        env:
+          BASE: ${{ github.base_ref || github.event.repository.default_branch }}
+          SLUG: ${{ github.repository }}
+
+  # The unit tests again, built with AddressSanitizer and UBSan and the extra warnings, as the
+  # local unit leg (CONTRIBUTING.md) runs them: the Linux job's Release build has no sanitizer, so
+  # a test that reads before an array or a freed slot passes there when the memory happens to
+  # read as expected. It runs in the Debian headless image, as `tester` (root ignores the file
+  # permissions some tests rely on), with address randomization off (setarch -R), which GCC 12's
+  # ASan needs and Docker's default seccomp profile refuses. A compiler warning in our code, a
+  # failed test or a sanitizer report (UBSan halts on its first) fails it. It is skipped when
+  # promote says this commit's files already passed it in their PR, and runs when promote failed.
+  unit_sanitizers:
+    name: Unit tests (ASan, UBSan)
+    runs-on: ubuntu-24.04
+    needs: [promote]
+    if: ${{ !cancelled() && needs.promote.outputs.promoted != 'true' }} # GitHub's function name; spelling: allow
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test image
+        run: docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
+
+      - name: Build and run the unit tests
+        run: |
+          docker run --rm -i --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+            streamflex-test-debian bash -s <<'EOF'
+          set -u
+          rm -rf /work; mkdir -p /work
+          tar -C /src --exclude=./build --exclude=./.git -cf - . | tar -C /work -xf -
+          chown -R tester /work
+          flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          su tester -c "cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='$flags' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DEXTRA_WARNINGS=ON" > /tmp/configure.log 2>&1 \
+            || { echo "::error::CMake configure failed"; cat /tmp/configure.log; exit 2; }
+          su tester -c "cmake --build /work/build -j$(nproc)" > /tmp/build.log 2>&1 \
+            || { echo "::error::The build failed"; cat /tmp/build.log; exit 2; }
+          ours=$(grep -iE 'warning:' /tmp/build.log | grep -vE '^g?make(\[[0-9]+\])?: ' | grep -v '^/work/src/external/')
+          if [ -n "$ours" ]; then echo "::error::Compiler warnings outside src/external"; echo "$ours"; exit 1; fi
+          su tester -c "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 setarch $(uname -m) -R ctest --test-dir /work/build --output-on-failure"
+          EOF
+
   # What only a running launcher shows: the settings screen, key handling and startup paths,
   # driven by key presses under a virtual display (tests/headless). It runs in its own container
   # because the harness turns off address randomization for ASan (setarch -R), which Docker's
-  # default seccomp profile refuses. One leg per image: Debian, and Fedora, whose SDL2 is
+  # default seccomp profile refuses. One image per distro: Debian, and Fedora, whose SDL2 is
   # sdl2-compat (SDL2's API over SDL3) rather than SDL2 itself. One run.sh serves both; what
-  # differs between them is detected, not named. A failed leg fails this job, and with it
-  # build-and-test; fail-fast is off so the other leg still reports.
+  # differs between them is detected, not named.
+  # A pass (every check, plain or with LeakSanitizer on) is too long for one job, so each runs in
+  # 2 shards, one job each, as run-shards.ps1 does locally: run.sh <label> [leaks] K/2 runs shard
+  # K, and headless_merge adds a pass's two shard consoles up into its one result. A shard alone
+  # is not the pass: only the merge is. Scrollfail runs in each distro's plain shard 1, after the
+  # shard. A failed shard fails this job, and with it build-and-test; fail-fast is off so the
+  # other shards still report. Like the sanitized unit tests, the shards are skipped when
+  # promote says this commit's files already passed them in their PR.
   headless:
-    name: Headless (${{ matrix.distro }})
+    name: Headless (${{ matrix.distro }}, ${{ matrix.pass }} ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
-    # A backstop for a hang the harness helpers' own timeouts miss (GitHub's default is 6 hours)
-    timeout-minutes: 45
+    needs: [promote]
+    if: ${{ !cancelled() && needs.promote.outputs.promoted != 'true' }} # GitHub's function name; spelling: allow
+    # A backstop for a hang the harness helpers' own timeouts miss (GitHub's default is 6 hours).
+    # A shard took 25 to 28 minutes locally on 3 CPUs (2026-10-08), with its own build. On GitHub
+    # (run 37801014279) the plain shards took about 26 minutes and the leak shards about 27 to 30,
+    # all in parallel, image build and scrollfail included; 60 minutes is about twice the measured
+    # GitHub shard
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        distro: [Debian, Fedora]
+        pass: [plain, leaks]
+        shard: [1, 2]
         include:
           - distro: Debian
+            key: debian
             dockerfile: Dockerfile
             image: streamflex-test-debian
           - distro: Fedora
+            key: fedora
             dockerfile: Dockerfile.fedora
             image: streamflex-test-fedora
     env:
       DOCKERFILE: ${{ matrix.dockerfile }}
       IMAGE: ${{ matrix.image }}
+      PASS: ${{ matrix.pass }}
+      SHARD: ${{ matrix.shard }}
+      LABEL: ci-${{ matrix.key }}-${{ matrix.pass }}-s${{ matrix.shard }}
     steps:
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -299,66 +433,156 @@ jobs:
         id: build_image
         run: docker build -t "$IMAGE" -f "tests/headless/$DOCKERFILE" tests/headless
 
-      # Both passes run even when the first fails, so one run shows every failure; the step then
-      # fails if either did
-      - name: Run the headless checks
+      # The console is kept under a name of its own, which the merge reads: the SHARD lines in it
+      # are how merge.py knows the two shards make one complete run
+      - name: Run the shard
+        run: |
+          mkdir -p "$RUNNER_TEMP/headless" "$RUNNER_TEMP/console"
+          mode=()
+          if [ "$PASS" = leaks ]; then mode=(leaks); fi
+          docker run --rm --security-opt seccomp=unconfined \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
+            "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2" 2>&1 \
+            | tee "$RUNNER_TEMP/console/$LABEL.console.log"
+
+      # Item 11's injected fault, a run of its own with no shards. It runs even when the shard
+      # failed, so one run shows every failure, but not without an image to run in
+      - name: Run scrollfail
+        if: (success() || failure()) && steps.build_image.outcome == 'success' && matrix.pass == 'plain' && matrix.shard == 1
         run: |
           mkdir -p "$RUNNER_TEMP/headless"
-          status=0
           docker run --rm --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh ci || status=1
-          docker run --rm --security-opt seccomp=unconfined \
-            -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh ci-scrollfail scrollfail || status=1
-          exit $status
+            "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail
 
-      # Every check again, with LeakSanitizer on. It runs even when the step before it failed, so
-      # a leak is reported beside any other failure, but not without an image to run in
-      - name: Look for memory leaks
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        name: Upload the shard's console
         if: (success() || failure()) && steps.build_image.outcome == 'success'
-        run: |
-          mkdir -p "$RUNNER_TEMP/headless"
-          docker run --rm --security-opt seccomp=unconfined \
-            -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh ci-leaks leaks
+        with:
+          name: headless console ${{ matrix.key }}-${{ matrix.pass }}-s${{ matrix.shard }}
+          path: ${{ runner.temp }}/console/${{ env.LABEL }}.console.log
+          if-no-files-found: error
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload the logs of a failed run
         if: failure()
         with:
-          name: Headless (${{ matrix.distro }}) logs
+          name: Headless (${{ matrix.distro }}, ${{ matrix.pass }}, shard ${{ matrix.shard }}) logs
           path: ${{ runner.temp }}/headless
 
-  # Single required status check for the master branch ruleset. It passes only when every
-  # platform build, the icon library check and both headless legs succeeded; `if: always()`
-  # makes it report a failure (rather than being skipped) when a job fails or is cancelled.
+  # One job per distro and pass: merge.py adds the pass's two shard consoles up, and fails when
+  # a check failed or leaked, or when they are not one complete run (a shard missing or given
+  # twice, a check file run in neither shard or in both, a shard cut short). It runs when a
+  # shard failed too, so the merged result shows; a shard whose console never came is missing.
+  # It is skipped with the shards when promote says their PR already passed them.
+  headless_merge:
+    name: Headless (${{ matrix.distro }}, ${{ matrix.pass }})
+    runs-on: ubuntu-24.04
+    needs: [promote, headless]
+    if: ${{ always() && needs.promote.outputs.promoted != 'true' }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [Debian, Fedora]
+        pass: [plain, leaks]
+        include:
+          - distro: Debian
+            key: debian
+          - distro: Fedora
+            key: fedora
+    env:
+      LEG: ci-${{ matrix.key }}-${{ matrix.pass }}
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Each console has a name of its own, so the two land side by side however they are laid out
+      - name: Download the shard consoles
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: headless console ${{ matrix.key }}-${{ matrix.pass }}-s*
+          path: ${{ runner.temp }}/console
+          merge-multiple: true
+
+      - name: Merge the shards
+        run: |
+          mkdir -p "$RUNNER_TEMP/console"
+          mapfile -t consoles < <(find "$RUNNER_TEMP/console" -type f -name '*.console.log' | sort)
+          echo "Shard consoles: ${consoles[*]:-none}"
+          python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
+
+  # Single required status check for the master branch ruleset. It passes only when promote,
+  # every platform build, the icon library check, the spelling check, the sanitized unit tests,
+  # every headless shard and every merge succeeded. The one exception: the sanitized unit tests,
+  # the shards and the merges may be skipped on a push run when promote succeeded and said
+  # `promoted=true`, because their PR passed them on the same files; the log and the summary name
+  # them. On any other event the gate accepts no skip, whatever promote said. Any other
+  # skip fails it, so a skipped build never passes. It decides by job name, from toJSON(needs).
+  # `if: always()` makes it report a failure (rather than being skipped) when a job fails or is
+  # canceled.
   build-and-test:
     runs-on: ubuntu-24.04
-    needs: [build_windows, build_linux, build_rpi, build_arch, library_check, headless]
+    needs: [promote, build_windows, build_linux, build_rpi, build_arch, library_check, spelling, unit_sanitizers, headless, headless_merge]
     if: always()
     steps:
-      - name: Check platform builds
+      - name: Check the jobs
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
         run: |
-          echo "Build results: $RESULTS"
-          for r in $RESULTS; do
-            if [ "$r" != "success" ]; then
-              echo "::error::A required job did not succeed ($r)"
-              exit 1
-            fi
-          done
+          python3 - <<'EOF'
+          import json, os, sys
+
+          needs = json.loads(os.environ["NEEDS"])
+          promote = needs.get("promote", {})
+          promoted = (
+              os.environ.get("EVENT") == "push"
+              and promote.get("result") == "success"
+              and (promote.get("outputs") or {}).get("promoted") == "true"
+          )
+          promotable = {"unit_sanitizers", "headless", "headless_merge"}
+          failed, accepted = [], []
+          for name in sorted(needs):
+              result = needs[name].get("result")
+              print(f"{name}: {result}")
+              if result == "success":
+                  continue
+              if result == "skipped" and promoted and name in promotable:
+                  accepted.append(name)
+                  continue
+              failed.append(f"{name} ({result})")
+
+          lines = []
+          if accepted:
+              lines.append("Promoted from the PR, not run again: " + ", ".join(accepted))
+          for job in failed:
+              print(f"::error::A required job did not succeed: {job}")
+              lines.append(f"Did not succeed: {job}")
+          for line in lines:
+              print(line)
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary and lines:
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines) + "\n")
+          sys.exit(1 if failed else 0)
+          EOF
 
   # Publishes the GitHub release when a v* tag is pushed. Every other run is a
   # dry run: it collects the packages and release notes exactly as a release
   # would, then skips attestation and publishing. v* tags cannot be deleted or
   # moved (tag ruleset), so a release job that breaks on the tag would cost a
   # version number; the dry run surfaces that on every PR instead.
+  # The `if` is not redundant: without one, a job is skipped when any job before it in the chain
+  # was skipped, even one build-and-test accepted (actions/runner#2205), so a promoted tag run
+  # would never publish.
   release:
     name: Release
     runs-on: ubuntu-24.04
     needs: [build-and-test]
+    if: ${{ !cancelled() && needs.build-and-test.result == 'success' }} # GitHub's function name; spelling: allow
     permissions:
       contents: write       # create the GitHub release
       id-token: write       # Sigstore OIDC token for build provenance
@@ -372,9 +596,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # The packages only: each package's artifact is named "<platform> build", and the headless
+      # shard consoles are artifacts of this run too
       - name: Download packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          pattern: "* build"
           path: dist
           merge-multiple: true
 

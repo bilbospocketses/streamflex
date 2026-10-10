@@ -1,6 +1,6 @@
 # StreamFlex 3a hands-on check: Windows 11
 
-This is the Windows half of Task 13's hands-on check for the settings screen (sub-project 3a). It is run by the qa-harness session in its Windows 11 guest, against the PR's CI **Windows build** zip. It covers the 9 steps of `task-13-brief.md` Step 4, and it adds checks for the Batch C fixes of the final fix wave:
+This is the Windows half of the hands-on check for the settings screen of sub-project 3a. It is run in a Windows 11 guest, by hand or by a QA harness, against the PR's CI **Windows build** zip. It covers the nine hands-on steps of the 3a plan (each heading's "brief step"), and it adds checks for the fixes of 3a's final fix wave (Batch C):
 
 - **Imp 1:** a held Start button, or a held Menu key, opens settings once.
 - **Imp 2:** one image rule everywhere: upper-case extensions count, and hidden files do not.
@@ -8,7 +8,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
 - **Refusals and focus:** settings do not open while an application is launching or running (#116), and gamepad input is ignored while StreamFlex is not the focused window.
 - **Display details:** the Menus list's preview follows the cursor only after it rests about 300 ms, and a title too long for its button is cut and never runs past it.
 - **The zip carries no DLL:** it has no `vcruntime140.dll`, so a guest with no Visual C++ runtime starts StreamFlex.
-- **The real transparent window** (progress.md, Task 9's note): with Mode set to Transparent, the actual window turns see-through, and turns solid again when Mode is set back.
+- **The real transparent window**, which no headless check can show: with Mode set to Transparent, the actual window turns see-through, and turns solid again when Mode is set back.
 
 ## How to read and run each step
 
@@ -73,14 +73,14 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
    Expected listing: `BLEU.JPG`, `caché.png` (Hidden), `notes.txt`, `rouge.png` and `VERT.PNG`. StreamFlex must show and count **3 images**: BLEU.JPG, rouge.png and VERT.PNG.
 5. **Connect the ViGEm Xbox 360 pad before StreamFlex starts.**
 6. **Start `C:\StreamFlex\streamflex.exe -d`** (the `-d` matters: the `Video:` line in step 7 is written only at debug level) in the interactive desktop session, from `C:\StreamFlex`. **Frame** `W0-home.png`.
-7. **Expected in the log:** `Video: SDL's windows driver, the <renderer> renderer` (record the renderer name), `Video driver:  windows`, `Resolution:` with the guest's resolution, `Gamepad connected with device index 0`, a `Gamepad Mapping:` block, `Loading menu 'Main'`, and `Gained keyboard focus`. The screen shows Main's four buttons (Kodi, Plex, Steam, System) on black. If `Gamepad connected` is missing, stop: the pad is not reaching SDL. That is a setup fault, not a verdict.
+7. **Expected in the log:** `Video: SDL's windows driver, the <renderer> renderer` (record the renderer name), `Video driver:  windows`, `Resolution:` with the guest's resolution, `Gamepad connected with device index 0, instance id <N>` and then `Gamepad opened at device index 0, instance id <N>` (the same N), a `Gamepad Mapping:` block, `Loading menu 'Main'`, and `Gained keyboard focus`. The screen shows Main's four buttons (Kodi, Plex, Steam, System) on black. If `Gamepad connected` is missing, stop: the pad is not reaching SDL. That is a setup fault, not a verdict.
 
 ## W1. Start opens settings (brief step 1)
 
 - **Inputs:** Pad **Start**, with the config exactly as the zip shipped it (no edit from W0).
 - **Expected:**
   - The pad works out of the box: `Gamepad ButtonStart detected` appears with no `Enabled` edit.
-  - The column is on the left, headed "Settings", with these rows: *Background › Colour*, *Menus › 2 menus*, *Titles › Medium*, a divider, then *Discard changes* (greyed). There is a key hint at the bottom.
+  - The column is on the left, headed "Settings", with these rows: *Background › Color*, *Menus › 2 menus*, *Titles › Medium*, a divider, then *Discard changes* (grayed). There is a key hint at the bottom.
   - The preview on the right is a 16:9 outlined picture of Main's menu. Its caption reads *Preview: Main · 4 × 1, … px buttons*.
   - **Frame** `W1-open.png`.
   - New lines include `Gamepad ButtonStart detected`, `Settings opened over menu 'Main'`, and `Settings: the preview is at X,Y, W x H`. Note the rectangle; the pixel checks below use it.
@@ -91,7 +91,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
 - **Inputs:** from the home screen, take a mark, then hold pad **Start** for **2000 ms** and release. Wait 1 s.
 - **Expected:**
   - Settings are open. **Frame** `W1a-held-start.png`.
-  - The new lines hold exactly **one** `Settings opened over menu 'Main'` and **no** `Settings closed`. The old behaviour repeated the button after 500 ms and toggled settings shut and open again, so any second `Settings opened`, or any `Settings closed`, is a FAIL.
+  - The new lines hold exactly **one** `Settings opened over menu 'Main'` and **no** `Settings closed`. The old behavior repeated the button after 500 ms and toggled settings shut and open again, so any second `Settings opened`, or any `Settings closed`, is a FAIL.
 - Then pad **B** to close them (`Settings closed`).
 
 ## W1b. The Menu key, single and held (Batch C Imp 1, and the key code)
@@ -112,22 +112,22 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
 
 ## W2. Background modes (brief step 2)
 
-- **Inputs:** Pad **Start** (settings open on *Background*), then **A**. The Background page shows *Mode: Colour* and *Colour: Black*.
-  1. **D-pad Down** (to *Colour*), then **D-pad Right**. Colour becomes *Charcoal*.
-     - The preview's background turns dark grey. **Frame** `W2-charcoal.png`.
+- **Inputs:** Pad **Start** (settings open on *Background*), then **A**. The Background page shows *Mode: Color* and *Color: Black*.
+  1. **D-pad Down** (to *Color*), then **D-pad Right**. Color becomes *Charcoal*.
+     - The preview's background turns dark gray. **Frame** `W2-charcoal.png`.
      - New line: `Settings: [Background] Color #000000 -> #1E1E1E`.
      - Pixel check: a pixel inside the preview, near its top-left corner and clear of the outline, reads about (30,30,30).
   2. **D-pad Up** (to *Mode*), then **D-pad Right**. Mode becomes *Image*, with an *Image: Choose…* row.
-     - The preview stays charcoal: an incomplete mode previews as the colour.
+     - The preview stays charcoal: an incomplete mode previews as the color.
      - New line: `Settings: [Background] Mode Color -> Image`. **Frame** `W2-image.png`.
   3. **D-pad Right**. Mode becomes *Slideshow*, with *Folder*, *Change every* and *Fade* rows.
      - New line: `Mode Image -> Slideshow`. **Frame** `W2-slideshow.png`.
   4. **D-pad Right**. Mode becomes *Transparent*, and the column shows a note that the desktop shows through.
-     - The preview shows a **checkerboard** of two alternating colours. **Frame** `W2-transparent.png`.
+     - The preview shows a **checkerboard** of two alternating colors. **Frame** `W2-transparent.png`.
      - New lines: `Mode Slideshow -> Transparent`, and `Background set up: Transparent`.
      - Record whether any part of the real desktop shows through the window now. This is an observation, not a verdict: the real window is judged in W7b.
-  5. **D-pad Left** three times. Mode steps back through Slideshow and Image to *Colour*.
-     - The preview is charcoal again, with no checkerboard, and the rest of the window is solid. **Frame** `W2-back-to-colour.png`.
+  5. **D-pad Left** three times. Mode steps back through Slideshow and Image to *Color*.
+     - The preview is charcoal again, with no checkerboard, and the rest of the window is solid. **Frame** `W2-back-to-color.png`.
      - New lines: `Transparent -> Slideshow`, `Slideshow -> Image`, `Image -> Color`.
 - **PASS** when every line above appears and every frame matches its description.
 
@@ -158,7 +158,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
   - The *Use this folder* row says **3 images**, not 2 and not 4.
   - New line: `Settings: chose C:\Users\<user>\Pictures\Été`.
   - The Folder row reads `Été · 3 images` (log: `Settings: the Folder row shows Été · 3 images`).
-  - The preview shows one of the three solid colours. **Frame** `W3b-slideshow.png`.
+  - The preview shows one of the three solid colors. **Frame** `W3b-slideshow.png`.
 - Then **B** to the top level. The Background row now reads *Slideshow*.
 
 ## W4. Menus (brief step 4)
@@ -216,13 +216,13 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
 
 - **Inputs:** start `streamflex.exe -d` again. Wait 5 s. **Frame** `W7-restart.png`. Wait 35 s more (the default *Change every* is 30 s). **Frame** `W7-restart-35s.png`.
 - **Expected:**
-  - The background is a slideshow of the `Été` pictures: the two frames show different solid colours.
+  - The background is a slideshow of the `Été` pictures: the two frames show different solid colors.
   - Main shows 6 columns and small titles. Opening System would show two rows' worth of sizing; that is optional to check.
   - The log holds `Found 3 images in directory C:\Users\<user>\Pictures\Été:`, followed by exactly three paths: the ones ending `BLEU.JPG`, `rouge.png` and `VERT.PNG`, in any order. No `caché.png`, no `notes.txt`.
   - The log holds `Background set up: Slideshow`.
   - Copy the log to `logs\W7.log`.
 
-## W7b. The real transparent window (Task 9's note in progress.md)
+## W7b. The real transparent window
 
 - **Inputs:**
   1. Pad **Start**, **A** (Background), **D-pad Right** (Mode goes from *Slideshow* to *Transparent*).
@@ -232,7 +232,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
   - The Windows desktop, meaning its wallpaper and any windows behind, is visible around and between StreamFlex's buttons. The buttons and titles are still drawn.
   - New lines: `Settings saved 1 change(s)`, and `Background set up: Transparent`.
 - **Inputs, back:**
-  1. Pad **Start**, **A**, **D-pad Left** three times (*Slideshow*, *Image*, *Colour*).
+  1. Pad **Start**, **A**, **D-pad Left** three times (*Slideshow*, *Image*, *Color*).
   2. **B**, **B**.
   3. **Frame** `W7b-opaque.png`.
 - **Expected:**
@@ -276,7 +276,7 @@ This is the Windows half of Task 13's hands-on check for the settings screen (su
   The last line prints `Entry9=Café;apps;"C:\Users\Public\Été\café.txt"`.
 - **Inputs:**
   1. Start `streamflex.exe -d`. Main now shows five buttons, the last one *Café*.
-  2. **The long title.** Main now has six buttons. Look at the *Extraordinarily Wide Title* button (**Frame** `W9-longtitle.png`). Expected: its title is cut to fit, and no letter is drawn past the button's left or right edge or into a neighbour. Zoom on both edges. **FAIL** if any glyph is outside the button.
+  2. **The long title.** Main now has six buttons. Look at the *Extraordinarily Wide Title* button (**Frame** `W9-longtitle.png`). Expected: its title is cut to fit, and no letter is drawn past the button's left or right edge or into a neighbor. Zoom on both edges. **FAIL** if any glyph is outside the button.
   3. **D-pad Right** onto *Café*. **Frame** `W9-cafe.png`.
   4. Take a mark, pad **A**, and within 300 ms key **Menu**. The app is launching.
   5. Once Notepad is in front, key **Menu** and pad **Start** again (the pad is ignored while StreamFlex is behind, so use the Menu key sent to the desktop and confirm it is not delivered to StreamFlex).

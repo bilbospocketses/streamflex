@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.18)
 project("StreamFlex" 
   LANGUAGES C
-  VERSION 0.3.1
+  VERSION 0.4.1
   DESCRIPTION "Customizable HTPC Application Launcher"
   HOMEPAGE_URL "https://github.com/bilbospocketses/streamflex"
 )
@@ -19,7 +19,7 @@ if (EXTRA_WARNINGS)
   endif ()
 endif ()
 
-# MSVC calls the POSIX names (strdup) deprecated in favour of its own (_strdup); the code uses the
+# MSVC calls the POSIX names (strdup) deprecated in favor of its own (_strdup); the code uses the
 # POSIX names on every platform. This reaches the launcher, platform and test targets, not vcpkg's builds
 if (MSVC)
   add_compile_definitions(_CRT_NONSTDC_NO_DEPRECATE)
@@ -31,7 +31,7 @@ if (WIN32)
 endif ()
 
 # Minimum library versions for Linux
-set(MIN_SDL_VERSION "2.0.14")
+set(MIN_SDL_VERSION "2.0.18")
 set(MIN_SDL_IMAGE_VERSION "2.0.5")
 set(MIN_SDL_TTF_VERSION "2.0.15")
 
@@ -191,9 +191,9 @@ if (UNIX)
     # dpkg-shlibdeps derives every dependency and its minimum version (glibc
     # included) from the built binary. No explicit CPACK_DEBIAN_PACKAGE_DEPENDS:
     # CPack appends shlibdeps' list to it without merging, so each library
-    # would appear twice. The MIN_SDL_* floors above are enforced at build
-    # time; at run time the computed glibc floor (2.34) already rules out any
-    # system with an SDL2 older than them.
+    # would appear twice. SDL2's floor comes from its symbols file:
+    # SDL_RenderSetVSync (2.0.18) makes the package depend on libsdl2-2.0-0
+    # (>= 2.0.18), matching MIN_SDL_VERSION above.
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "bilbospocketses <104535858+bilbospocketses@users.noreply.github.com>")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE ${CMAKE_PROJECT_HOMEPAGE_URL})

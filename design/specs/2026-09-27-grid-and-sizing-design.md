@@ -6,7 +6,7 @@
 
 ## Context
 
-StreamFlex is a 10-foot launcher: it runs full screen on a TV and is driven by a remote or a gamepad alone. There is no mouse and no keyboard to rely on. Every behaviour below must work with the D-pad, OK and Back.
+StreamFlex is a 10-foot launcher: it runs full screen on a TV and is driven by a remote or a gamepad alone. There is no mouse and no keyboard to rely on. Every behavior below must work with the D-pad, OK and Back.
 
 This is sub-project 1 of the overhaul, which is split into four parts, each with its own spec, plan and build:
 
@@ -49,7 +49,7 @@ Rows=1          ; new: rows visible at once (default 1)
 Columns=4       ; new name for MaxButtons (default 4); MaxButtons still accepted
 IconSize=256    ; the LARGEST a button may grow; leave it out to let buttons fill
 IconSpacing=5%  ; gap between buttons, across and down (percent of screen width)
-VCenter=50%     ; vertical centre of the whole grid block
+VCenter=50%     ; vertical center of the whole grid block
 
 [Games]
 Rows=3          ; per-menu overrides: Rows, Columns, IconSize
@@ -61,7 +61,7 @@ Entry1=...
 - **Precedence.** `MaxButtons` is an alias only in `[Layout]`. When `[Layout]` has both, `Columns` wins.
 - **Reserved names in menu sections.** Inside a menu section, `Rows`, `Columns` and `IconSize` are settings **only when their value is a number**. A value shaped like an entry (containing `;`) is still parsed as an entry, with a warning in the log. No existing button can be lost to the new rule.
 
-## Behaviour
+## Behavior
 
 ### Sizing
 
@@ -74,9 +74,9 @@ Entry1=...
 
 ### Placement
 
-- The grid block is centred horizontally using its **configured** column count, so columns stay put as it scrolls, and a partial last row lines up left under them.
-- **Exception:** a menu whose buttons fill less than one row is centred, exactly like today's single row.
-- The **occupied** rows are centred vertically on `VCenter`. `VCenter` keeps its existing limits of 25% to 75%. The block is then clamped so that it stays inside the usable area: a tall grid with `VCenter=25%` moves down rather than spilling into the margin or under the clock.
+- The grid block is centered horizontally using its **configured** column count, so columns stay put as it scrolls, and a partial last row lines up left under them.
+- **Exception:** a menu whose buttons fill less than one row is centered, exactly like today's single row.
+- The **occupied** rows are centered vertically on `VCenter`. `VCenter` keeps its existing limits of 25% to 75%. The block is then clamped so that it stays inside the usable area: a tall grid with `VCenter=25%` moves down rather than spilling into the margin or under the clock.
 
 ### Strip (`Rows=1`)
 
@@ -157,7 +157,7 @@ LayoutOverrides layout_resolve(LayoutOverrides menu, LayoutOverrides global,
   - vertically only for grids of two or more rows, since a single row has no row gap and today's strips must not change.
 
   A negative (unset) padding counts as 0.
-- **Edge rules.** Every rule in **Behaviour** lives in `layout_move` and `layout_clamp`, and nowhere else.
+- **Edge rules.** Every rule in **Behavior** lives in `layout_move` and `layout_clamp`, and nowhere else.
 
 ### Changes elsewhere
 
@@ -172,10 +172,10 @@ LayoutOverrides layout_resolve(LayoutOverrides menu, LayoutOverrides global,
 - **Parser** (`util.c`):
   - `[Layout]` gains `Rows` and `Columns` (with `MaxButtons` as an alias);
   - menu sections apply the reserved-name rule above;
-  - `validate_settings()` keeps the global checks (fonts, colours, limits), and the width-fitting logic moves into `layout_compute`.
+  - `validate_settings()` keeps the global checks (fonts, colors, limits), and the width-fitting logic moves into `layout_compute`.
 - **`launcher.c`:**
   - **`load_menu`** resolves the effective settings and calls `layout_compute`. If the button size changed, it re-renders the menu's textures:
-    - SVG icons are rasterised at the button size with `rasterize_svg_from_file`, which `image.h` has declared but never defined until now;
+    - SVG icons are rasterized at the button size with `rasterize_svg_from_file`, which `image.h` has declared but never defined until now;
     - titles are rendered with `max_width` set to the button size;
     - the highlight texture is re-rendered.
 
@@ -189,7 +189,7 @@ LayoutOverrides layout_resolve(LayoutOverrides menu, LayoutOverrides global,
 - A **strip** keeps today's left and right arrows in the bottom corners, unchanged.
 - A **grid** draws the same arrow texture rotated to point up or down (`SDL_RenderCopyEx`):
   - sized to the height of `SCREEN_MARGIN`;
-  - centred horizontally in the top and bottom margins;
+  - centered horizontally in the top and bottom margins;
   - shown only when `layout_can_scroll` says more rows exist that way.
 
   It takes no space from the buttons, and it cannot collide with the clock, which sits in a corner.
@@ -226,7 +226,7 @@ LayoutOverrides layout_resolve(LayoutOverrides menu, LayoutOverrides global,
 - **Unit tests (new).** `tests/test_layout.c` is plain C with no SDL, built as its own executable and run through CTest (`enable_testing()`, `add_test`). CI runs it on at least the Debian and Windows jobs. It covers:
   - **sizing:** the cap, a width-limited fit, a height-limited fit, the clock band, and reduction on the overflowing axis only;
   - **highlight padding:** reduced when the gaps are too small;
-  - **placement:** a partial single row centred, and a partial last row aligned left;
+  - **placement:** a partial single row centered, and a partial last row aligned left;
   - **strip:** one-button scroll, with wrap in both directions;
   - **grid:** Left/Right stopping at row edges, in-row wrap with `WrapEntries`, Up/Down scrolling at the top and bottom, Down into a shorter last row, and vertical wrap;
   - **placement clamp:** a tall grid with `VCenter` at 25% and at 75% stays inside the usable area;
@@ -256,6 +256,6 @@ LayoutOverrides layout_resolve(LayoutOverrides menu, LayoutOverrides global,
 
 - Mixed-size or featured tiles.
 - Saving layout changes from inside the app (sub-project 3).
-- Better downscaling for raster (PNG) icons (sub-project 2, where icon quality is the focus). This sub-project only rasterises SVG icons at the button size.
+- Better downscaling for raster (PNG) icons (sub-project 2, where icon quality is the focus). This sub-project only rasterizes SVG icons at the button size.
 - Per-menu title font sizes. The title size stays global, for readability at 10 feet.
 - Mouse-driven navigation.

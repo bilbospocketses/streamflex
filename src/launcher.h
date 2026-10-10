@@ -1,4 +1,5 @@
 #include "layout.h"
+#include "derive.h"
 
 // Color masking bit logic
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
@@ -17,27 +18,14 @@
 // Launcher parameters
 #define DEFAULT_REFRESH_RATE 60
 #define MIN_FPS_LIMIT 10
-#define MIN_ICON_SIZE 32
-#define MAX_ICON_SIZE 1024
-#define MIN_RX_SIZE 0
-#define MAX_RX_SIZE 100
-#define PERCENT_MAX_CHARS 10
 #define GAMEPAD_DEADZONE 10000
 #define GAMEPAD_REPEAT_DELAY 500
 #define GAMEPAD_REPEAT_INTERVAL 25
 #define CLOCK_UPDATE_PERIOD 1000
 #define SCROLL_INDICATOR_HEIGHT 0.11F
-#define MAX_SCROLL_INDICATOR_OUTLINE 0.01F
 #define SCREEN_MARGIN 0.05F
-#define MAX_CLOCK_MARGIN 0.1F
-#define MIN_VCENTER 0.25F
-#define MAX_VCENTER 0.75F
-#define MIN_SCREENSAVER_IDLE_TIME 3
-#define MAX_SCREENSAVER_IDLE_TIME 900
 #define SCREENSAVER_TRANSITION_TIME 1500
 #define APPLICATION_WAIT_PERIOD 100
-#define MIN_APPLICATION_TIMEOUT 3
-#define MAX_APPLICATION_TIMEOUT 30
 #define TITLE_MIN_SIZE 0.02F       // The readable minimum title size: 2% of the screen height
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
 
@@ -120,8 +108,8 @@ typedef struct {
     bool slideshow_paused;
     bool screensaver_active;
     bool screensaver_transition;
-    bool clock_rendering;
-    bool clock_ready;
+    SDL_atomic_t clock_rendering;   // Both also written by the clock's render thread
+    SDL_atomic_t clock_ready;
 } State;
 
 // Timing information
@@ -156,7 +144,7 @@ typedef struct menu {
     char            *name;
     unsigned int    num_entries;
     Entry           *first_entry;
-    Entry           **items;          // Entries by index, for the layout maths
+    Entry           **items;          // Entries by index, for the layout math
     LayoutOverrides overrides;        // Per-menu Rows/Columns/IconSize; 0 = from [Layout]
     LayoutPosition  position;         // Selected entry and scroll position
     int             rendered_size;    // Button size the textures were rendered at; 0 = not yet
@@ -167,8 +155,7 @@ typedef struct menu {
 
 typedef struct gamepad {
     SDL_GameController *controller;
-    int device_index;
-    int id;
+    int id;                          // The instance id; its device index is looked up when it opens
     struct gamepad *previous;
     struct gamepad *next;
 } Gamepad;
@@ -231,6 +218,7 @@ typedef struct {
     SDL_Surface *transition_surface;
     SDL_Texture *transition_texture;
     bool only_one;   // Set by the loader: the only image that loads is the one already on show
+    double transition_luminance;   // The next image's mean luminance, measured on the loader thread
 } Slideshow;
 
 // Screensaver
@@ -241,13 +229,14 @@ typedef struct {
     SDL_Texture *texture;
 } Screensaver;
 
-// Configuration settings
+// Configuration settings: what config.ini says, or the built-in default. Nothing converts them in
+// place: the values the launcher draws with are derived from them into `eff` (derive.h).
 typedef struct {
     char *default_menu;
     unsigned int max_buttons; // The Columns setting (MaxButtons is its older name)
     unsigned int rows;
     bool vsync;
-    int fps_limit;
+    int fps_limit;            // -1 when FPSLimit is absent
     Uint32 application_timeout;
     ModeBackground background_mode; // Defines image or color background mode
     SDL_Color background_color; // Background color
@@ -255,37 +244,38 @@ typedef struct {
     char *background_image; // Path to background image
     char *slideshow_directory;
     bool background_overlay;
-    SDL_Color background_overlay_color;
-    char background_overlay_opacity[PERCENT_MAX_CHARS];
+    SDL_Color background_overlay_color; // Its alpha is eff's, from the opacity
+    int background_overlay_opacity;     // Hundredths of a percent, as every opacity below
     Uint16 icon_size;
-    int icon_spacing;
-    char icon_spacing_str[PERCENT_MAX_CHARS];
+    int icon_spacing;                   // Hundredths of a percent of the screen width, or px
+    bool icon_spacing_percent;
     bool titles_enabled;
-    char *title_font_path; // Path to title TTF font file
+    char *title_font_path;              // As configured; title_info.font_path is the file opened
+    int title_font_face;
     unsigned int title_font_size;
     int title_font_size_pct;    // FontSize as a percentage of the button; 0 = the fixed title_font_size
     SDL_Color title_font_color; // Color struct for title text
     bool title_shadows;
     SDL_Color title_shadow_color;
-    char title_opacity[PERCENT_MAX_CHARS];
-    ModeOversize title_oversize_mode; 
+    int title_opacity;
+    ModeOversize title_oversize_mode;
     int title_padding;
     int title_padding_pct;      // Padding as a percentage of the button; 0 = the fixed title_padding
     bool highlight;
     SDL_Color highlight_fill_color;
     SDL_Color highlight_outline_color;
     int highlight_outline_size;
-    char highlight_fill_opacity[PERCENT_MAX_CHARS];
-    char highlight_outline_opacity[PERCENT_MAX_CHARS];
-    unsigned int highlight_rx;
+    int highlight_fill_opacity;
+    int highlight_outline_opacity;
+    int highlight_rx;
     int highlight_vpadding;
     int highlight_hpadding;
-    char vcenter[PERCENT_MAX_CHARS];
+    int vcenter;                        // Hundredths of a percent of the screen height
     bool scroll_indicators;
     SDL_Color scroll_indicator_fill_color;
     int scroll_indicator_outline_size;
     SDL_Color scroll_indicator_outline_color;
-    char scroll_indicator_opacity[PERCENT_MAX_CHARS];
+    int scroll_indicator_opacity;
     bool wrap_entries;
     bool reset_on_back;
     bool mouse_select;
@@ -295,12 +285,13 @@ typedef struct {
     ModeOnLaunch on_launch;
     bool screensaver_enabled;
     Uint32 screensaver_idle_time;
-    char screensaver_intensity_str[PERCENT_MAX_CHARS];
+    int screensaver_intensity;
     bool screensaver_pause_slideshow;
     bool gamepad_enabled;
     int gamepad_device;
     char *gamepad_mappings_file;
     bool debug;
+    bool restarted;           // Started by a restart (--restarted): no StartupCmd, and the log goes on
     char *exe_path;
     char *config_path; // The file the settings were read from
     Menu *first_menu;
@@ -308,11 +299,12 @@ typedef struct {
     bool clock_enabled;
     bool clock_show_date;
     Alignment clock_alignment;
-    char *clock_font_path;
-    char clock_margin_str[PERCENT_MAX_CHARS];
-    int clock_margin;
+    char *clock_font_path;              // As configured; the clock's text_info.font_path is the file opened
+    int clock_font_face;
+    int clock_margin;                   // Hundredths of a percent of the screen height, or px
+    bool clock_margin_percent;
     SDL_Color clock_font_color;
-    char clock_opacity[PERCENT_MAX_CHARS];
+    int clock_opacity;
     unsigned int clock_font_size;
     bool clock_shadows;
     SDL_Color clock_shadow_color;
@@ -326,12 +318,14 @@ typedef struct {
 void quit_slideshow(void);
 void set_draw_color(void);
 void quit(int status);
+void restart_streamflex(const char *names);   // Comes back only when the program cannot be found to start again
 void print_version(FILE *stream);
 int compute_menu_layout(const Menu *menu, LayoutGeometry *geometry, char *why, size_t why_size);
 void describe_titles(const LayoutGeometry *geometry, char *out, size_t size);
 
 extern ModeBackground background_shown;
 extern SDL_Texture *background_override;
+extern double background_luminance;              // The image on show's mean luminance; -1 unknown
 void draw_scene(bool preview);
 void present_frame(void);
 void reload_background(void);
@@ -341,3 +335,21 @@ void trim_title_fonts(void);
 void refresh_layout(void);
 int show_menu(Menu *menu);
 int show_home(void);
+extern Effective eff;
+void refresh_effective(void);
+void reload_highlight(void);
+void reload_scroll(void);
+void reload_clock(void);        // Also lays the menu out again: the clock's size moves the buttons
+void stop_clock(void);          // Waits for a render in flight; the settings screen stops it before writing a clock setting
+void reload_screensaver(void);
+void reload_gamepad(void);      // Also the Device setting: closes the pads and opens the chosen one
+void reload_title_font(void);   // Closes the size cache and the fixed font, opens the font again, then reload_titles()
+void apply_frame_timing(void);  // VSync and FPSLimit, live
+void apply_os_screensaver(void);
+void apply_default_menu(void);  // Points :home at config.default_menu
+bool gamepad_running(void);
+bool gamepad_connected(void);                  // A pad is open to read
+#ifdef STREAMFLEX_TEST_HOOKS
+Uint32 test_pad_repeat_delay(void);            // The frames a held pad control waits before it repeats
+#endif
+int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none

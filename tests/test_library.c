@@ -3,6 +3,11 @@
 #include <stdbool.h>
 #include "check.h"
 #include "library.h"
+#ifndef _WIN32
+#include <signal.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#endif
 
 static int warnings = 0;
 
@@ -150,6 +155,74 @@ static void test_rescue(void)
     CHECK(library_rescue("Netflix", NULL) == NULL);          // nothing loaded, nothing rescued
 }
 
+#ifndef _WIN32
+#define PIPED "library-piped"
+
+// A function to fail the run when a load waits on a pipe, which it would do for good, with the
+// totals check_report() would have printed
+static void waited_on_a_pipe(int signal_number)
+{
+    (void) signal_number;
+    static char message[160];
+    int length = snprintf(message, sizeof(message), "test_library.c: CHECK failed: library_load waited on a pipe\n"
+                          "%d checks, %d failed\n", check_count + 1, check_failures + 1);
+    if (length > 0 && write(STDOUT_FILENO, message, (size_t) length) < 0)
+        _exit(2);
+    _exit(1);
+}
+
+// A function to write a small file for the piped library
+static void write_text(const char *path, const char *text)
+{
+    FILE *file = fopen(path, "w");
+    CHECK(file != NULL);
+    if (file != NULL) {
+        fputs(text, file);
+        fclose(file);
+    }
+}
+
+// A function to clear the piped library away
+static void remove_piped(void)
+{
+    remove(PIPED "/icons.ini");
+    remove(PIPED "/ok.svg");
+    remove(PIPED "/pipe.svg");
+    rmdir(PIPED "/folder.svg");
+    rmdir(PIPED);
+}
+
+// A function to test that a library never opens a pipe, which nothing writes, as an icon or as its
+// manifest: the icon is skipped with a warning, as a folder named like one is, and a piped manifest
+// is a library that cannot be read. A load that waited on either would never return.
+static void test_load_skips_what_is_not_a_file(void)
+{
+    remove_piped();
+    CHECK(mkdir(PIPED, 0755) == 0);
+    write_text(PIPED "/icons.ini", "[ok]\nfile = ok.svg\n\n[pipe]\nfile = pipe.svg\n\n[folder]\nfile = folder.svg\n");
+    write_text(PIPED "/ok.svg", "<svg/>");
+    CHECK(mkfifo(PIPED "/pipe.svg", 0644) == 0);
+    CHECK(mkdir(PIPED "/folder.svg", 0755) == 0);
+    signal(SIGALRM, waited_on_a_pipe);
+    alarm(20);
+    warnings = 0;
+    CHECK_INT(library_load(PIPED), 1);
+    CHECK_INT(warnings, 2);
+    CHECK(ends_with(library_lookup("ok"), "ok.svg"));
+    CHECK(library_lookup("pipe") == NULL);
+    CHECK(library_lookup("folder") == NULL);
+
+    remove(PIPED "/icons.ini");
+    CHECK(mkfifo(PIPED "/icons.ini", 0644) == 0);
+    warnings = 0;
+    CHECK_INT(library_load(PIPED), -1);
+    CHECK_INT(warnings, 1);
+    alarm(0);
+    library_free();
+    remove_piped();
+}
+#endif
+
 int main(void)
 {
     library_set_warn(count_warning);
@@ -160,5 +233,8 @@ int main(void)
     test_reload_and_free();
     test_legacy();
     test_rescue();
+#ifndef _WIN32
+    test_load_skips_what_is_not_a_file();
+#endif
     return check_report();
 }

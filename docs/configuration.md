@@ -37,11 +37,13 @@ A line that starts with `#` or `;` is a comment, and is ignored. A comment can a
 - The following image formats are supported: JPEG, PNG, WebP and SVG
 - Relative paths are evaluated with respect to the *current working directory*, which may not be the same as the directory that the config file is located in. It is recommended to use absolute paths whenever possible to eliminate any confusion. Fonts are the exception: a relative path in either `Font` setting that isn't found there is also looked for in the folder containing the StreamFlex executable. Icons from the built-in [Icon Library](icons) are given by name rather than path, so they don't depend on the working directory at all.
 - Color is specified in 24 bit RGB HEX format prefixed with the # character, e.g. the color red should be `#FF0000`. The letters can be uppercase or lowercase. HEX color pickers can be easily found online to assist color choices.
-- Several settings allow for values to be specified in pixels *or* as a percentage of another value. In this case, if no percent sign is detected it will be interpreted as pixels, and if the percent sign is present, than it will be interpreted as a percent value e.g. "5" means 5 pixels and "5%" means 5 percent.
+- Several settings allow for values to be specified in pixels *or* as a percentage of another value: [IconSpacing](#iconspacing), the titles' [Padding](#padding) and the clock's [Margin](#margin). In this case, if no percent sign is detected it will be interpreted as pixels, and if the percent sign is present, than it will be interpreted as a percent value e.g. "5" means 5 pixels and "5%" means 5 percent. The opacities, `VCenter` and `Intensity` take a percentage only, so a plain number there is invalid.
+- A percentage in those settings, and in `IconSpacing` and `Margin`, is written `N%`, `N.N%` or `N.NN%`: it may have up to two decimals, such as `12.5%`. A percentage over 100% is invalid. The titles' `Padding` takes a whole percentage, at most 50%.
+- A value a setting cannot take is ignored, and the log says so: `Invalid <key> value '<value>' in [<section>], ignoring it`. The setting keeps its default. Pixels and percentages are read strictly, so a value such as `IconSpacing=40px` is ignored rather than read as 40.
 - Shell variable expansion is generally not supported, e.g. you cannot use the ~ character to refer to your home directory. The exception is for commands, since those are passed through to your system shell.
 
 ## The Settings Screen
-The settings screen changes the background, each menu's grid and the title size from the remote, and shows each change in a preview as you make it. It saves your changes into your config file when you leave.
+The settings screen changes every setting on this page from the remote: each section under [Settings](#settings), each menu's grid, the [Clock](#clock), the [Screensaver](#screensaver), the [Hotkeys](#hotkeys) and the [Gamepad](#gamepad-controls). It shows each change in a preview as you make it, and saves your changes into your config file when you leave. The menus' entries are still written in the config file.
 
 ### Opening it
 - Press the **Menu** key on the remote (the context-menu key on a keyboard), or **Start** on a gamepad when [gamepad controls](#gamepad-controls) are enabled, as they are by default. Either works unless your config gives that key or button something else to do. SDL reports the Menu key as one of two keycodes, `#40000065` (a keyboard's context-menu key) or `#40000076` (a remote's Menu button), and both open settings; a hotkey on either code takes that code over. The name the debug log gives `#40000065` depends on the SDL version: it may read `Key Application (#40000065)` or `Key Menu (#40000065)`, so go by the keycode.
@@ -52,19 +54,113 @@ Holding the key or button opens settings once. Settings don't open while an appl
 ### Using it
 The settings are in a column on the left; the rest of the screen is a live preview of your launcher.
 - **Up and Down** move between rows.
-- **Left and Right** change the highlighted value.
-- **OK** opens a row marked ›, or does what the row says, such as *Discard changes*.
+- **Left and Right** change the highlighted value. On a color, the default menu or the gamepad's device they step through its choices; a font or a command is chosen with OK.
+- **OK** opens a row marked ›: a page, the [folder browser](#the-folder-browser), a [picker](#the-pickers) or a [binding](#key-and-button-bindings). On any other row it does what the row says, such as *Discard changes*.
 - **Back** goes back a page. On the first page, it saves your changes and closes settings.
-- **Menu** (or Start) closes settings from any page, saving your changes, except the *Couldn't save* page, where you choose *Try again* or *Leave without saving*. A `:home` command does the same, then shows the menu set by `DefaultMenu`.
+- **Menu** (or Start) closes settings from any page, saving your changes, except two: the *Couldn't save* page, where you choose *Try again* or *Leave without saving*, and the [restart question](#restart-now), where you choose *Yes* or *No*. A `:home` command does the same, then shows the menu set by `DefaultMenu`.
+
+A row that depends on a switch that is off, such as *Shadow color* while *Shadows* is off, is grayed. It cannot be changed, but the cursor can rest on it, and the note under the preview says why.
 
 While settings are open, a hotkey or gamepad control works only when its command is one of the keys above (`:up`, `:down`, `:left`, `:right`, `:select`, `:back`, `:home` or `:settings`). Any other command, such as `:quit`, is ignored. The screensaver does not start while settings are open.
 
 ### What it changes
-- **Background:** a colour (one of ten presets; a colour of your own from the config file stays among the choices, shown as *Custom*), an image, a slideshow of a folder of images, or transparent. A slideshow also has *Change every*, from 5 seconds to 60 minutes, and *Fade*, from 0 to 3 seconds.
-- **Menus:** the grid of every menu (*All menus*, which is the `[Layout]` section) and of each menu on its own: rows (1 to 10), columns (1 to 12) and the largest a button may grow (64 to 1024 px; on *All menus*, *Fill* lets buttons grow as large as the grid allows). On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again. A menu with no entries cannot be shown in the preview, but its grid can still be changed. The Menus page lists up to 62 menus; with more, a note at its end counts the rest, whose grids you set in the config file.
-- **Titles:** Small, Medium or Large. Titles scale with each menu's buttons; see [FontSize](#fontsize). A fixed size from your config file stays among the choices, shown as *Fixed*.
+The first page has a row for each page below, in this order, and *Discard changes*. Each page's rows are listed here with the setting each one writes and the steps Left and Right take. A value from your config file that is not one of the steps, such as `Opacity=12.5%`, stays among the choices in its place, so you can step back to it.
+
+#### The General page
+- *Default menu* ([DefaultMenu](#defaultmenu)): your menus, in the order the config file has them.
+- *Wrap around* ([WrapEntries](#wrapentries)), *Reset on Back* ([ResetOnBack](#resetonback)), *Mouse select* ([MouseSelect](#mouseselect)) and *Block the OS screensaver* ([InhibitOSScreensaver](#inhibitosscreensaver)): On or Off.
+- *VSync* ([VSync](#vsync)): On or Off.
+- *FPS limit* ([FPSLimit](#fpslimit)): Off, 30, 60, 75, 120, 144, 165 or 240. Grayed while VSync is on.
+- *After launching an app* ([OnLaunch](#onlaunch)): *Blank screen*, *Keep showing* or *Quit*.
+- *App timeout* ([ApplicationTimeout](#applicationtimeout)): 3, 5, 10, 15, 20 or 30 seconds.
+- *Startup command* and *Quit command* ([StartupCmd](#startupcmd), [QuitCmd](#quitcmd)): chosen in the [command picker](#the-command-picker). *None* removes the line.
+
+VSync and the FPS limit take effect at once, with no restart.
+
+#### The Background page
+- *Mode* ([Mode](#mode)): *Color*, *Image*, *Slideshow* or *Transparent*. The rows under it follow the mode:
+  - Color: *Color* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [color picker](#the-color-picker). Every color row names its color as the color picker does: by the swatch's name, such as *White*, when it is one of the picker's 24 swatches, and as *Custom #RRGGBB* when it is not.
+  - Image: *Image* ([Image](#image)), chosen in the [folder browser](#the-folder-browser).
+  - Slideshow: *Folder* ([SlideshowDirectory](#slideshowdirectory)), chosen in the folder browser; *Change every* ([SlideshowImageDuration](#slideshowimageduration)): 5, 10, 15 or 30 seconds, or 1, 2, 5, 10, 30 or 60 minutes; and *Fade* ([SlideshowTransitionTime](#slideshowtransitiontime)): 0 to 3 seconds, in steps of 0.5.
+  - Transparent: a note that the desktop shows through, and *See-through color* ([ChromaKeyColor](#chromakeycolor)).
+- *Overlay* ([Overlay](#overlay)): On or Off.
+- *Overlay color* ([OverlayColor](#overlaycolor)) and *Overlay opacity* ([OverlayOpacity](#overlayopacity)): 0% to 100%, in steps of 5. Both are grayed until Overlay is on.
 
 If you choose Image or Slideshow but leave the Background page without choosing an image or folder, the mode goes back to what it was when you opened the page.
+
+#### The Menus page
+The grid of every menu (*All menus*, which is the `[Layout]` section) and of each menu on its own:
+- *Rows* ([Rows](#rows)): 1 to 10.
+- *Columns* ([Columns](#columns)): 1 to 12.
+- *Largest button* ([IconSize](#iconsize)): 64, 96, 128, 160, 192, 256, 320, 384, 512, 768 or 1024 px. On *All menus*, *Fill* lets buttons grow as large as the grid allows.
+- On *All menus* only: *Icon spacing* ([IconSpacing](#iconspacing)): 0% to 10% of the screen width, in steps of 1; and *Vertical center* ([VCenter](#vcenter)): 25% to 75%, in steps of 5.
+
+On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again. A menu with no entries cannot be shown in the preview, but its grid can still be changed. The Menus page lists up to 62 menus; with more, it lists 61, and a note at its end counts the rest, whose grids you set in the config file.
+
+#### The Titles page
+- *Size* ([FontSize](#fontsize)): Small, Medium or Large. Titles scale with each menu's buttons. A fixed size from your config file stays among the choices, shown as *Fixed*.
+- *Show titles* ([Enabled](#enabled)): On or Off.
+- *Font* ([Font](#font)): chosen in the [font picker](#the-font-picker).
+- *Color* ([Color](#color-1)): the ten presets, or the color picker. The note under the preview gives the [contrast warning](#the-contrast-warning).
+- *Opacity* ([Opacity](#opacity)): 0% to 100%, in steps of 5.
+- *Shadows* ([Shadows](#shadows)): On or Off.
+- *Shadow color* ([ShadowColor](#shadowcolor)): grayed until Shadows is on.
+- *Too long* ([OversizeMode](#oversizemode)): *Truncate* or *Shrink*. A `None` from your config file stays among the choices, shown as *Leave as is*.
+- *Padding* ([Padding](#padding)): 0% to 20%, in steps of 2.
+
+Every row but *Show titles* is grayed while titles are off.
+
+#### The Highlight page
+- *Show* ([Enabled](#enabled-1)): On or Off.
+- *Fill color* ([FillColor](#fillcolor)), and *Fill opacity* ([FillOpacity](#fillopacity)): 0% to 100%, in steps of 5.
+- *Outline size* ([OutlineSize](#outlinesize)): 0 to 10 px.
+- *Outline color* ([OutlineColor](#outlinecolor)) and *Outline opacity* ([OutlineOpacity](#outlineopacity)): 0% to 100%, in steps of 5. Both are grayed while the outline's size is 0.
+- *Corner radius* ([CornerRadius](#cornerradius)): 0 to 100, in steps of 5. Grayed while there is an outline, since rounded corners cannot be drawn with one.
+- *Vertical padding* ([VPadding](#vpadding)) and *Horizontal padding* ([HPadding](#hpadding)): 0 to 100 px, in steps of 5.
+
+Every row but *Show* is grayed while the highlight is off.
+
+#### The Scroll indicators page
+- *Show* ([Enabled](#enabled-2)): On or Off.
+- *Fill color* ([FillColor](#fillcolor-1)).
+- *Outline size* ([OutlineSize](#outlinesize-1)): 0 to 10 px.
+- *Outline color* ([OutlineColor](#outlinecolor-1)): grayed while the outline's size is 0.
+- *Opacity* ([Opacity](#opacity-1)): 0% to 100%, in steps of 5.
+
+Every row but *Show* is grayed while the scroll indicators are off.
+
+#### The Clock page
+- *Show* ([Enabled](#enabled-3)) and *Show date* ([ShowDate](#showdate)): On or Off.
+- *Weekday* ([IncludeWeekday](#includeweekday)): On or Off. Grayed until Show date is on.
+- *Alignment* ([Alignment](#alignment)): Left or Right.
+- *Font* ([Font](#font-1)): chosen in the font picker.
+- *Size* ([FontSize](#fontsize-1)): 20 to 120, in steps of 5.
+- *Color* ([FontColor](#fontcolor)): the ten presets, or the color picker, with the contrast warning.
+- *Opacity* ([Opacity](#opacity-2)): 0% to 100%, in steps of 5.
+- *Shadows* ([Shadows](#shadows-1)), and *Shadow color* ([ShadowColor](#shadowcolor-1)), which is grayed until Shadows is on.
+- *Margin* ([Margin](#margin)): 0% to 10%, in steps of 1.
+- *Time* ([TimeFormat](#timeformat)): *14:05* (24hr), *2:05 PM* (12hr) or *Auto*.
+- *Date* ([DateFormat](#dateformat)): *Sep 28* (Big), *28 Sep* (Little) or *Auto*. Grayed until Show date is on.
+
+Every row but *Show* is grayed while the clock is off.
+
+#### The Screensaver page
+- *On* ([Enabled](#enabled-4)): On or Off.
+- *Idle time* ([IdleTime](#idletime)): 3, 5, 10, 15 or 30 seconds, or 1, 2, 5, 10 or 15 minutes.
+- *Dim level* ([Intensity](#intensity)): 10% to 100%, in steps of 10. While this page is open, the preview is dimmed as the screensaver would dim the screen.
+- *Pause slideshow* ([PauseSlideshow](#pauseslideshow)): On or Off.
+
+Every row but *On* is grayed while the screensaver is off.
+
+#### The Controls page
+- *Keyboard*: the [hotkeys](#hotkeys). Its page lists them; see [Key and button bindings](#key-and-button-bindings).
+- *Gamepad*: its page has:
+  - *On* ([Enabled](#enabled-5)): On or Off;
+  - *Device* ([DeviceIndex](#deviceindex)): *Any*, or one of the gamepads connected, by name. A device index from your config file with no gamepad on it stays among the choices, shown as *Pad N (not connected)*;
+  - *Mappings file* ([ControllerMappingsFile](#controllermappingsfile)), chosen in the folder browser. It applies at next start: the note under the preview says *This applies at next start* when you choose one, the page says why, and settings offer to [restart StreamFlex](#restart-now) when you leave;
+  - the gamepad's [controls](#key-and-button-bindings).
+
+  *Device* and *Mappings file* are grayed while the gamepad is off.
 
 #### The folder browser
 Choosing an image or a slideshow folder opens a folder browser. It starts in the folder of the image or slideshow you have now, or else in your Pictures folder (on Linux, the one your desktop names in its `user-dirs.dirs` file, whatever its language, such as `~/Bilder`), and its list of places reaches your home folder and your drives (on Linux, `/` and the drives and shares mounted in `/media` and `/mnt`).
@@ -74,16 +170,95 @@ Choosing an image or a slideshow folder opens a folder browser. It starts in the
 
 The preview shows each image as you move over it, and the first image of a highlighted folder. The browser lists JPEG, PNG and WebP images by the same rule a slideshow uses (see [SlideshowDirectory](#slideshowdirectory)). A slideshow folder needs at least two images; the Background page shows the chosen folder's name and how many images it holds. An image that cannot be opened is shown but cannot be chosen, and the browser says it cannot be opened; the debug log (`-d`) gives the reason. A path too long for one line of the config file is shown but cannot be chosen, and the browser says why. Network drives and shares, and on Linux what is mounted in `/media` and `/mnt`, are listed without being opened, so a server that is off does not hold up the list of places; opening one that cannot be reached waits for the network to give up, then says so. The exception is an NFS share mounted `hard`: there the wait may never end, because the system keeps retrying until the server answers. The same wait applies when your current image or slideshow folder is on such a share, since the browser starts there.
 
+For the gamepad's *Mappings file*, the browser lists every file, not only images, and previews none of them. It lists files only, so a pipe or a device never appears.
+
+### The pickers
+A row whose value is a color, a font, a command, the default menu or the gamepad's device opens a picker with OK. The picker takes the place of the rows; the key hint at the bottom says which keys it takes. **Menu** and `:home` leave a picker without choosing, and close settings as they would from the page.
+
+#### The color picker
+The color picker shows 24 swatches, six across and four down:
+- Black `#000000`, Charcoal `#1E1E1E`, Graphite `#33383D`, Slate `#2E3440`, Midnight `#121A2E`, Navy `#0B1F3A`, Teal `#07606C`, Forest `#1E3B2F`, Plum `#3B1F3A` and Burgundy `#4A1520`, the ten that Left and Right step through on a color row;
+- White `#FFFFFF`, Light gray `#C8C8C8`, Gray `#808080` and Dark gray `#4A4A4A`;
+- Red `#D03030`, Orange `#E07020`, Amber `#F0B000`, Yellow `#F0E040`, Lime `#80C040`, Green `#30A050`, Cyan `#20B0C0`, Blue `#3070D0`, Indigo `#5048C0` and Pink `#D04890`.
+
+Below them is a *Custom #RRGGBB* row, for any other color. The swatch of the color you have now is marked.
+- **The arrows** move between the swatches, and down onto the Custom row. The preview shows the color under the cursor as you move, and the note under the preview names it.
+- **OK** on a swatch chooses it. On the Custom row, OK opens the hex editor, which starts at the color you have now: **Left and Right** choose a digit, **Up and Down** change it, wrapping between F and 0 either way, **OK** keeps the color, and **Back** leaves the editor without choosing.
+- **Back** closes the picker without choosing, and puts the color back as it was when the picker opened.
+
+#### The contrast warning
+For the titles' and the clock's color, the note under the preview warns when the color stands out too little from what lies behind it: `Low contrast: 1.8:1 against the background; 3:1 or more reads well`. It warns below 3:1, the contrast ratio WCAG asks of large text. What lies behind is the background color, or for an image or a slideshow, the image's mean luminance (its average brightness); when the overlay is on, it is laid over either. A transparent background gets no warning. The warning is advice only: the color can still be chosen. It shows in the color picker, for the color under the cursor, and whenever the cursor rests on the color's row.
+
+#### The command picker
+The startup and quit commands, and a binding's command, are chosen from a list:
+- *None*;
+- the special commands: Left, Right, Up, Down, OK, Back, Home, Settings, *Quit StreamFlex*, *Shut down*, *Restart* (the computer) and *Sleep*;
+- *Open submenu:* each of your menus;
+- on Windows only, *Close the app on show*, the [`:exit`](#exit) hotkey's command;
+- every command your menus' entries run, each named by its entry's title, and each once.
+
+A command from your config file that none of these runs is listed first, as *Custom: ...*, so choosing it keeps it. **Up and Down** move, **Left and Right** move a page at a time, **OK** chooses, and **Back** closes the list without choosing.
+
+#### The font picker
+The titles' and the clock's *Font* rows open a list of the fonts installed, one row for each family, each drawn in its own face: StreamFlex's bundled fonts first, then the others by name. It lists TrueType and OpenType fonts (`.ttf` and `.otf`) and font collections (`.ttc` and `.otc`), from:
+- the folder of StreamFlex's bundled fonts;
+- on Windows, the fonts installed for every user and for you (a font installed for one user is in your own folder, and listed too);
+- on Linux, `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts` and `~/.fonts`, and the folders inside them.
+
+A face that cannot draw the letters A, a and 0, such as a symbol font's, is left out. The first time the picker opens, it reads the font files while it shows *Loading fonts… (N)*, N being the files read so far; **Back** closes it meanwhile. The list is then kept until StreamFlex quits, so it opens at once from then on.
+
+Choosing a family writes its Regular style's file to `Font`, or the first style found if it has no Regular. A face inside a font collection, other than its first, is also written as [`FontFace`](#fontface). A font in your config file that is not in the list is listed first, as *Custom:* and its file name. The keys are the command picker's.
+
+#### The list pickers
+*Default menu* lists your menus, in the order the config file has them. *Device* lists *Any*, then each gamepad connected, by name; it is made again when a gamepad is plugged in or pulled out. The keys are the command picker's, and Left and Right on these rows step through the same choices without opening the list.
+
+### Key and button bindings
+*Controls › Keyboard* lists the [hotkeys](#hotkeys), and *Controls › Gamepad* lists the gamepad's [controls](#controls) under its settings. Each list starts with *Add binding*, and then has a row for each binding: its key or button, and the command it runs. A binding's page has three rows:
+- *Key*: OK captures the key or button (below);
+- *Command*: OK opens the [command picker](#the-command-picker);
+- *Remove*, or *Cancel* for a binding that is new.
+
+A binding is set as soon as it has both a key and a command: you are then back on the list, and it takes effect at once. On Windows the exit hotkey is registered again, as the first `:exit` hotkey on a key Windows can register (F1 to F11, and F13 to F24).
+
+If the hotkeys and controls cannot be read from the config file, the Keyboard page and the gamepad's controls are left out, and the log says why.
+
+#### Capture
+OK on *Key* asks you to press the key or button, and the note under the preview counts down the 5 seconds you have. The key that started the capture (OK, held down) does not count: its repeats and its release are ignored, so the next key pressed is the one captured. A gamepad's capture takes a button, a stick pushed one way, or a trigger. The page then shows *Captured:* and the key's name, with *Keep*, *Try again* and *Cancel*.
+
+A capture that ends with nothing to keep leaves the binding as it was, with the reason in the note:
+- nothing was pressed in 5 seconds;
+- the key has no code StreamFlex can store. On Linux, a CEC remote's OK and Back arrive this way;
+- the key is the Left or Right arrow, Enter (OK) or Backspace (Back), which keep their own meaning.
+
+#### The safety floor
+The Left and Right arrows, Enter (OK) and Backspace (Back) always keep their meaning. Beyond that, settings refuse a change, or a removal, that would leave Left, Right, Up, Down, OK, Back or Settings without a key on the Keyboard page, or without a button on the Gamepad page while the gamepad is on. The note says which: `That would leave no key for Up`. The Up and Down arrows and the Menu key count while no hotkey takes them over, and so do the gamepad's built-in Up, Down and Start (see [Gamepad Controls](#gamepad-controls)) while nothing else is bound to them. On Windows, the key the exit hotkey is registered on never reaches StreamFlex, so another hotkey on that key counts for nothing.
+
+On Windows, `:exit` can only be bound to F1 to F24, and not F12. A hotkey line that has no name in the config file (`=#...`) cannot be removed, since removing it would change how the lines after it are read; its *Remove* row says so.
+
+#### The 10 second confirmation
+A hotkey on the Up or Down arrow or the Menu key that runs something other than that key's own command (`:up`, `:down` or `:settings`) takes the key's job away. Such a change takes effect, and the note asks you to press that key again: `Press Up again within 10 s to keep it`. Pressing it keeps the change. Otherwise, after 10 seconds, the change goes back. It goes back too if settings close first. Until the change is kept or goes back, no binding's page opens, and the note says why.
+
+#### How bindings are written
+A new hotkey is written as `HotkeyN=#<keycode>;<command>`, numbered one above the highest `HotkeyN` in the file, such as `Hotkey2=#4000003E;:quit`. A new gamepad control is written as the button's name and its command, such as `ButtonY=:home`. A changed binding rewrites its own line, keeping its name, and a removed one removes its line.
+
 ### Saving
 - Only the settings you changed are written. Everything else in your config file stays as it was: comments, blank lines and order included. Setting a menu back to *All menus* removes its line.
 - The file is read again when you save, so an edit made to it by hand while settings were open is kept.
 - If nothing changed, nothing is written.
 - The previous version is kept beside it as `config.ini.bak`. The new file is written beside the old one and then swapped in whole, so a failed save never leaves half a file. On Windows, a config file you have hidden stays hidden.
 - A file that sets the columns with the older name, `MaxButtons`, keeps that name when they are saved. A file that has both `Columns` and `MaxButtons` in `[Layout]` is left with `Columns` alone.
-- **Discard changes**, on the first page, puts everything back as it was when you opened settings.
+- Hotkeys and gamepad controls are saved line by line: only the lines of the bindings you changed, added or removed are written. A binding's line that was changed by hand while settings were open keeps the hand edit, and your change is written beside it as a new line; where two lines bind one key or button, the first in the file is the one that runs. A line removed by hand stays removed, and the removal is skipped. The debug log (`-d`) says so in a `Settings: not saved as asked: ...` line for each.
+- **Discard changes**, on the first page, puts everything back as it was when you opened settings, the bindings included.
 - **On Linux**, the config installed with the package (in `/usr/share/streamflex`) cannot be changed. Your first save writes your own copy to `~/.config/streamflex/config.ini`, which StreamFlex reads from then on, and later saves change that copy. If that copy exists but cannot be read, the save fails and says why rather than replace it.
 - If the file cannot be written, settings say why, and offer to try again or to leave without saving; Back returns to the settings instead. The config file stays as it was.
 - Quitting StreamFlex while settings are open saves nothing.
+
+### Restart now?
+One setting applies only at the next start: the gamepad's *Mappings file* ([ControllerMappingsFile](#controllermappingsfile)). When a save writes it, settings ask, before they close, *Restart StreamFlex now to apply the mappings file?* They ask after every save that writes it, however you leave: with Back, with the Menu key, with `:home`, or with *Try again* after a save that failed.
+- **Yes**, under the cursor when the question opens, restarts StreamFlex. On Linux the new start takes the place of the running program; on Windows a new copy starts once this one's window, and its exit hotkey, are gone.
+- **No**, or **Back**, closes settings. The change waits for the next start.
+
+A restart is not a quit: the [QuitCmd](#quitcmd) does not run, and the restarted copy does not run the [StartupCmd](#startupcmd) again. The restarted copy is started with `--restarted`, an option for StreamFlex's own use, and carries on the same log file instead of starting a new one; the debug log (`-d`) says `Restarting StreamFlex to apply the mappings file`. If the program cannot be found to start again, the log says why, and StreamFlex carries on running. This has nothing to do with the [`:restart`](#restart) command, which restarts the computer.
 
 ## Settings
 The following sections contain settings that control the look and behavior of the launcher:
@@ -116,10 +291,14 @@ Defines whether VSync will be used to synchronize the frame rate with the refres
 Default: true
 
 ##### FPSLimit
-When `VSync` is set to false, this setting defines the maximum number of frames per second that StreamFlex will render. The minimum is 10, and the maximum is the same as the refresh rate of your monitor.
+When `VSync` is set to false, this setting defines the maximum number of frames per second that StreamFlex will render. The minimum is 10, and the maximum is the same as the refresh rate of your monitor. The file may hold a whole number from 10 to 1000; any other value is ignored, and the log says so. A limit above your monitor's refresh rate leaves VSync on, as no `FPSLimit` at all does (*Off* on the settings screen).
+
+Both `VSync` and `FPSLimit` take effect at once when the settings screen changes them. If the renderer refuses to turn VSync on, or off, StreamFlex paces each frame itself and writes an error line to the log: `The renderer refused VSync: each frame is paced to <N> ms instead` when VSync stays off, and `The renderer would not turn VSync off: each frame is still paced to <N> ms` when it stays on.
+
+Default: none (Off)
 
 ##### ApplicationTimeout
-Defines the time in seconds that the launcher will wait for an application to launch. If the launcher does not lose the window focus before the timeout occurs, it assumes there was an error with the launched application.
+Defines the time in seconds that the launcher will wait for an application to launch, from 3 to 30. If the launcher does not lose the window focus before the timeout occurs, it assumes there was an error with the launched application.
 
 Default: 15
 
@@ -192,14 +371,14 @@ When `Mode` is set to "Image", this setting defines the image to be displayed in
 When `Mode` is set to "Slideshow", this setting defines the directory (folder) which contains the images to display in the background. The value should be a path to a directory on your filesystem. The slideshow shows the files whose names end in `.jpg`, `.jpeg`, `.png` or `.webp`, in any case (`DSC_0001.JPG` counts), and leaves out hidden files: on Linux a name starting with a dot, and on Windows a file with the hidden or system attribute. Folders inside it are not searched.
 
 ##### SlideshowImageDuration
-When `Mode` is set to "Slideshow", this setting defines the amount of time in seconds to display each image. Must be an integer value.
+When `Mode` is set to "Slideshow", this setting defines the amount of time in seconds to display each image. Must be an integer value, from 5 to 3600.
 
 Default: 30
 
 ##### SlideshowTransitionTime
-When `Mode` is set to "Slideshow", this setting defines the amount of time in seconds that the next background image will fade in. The fading transition may be disabled by setting this to 0, which will yield a "hard" transition between images. Decimal values are acceptable.
+When `Mode` is set to "Slideshow", this setting defines the amount of time in seconds that the next background image will fade in, at most 3. The fading transition may be disabled by setting this to 0, which will yield a "hard" transition between images. Decimal values are acceptable.
 
-Default: 3
+Default: 1.5 (the sample config's commented-out line shows 3)
 
 ##### ChromaKeyColor
 When `Mode` is set to "Transparent", this setting defines the color that will be applied to the background for chroma key transparency.
@@ -217,7 +396,7 @@ Defines the color of the background overlay.
 Default: #000000 (Black)
 
 ##### OverlayOpacity
-Defines the opacity of the background overlay. Must be a percent value.
+Defines the opacity of the background overlay. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 50%
 
@@ -248,12 +427,12 @@ The largest size of a button, in pixels: a whole number from 32 to 1024. Buttons
 Default: none (the sample config sets 256)
 
 ##### IconSpacing
-The gap between buttons, across and down, in pixels or percent of the screen width. The gap is kept as set, up to the width of the screen: if it is too large for the grid to fit at `IconSize`, the buttons shrink instead.
+The gap between buttons, across and down, in pixels or percent of the screen width. A percentage may have up to two decimals (`12.5%`). The gap is kept as set, up to the width of the screen: if it is too large for the grid to fit at `IconSize`, the buttons shrink instead.
 
 Default: 5%
 
 ##### VCenter
-The vertical centre of the buttons, in percent of the screen height. A value of 50% centres them halfway down the screen; a higher value lowers them and a lower value raises them. The rows that have buttons are centred on this line, but a tall grid is kept on the screen and below the clock.
+The vertical center of the buttons, in percent of the screen height, which may have up to two decimals (`52.5%`). A value of 50% centers them halfway down the screen; a higher value lowers them and a lower value raises them. The center is kept between 25% and 75% of the height: a value outside that is drawn at the nearer end. The rows that have buttons are centered on this line, but a tall grid is kept on the screen and below the clock.
 
 Default: 50%
 
@@ -262,6 +441,7 @@ The settings in this section affect the application titles that display below th
 
 - [Enabled](#enabled)
 - [Font](#font)
+- [FontFace](#fontface)
 - [FontSize](#fontsize)
 - [Color](#color-1)
 - [Shadows](#shadows)
@@ -276,9 +456,16 @@ Defines whether or not application titles are enabled. This setting is a boolean
 Default: true
 
 ##### Font
-Defines the font to use for the titles of the menu entries. The value should be the path to a TrueType (TTF) font file. Non-TTF font formats are not supported. StreamFlex ships with a handful of libre fonts.
+Defines the font to use for the titles of the menu entries. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc` or `.otc`). StreamFlex ships with a handful of libre fonts. The settings screen's [font picker](#the-font-picker) lists the fonts installed.
+
+`FontFace` picks a face inside a font collection (`.ttc`), counted from 0. Absent means 0. A config moved to another machine whose font is not there falls back to the bundled font, as its image paths do.
 
 Default: OpenSans
+
+##### FontFace
+The face to use inside the titles' `Font`, when that is a font collection: a whole number, counted from 0. The font picker writes it when you choose a face that is not a collection's first, and removes it when you choose one that is. A face the file does not have falls back to the bundled font, and the log says so.
+
+Default: 0
 
 ##### FontSize
 Defines the size of the menu entry titles, in one of two ways:
@@ -303,7 +490,7 @@ Defines the color of the title shadows.
 Default: #000000 (Black)
 
 ##### Opacity
-Defines the opacity of the menu entry titles. Must be a percent value.
+Defines the opacity of the menu entry titles. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 100%
 
@@ -316,7 +503,7 @@ Defines the behavior when the width of a menu entry title exceeds the width of i
 Default: Truncate
 
 ##### Padding
-Defines the vertical spacing between an icon and its title: a percentage of the button size, such as `8%`, or a number of pixels. A number of pixels is capped at half the button's size.
+Defines the vertical spacing between an icon and its title: a whole percentage of the button size up to 50%, such as `8%`, or a number of pixels. A number of pixels is capped at half the button's size.
 
 Default: 8%
 
@@ -344,12 +531,12 @@ Defines the fill color of the highlight cursor.
 Default: #FFFFFF (White)
 
 ##### FillOpacity
-Defines the fill opacity of the highlight cursor. Must be a percent value.
+Defines the fill opacity of the highlight cursor. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 25%
 
 ##### OutlineSize
-Defines the stroke width in pixels of the outline of the highlight cursor. Setting this to 0 will disable the outline.
+Defines the stroke width in pixels of the outline of the highlight cursor. Setting this to 0 will disable the outline. The outline is drawn at most as wide as the smaller of `VPadding` and `HPadding`, so it stays inside the highlight.
 
 Default: 0
 
@@ -359,12 +546,12 @@ Defines the outline color of the highlight cursor.
 Default: #0000FF (Blue)
 
 ##### OutlineOpacity
-Defines the outline opacity of the highlight cursor. Must be a percent value.
+Defines the outline opacity of the highlight cursor. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 100%
 
 ##### CornerRadius
-Defines the corner radius of the highlight cursor, in pixels. A value of 0 will yield a plain rectangle. Increasing the value will yield a rounded rectangle with increasingly round corners. The value of `HighlightOutlineSize` must be 0, otherwise this setting will be ignored.
+Defines the corner radius of the highlight cursor, in pixels. A value of 0 will yield a plain rectangle. Increasing the value will yield a rounded rectangle with increasingly round corners. The highlight's [OutlineSize](#outlinesize) must be 0, otherwise this setting will be ignored.
 
 Default: 0
 
@@ -374,12 +561,12 @@ Defines the amount of vertical distance that the highlight cursor extends beyond
 Default: 30
 
 ##### HPadding
-Defines the amount of horizontal distance that the highlight cursor extends beyond the left and right of the menu entry icon, in pixels.
+Defines the amount of horizontal distance that the highlight cursor extends beyond the left and right of the menu entry icon, in pixels. It is drawn at most half as wide as the gap between buttons ([IconSpacing](#iconspacing)), so the highlight never reaches the next button.
 
 Default: 30
 
 #### Scroll Indicators
-The settings in this section pertain to scroll indicators. Scroll indicators are arrows that show when a menu has more buttons than fit on the screen. A one-row menu shows them in the bottom left and/or bottom right corners. A grid shows them centred at the top and/or bottom of the screen, pointing up or down.
+The settings in this section pertain to scroll indicators. Scroll indicators are arrows that show when a menu has more buttons than fit on the screen. A one-row menu shows them in the bottom left and/or bottom right corners. A grid shows them centered at the top and/or bottom of the screen, pointing up or down.
 
 - [Enabled](#enabled-2)
 - [FillColor](#fillcolor-1)
@@ -393,7 +580,7 @@ Defines whether scroll indicators will be enabled when a menu has more buttons t
 Default: true
 
 ##### OutlineSize
-Defines the stroke width in pixels of the scroll indicator outline. Setting this to 0 will disable the outline.
+Defines the stroke width in pixels of the scroll indicator outline. Setting this to 0 will disable the outline. It is drawn at most 1% of the screen height wide.
 
 Default: 0
 
@@ -408,7 +595,7 @@ Defines the color of the scroll indicator outline.
 Default: #000000 (Black)
 
 ##### Opacity
-Defines the opacity of the scroll indicators. Must be a percent value.
+Defines the opacity of the scroll indicators. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 100%
 
@@ -483,7 +670,7 @@ The :fork special command requires a command as an argument. For example `:fork 
 Windows users should invoke a command line interpreter such as Command Prompt and pass the command to run as an argument, e.g. `:fork cmd.exe /c "command arguments"`
 
 #### :exit
-Windows only. Quits the currently running application. This special command is only available as a hotkey command. See the [Exit Hotkey](#exit-hotkey-windows-only) section for more information.
+Quits the currently running application. Windows only, as a hotkey. Anywhere else (a Linux hotkey, or a menu entry on either platform) StreamFlex logs that it does nothing. See the [Exit Hotkey](#exit-hotkey-windows-only) section for more information.
 
 #### :back
 Go back to the previous menu.
@@ -551,17 +738,24 @@ Defines which side of the screen the clock text should align to. Possible values
 Default: Left
 
 #### Font
-Defines the font to use for the clock text. The value should be the path to a TrueType (TTF) font file.
+Defines the font to use for the clock text. The value should be the path to a TrueType or OpenType font file (`.ttf` or `.otf`), or a font collection (`.ttc` or `.otc`). The settings screen's [font picker](#the-font-picker) lists the fonts installed.
+
+`FontFace` picks a face inside a font collection (`.ttc`), counted from 0. Absent means 0. A config moved to another machine whose font is not there falls back to the bundled font, as its image paths do.
 
 Default: SourceSansPro
 
+#### FontFace
+The face to use inside the clock's `Font`, when that is a font collection: a whole number, counted from 0. The font picker writes it when you choose a face that is not a collection's first, and removes it when you choose one that is. A face the file does not have falls back to the bundled font, and the log says so.
+
+Default: 0
+
 #### FontSize
-Defines the font size of the clock text
+Defines the font size of the clock text: a whole number, at least 1. Any other value, such as a negative one, is ignored, and the log says so. The settings screen steps it from 20 to 120, in steps of 5.
 
 Default: 50
 
 #### Margin
-Defines the distance of the clock text from the top and side of the screen, in pixels or percent of the screen height.
+Defines the distance of the clock text from the top and side of the screen, in pixels or percent of the screen height. A percentage may have up to two decimals (`12.5%`). The margin is at most 10% of the screen height.
 
 Default: 5%
 
@@ -581,7 +775,7 @@ Defines the color of the clock text shadows.
 Default: #000000 (Black)
 
 #### Opacity
-Defines the opacity of the clock text. Must be a percent value.
+Defines the opacity of the clock text. Must be a percent value, which may have up to two decimals (`12.5%`).
 
 Default: 100%
 
@@ -613,17 +807,17 @@ Defines whether or not the screensaver is enabled. This setting is a boolean "tr
 Default: false
 
 #### IdleTime
-Defines the amount of time in seconds that the input should be idle before activating the screensaver
+Defines the amount of time in seconds that the input should be idle before activating the screensaver, from 3 to 900 (15 minutes).
 
 Default: 300 (5 minutes)
 
 #### Intensity
-Defines the amount to dim the screen. Must be a percent value.
+Defines the amount to dim the screen. Must be a percent value, which may have up to two decimals (`12.5%`). An intensity too low to dim the screen at all (below 0.4%) is logged, and the screensaver is not started.
 
 Default: 70%
 
 #### PauseSlideshow
-When `BackgroundMode` is set to "Slideshow", this setting defines whether or not the slideshow should be paused while the screensaver is active. This setting is a boolean "true" or "false".
+When the background's `Mode` is set to "Slideshow", this setting defines whether or not the slideshow should be paused while the screensaver is active. This setting is a boolean "true" or "false".
 
 Default: true
 
@@ -632,6 +826,8 @@ StreamFlex supports configurable hotkeys, which executes a command when a specif
 ```ini
 Hotkey=keycode;command
 ```
+The settings screen's *Keyboard* page adds, changes and removes hotkeys from the remote, capturing the key for you; see [Key and button bindings](#key-and-button-bindings).
+
 The keycode is a HEX prefixed with the # character. There are two ways to find a keycode for a given key. The first is to use the [lookup table provided by SDL](https://wiki.libsdl.org/SDLKeycodeLookup). The name of each key is in the right column of the table, and the corresponding HEX keycode is in the center column. The second is to run StreamFlex in debug mode, press the key, then check the log. For each keystroke, the name of the key will be printed and the HEX value will be in parenthesis next to it.
 
 Any key can be set as a hotkey, except keys that are reserved for the default controls: the left and right arrow keys, enter/return, and backspace. The up and down arrow keys move between rows of a grid, unless a hotkey is bound to them, in which case the hotkey is used. The Menu key opens the [settings screen](#the-settings-screen) the same way in either of its two keycodes, `#40000065` (a keyboard's context-menu key) and `#40000076` (a remote's Menu button), unless a hotkey is bound to that code; a hotkey on one code leaves the other still opening settings. The debug log's name for `#40000065` varies with the SDL version (`Application` or `Menu`); the keycode is what identifies it. Hotkeys may be used to "speed dial" your favorite applications, or to add controls via [special commands](#special-commands). As an example configuration below, the first hotkey is mapped to F1 and will launch Kodi when it is pressed, and the second hotkey is mapped to F12 and will cause StreamFlex to quit when it is pressed:
@@ -645,6 +841,8 @@ Hotkey2=#40000045;:quit
 The exit hotkey feature allows a user to quit the running application using a button on their remote. This is especially useful for applications that don't have a quit button, such as a web browser operating in fullscreen mode.
 
 Only the function keys F1-F24 may be used as an exit hotkey, with the exception of F12 which is forbidden by Windows. Pressing an exit hotkey is functionally equivalent to using the Alt+F4 keyboard shortcut on the active window; it is not a forceful method, so the application is able to close cleanly. However, the application could also choose to ignore it, display a confirmation dialog, or not respond if it's hung.
+
+If another program already holds the key when StreamFlex starts, Windows refuses the exit hotkey, and the log says why. StreamFlex then tries again every 5 seconds, whenever it comes back to the front, and whenever settings close, so the exit hotkey starts working as soon as the other program lets go of the key, with no restart. The log says once when it succeeds.
 
 The following example maps F10 as an exit hotkey:
 ```ini
@@ -664,19 +862,21 @@ Defines whether or not gamepad controls are enabled. This setting is a boolean "
 Default: true
 
 #### DeviceIndex
-Defines the device index of the gamepad in SDL. If this value is negative, any gamepad may be used to control the launcher.
+Defines the device index of the gamepad in SDL: -1, or 0 to 15. -1 lets any gamepad control the launcher; any other value is ignored, and the log says so.
 
 Default: -1
 
 #### ControllerMappingsFile
 A path to a text file that contains 1 or more controller mappings to override the default. This is usually not necessary, but if you want to change the mapping for your controller, or there is no default mapping for your controller in SDL, it can be specified via this interface. A community database of mappings for many common controllers can be found [here](https://github.com/gabomdq/SDL_GameControllerDB). Alternatively, you may create a custom mapping using a GUI tool such as the [SDL2 Gamepad Tool](https://generalarcade.com/gamepadtool/).
 
+Applies at next start: SDL can add mappings while running, but not take one back. When the settings screen changes it, it offers to [restart StreamFlex](#restart-now) as it closes.
+
 ### Controls
 The controls are defined in key=value pairs, where the key is the name of the axis or button that is pressed, and the value is the command that is to be run, which is typically a [special command](#special-commands). An axis is an analog stick or a trigger. For analog sticks, negative (-) represents left for the x axis and up for the y axis, and postive (+) represents right for the x axis and down for the y axis. 
 
-The [SDL GameController](https://wiki.libsdl.org/CategoryGameController) interface is an abstraction which conceptualizes a controller as having an Xbox-style layout. The mapping names in SDL are based on the *location* of the buttons on an Xbox controller, and may not correspond to the actual labelling of the buttons on your controller. For example, `ButtonA` is for the "bottom" button, `ButtonB` is for the "right" button of the 4 main control buttons. If you have a Playstation-style controller, those mapping names will correspond to the X button and the Circle button, respectively. 
+The [SDL GameController](https://wiki.libsdl.org/CategoryGameController) interface is an abstraction which conceptualizes a controller as having an Xbox-style layout. The mapping names in SDL are based on the *location* of the buttons on an Xbox controller, and may not correspond to the actual labeling of the buttons on your controller. For example, `ButtonA` is for the "bottom" button, `ButtonB` is for the "right" button of the 4 main control buttons. If you have a Playstation-style controller, those mapping names will correspond to the X button and the Circle button, respectively. 
 
-The default controls in StreamFlex allow the user to move the highlight cursor with the left stick or the DPad, select an entry by pressing A, and go back to the previous menu by pressing B. These controls are simple and will suffice for the vast majority of use cases.
+The default controls in StreamFlex allow the user to move the highlight cursor with the left stick or the DPad, select an entry by pressing A, and go back to the previous menu by pressing B. These controls are simple and will suffice for the vast majority of use cases. The settings screen's *Gamepad* page adds, changes and removes controls, capturing the button from the gamepad; see [Key and button bindings](#key-and-button-bindings).
 
 Up and down have defaults of their own. If your config maps nothing to `:up` or `:down`, the DPad's up and down buttons and the left stick's vertical axis run them, unless your config already uses those controls for something else. A config written before grids existed can still move between rows.
 

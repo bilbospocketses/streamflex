@@ -13,8 +13,12 @@
 
 #ifdef STREAMFLEX_TEST_HOOKS
 // Only the headless harness builds these. STREAMFLEX_TEST_FAIL names one of the settings screen's
-// steps (places, browser, command or keep), which then runs as if memory had run out, or for keep,
-// as if the saved file's permissions could not be kept: failures no real run can be made to give.
+// steps (places, browser, command, keep or bindings; the pickers' list, rows, select, pads or apply; the font
+// picker's fontlist, fontscan, fontfolder, faces or sample) or the launcher's restart (its copy of the
+// arguments, made at the start), which then runs as if memory had run
+// out, or for keep, as if the saved file's permissions could not be kept; or one its own code fails
+// (fontthread: no thread starts; fontadd: the listing thread cannot add a file): failures no real
+// run can be made to give.
 
 // A function standing in for realloc that always fails
 static void *failing_reallocate(void *memory, size_t size)
@@ -30,6 +34,16 @@ static void releasing(void *memory)
     free(memory);
 }
 
+// A function to say that a step fails, once per run: a step that fails each frame (sample) would
+// otherwise fill the log
+static void log_failing(const char *step)
+{
+    static bool logged = false;
+    if (!logged)
+        log_debug("Test hook: %s fails", step);
+    logged = true;
+}
+
 // A function to start (true) or end (false) the failure the harness asked for, when it names `step`
 void test_fail(const char *step, bool on)
 {
@@ -42,6 +56,17 @@ void test_fail(const char *step, bool on)
     else
         alloc_set_hooks(on ? &failing : NULL);
     if (on)
-        log_debug("Test hook: %s fails", step);
+        log_failing(step);
+}
+
+// A function to tell whether the harness asked for `step` to fail, where the step's own code fails
+// it (no allocation hook is involved: fontthread, fontadd). Main thread only: it logs.
+bool test_failing(const char *step)
+{
+    const char *asked = getenv("STREAMFLEX_TEST_FAIL");
+    if (asked == NULL || strcmp(asked, step) != 0)
+        return false;
+    log_failing(step);
+    return true;
 }
 #endif

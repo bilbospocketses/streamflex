@@ -19,7 +19,7 @@ StreamFlex builds on Flex Launcher, which complexlogic first released in late 20
 - **Portability:** Many of the other existing solutions only support a single platform. StreamFlex aims to be portable and cross-platform, running on ARM-based SBCs such as Raspberry Pi, to high-end Windows PCs, and everything in between.
 - **Ease of Navigation:** StreamFlex should be completely navigable using only directional keys, enter, and back. The launcher should include built-in support for gamepad devices.
 
-StreamFlex is free and open source software, released under the GNU General Public License v3.0. You may modify and redistribute it under the terms of that licence. The source code is available on [GitHub](https://github.com/bilbospocketses/streamflex).
+StreamFlex is free and open source software, released under the GNU General Public License v3.0. You may modify and redistribute it under the terms of that license. The source code is available on [GitHub](https://github.com/bilbospocketses/streamflex).
 
 This project started from complexlogic's original Flex Launcher (v2.2) and is developed independently.
 
@@ -50,7 +50,7 @@ With the hotkeys feature, you can map custom commands to a button on your remote
 There are built-in menu options to shut down, restart, or put your PC to sleep.
 
 #### Gamepad Controls
-StreamFlex has full support for gamepad controls, allowing easy menu navigation. Enable the controls via the configuration file and connect your gamepad. The user can also add a custom mapping for a given gamepad.
+StreamFlex has full support for gamepad controls, allowing easy menu navigation. The controls are on by default: connect your gamepad. The user can also add a custom mapping for a given gamepad.
 
 #### Screensaver
 StreamFlex includes a screensaver mode that will dim the screen after it has been idle. The user is able to adjust how long the idle time should be, and how much to dim the screen.

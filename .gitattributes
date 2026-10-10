@@ -7,3 +7,5 @@ tests/headless/Dockerfile.fedora text eol=lf
 # The hands-on QA helpers run in the Ubuntu guest, so the same holds for them
 tests/qa/*.sh text eol=lf
 tests/qa/*.py text eol=lf
+# The CI helper scripts run on the Linux runners and also locally from Git Bash
+.github/scripts/*.sh text eol=lf

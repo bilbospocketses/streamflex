@@ -54,7 +54,7 @@ These are the input classes that the unit tests do not reach, because they live 
 3. **A config written before grids existed** (gamepad enabled, with only Left/Right mapped) must get D-pad and left-stick Up/Down. A control the config already uses for something else must keep its own command. Pinned in Task 6 (fixtures C, D and E).
 4. **Moving between menus with different button sizes** (a 1-row main menu and a 3×6 submenu, then `:back`). Each menu must be re-rendered at its own size, with the highlight matching. The parent keeps its selection. Pinned in Task 5 (fixture G), and by hand in Task 8.
 5. **SVG icons, and a missing icon file.**
-   - An `.svg` icon (and its `_selected` override) must be rasterised at the button size.
+   - An `.svg` icon (and its `_selected` override) must be rasterized at the button size.
    - A missing icon file must log an error and draw nothing, never crash.
 
    Pinned in Task 5 (fixture F).
@@ -141,7 +141,7 @@ typedef struct {
     int y;
     int w;
     int h;
-    int vcenter;     // Vertical centre of the button block, in px from the top of the screen
+    int vcenter;     // Vertical center of the button block, in px from the top of the screen
 } LayoutArea;
 
 // The computed layout of one menu
@@ -149,8 +149,8 @@ typedef struct {
     int rows;        // After any reduction to fit the screen
     int columns;
     int button;      // Square button size in px
-    int x_advance;   // Distance between neighbouring buttons' x
-    int y_advance;   // Distance between neighbouring rows' y
+    int x_advance;   // Distance between neighboring buttons' x
+    int y_advance;   // Distance between neighboring rows' y
     int x_origin;    // Top-left of the first visible slot
     int y_origin;
     int hpad;        // Highlight padding after capping
@@ -499,7 +499,7 @@ static void test_compute_grid_height_limited(void)
     CHECK_INT(layout_compute(&p, &SCREEN_1080, 18, &g, NULL, 0), 0);
     CHECK_INT(g.button, 180);    // (972 - 2*96 - 2*30) / 3 - 60
     CHECK_INT(g.x_origin, 180);  // (1920 - (6*180 + 5*96)) / 2
-    CHECK_INT(g.y_origin, 84);   // centred at 540, then kept inside: 54 + 30
+    CHECK_INT(g.y_origin, 84);   // centered at 540, then kept inside: 54 + 30
     CHECK_INT(g.y_advance, 336); // 180 + 60 + 96
 }
 
@@ -555,8 +555,8 @@ static void test_compute_fails_when_nothing_fits(void)
     CHECK_INT(g.button, 0);      // Untouched on failure
 }
 
-// A function to test centring: a partial single row on its own buttons, a partial last row on the columns
-static void test_compute_centring(void)
+// A function to test centering: a partial single row on its own buttons, a partial last row on the columns
+static void test_compute_centering(void)
 {
     LayoutParams p = params(3, 6, 0);
     LayoutGeometry g;
@@ -613,7 +613,7 @@ int main(void)
     test_compute_padding_caps();
     test_compute_reduces_overflowing_axis();
     test_compute_fails_when_nothing_fits();
-    test_compute_centring();
+    test_compute_centering();
     test_compute_vcenter_clamp();
     test_compute_clock_band();
     return check_report();
@@ -693,8 +693,8 @@ int layout_compute(const LayoutParams *params, const LayoutArea *area, int entry
         snprintf(why, why_size, "not enough screen space for %i x %i buttons, reducing to %i x %i",
             params->columns, params->rows, g.columns, g.rows);
 
-    // Centre the block horizontally on the configured columns, so columns stay put as it
-    // scrolls. A menu that fills less than one row is centred on its own buttons instead.
+    // Center the block horizontally on the configured columns, so columns stay put as it
+    // scrolls. A menu that fills less than one row is centered on its own buttons instead.
     int count = max_int(entry_count, 1);
     int used_columns = min_int(count, g.columns);
     int used_rows = min_int(g.rows, (count + g.columns - 1) / g.columns);
@@ -704,7 +704,7 @@ int layout_compute(const LayoutParams *params, const LayoutArea *area, int entry
     g.y_advance = g.button + params->title_block + spacing;
     g.x_origin = area->x + (area->w - block_w) / 2;
 
-    // Centre the occupied rows on VCenter, then keep the block and its highlight inside the area
+    // Center the occupied rows on VCenter, then keep the block and its highlight inside the area
     g.y_origin = area->vcenter - block_h / 2;
     g.y_origin = min_int(g.y_origin, area->y + area->h - g.vpad - block_h);
     g.y_origin = max_int(g.y_origin, area->y + g.vpad);
@@ -886,7 +886,7 @@ int main(void)
     test_compute_padding_caps();
     test_compute_reduces_overflowing_axis();
     test_compute_fails_when_nothing_fits();
-    test_compute_centring();
+    test_compute_centering();
     test_compute_vcenter_clamp();
     test_compute_clock_band();
     test_strip_moves();
@@ -1140,7 +1140,7 @@ typedef struct menu {
     Entry           *first_entry;
     Entry           *root_entry;
     Entry           *last_selected_entry;
-    Entry           **items;          // Entries by index, for the layout maths
+    Entry           **items;          // Entries by index, for the layout math
     LayoutOverrides overrides;        // Per-menu Rows/Columns/IconSize; 0 = from [Layout]
     LayoutPosition  position;         // Selected entry and scroll position
     int             rendered_size;    // Button size the textures were rendered at; 0 = not yet
@@ -1288,7 +1288,7 @@ In `create_menu`, replace the compound literal with:
 After `create_menu` in `src/util.c`, add:
 
 ```c
-// A function to give every menu an array of its entries by index, for the layout maths
+// A function to give every menu an array of its entries by index, for the layout math
 void build_menu_items()
 {
     for (Menu *m = config.first_menu; m != NULL; m = m->next) {
@@ -1436,7 +1436,7 @@ typedef struct menu {
     char            *name;
     unsigned int    num_entries;
     Entry           *first_entry;
-    Entry           **items;          // Entries by index, for the layout maths
+    Entry           **items;          // Entries by index, for the layout math
     LayoutOverrides overrides;        // Per-menu Rows/Columns/IconSize; 0 = from [Layout]
     LayoutPosition  position;         // Selected entry and scroll position
     int             rendered_size;    // Button size the textures were rendered at; 0 = not yet
@@ -1532,7 +1532,7 @@ with:
 4. Replace the VCenter block, from `// Calculate y margin for buttons from centerline setting string, check limits` down to `geo->y_margin = vcenter - button_height / 2;`, with:
 
 ```c
-    // Convert the vertical centre setting to px and check its limits
+    // Convert the vertical center setting to px and check its limits
     int vcenter = INVALID_PERCENT_VALUE;
     float f_screen_height = (float) geo->screen_height;
     int lower_limit = (int) (MIN_VCENTER*f_screen_height);
@@ -1584,8 +1584,8 @@ In `render_scroll_indicators`, after the last line (`scroll->rect_left.x = geo->
 ```c
 
     // Grid indicators: the same arrow drawn a quarter turn round (see draw_screen), sized so
-    // its on-screen height is the screen margin and centred in the top and bottom margins.
-    // SDL rotates about the rect's centre, so the rect keeps the unrotated arrow's proportions,
+    // its on-screen height is the screen margin and centered in the top and bottom margins.
+    // SDL rotates about the rect's center, so the rect keeps the unrotated arrow's proportions,
     // and its width becomes the on-screen height.
     int grid_w = geo->screen_margin;
     int grid_h = grid_w * scroll->rect_right.h / scroll->rect_right.w;
@@ -2289,7 +2289,7 @@ The gap between buttons, across and down, in pixels or percent of the screen wid
 Default: 5%
 
 ##### VCenter
-The vertical centre of the buttons, in percent of the screen height. A value of 50% centres them halfway down the screen; a higher value lowers them and a lower value raises them. The rows that have buttons are centred on this line, but a tall grid is kept on the screen and below the clock.
+The vertical center of the buttons, in percent of the screen height. A value of 50% centers them halfway down the screen; a higher value lowers them and a lower value raises them. The rows that have buttons are centered on this line, but a tall grid is kept on the screen and below the clock.
 
 Default: 50%
 ````
@@ -2434,7 +2434,7 @@ Only the user can do this: it needs the TV, remote and gamepad. Give the user th
 git -C C:/Users/jscha/source/repos/streamflex push -u origin feat/grid-layout
 ```
 
-Write the PR body to a scratch file and pass it with `--body-file`. The body covers the Goal, the two behaviour changes for existing configs, the test counts from Step 1, the fixture results, and the user's hands-on results. Then:
+Write the PR body to a scratch file and pass it with `--body-file`. The body covers the Goal, the two behavior changes for existing configs, the test counts from Step 1, the fixture results, and the user's hands-on results. Then:
 
 ```powershell
 gh pr create -R bilbospocketses/streamflex --base master --head feat/grid-layout --title "feat: multi-row grids and button sizing" --body-file <scratch file>

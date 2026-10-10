@@ -4,7 +4,7 @@
 
 **Goal:** Ship a built-in icon library — 33 streaming/app services' own icons and 36 generic icons on one shared outline — that a menu entry names with a bare word (`Entry1=Netflix;netflix;...`).
 
-**Architecture:** Icon files live in `assets/icons/library/` with an `icons.ini` manifest. A new pure C module, `src/library.c` (inih + libc, no SDL), reads the manifest. `resolve_library_icons()` in `src/util.c` runs once at startup and rewrites each bare-name entry's `icon_path` to the library file. Everything downstream (sizing, SVG rasterising, the grid) is unchanged. Python tools in `branding/library/` generate the generic SVGs, the manifest and the brand NOTICE; they import brand art, check the library in CI, and build the docs gallery.
+**Architecture:** Icon files live in `assets/icons/library/` with an `icons.ini` manifest. A new pure C module, `src/library.c` (inih + libc, no SDL), reads the manifest. `resolve_library_icons()` in `src/util.c` runs once at startup and rewrites each bare-name entry's `icon_path` to the library file. Everything downstream (sizing, SVG rasterizing, the grid) is unchanged. Python tools in `branding/library/` generate the generic SVGs, the manifest and the brand NOTICE; they import brand art, check the library in CI, and build the docs gallery.
 
 **Tech Stack:** C (SDL2 launcher, inih, nanosvg), CMake/CTest, Python 3 (standard library; Pillow 11.0.0 for the brand-image tools only), GitHub Actions, Jekyll (docs site).
 
@@ -15,8 +15,8 @@
 - **Icon names:** 1-32 characters from `a-z`, `0-9`, `-`; unique across generic and brand icons. Anything else in an entry's icon field is a file path, exactly as today.
 - **`src/library.c` stays pure:** inih and the C library only — no SDL, no `util.c`, no `debug.c` — so it is unit-tested without SDL, like `layout.c`.
 - **Shared outline:** a rounded square filling the canvas, corner radius **22%** of the side (the app icon's plate, 54 of 244). Generic SVGs use `viewBox 0 0 512 512`, `rx="112.64"`.
-- **Plate colours:** every coloured plate has CIE L* = 52. Media hue slots `h = 25 + k·360/13`, chroma `floor(0.85 × max in-gamut chroma at L* = 52)` found in 0.5 steps. Pinned results: movies `#E7364B`, news `#C85D21`, kids `#9E7522`, sports `#7A8223`, music `#328E23`, podcasts `#308B69`, audiobooks `#338984`, photos `#358696`, tv-shows `#3784A9`, live-tv `#3A7EC9`, games `#7B68EA`, emulators `#CF37C7`, radio `#DF3784`; system `#5C646D` = LCh(42, 6, 260); general `#07606C` (app icon `TEAL_BG`); devices `#4D7189` = LCh(46, 18, 250). Every plate ≥ 3:1 contrast against white.
-- **Glyphs:** Material Symbols Rounded filled, npm `@material-symbols/svg-500` **0.47.5** (Apache-2.0), vendored in `branding/library/glyphs/`; 960-unit em box scaled to **60%** of the plate, centred, times a per-glyph trim (start 1.0).
+- **Plate colors:** every colored plate has CIE L* = 52. Media hue slots `h = 25 + k·360/13`, chroma `floor(0.85 × max in-gamut chroma at L* = 52)` found in 0.5 steps. Pinned results: movies `#E7364B`, news `#C85D21`, kids `#9E7522`, sports `#7A8223`, music `#328E23`, podcasts `#308B69`, audiobooks `#338984`, photos `#358696`, tv-shows `#3784A9`, live-tv `#3A7EC9`, games `#7B68EA`, emulators `#CF37C7`, radio `#DF3784`; system `#5C646D` = LCh(42, 6, 260); general `#07606C` (app icon `TEAL_BG`); devices `#4D7189` = LCh(46, 18, 250). Every plate ≥ 3:1 contrast against white.
+- **Glyphs:** Material Symbols Rounded filled, npm `@material-symbols/svg-500` **0.47.5** (Apache-2.0), vendored in `branding/library/glyphs/`; 960-unit em box scaled to **60%** of the plate, centered, times a per-glyph trim (start 1.0).
 - **Brand art:** RGBA PNG, square, **512 to 1024 px** (never upscaled; larger art stored at 1024), transparent outside the outline and opaque inside it. Recorded in `branding/library/brands.ini` with `source`, `sha256`, `size`.
 - **Library search order** (same as the bundled font): `<exe folder>/assets/icons/library`, then `@CMAKE_INSTALL_PREFIX@/share/streamflex/assets/icons/library` on Linux or `.\assets\icons\library` on Windows.
 - **Unknown name → the `apps` icon** plus one log line. **Old Numix path that no longer exists → its library equivalent** (`system.png` → `settings`) plus a note.
@@ -606,7 +606,7 @@ git -C $repo commit -m "feat(library): pure manifest reader for the built-in ico
 - Produces, used by Tasks 3-8:
   - `libtools.py`: `ROOT`, `LIBRARY`, `GLYPHS`, `BRANDS_INI`, `NAME_RE`, `GENERIC_GROUPS`, `BRAND_GROUPS`, `OUTLINE_RADIUS`, `BRAND_MIN`, `BRAND_MAX`, `BRAND_KEYS`, `read_sections(path)`, `write_brands(sections, path)`, `sha256_file(path)`.
   - `outline_mask(size)` is added to `libtools.py` in Task 3.
-  - `build-library.py`: `GENERIC` table, `plate_colour(group, slot)`, `contrast_with_white(hex)`, `generic_svg(colour, paths, trim)`, `build_outputs(brands_ini)`.
+  - `build-library.py`: `GENERIC` table, `plate_color(group, slot)`, `contrast_with_white(hex)`, `generic_svg(color, paths, trim)`, `build_outputs(brands_ini)`.
   - `build-library.py` also has the CLI `--check`.
 - **Ruling (plan vs spec):** the spec names the generator `build-generic.py` and describes a hand-kept `icons.ini`. This plan uses one script, `build-library.py`. It generates `icons.ini` and `NOTICE.md` from two sources: its own `GENERIC` table, and `branding/library/brands.ini`, which is kept by the import tool and by hand. Each fact then lives in exactly one place, and the spec's "re-running reproduces the committed files" check covers the manifest and the NOTICE too. Cost if wrong: one renamed script.
 
@@ -635,9 +635,9 @@ MEDIA = {
 }
 
 
-def lightness(hex_colour):
-    """CIE L* of an sRGB hex colour."""
-    y = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), bl.hex_to_linear(hex_colour)))
+def lightness(hex_color):
+    """CIE L* of an sRGB hex color."""
+    y = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), bl.hex_to_linear(hex_color)))
     f = y ** (1 / 3) if y > 216 / 24389 else (24389 / 27 * y + 16) / 116
     return 116 * f - 16
 
@@ -647,29 +647,29 @@ class Palette(unittest.TestCase):
         media = [row for row in bl.GENERIC if row[2] == "media"]
         self.assertEqual(len(media), 13)
         for name, _title, group, _glyph, slot, _trim in media:
-            self.assertEqual(bl.plate_colour(group, slot), MEDIA[name], name)
+            self.assertEqual(bl.plate_color(group, slot), MEDIA[name], name)
 
-    def test_one_colour_groups_match_the_spec(self):
-        self.assertEqual(bl.plate_colour("system", None), "#5C646D")
-        self.assertEqual(bl.plate_colour("general", None), "#07606C")
-        self.assertEqual(bl.plate_colour("devices", None), "#4D7189")
+    def test_one_color_groups_match_the_spec(self):
+        self.assertEqual(bl.plate_color("system", None), "#5C646D")
+        self.assertEqual(bl.plate_color("general", None), "#07606C")
+        self.assertEqual(bl.plate_color("devices", None), "#4D7189")
 
     def test_media_plates_share_one_lightness(self):
-        for hex_colour in MEDIA.values():
-            self.assertAlmostEqual(lightness(hex_colour), 52.0, delta=0.6, msg=hex_colour)
+        for hex_color in MEDIA.values():
+            self.assertAlmostEqual(lightness(hex_color), 52.0, delta=0.6, msg=hex_color)
 
     def test_every_plate_keeps_white_readable(self):
         for name, _title, group, _glyph, slot, _trim in bl.GENERIC:
-            self.assertGreaterEqual(bl.contrast_with_white(bl.plate_colour(group, slot)), 3.0, name)
+            self.assertGreaterEqual(bl.contrast_with_white(bl.plate_color(group, slot)), 3.0, name)
 
 
 class Geometry(unittest.TestCase):
-    def test_trim_one_centres_the_em_box_at_sixty_percent(self):
+    def test_trim_one_centers_the_em_box_at_sixty_percent(self):
         svg = bl.generic_svg("#123456", ["M0 0h1"], 1.0)
         self.assertIn('rx="112.64"', svg)
         self.assertIn('transform="translate(102.400 409.600) scale(0.320000)"', svg)
 
-    def test_trim_scales_about_the_centre(self):
+    def test_trim_scales_about_the_center(self):
         svg = bl.generic_svg("#123456", ["M0 0h1"], 0.5)
         self.assertIn('transform="translate(179.200 332.800) scale(0.160000)"', svg)
 
@@ -870,17 +870,17 @@ def linear_to_hex(rgb):
     return "#" + "".join(f"{round(encode(x) * 255):02X}" for x in rgb)
 
 
-def hex_to_linear(hex_colour):
-    values = [int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+def hex_to_linear(hex_color):
+    values = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
     return [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in values]
 
 
-def contrast_with_white(hex_colour):
-    luminance = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), hex_to_linear(hex_colour)))
+def contrast_with_white(hex_color):
+    luminance = sum(w * c for w, c in zip((0.2126, 0.7152, 0.0722), hex_to_linear(hex_color)))
     return 1.05 / (luminance + 0.05)
 
 
-def plate_colour(group, slot):
+def plate_color(group, slot):
     if group == "media":
         h = 25 + slot * 360 / 13
         return linear_to_hex(lch_to_linear(LIGHTNESS, math.floor(max_chroma(LIGHTNESS, h) * VIVID), h))
@@ -899,14 +899,14 @@ def glyph_paths(glyph):
     return paths
 
 
-def generic_svg(colour, paths, trim):
+def generic_svg(color, paths, trim):
     scale = CANVAS * GLYPH_BOX / 960 * trim
     x = (CANVAS - 960 * scale) / 2
     y = x + 960 * scale                  # the glyph's y runs from -960 to 0
     body = "".join(f'<path d="{d}" fill="#FFFFFF"/>' for d in paths)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS}" height="{CANVAS}" '
             f'viewBox="0 0 {CANVAS} {CANVAS}">\n'
-            f'<rect width="{CANVAS}" height="{CANVAS}" rx="{RADIUS:g}" ry="{RADIUS:g}" fill="{colour}"/>\n'
+            f'<rect width="{CANVAS}" height="{CANVAS}" rx="{RADIUS:g}" ry="{RADIUS:g}" fill="{color}"/>\n'
             f'<g transform="translate({x:.3f} {y:.3f}) scale({scale:.6f})">{body}</g>\n'
             f'</svg>\n')
 
@@ -915,7 +915,7 @@ NOTICE_HEAD = """# Brand icons
 
 Every icon in this folder is the trademark and artwork of the company named beside it. StreamFlex includes
 them only to identify each service on its launcher button. They are not covered by StreamFlex's GPL-3.0
-licence.
+license.
 
 If you own one of these marks and want it removed, open an issue at
 https://github.com/bilbospocketses/streamflex/issues and it will be taken out.
@@ -939,10 +939,10 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         if not libtools.NAME_RE.match(name) or name in names:
             errors.append(f"generic '{name}': invalid or repeated name")
         names.add(name)
-        colour = plate_colour(group, slot)
-        if contrast_with_white(colour) < MIN_CONTRAST:
-            errors.append(f"generic '{name}': plate {colour} gives white only {contrast_with_white(colour):.2f}:1")
-        outputs[f"generic/{name}.svg"] = generic_svg(colour, glyph_paths(glyph), trim)
+        color = plate_color(group, slot)
+        if contrast_with_white(color) < MIN_CONTRAST:
+            errors.append(f"generic '{name}': plate {color} gives white only {contrast_with_white(color):.2f}:1")
+        outputs[f"generic/{name}.svg"] = generic_svg(color, glyph_paths(glyph), trim)
         manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"]
 
     rows = []
@@ -1016,7 +1016,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Write `branding/library/fetch-glyphs.py` and vendor the glyphs**
 
 ```python
-"""Vendor the Material Symbols glyphs the generic icons use, and their licence, into glyphs/.
+"""Vendor the Material Symbols glyphs the generic icons use, and their license, into glyphs/.
 
   python branding/library/fetch-glyphs.py
 
@@ -1079,7 +1079,7 @@ branding/library/build/
 - [ ] **Step 5: Run the Python tests**
 
 Run: `python -m unittest discover -s C:/Users/jscha/source/repos/streamflex/branding/library -p "test_*.py" -v`
-Expected: 7 tests, OK. The palette test proves the generator reproduces the spec's 13 pinned colours.
+Expected: 7 tests, OK. The palette test proves the generator reproduces the spec's 13 pinned colors.
 
 - [ ] **Step 6: Write the failing nanosvg test**
 
@@ -1237,13 +1237,13 @@ class ImportBrand(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def art(self, size, colour=(200, 30, 40, 255), mode="RGBA", round_logo=False):
+    def art(self, size, color=(200, 30, 40, 255), mode="RGBA", round_logo=False):
         width, height = size if isinstance(size, tuple) else (size, size)
         if round_logo:
             image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            ImageDraw.Draw(image).ellipse((50, 50, width - 51, height - 51), fill=colour)
+            ImageDraw.Draw(image).ellipse((50, 50, width - 51, height - 51), fill=color)
         else:
-            image = Image.new(mode, (width, height), colour if mode == "RGBA" else colour[:3])
+            image = Image.new(mode, (width, height), color if mode == "RGBA" else color[:3])
         path = self.dir / f"src-{width}x{height}-{mode}-{round_logo}.png"
         image.save(path)
         return path
@@ -1259,7 +1259,7 @@ class ImportBrand(unittest.TestCase):
             self.assertEqual(out.mode, "RGBA")
             self.assertEqual(out.size, (600, 600))
             self.assertEqual(out.getpixel((0, 0))[3], 0)        # corner: outside the outline
-            self.assertEqual(out.getpixel((300, 300))[3], 255)  # centre: inside
+            self.assertEqual(out.getpixel((300, 300))[3], 255)  # center: inside
             self.assertEqual(out.getpixel((300, 300))[:3], (200, 30, 40))
 
     def test_brands_ini_records_provenance_and_keeps_hand_edits(self):
@@ -1331,9 +1331,9 @@ def outline_mask(size, supersample=4):
   python branding/library/import-brand.py <name> <image> --source <page URL> [--art <image URL>] [--fill '#RRGGBB']
 
 - The image must be square and at least 512 px. Art above 1024 px is reduced to 1024; art is never enlarged.
-- A palette, greyscale or RGB image is converted to RGBA; an embedded colour profile is converted to sRGB.
+- A palette, grayscale or RGB image is converted to RGBA; an embedded color profile is converted to sRGB.
 - Transparent pixels inside the outline (an old round or padded logo) are refused unless --fill names a solid
-  colour to put behind the art. Choose the art's own background colour and say so in the task report.
+  color to put behind the art. Choose the art's own background color and say so in the task report.
 - Writes assets/icons/library/brands/<name>.png, and records source, art, fill, size and sha256 in
   branding/library/brands.ini. Set title, group, owner and android there by hand, then run build-library.py.
 Needs Pillow.
@@ -1386,7 +1386,7 @@ def import_brand(name, image_path, source, art=None, fill=None, library=libtools
         if fill is None:
             raise ImportRefused(f"{image_path} has transparent pixels inside the outline (around {holes}). "
                                 f"Look at it: if it is an old round or padded logo, re-run with --fill "
-                                f"'#RRGGBB' set to its own background colour")
+                                f"'#RRGGBB' set to its own background color")
         rgb = tuple(int(fill[i:i + 2], 16) for i in (1, 3, 5))
         image = Image.alpha_composite(Image.new("RGBA", (size, size), rgb + (255,)), image)
 
@@ -1504,7 +1504,7 @@ After each import, set `title`, `group`, `owner` and `android` for that section 
 
 When the importer **refuses** an image for transparency:
 1. Look at the image.
-2. If it is an old round or padded logo, re-run with `--fill` set to the art's own background colour.
+2. If it is an old round or padded logo, re-run with `--fill` set to the art's own background color.
 3. List every `--fill` choice in the report.
 
 Never fill an image that is transparent for another reason; report it instead.
@@ -2135,7 +2135,7 @@ image file, as before. See [Creating Menus](configuration#creating-menus).
 """
 
 BRAND_NOTE = """The service icons below are the trademarks and artwork of their owners, shown only to identify each
-service. They are not covered by StreamFlex's GPL-3.0 licence; see the
+service. They are not covered by StreamFlex's GPL-3.0 license; see the
 [brand notice](https://github.com/bilbospocketses/streamflex/blob/master/assets/icons/library/brands/NOTICE.md).
 
 """
@@ -2234,7 +2234,7 @@ Entry5=Back;back;:back
 
 Also in `docs/configuration.md`:
 - In "Selected Icon Overrides", add at the end: "Icons from the library have no selected versions; the highlight shows which one is selected."
-- In the Transparent background section's list of limitations, add: "Icons from the [Icon Library](icons) have smooth, partly transparent edges, so a faint outline in the chroma key colour can show around them."
+- In the Transparent background section's list of limitations, add: "Icons from the [Icon Library](icons) have smooth, partly transparent edges, so a faint outline in the chroma key color can show around them."
 
 In `docs/setup.md`, "Selecting Menu Icons" becomes:
 
@@ -2325,7 +2325,7 @@ git -C $repo commit -m "docs: the icon library in the configuration and setup gu
 - [ ] **Step 1: Write `branding/library/review-sheet.py`**
 
 ```python
-"""Write build/review.html: every library icon at 32, 48, 64, 128 and 256 px on light, grey, dark and photo
+"""Write build/review.html: every library icon at 32, 48, 64, 128 and 256 px on light, gray, dark and photo
 backgrounds, brand icons first, with 512-only brand art marked. Open it in a browser to judge the set by eye.
 Standard library only.
 """
@@ -2338,7 +2338,7 @@ import libtools  # noqa: E402
 
 SIZES = (32, 48, 64, 128, 256)
 BACKGROUNDS = {
-    "light": "#FFFFFF", "grey": "#808080", "dark": "#101418",
+    "light": "#FFFFFF", "gray": "#808080", "dark": "#101418",
     "photo": "linear-gradient(135deg,#c9d8e6 0%,#e9d9b8 45%,#7a9a6b 100%)",
 }
 
@@ -2377,7 +2377,7 @@ Expected: `wrote ...\branding\library\build\review.html with 69 icons`.
 - [ ] **Step 2: Tune the optical trims with the user**
 
 1. Open `review.html` with the user; the brainstorm companion can show it.
-2. Adjust the trim column of `GENERIC` in `build-library.py` for any glyph that looks too big or too small against its neighbours. A solid mass (`photo`, `folder`) usually wants about 0.9, and a thin one (`bluetooth`) about 1.1.
+2. Adjust the trim column of `GENERIC` in `build-library.py` for any glyph that looks too big or too small against its neighbors. A solid mass (`photo`, `folder`) usually wants about 0.9, and a thin one (`bluetooth`) about 1.1.
 3. After each change, run `build-library.py`, `review-sheet.py`, the library unit tests and `ctest`.
 
 The Python geometry tests only pin trim 1.0 and 0.5, so they keep passing.

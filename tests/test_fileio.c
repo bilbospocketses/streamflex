@@ -143,15 +143,30 @@ static void test_non_ascii_round_trip(void)
     int count = fileio_list(DIR, &entries);
     bool found_file = false, found_dir = false;
     for (int i = 0; i < count; i++) {
-        if (strcmp(entries[i].name, CAFE) == 0 && !entries[i].is_dir)
+        if (strcmp(entries[i].name, CAFE) == 0 && !entries[i].is_dir && entries[i].is_file)
             found_file = true;
-        if (strcmp(entries[i].name, "deeper") == 0 && entries[i].is_dir)
+        if (strcmp(entries[i].name, "deeper") == 0 && entries[i].is_dir && !entries[i].is_file)
             found_dir = true;
         CHECK(strcmp(entries[i].name, ".") != 0 && strcmp(entries[i].name, "..") != 0);
     }
     CHECK(found_file);
     CHECK(found_dir);
     fileio_free_list(entries, count);
+
+    // A path to a regular file is one; a folder is not, nor is a path to nothing, each with the reason
+    CHECK(fileio_is_file(DIR "/" CAFE));
+    CHECK(!fileio_is_file(DIR "/deeper"));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(!fileio_is_file(DIR "/no-such-file.png"));
+    CHECK_STR(fileio_last_error(), "not found");
+
+    // Only what is there and is not a regular file is refused: a path to nothing is left for its open
+    // to report
+    CHECK(!fileio_not_a_file(DIR "/" CAFE));
+    CHECK(fileio_not_a_file(DIR "/deeper"));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(!fileio_not_a_file(DIR "/no-such-file.png"));
+    CHECK_STR(fileio_last_error(), "not found");
 }
 
 // A function to test copy, replace and remove
@@ -451,6 +466,78 @@ static void test_wide(void)
     CHECK(strstr(fileio_last_error(), "UTF-8") != NULL);
 }
 
+// A function to check a restart's command line: the arguments given, then --restarted after one
+// space. A program started through Windows' shell can have a space after its last argument
+// (Windows PowerShell's Start-Process leaves one), which is not doubled; a line with none gets its
+// one space, and no argument leaves the line as given less that space. A line that does not fit is
+// refused, and nothing is written.
+static void test_command_with(void)
+{
+    wchar_t out[64];
+    CHECK(fileio_command_with(out, 64, L"\"C:\\StreamFlex\\streamflex.exe\" -d ", L"--restarted"));
+    CHECK(wcscmp(out, L"\"C:\\StreamFlex\\streamflex.exe\" -d --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"\"C:\\StreamFlex\\streamflex.exe\" ", L"--restarted"));
+    CHECK(wcscmp(out, L"\"C:\\StreamFlex\\streamflex.exe\" --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d \t ", L"--restarted"));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d", L"--restarted"));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+    wmemset(out, L'x', 64);   // So an end left unwritten shows
+    CHECK(fileio_command_with(out, 64, L"streamflex.exe -d --restarted ", NULL));
+    CHECK(wcscmp(out, L"streamflex.exe -d --restarted") == 0);
+
+    // 17 characters and the end fit 18 exactly; one more does not
+    CHECK(fileio_command_with(out, 18, L"a.exe -d ", L"--restar"));
+    CHECK(wcscmp(out, L"a.exe -d --restar") == 0);
+    CHECK(!fileio_command_with(out, 18, L"a.exe -d ", L"--restart"));
+    CHECK(out[0] == L'\0');
+    CHECK_STR(fileio_last_error(), "the command line is too long");
+}
+
+#define TEST_PIPE "\\\\.\\pipe\\streamflex-test-fileio"
+
+// A function to test that only a file on a disk is a regular file. The null device by both its
+// names, the console and a named pipe are there and are refused, the pipe both while it listens and
+// once its one instance is taken; none of them is waited on. nul.png in a folder is a regular file
+// where Windows makes it a file there (Windows 11), and refused where it is the null device.
+static void test_devices_and_pipes(void)
+{
+    static const char *const devices[] = { "NUL", "\\\\.\\NUL", "CON" };
+    for (size_t i = 0; i < sizeof(devices) / sizeof(devices[0]); i++) {
+        CHECK(!fileio_is_file(devices[i]));
+        CHECK_STR(fileio_last_error(), "not a regular file");
+        CHECK(fileio_not_a_file(devices[i]));
+        CHECK_STR(fileio_last_error(), "not a regular file");
+    }
+
+    // The first look connects to the listening instance, and holds it until the pipe disconnects
+    // it, so the second finds every instance taken
+    HANDLE pipe = CreateNamedPipeW(L"\\\\.\\pipe\\streamflex-test-fileio", PIPE_ACCESS_INBOUND,
+                                   PIPE_TYPE_BYTE | PIPE_WAIT, 1, 0, 0, 0, NULL);
+    CHECK(pipe != INVALID_HANDLE_VALUE);
+    DWORD start = GetTickCount();
+    CHECK(!fileio_is_file(TEST_PIPE));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(fileio_not_a_file(TEST_PIPE));
+    CHECK_STR(fileio_last_error(), "not a regular file");
+    CHECK(GetTickCount() - start < 1000);
+    CloseHandle(pipe);
+    CHECK(!fileio_not_a_file(TEST_PIPE));   // Gone with its last instance: nothing there
+    CHECK_STR(fileio_last_error(), "not found");
+
+    // Whether nul.png is a file here, the folder's own listing says. Where it is the null device
+    // the write fails, so the write is held to the listing as the looks at the path are.
+    bool wrote = fileio_write_all(DIR "/nul.png", "x", 1);
+    FileioEntry *entries = NULL;
+    int count = fileio_list(DIR, &entries);
+    bool listed = find_entry(entries, count, "nul.png") != NULL;
+    fileio_free_list(entries, count);
+    printf("nul.png in a folder is %s here\n", listed ? "a file" : "the null device");
+    CHECK(wrote == listed);
+    CHECK(fileio_is_file(DIR "/nul.png") == listed);
+    CHECK(fileio_not_a_file(DIR "/nul.png") == !listed);
+}
+
 // A function to test that folders are made on a share ("\\server\share\..."), whose server and
 // share cannot be made and are not tried. The local machine's own device path, "\\.\C:\...", has
 // the same two parts.
@@ -746,6 +833,54 @@ static void test_list_kinds(void)
     chmod(DIR "/kinds", 0755);
 }
 
+// A function to test which entries are regular files: a file and a link to one are; a folder, a
+// pipe, a link to a device, a link to a folder and a link to nothing are not. The same where the
+// listing gives no entry's kind, so each entry is looked at itself.
+static void test_list_regular_files(void)
+{
+    CHECK(fileio_make_dirs(DIR "/regular/folder"));
+    CHECK(fileio_write_all(DIR "/regular/file.txt", "x", 1));
+    CHECK(mkfifo(DIR "/regular/pipe", 0644) == 0);
+    CHECK(symlink("file.txt", DIR "/regular/to-file") == 0);
+    CHECK(symlink("/dev/null", DIR "/regular/to-device") == 0);
+    CHECK(symlink("folder", DIR "/regular/to-folder") == 0);
+    CHECK(symlink("/streamflex-no-such-file", DIR "/regular/dead") == 0);
+    static const char *const names[] = { "file.txt", "to-file", "folder", "pipe", "to-device", "to-folder", "dead" };
+    static const bool regular[] = { true, true, false, false, false, false, false };
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 1)
+            fileio_set_fault(FILEIO_FAULT_NO_KIND, 0, 0);
+        FileioEntry *entries = NULL;
+        int count = fileio_list(DIR "/regular", &entries);
+        fileio_set_fault(FILEIO_FAULT_NONE, 0, 0);
+        CHECK_INT(count, 7);
+        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+            const FileioEntry *entry = find_entry(entries, count, names[i]);
+            CHECK(entry != NULL && entry->is_file == regular[i]);
+            if (entry != NULL && entry->is_file != regular[i])
+                printf("    pass %d: %s is_file %d\n", pass, names[i], (int) entry->is_file);
+        }
+        fileio_free_list(entries, count);
+    }
+
+    // A path, as an image or icon setting names one, is a regular file by the same rule
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        char path[256];
+        snprintf(path, sizeof(path), "%s/%s", DIR "/regular", names[i]);
+        bool is_file = fileio_is_file(path);
+        CHECK(is_file == regular[i]);
+        if (is_file != regular[i])
+            printf("    path %s: fileio_is_file %d\n", names[i], (int) is_file);
+        if (!is_file)   // A dead link leads nowhere, so it is not found; the rest are found and refused
+            CHECK_STR(fileio_last_error(), strcmp(names[i], "dead") == 0 ? "not found" : "not a regular file");
+        // Refused only when something is there: not a regular file, and not a dead link
+        bool refused = fileio_not_a_file(path);
+        CHECK(refused == (!regular[i] && strcmp(names[i], "dead") != 0));
+        if (refused != (!regular[i] && strcmp(names[i], "dead") != 0))
+            printf("    path %s: fileio_not_a_file %d\n", names[i], (int) refused);
+    }
+}
+
 // A function to test that, where the listing gives no entry's kind, an entry that a network file
 // system is mounted on is a folder without being looked at (on a dead hard NFS mount a lookup never
 // returns), found from the mount table by the folder's real path; a file beside it is still looked
@@ -1013,6 +1148,8 @@ int main(void)
     test_replace_waits_for_a_held_file();
     test_replace_keeps_a_hidden_target_hidden();
     test_wide();
+    test_command_with();
+    test_devices_and_pipes();
     test_make_dirs_on_a_share();
     test_places_keep_the_process_error_mode();
 #endif
@@ -1022,6 +1159,7 @@ int main(void)
     test_places_under_the_user_folder();
     test_places_under_a_fuse_mount();
     test_list_kinds();
+    test_list_regular_files();
     test_list_a_network_mount_in_the_folder();
     test_list_many_network_mounts_in_the_folder();
     test_places_pictures();
