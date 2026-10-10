@@ -20,8 +20,6 @@
 #   REPO=bilbospocketses/streamflex check_passed <commit>
 #   REPO=bilbospocketses/streamflex same_tree <commit> <commit>
 
-set -u
-
 # api <path> <jq filter>: prints gh's answer, or logs the error and fails
 api() {
   local out err status
@@ -65,7 +63,7 @@ merged_pr() {
 
 # tree_of <sha>: prints the commit's tree
 tree_of() {
-  api "repos/$REPO/commits/$1" ".commit.tree.sha"
+  api "repos/$REPO/git/commits/$1" ".tree.sha"
 }
 
 # same_tree <sha> <sha>: succeeds when both commits have one tree; sets TREE to the first's
@@ -130,6 +128,7 @@ decide() {
 
 main() {
   local line
+  set -u
   DECISION=false
   REASON="the checks did not finish"
   decide

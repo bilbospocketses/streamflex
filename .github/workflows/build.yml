@@ -517,8 +517,9 @@ jobs:
   # Single required status check for the master branch ruleset. It passes only when promote,
   # every platform build, the icon library check, the spelling check, the sanitized unit tests,
   # every headless shard and every merge succeeded. The one exception: the sanitized unit tests,
-  # the shards and the merges may be skipped when promote succeeded and said `promoted=true`,
-  # because their PR passed them on the same files; the log and the summary name them. Any other
+  # the shards and the merges may be skipped on a push run when promote succeeded and said
+  # `promoted=true`, because their PR passed them on the same files; the log and the summary name
+  # them. On any other event the gate accepts no skip, whatever promote said. Any other
   # skip fails it, so a skipped build never passes. It decides by job name, from toJSON(needs).
   # `if: always()` makes it report a failure (rather than being skipped) when a job fails or is
   # canceled.
@@ -530,13 +531,18 @@ jobs:
       - name: Check the jobs
         env:
           NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
         run: |
           python3 - <<'EOF'
           import json, os, sys
 
           needs = json.loads(os.environ["NEEDS"])
           promote = needs.get("promote", {})
-          promoted = promote.get("result") == "success" and (promote.get("outputs") or {}).get("promoted") == "true"
+          promoted = (
+              os.environ.get("EVENT") == "push"
+              and promote.get("result") == "success"
+              and (promote.get("outputs") or {}).get("promoted") == "true"
+          )
           promotable = {"unit_sanitizers", "headless", "headless_merge"}
           failed, accepted = [], []
           for name in sorted(needs):
