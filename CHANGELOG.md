@@ -8,9 +8,14 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SDL3 and needs Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10 (or a newer release of each), Arch Linux, or Windows. Debian bookworm and Ubuntu 24.04 LTS package no SDL3, so users there stay on v0.4.1, which stays downloadable; there is no backport.
+
 ### Changed
 - The configuration guide's Exit Hotkey section says what happens when another program holds the key: Windows refuses it, and StreamFlex keeps trying until the key is free.
 - A CI run on master or on a release tag no longer runs the sanitized unit tests and the headless shards again when the PR it came from already passed them on the same files, so cutting a release takes about 40 minutes instead of about 75.
+- The hands-on checks are one smoke doc, `tests/qa/smoke-test.md`, with a row per observable claim on five desktops, a coverage register saying which rows the unit tests and the headless harness already prove, and a results file per release. It replaces the four per-release checklists.
+- A new required CI check, `smoke-coverage`, fails a PR that changes code a user can see unless it updates the smoke doc or says in its body why it needs no change, and keeps the smoke doc, the register and the results files well-formed.
+- CI's American spelling check uses v1.0.3 of the word list.
 
 ## [0.4.1] - 2026-10-10
 

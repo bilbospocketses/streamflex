@@ -51,6 +51,8 @@ Download the win64 .zip file from the [latest release](https://github.com/bilbos
 ### Linux
 Binary packages for APT and pacman based distributions are available from the [latest release](https://github.com/bilbospocketses/streamflex/releases/latest) and the [download page](https://bilbospocketses.github.io/streamflex/download). Download the package for your system, then install it from the directory you saved it to.
 
+v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex needs SDL3, and with it Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10, or newer; on Debian bookworm or Ubuntu 24.04 LTS, stay on [v0.4.1](https://github.com/bilbospocketses/streamflex/releases/tag/v0.4.1).
+
 #### APT-based x86-64 Distributions (Debian, Ubuntu, etc.)
 This package is compatible with Debian 12 (Bookworm) and later, Ubuntu 22.04 and later.
 ```bash
