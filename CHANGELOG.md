@@ -10,6 +10,7 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ### Changed
 - The configuration guide's Exit Hotkey section says what happens when another program holds the key: Windows refuses it, and StreamFlex keeps trying until the key is free.
+- A CI run on master or on a release tag no longer runs the sanitized unit tests and the headless shards again when the PR it came from already passed them on the same files, so cutting a release takes about 40 minutes instead of about 75.
 
 ## [0.4.1] - 2026-10-10
 
