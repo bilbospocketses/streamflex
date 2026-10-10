@@ -94,7 +94,7 @@ jobs:
           }
           "icon library found beside streamflex.exe in $($zip.Name)"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Windows build
@@ -150,7 +150,7 @@ jobs:
             grep -q "\./$want\$" <<< "$contents" || { echo "::error::$want is not in the package"; exit 1; }
           done
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload Package
         with:
           name: Debian build
@@ -198,7 +198,7 @@ jobs:
             grep -q "\./$want\$" <<< "$contents" || { echo "::error::$want is not in the package"; exit 1; }
           done
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Raspberry Pi build
@@ -238,7 +238,7 @@ jobs:
       - name: Show package metadata
         run: pacman -Qip build/*.pkg.tar.zst
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload package
         with:
           name: Arch Linux build
@@ -414,7 +414,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
             "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload the shard's console
         if: (success() || failure()) && steps.build_image.outcome == 'success'
         with:
@@ -422,7 +422,7 @@ jobs:
           path: ${{ runner.temp }}/console/${{ env.LABEL }}.console.log
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload the logs of a failed run
         if: failure()
         with:
