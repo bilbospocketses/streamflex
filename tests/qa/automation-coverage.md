@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 111 |
-| Row halves | 138 |
-| Verdicts per release (row x desktop) | 449 |
+| Rows | 194 |
+| Row halves | 258 |
+| Verdicts per release (row x desktop) | 843 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 33 (132 verdicts) |
+| `streamflex-headless` halves | 71 (284 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 105 (317 verdicts) |
-| **Automated today** | 33 of 138 halves; 132 of 449 verdicts (29 %) |
+| `manual` halves | 187 (559 verdicts) |
+| **Automated today** | 71 of 258 halves; 284 of 843 verdicts (33 %) |
 
 <!-- summary:end -->
 
@@ -126,6 +126,126 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 3.10 | `[All]` | manual | qa-harness item 75, planned |
 | 3.11 | `[All]` | manual | qa-harness item 75, planned |
 | 3.12 | `[All]` | manual | qa-harness item 75, planned |
+| 4.1 | `[All]` | manual | qa-harness item 75, planned |
+| 4.2 | `[All]` | manual | qa-harness item 75, planned |
+| 4.3 | `[All]` | manual | qa-harness item 75, planned |
+| 4.4 | `[All]` | manual | qa-harness item 75, planned |
+| 4.5 | `[All]` | manual | qa-harness item 75, planned |
+| 4.6 | `[All]` | manual | qa-harness item 75, planned |
+| 4.7 | `[All]` | manual | qa-harness item 75, planned |
+| 4.8 | `[All]` | manual | qa-harness item 75, planned |
+| 4.9 | `[All]` | manual | qa-harness item 75, planned |
+| 4.10 | `[All]` | manual | qa-harness item 75, planned |
+| 4.11 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-padheld` |
+| 4.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.12 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-grid` |
+| 4.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.13 | `[All]` | manual | qa-harness item 75, planned |
+| 4.14 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menukb` |
+| 4.15 | `[All]` | manual | qa-harness item 75, planned |
+| 4.16 | `[Linux]` | manual | qa-harness item 75, planned |
+| 4.17 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-paddefault` |
+| 4.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.18 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-pad` |
+| 4.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-pad-taken` |
+| 4.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.20 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-heldhotkey` |
+| 4.20 | `[Win]` | manual | qa-harness item 75, planned |
+| 4.21 | `[All]` | manual | qa-harness item 75, planned |
+| 5.1 | `[All]` | manual | qa-harness item 75, planned |
+| 5.2 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-color` |
+| 5.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.3 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-color` |
+| 5.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.4 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-color` |
+| 5.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.5 | `[All]` | manual | qa-harness item 75, planned |
+| 5.6 | `[All]` | manual | qa-harness item 75, planned |
+| 5.7 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-transparent` |
+| 5.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.8 | `[All]` | manual | qa-harness item 75, planned |
+| 5.9 | `[All]` | manual | qa-harness item 75, planned |
+| 5.10 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-transparent` |
+| 5.10 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.11 | `[All]` | manual | qa-harness item 75, planned |
+| 5.12 | `[All]` | manual | qa-harness item 75, planned |
+| 5.13 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-transparent` |
+| 5.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.14 | `[All]` | manual | qa-harness item 75, planned |
+| 5.15 | `[All]` | manual | qa-harness item 75, planned |
+| 5.16 | `[All]` | manual | qa-harness item 75, planned |
+| 5.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.19 | `[Linux]` | manual | qa-harness item 75, planned |
+| 5.20 | `[All]` | manual | qa-harness item 75, planned |
+| 5.21 | `[All]` | manual | qa-harness item 75, planned |
+| 5.22 | `[All]` | manual | qa-harness item 75, planned |
+| 5.23 | `[All]` | manual | qa-harness item 75, planned |
+| 5.24 | `[All]` | manual | qa-harness item 75, planned |
+| 5.25 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-nest` |
+| 5.25 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.26 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-preview` |
+| 5.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.27 | `[All]` | manual | qa-harness item 75, planned |
+| 5.28 | `[All]` | manual | qa-harness item 75, planned |
+| 5.29 | `[All]` | manual | qa-harness item 75, planned |
+| 5.30 | `[All]` | manual | qa-harness item 75, planned |
+| 5.31 | `[All]` | manual | qa-harness item 75, planned |
+| 5.32 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slideshow` |
+| 5.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.33 | `[All]` | manual | qa-harness item 75, planned |
+| 5.34 | `[All]` | manual | qa-harness item 75, planned |
+| 5.35 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-color` |
+| 5.35 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.36 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-image` |
+| 5.36 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.37 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slideshow` |
+| 5.37 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.38 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-incomplete` |
+| 5.38 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.39 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-locked` |
+| 5.39 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.40 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-broken` |
+| 5.40 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.41 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-broken` |
+| 5.41 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.42 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-running` |
+| 5.42 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.43 | `[All]` | manual | qa-harness item 75, planned |
+| 5.44 | `[All]` | manual | qa-harness item 75, planned |
+| 5.45 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.46 | `[GNOME]` | manual | qa-harness item 75, planned |
+| 5.47 | `[KDE]` | manual | qa-harness item 75, planned |
+| 5.48 | `[Linux]` | streamflex-headless | `70-chroma.sh` run `f70-chroma` |
+| 5.48 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.49 | `[All]` | manual | qa-harness item 75, planned |
+| 5.50 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-image` |
+| 5.50 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.51 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-missing` |
+| 5.51 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.52 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-missing` |
+| 5.52 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.53 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-missing` |
+| 5.53 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.54 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-slideshow` |
+| 5.54 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.55 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-upper` |
+| 5.55 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.56 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-one` |
+| 5.56 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.57 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-empty` |
+| 5.57 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.58 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-broken` |
+| 5.58 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.59 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-mixed` |
+| 5.59 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.60 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-vanish` |
+| 5.60 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.61 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-noimage` |
+| 5.61 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.62 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-nodir`, `60-settings-background.sh` run `f60-nofolder` |
+| 5.62 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
