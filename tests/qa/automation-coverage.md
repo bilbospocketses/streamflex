@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 194 |
-| Row halves | 258 |
-| Verdicts per release (row x desktop) | 843 |
+| Rows | 195 |
+| Row halves | 260 |
+| Verdicts per release (row x desktop) | 848 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 71 (284 verdicts) |
+| `streamflex-headless` halves | 72 (288 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 187 (559 verdicts) |
-| **Automated today** | 71 of 258 halves; 284 of 843 verdicts (33 %) |
+| `manual` halves | 188 (560 verdicts) |
+| **Automated today** | 72 of 260 halves; 288 of 848 verdicts (33 %) |
 
 <!-- summary:end -->
 
@@ -246,6 +246,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.61 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.62 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-nodir`, `60-settings-background.sh` run `f60-nofolder` |
 | 5.62 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.63 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slowdecode` |
+| 5.63 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
