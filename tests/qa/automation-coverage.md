@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 0 |
-| Row halves | 0 |
-| Verdicts per release (row x desktop) | 0 |
+| Rows | 50 |
+| Row halves | 52 |
+| Verdicts per release (row x desktop) | 165 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 0 (0 verdicts) |
+| `streamflex-headless` halves | 2 (8 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 0 (0 verdicts) |
-| **Automated today** | 0 of 0 halves; 0 of 0 verdicts (n/a) |
+| `manual` halves | 50 (157 verdicts) |
+| **Automated today** | 2 of 52 halves; 8 of 165 verdicts (4 %) |
 
 <!-- summary:end -->
 
@@ -33,5 +33,57 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Row | Platforms | Owner | Where it runs, or why not |
 |---|---|---|---|
+| 1.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.3 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.4 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.5 | `[Linux]` | manual | qa-harness item 75, planned |
+| 1.6 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.7 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.8 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.9 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.10 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.11 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.12 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.13 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.14 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.15 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.16 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.17 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.18 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.19 | `[All]` | manual | qa-harness item 75, planned |
+| 1.20 | `[All]` | manual | qa-harness item 75, planned |
+| 1.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.22 | `[Linux]` | manual | qa-harness item 75, planned |
+| 1.23 | `[All]` | manual | qa-harness item 75, planned |
+| 1.24 | `[All]` | manual | qa-harness item 75, planned |
+| 1.25 | `[All]` | manual | qa-harness item 75, planned |
+| 1.26 | `[All]` | manual | qa-harness item 75, planned |
+| 3.1 | `[All]` | manual | qa-harness item 75, planned |
+| 3.2 | `[All]` | manual | qa-harness item 75, planned |
+| 3.3 | `[All]` | manual | qa-harness item 75, planned |
+| 3.4 | `[All]` | manual | qa-harness item 75, planned |
+| 3.5 | `[All]` | manual | qa-harness item 75, planned |
+| 3.6 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-launch` |
+| 3.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 3.7 | `[All]` | manual | qa-harness item 75, planned |
+| 3.8 | `[All]` | manual | qa-harness item 75, planned |
+| 3.9 | `[All]` | manual | qa-harness item 75, planned |
+| 3.10 | `[All]` | manual | qa-harness item 75, planned |
+| 3.11 | `[All]` | manual | qa-harness item 75, planned |
+| 3.12 | `[All]` | manual | qa-harness item 75, planned |
+| 13.1 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
+| 13.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.4 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.5 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.6 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.7 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.8 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.9 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.10 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.11 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.12 | `[Linux]` | manual | qa-harness item 75, planned |
 
 ## Findings
