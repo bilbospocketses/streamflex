@@ -55,6 +55,20 @@ class DocLint(unittest.TestCase):
                 _, errors = self.lint(doc(line))
                 self.assertTrue(any("exactly one tag" in e for e in errors), errors)
 
+    def test_tag_after_the_name_is_an_error(self):
+        line = '| ☐ <a id="t-1-1"></a> **1.1** n `[Win]` | s | e |'
+        _, errors = self.lint(doc(line))
+        self.assertTrue(any("exactly one tag" in e for e in errors), errors)
+
+    def test_backticked_bracket_in_the_name_is_not_a_tag(self):
+        rows, errors = self.lint(doc(row("1.1", "Win", name="press `[A]` to pair")))
+        self.assertEqual(errors, [])
+        self.assertEqual([r.tag for r in rows], ["Win"])
+
+    def test_id_re_is_a_full_match(self):
+        self.assertIsNotNone(cs.ID_RE.match("1.1"))
+        self.assertIsNone(cs.ID_RE.match("1.1\n"))
+
     def test_duplicate_id(self):
         _, errors = self.lint(doc(row("1.1"), row("1.1", "Win")))
         self.assertTrue(any("1.1 appears more than once" in e for e in errors), errors)
@@ -63,8 +77,16 @@ class DocLint(unittest.TestCase):
         _, errors = self.lint(doc(row("1.1"), retired=["1.1"]))
         self.assertTrue(any("1.1 is retired" in e for e in errors), errors)
 
+    def test_malformed_retired_entry(self):
+        _, errors = self.lint(doc(row("1.1"), retired=["not-an-id"]))
+        self.assertTrue(any("a retired-ids entry must start with a valid id" in e for e in errors), errors)
+
     def test_malformed_row_start(self):
         _, errors = self.lint(doc("| ☐ **1.1** `[All]` no anchor | s | e |"))
+        self.assertTrue(any("a row must read" in e for e in errors), errors)
+
+    def test_row_without_closing_pipe(self):
+        _, errors = self.lint(doc('| ☐ <a id="t-1-1"></a> **1.1** `[All]` n | s | e'))
         self.assertTrue(any("a row must read" in e for e in errors), errors)
 
     def test_unescaped_pipe_is_an_error(self):
@@ -76,11 +98,14 @@ class DocLint(unittest.TestCase):
         self.assertEqual(errors, [])
 
     def test_crlf_doc_parses_like_lf(self):
-        text = doc(row("1.1"), row("1.2", "Linux"), retired=["1.9"])
+        text = doc(row("1.1"), row("1.2", "Linux"), retired=["1.1"])
+        crlf = text.replace("\n", "\r\n")
         lf_rows, lf_errors = self.lint(text)
-        crlf_rows, crlf_errors = self.lint(text.replace("\n", "\r\n"))
+        crlf_rows, crlf_errors = self.lint(crlf)
+        self.assertTrue(any("1.1 is retired" in e for e in lf_errors), lf_errors)
         self.assertEqual(lf_errors, crlf_errors)
         self.assertEqual([r.id for r in lf_rows], [r.id for r in crlf_rows])
+        self.assertEqual(cs.parse_doc(text)[1], cs.parse_doc(crlf)[1])
 
 
 if __name__ == "__main__":

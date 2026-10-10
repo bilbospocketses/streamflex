@@ -37,8 +37,10 @@ AUTOMATED = ("streamflex-ctest", "streamflex-headless", "qa-harness")
 
 # qa-harness parses ids with the same grammar, so the two must agree byte for byte
 ID = r"\d+\.\d+(?:[a-z]|-[a-z][a-z0-9-]*)?"
-ID_RE = re.compile(rf"^{ID}$")
+ID_RE = re.compile(rf"\A{ID}\Z")
 TAG_RE = re.compile(r"`\[([^\]`]*)\]`")
+# the tags are the run of backticked brackets directly after the bold id; any later one is part of the name
+TAG_RUN_RE = re.compile(r"(?:`\[[^\]`]*\]`\s*)+")
 ROW_START = "| \u2610"
 ROW_RE = re.compile(r'^\| \u2610 <a id="([^"]*)"></a> \*\*([^*]+)\*\* ')
 ROW_SHAPE = '| [box] <a id="t-..."></a> **<id>** `[<tag>]` <name> | <steps> | <expected> |'
@@ -91,7 +93,8 @@ def parse_doc(text):
         row_cells = cells(line)
         if len(row_cells) != 3:
             errors.append(f"{DOC}:{n}: row {rid} has {len(row_cells)} cells, not three cells; write a literal pipe as \\|")
-        tags = TAG_RE.findall(row_cells[0]) if row_cells else []
+        run = TAG_RUN_RE.match(line, m.end())
+        tags = TAG_RE.findall(run.group(0)) if run else []
         tag = tags[0] if len(tags) == 1 and tags[0] in TAGS else None
         if tag is None:
             errors.append(f"{DOC}:{n}: row {rid} needs exactly one tag from {', '.join('[' + t + ']' for t in TAGS)}")
