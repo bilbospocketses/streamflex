@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 414 |
-| Row halves | 634 |
-| Verdicts per release (row x desktop) | 1916 |
+| Rows | 469 |
+| Row halves | 707 |
+| Verdicts per release (row x desktop) | 2118 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 235 (940 verdicts) |
+| `streamflex-headless` halves | 255 (1020 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 399 (976 verdicts) |
-| **Automated today** | 235 of 634 halves; 940 of 1916 verdicts (49 %) |
+| `manual` halves | 452 (1098 verdicts) |
+| **Automated today** | 255 of 707 halves; 1020 of 2118 verdicts (48 %) |
 
 <!-- summary:end -->
 
@@ -622,6 +622,79 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.67 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.68 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-mixnote` |
 | 9.68 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.1 | `[All]` | manual | qa-harness item 75, planned |
+| 10.2 | `[All]` | manual | qa-harness item 75, planned |
+| 10.3 | `[All]` | manual | qa-harness item 75, planned |
+| 10.4 | `[All]` | manual | qa-harness item 75, planned |
+| 10.5 | `[All]` | manual | qa-harness item 75, planned |
+| 10.6 | `[All]` | manual | qa-harness item 75, planned |
+| 10.7 | `[All]` | manual | qa-harness item 75, planned |
+| 10.8 | `[All]` | manual | qa-harness item 75, planned |
+| 10.9 | `[All]` | manual | qa-harness item 75, planned |
+| 10.10 | `[All]` | manual | qa-harness item 75, planned |
+| 10.11 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.12 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.13 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.14 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.15 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.16 | `[All]` | manual | qa-harness item 75, planned |
+| 10.17 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.18 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.19 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.20 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes`, with `64-settings-restart.sh` run `f64-bare` |
+| 10.21 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-no` |
+| 10.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.22 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-no` |
+| 10.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.23 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-back` |
+| 10.23 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.24 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-no` |
+| 10.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.25 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 10.25 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.26 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-plain` |
+| 10.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 10.27 | `[Linux]` | manual | qa-harness item 75, planned |
+| 11.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.2 | `[Linux]` | manual | qa-harness item 75, planned |
+| 11.3 | `[All]` | manual | qa-harness item 75, planned |
+| 11.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.10 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.13 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-exit` |
+| 11.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.14 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.16 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.20 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.1 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 12.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.2 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-hotkey` |
+| 12.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.3 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-quitcmd` |
+| 12.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.4 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
+| 12.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.5 | `[All]` | manual | qa-harness item 75, planned |
+| 12.6 | `[All]` | manual | qa-harness item 75, planned |
+| 12.7 | `[Linux]` | manual | qa-harness item 75, planned |
+| 12.8 | `[All]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
