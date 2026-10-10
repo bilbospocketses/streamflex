@@ -184,6 +184,10 @@ class RegisterLint(unittest.TestCase):
         self.assertTrue(any("owner 'robot'" in e for e in errors), errors)
         self.assertTrue(any("empty" in e for e in errors), errors)
 
+    def test_empty_row_cell_is_reported(self):
+        errors = self.lint(register("|  | `[All]` | manual | x |", *self.good()))
+        self.assertTrue(any("'' is not a valid id" in e for e in errors), errors)
+
     def test_bad_platforms_cell(self):
         errors = self.lint(register("| 1.1 | Linux | manual | x |", *self.good()[1:]))
         self.assertTrue(any("one tag" in e for e in errors), errors)
@@ -290,7 +294,7 @@ class RegisterLint(unittest.TestCase):
 
 
 def results(*lines, findings=(), skips=()):
-    out = ["# Smoke results: v0.5.0", "", "| Desktop | OS | Image | Build |", "|---|---|---|---|", "| Win | Windows 11 24H2 | sha256:abc | sha256:def |", ""]
+    out = ["# Smoke results: v0.5.1", "", "| Desktop | OS | Image | Build |", "|---|---|---|---|", "| Win | Windows 11 24H2 | sha256:abc | sha256:def |", ""]
     out += [cs.RESULTS_HEADER, "|---|---|---|---|---|---|", *lines, ""]
     out += ["## Findings", ""] + [f"- **{f}** It failed." for f in findings] + [""]
     out += ["## Not measured", ""] + [f"- **{s}** NOT MEASURED -- no pad | none attached" for s in skips] + [""]
@@ -302,13 +306,13 @@ class ResultsLint(unittest.TestCase):
         self.rows, self.retired, _ = cs.parse_doc(doc(row("1.1", "All"), row("1.2", "Win"), row("5.3a", "KDE"),
                                                       row("4.2-system-gui", "GNOME"), retired=["1.9"]))
 
-    def lint(self, text, complete=False):
-        table, errors = cs.parse_results(text, "tests/qa/results/v0.5.0.md")
-        return errors + cs.lint_results("tests/qa/results/v0.5.0.md", table, self.rows, self.retired, complete)
+    def lint(self, text, complete=False, path="tests/qa/results/v0.5.1.md"):
+        table, errors = cs.parse_results(text, path)
+        return errors + cs.lint_results(path, table, self.rows, self.retired, complete)
 
     def full(self):
         return [
-            "| 1.1 | x | x | F1 | S1 | x (v0.4.1) |",
+            "| 1.1 | x | x | F1 | S1 | x (v0.5.0) |",
             "| 1.2 | x | - | - | - | - |",
             "| 5.3a | - | - | x | - | x |",
             "| 4.2-system-gui | - | x | - | x | - |",
@@ -362,7 +366,50 @@ class ResultsLint(unittest.TestCase):
         errors = self.lint(results("| 1.2 | x | - | - | - | - |", "| 1.2 | x | - | - | - | - |"))
         self.assertTrue(any("1.2 appears more than once" in e for e in errors), errors)
         errors = self.lint(results().replace(cs.RESULTS_HEADER, "| Row | Windows | Ubuntu | Kubuntu | Fedora | Fedora-KDE |"))
-        self.assertTrue(any("header" in e for e in errors), errors)
+        self.assertTrue(any("must be exactly" in e for e in errors), errors)
+
+    def test_empty_id_cell_is_a_malformed_line(self):
+        errors = self.lint(results("|  | x | F9 | - | - | - |"))
+        self.assertTrue(any("a results line is" in e for e in errors), errors)
+
+    def test_two_entries(self):
+        errors = self.lint(results("| 1.2 | F1 | - | - | - | - |", findings=["F1", "F1"]))
+        self.assertTrue(any("F1 has two entries" in e for e in errors), errors)
+
+    def test_misplaced_duplicate_entry_does_not_hide_the_right_one(self):
+        line = "| 1.2 | S1 | - | - | - | - |"
+        stray_first = results(line, findings=["S1"], skips=["S1"])
+        stray_last = results(line, skips=["S1"]) + "\n## Findings\n\n- **S1** stray\n"
+        for name, text in (("stray first", stray_first), ("stray last", stray_last)):
+            with self.subTest(name=name):
+                errors = self.lint(text)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn("S1 belongs under ## Not measured", errors[0])
+
+    def test_table_after_the_results_table_is_not_read(self):
+        text = results("| 1.2 | x | - | - | - | - |").replace(
+            "| 1.2 | x | - | - | - | - |\n",
+            "| 1.2 | x | - | - | - | - |\n\n| Note | A | B | C | D | E |\n|---|---|---|---|---|---|\n| 9.9 | x | x | x | x | x |\n")
+        table, errors = cs.parse_results(text, "tests/qa/results/v0.5.1.md")
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(table), ["1.2"])
+
+    def test_carry_forward_within_a_patch_release(self):
+        self.assertEqual(self.lint(results("| 1.2 | x (v0.5.1) | - | - | - | - |"), path="tests/qa/results/v0.5.2.md"), [])
+        self.assertEqual(self.lint(results("| 1.2 | x (v0.5.0) | - | - | - | - |"), path="tests/qa/results/v0.5.2.md"), [])
+
+    def test_carry_forward_refused_outside_its_rule(self):
+        cases = {
+            "another minor": ("v0.5.1.md", "x (v0.4.1)"),
+            "another major": ("v1.5.1.md", "x (v0.5.0)"),
+            "into a .0 release": ("v0.5.0.md", "x (v0.4.1)"),
+            "equal patch": ("v0.5.1.md", "x (v0.5.1)"),
+            "later patch": ("v0.5.1.md", "x (v0.5.2)"),
+        }
+        for name, (file, cell) in cases.items():
+            with self.subTest(name=name):
+                errors = self.lint(results(f"| 1.2 | {cell} | - | - | - | - |"), path=f"tests/qa/results/{file}")
+                self.assertTrue(any("1.2: Win:" in e and "carry-forward rule" in e for e in errors), errors)
 
     def test_suffixed_ids_and_other_tables(self):
         table, errors = cs.parse_results(results(*self.full(), findings=["F1"], skips=["S1"]), "r.md")
@@ -386,6 +433,24 @@ class ResultsLint(unittest.TestCase):
             self.assertTrue(any("1.2 has no line" in e for e in errors), errors)
             errors = cs.run_lint(root, complete=[str(root / "tests/qa/results/v9.9.9.md")])
             self.assertTrue(any("not a results file" in e for e in errors), errors)
+            # a relative path is read from the repo root, not the current directory
+            errors = cs.run_lint(root, complete=["tests/qa/results/v0.4.1.md"])
+            self.assertTrue(any("1.2 has no line" in e for e in errors), errors)
+            self.assertFalse(any("not a results file" in e for e in errors), errors)
+        finally:
+            tree.close()
+
+    def test_misnamed_results_file(self):
+        tree = Tree()
+        try:
+            root = tree.root
+            (root / "tests/qa/results").mkdir(parents=True)
+            (root / cs.DOC).write_text(doc(row("1.2", "Win")), encoding="utf-8")
+            (root / cs.REGISTER).write_text(register(half("1.2", "Win")), encoding="utf-8")
+            cs.run_lint(root, write=True)
+            (root / "tests/qa/results/v0.5.md").write_text(results(), encoding="utf-8")
+            errors = cs.run_lint(root)
+            self.assertIn("tests/qa/results/v0.5.md: a results file is named v<major>.<minor>.<patch>.md", errors)
         finally:
             tree.close()
 

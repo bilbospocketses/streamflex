@@ -23,7 +23,7 @@ One file per release, `vX.Y.Z.md`, committed in the release PR before the tag. I
    | `F1` | fail; its write-up is `F1` under Findings |
    | `S1` | not measured; its reason is `S1` under Not measured |
    | `-` | the desktop is outside the row's tag |
-   | `x (v0.5.0)` | carried forward from that release's pass (patch releases only) |
+   | `x (v0.5.0)` | carried forward from that release's pass (patch releases only, from an earlier patch of the same major.minor: v0.5.2 may carry v0.5.0 or v0.5.1) |
 
    An empty cell is never a pass. A skip's reason never goes in the cell: reasons are long and often hold a `|`.
 3. **`## Findings`**: `- **F1** <what failed, what was seen, the log or frame, and the fix PR or patch release, or the user's decision to ship with it>`.
@@ -43,4 +43,4 @@ Any `F` or `S` inside a row's tag. A fail is fixed and a skip is measured first,
 
     python tests/qa/check-smoke.py lint --complete tests/qa/results/vX.Y.Z.md
 
-`--complete` requires a line for every row of the doc and no empty cell inside a row's tag. CI runs it on every results file a PR adds or changes. Every other results file is checked for form only, so a committed file stays as it was when its release shipped.
+A relative path is read from the repository root, wherever the command runs. `--complete` requires a line for every row of the doc, no empty cell inside a row's tag, and `-` in every cell outside it. CI runs it on every results file a PR adds or changes. Every other results file is checked for form only, so a committed file stays as it was when its release shipped.

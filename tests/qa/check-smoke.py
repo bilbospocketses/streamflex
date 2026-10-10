@@ -55,6 +55,8 @@ CTEST_RE = re.compile(r"`(test_[a-z0-9_]+\.c)` `([A-Za-z_][A-Za-z0-9_]*)`")
 RESULTS_HEADER = "| Row | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |"
 RESULTS_NAME_RE = re.compile(r"^tests/qa/results/v\d+\.\d+\.\d+\.md$")
 CELL_RE = re.compile(r"^(?:x|-|[FS][1-9]\d*|x \(v\d+\.\d+\.\d+\))$")
+CARRY_RE = re.compile(r"^x \(v(\d+)\.(\d+)\.(\d+)\)$")
+RESULTS_VERSION_RE = re.compile(r"(?:^|/)v(\d+)\.(\d+)\.(\d+)\.md$")
 ENTRY_RE = re.compile(r"^- \*\*([FS][1-9]\d*)\*\*")
 ENTRY_SECTION = {"F": "Findings", "S": "Not measured"}
 
@@ -149,7 +151,7 @@ def parse_register(text):
         if section != "Every row" or not line.startswith("|"):
             continue
         c = cells(line)
-        if not c or c[0] == "Row" or set(c[0]) <= set("-: "):
+        if not c or c[0] == "Row" or (c[0] and set(c[0]) <= set("-: ")):
             continue
         if len(c) != 4:
             errors.append(f"{REGISTER}:{n}: a register line has four cells (Row, Platforms, Owner, Where); write a literal pipe as \\|")
@@ -290,7 +292,8 @@ def parse_results(text, path):
                     errors.append(f"{path}:{n}: {eid} belongs under ## {ENTRY_SECTION[eid[0]]}")
                 elif eid in entries:
                     errors.append(f"{path}:{n}: {eid} has two entries")
-                entries[eid] = section
+                else:
+                    entries[eid] = section
             continue
         if line.startswith("| Row |"):
             header_seen = in_table = True
@@ -303,7 +306,7 @@ def parse_results(text, path):
             in_table = False
             continue
         c = cells(line)
-        if c and set(c[0]) <= set("-: "):
+        if c and c[0] and set(c[0]) <= set("-: "):
             continue
         if len(c) != 6 or not ID_RE.match(c[0]):
             errors.append(f"{path}:{n}: a results line is | <id> | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |")
@@ -328,6 +331,14 @@ def lint_results(path, table, rows, retired, complete):
     errors = []
     by_id = {r.id: r for r in rows}
     retired_ids = {rid for rid, _ in retired}
+    own = RESULTS_VERSION_RE.search(path)
+    own = tuple(map(int, own.groups())) if own else None
+    for rid, (row_cells, n) in table.items():
+        for desktop, cell in zip(DESKTOPS, row_cells):
+            m = CARRY_RE.match(cell)
+            if m and not (own and own[:2] == tuple(map(int, m.groups()[:2])) and own[2] > int(m.group(3))):
+                errors.append(f"{path}:{n}: {rid}: {desktop}: {cell} breaks the carry-forward rule: only a patch release "
+                              "carries a pass forward, and only from an earlier patch of its own major.minor")
     for rid, (row_cells, n) in table.items():
         if rid not in by_id and rid not in retired_ids:
             errors.append(f"{path}:{n}: {rid} is not a row of the smoke doc")
@@ -371,7 +382,8 @@ def run_lint(root, write=False, complete=()):
             errors.append(f"{REGISTER}: the summary is stale; run python tests/qa/check-smoke.py lint --write")
     results_dir = root / RESULTS_DIR
     files = sorted(results_dir.glob("v*.md")) if results_dir.is_dir() else []
-    wanted = {Path(c).resolve() for c in complete}
+    # a relative --complete path is read from the repo root, wherever the command runs
+    wanted = {(Path(c) if Path(c).is_absolute() else root / c).resolve() for c in complete}
     for path in files:
         rel = path.relative_to(root).as_posix()
         if not RESULTS_NAME_RE.match(rel):
@@ -393,7 +405,7 @@ def main(argv=None):
     lint = sub.add_parser("lint", help="check the doc, the register and the results files")
     lint.add_argument("--write", action="store_true", help="regenerate the register's summary block")
     lint.add_argument("--complete", nargs="+", default=[], metavar="FILE",
-                      help="results files that must cover every row of the doc")
+                      help="results files that must cover every row of the doc (a relative path is from the repo root)")
     args = parser.parse_args(argv)
     if args.mode == "lint":
         errors = run_lint(ROOT, write=args.write, complete=args.complete)
