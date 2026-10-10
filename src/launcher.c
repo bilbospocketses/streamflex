@@ -58,6 +58,9 @@ static void test_pad_stop(void);
 static SDL_Thread *start_clock_thread(void);
 static inline void pre_launch(void);
 static inline void post_launch(void);
+#ifdef _WIN32
+static void retry_exit_hotkey_events(bool at_once);
+#endif
 static bool renderer_vsync(void);
 static void check_vsync(void);
 static void calculate_layout_area(void);
@@ -2274,6 +2277,17 @@ static inline void post_launch()
 #endif
 }
 
+#ifdef _WIN32
+// A function to try the exit hotkey Windows refused again, now or when it is due. Taken while an
+// application runs, its key must reach the loop at once, as pre_launch() lets it when the hotkey was
+// there at launch: post_launch() may never follow, when focus comes and goes in one drain
+static void retry_exit_hotkey_events(bool at_once)
+{
+    if (retry_exit_hotkey(at_once) && state.application_running)
+        SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+}
+#endif
+
 // A function to quit the launcher
 void quit(int status)
 {
@@ -2527,7 +2541,7 @@ int main(int argc, char *argv[])
                         log_debug("Gained keyboard focus");
                         state.has_focus = true;
 #ifdef _WIN32
-                        retry_exit_hotkey(true);   // The application that held its key may have just quit
+                        retry_exit_hotkey_events(true);   // The application that held its key may have just quit
 #endif
                     }
                     else if (event.window.event == SDL_WINDOWEVENT_LEAVE)
@@ -2542,10 +2556,8 @@ int main(int argc, char *argv[])
         }
 
 #ifdef _WIN32
-        // Try the exit hotkey Windows refused again when it is due. Taken while an application runs,
-        // its key must reach the loop now, as pre_launch() lets it when the hotkey was there at launch
-        if (retry_exit_hotkey(false) && state.application_running)
-            SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+        // Try the exit hotkey Windows refused again when it is due
+        retry_exit_hotkey_events(false);
 #endif
 
         // Update application state
