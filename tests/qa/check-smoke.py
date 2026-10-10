@@ -57,6 +57,8 @@ HEADLESS_RE = re.compile(r"`(\d\d-[a-z0-9-]+\.sh)` run `([A-Za-z0-9_.-]+)`")
 CTEST_RE = re.compile(r"`(test_[a-z0-9_]+\.c)` `([A-Za-z_][A-Za-z0-9_]*)`")
 RESULTS_HEADER = "| Row | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |"
 RESULTS_NAME_RE = re.compile(r"^tests/qa/results/v\d+\.\d+\.\d+\.md$")
+# a commit id, SHA-1 or SHA-256; the base SHA goes into an API path, so nothing else may
+COMMIT_RE = re.compile(r"\A[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 CELL_RE = re.compile(r"^(?:x|-|[FS][1-9]\d*|x \(v\d+\.\d+\.\d+\))$")
 CARRY_RE = re.compile(r"^x \(v(\d+)\.(\d+)\.(\d+)\)$")
 RESULTS_VERSION_RE = re.compile(r"(?:^|/)v(\d+)\.(\d+)\.(\d+)\.md$")
@@ -401,6 +403,22 @@ def evaluate(files, body):
     return ("empty-reason" if reason == "" else "missing"), watched, None
 
 
+def vanished_ids(base_text, head_text):
+    """The ids the base branch's doc holds as rows that the PR's doc neither keeps as a row nor
+    retires, in the base doc's order. A base_text of None is a base with no doc (the PR that adds
+    it), which has nothing to compare with."""
+    if base_text is None:
+        return []
+    base_rows, _, _ = parse_doc(base_text)
+    head_rows, head_retired, _ = parse_doc(head_text)
+    kept = {r.id for r in head_rows} | {rid for rid, _ in head_retired}
+    vanished = []
+    for r in base_rows:
+        if r.id not in kept and r.id not in vanished:
+            vanished.append(r.id)
+    return vanished
+
+
 def changed_results(entries):
     """The results files a PR adds or changes, from its (status, filename) pairs."""
     return [f for status, f in entries if status != "removed" and RESULTS_NAME_RE.match(f)]
@@ -425,10 +443,22 @@ def gh(args):
     return subprocess.run(["gh", *args], check=True, stdout=subprocess.PIPE, text=True, encoding="utf-8").stdout
 
 
+def base_doc(repo, sha):
+    """The smoke doc's text at the PR's base commit, or None when that commit has no doc. The
+    directory listing tells a missing doc from a failed read: any failed read raises, so the gate
+    fails closed."""
+    folder, name = DOC.rsplit("/", 1)
+    names = gh(["api", f"repos/{repo}/contents/{folder}?ref={sha}", "--jq", '.[] | select(.type == "file") | .name'])
+    if name not in names.split("\n"):
+        return None
+    return gh(["api", "-H", "Accept: application/vnd.github.raw", f"repos/{repo}/contents/{DOC}?ref={sha}"])
+
+
 def gate():
     """CI: a PR that changes user-visible code updates the smoke doc or says why not in its body,
-    and every results file it adds or changes covers every row. The body is read live through the
-    API, not from the event payload, so re-running after a body edit sees the edit."""
+    no row of the base branch's doc leaves it without being retired, and every results file it
+    adds or changes covers every row. The body and the base SHA are read live through the API, not
+    from the event payload, so re-running after a body edit sees the edit."""
     repo, pr = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("PR_NUMBER")
     if not repo or not pr:
         print("smoke gate: GITHUB_REPOSITORY and PR_NUMBER must be set", file=sys.stderr)
@@ -457,6 +487,17 @@ def gate():
               "  - put this in the PR body, with the real reason:\n"
               "        <!-- smoke: none -- <why this change has no smoke impact> -->\n\n"
               "Editing the PR body re-runs this check on its own.", file=sys.stderr)
+    # "never reused" holds before any results file names an id only if no row leaves the doc unretired
+    sha = gh(["api", f"repos/{repo}/pulls/{pr}", "--jq", ".base.sha"]).strip()
+    if not COMMIT_RE.match(sha):
+        print("smoke gate: the PR's base SHA is not a commit id:", json.dumps(sha), file=sys.stderr)
+        return 2
+    head_path = ROOT / DOC
+    head_text = head_path.read_text(encoding="utf-8") if head_path.is_file() else ""
+    for rid in vanished_ids(base_doc(repo, sha), head_text):
+        failed = True
+        print(f"{DOC}: {rid} is a row on the base branch and is gone from this PR's doc without being retired; "
+              "list it under the doc's ## Retired ids, so the id is never reused", file=sys.stderr)
     complete = changed_results(entries)
     errors = run_lint(ROOT, complete=[str(ROOT / f) for f in complete])
     for e in errors:

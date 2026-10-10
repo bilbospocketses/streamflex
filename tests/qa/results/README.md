@@ -1,6 +1,6 @@
 # Smoke results
 
-One file per release, `vX.Y.Z.md`, committed in the release PR before the tag. It records the verdict of every row of [`../smoke-test.md`](../smoke-test.md) on every desktop the row's tag covers. The first file is the next release's; v0.3.x and v0.4.x are not back-filled.
+One file per release, `vX.Y.Z.md`, committed in the release PR before the tag. The release PR also sets the smoke doc's **Smoke target** to the version. It records the verdict of every row of [`../smoke-test.md`](../smoke-test.md) on every desktop the row's tag covers. The first file is the next release's; v0.3.x and v0.4.x are not back-filled.
 
 ## The file
 

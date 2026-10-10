@@ -1,10 +1,15 @@
 """Tests for tests/qa/check-smoke.py. Run: python -m unittest discover -s tests/qa -p "test_*.py" -v"""
 
+import contextlib
 import importlib.util
+import io
+import os
+import subprocess
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("check_smoke", HERE / "check-smoke.py")
@@ -529,6 +534,140 @@ class Gate(unittest.TestCase):
         entries, files = cs.parse_file_rows("added\tsrc/a\u2028b.c\t\n")
         self.assertEqual(entries, [("added", "src/a\u2028b.c")])
         self.assertEqual(files, ["src/a\u2028b.c"])
+
+
+class VanishedIds(unittest.TestCase):
+    def test_kept_id_passes(self):
+        self.assertEqual(cs.vanished_ids(doc(row("1.1"), row("1.2")), doc(row("1.1"), row("1.2"), row("1.3"))), [])
+
+    def test_retired_id_passes(self):
+        self.assertEqual(cs.vanished_ids(doc(row("1.1"), row("1.2")), doc(row("1.2"), retired=["1.1"])), [])
+
+    def test_deleted_without_retiring_fails(self):
+        base = doc(row("1.1"), row("1.2"), row("5.3a", "KDE"), row("4.2-system-gui", "GNOME"))
+        self.assertEqual(cs.vanished_ids(base, doc(row("1.2"), row("4.2-system-gui", "GNOME"))), ["1.1", "5.3a"])
+
+    def test_base_without_the_doc_is_not_checked(self):
+        # the first PR that adds the doc has nothing on the base branch to compare with
+        self.assertEqual(cs.vanished_ids(None, doc(row("1.1"))), [])
+
+    def test_an_id_already_retired_on_the_base_is_not_a_row(self):
+        self.assertEqual(cs.vanished_ids(doc(row("1.2"), retired=["1.1"]), doc(row("1.2"), retired=["1.1"])), [])
+
+
+BASE_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+class GateRun(unittest.TestCase):
+    """gate() end to end, with the gh wrapper replaced by canned API answers."""
+
+    def setUp(self):
+        self.tree = Tree()
+        root = self.tree.root
+        (root / "tests/qa/results").mkdir(parents=True)
+        self.head_doc = doc(row("1.1", "All"), row("1.2", "Win"))
+        (root / cs.DOC).write_text(self.head_doc, encoding="utf-8")
+        (root / cs.REGISTER).write_text(register(half("1.1", "All"), half("1.2", "Win")), encoding="utf-8")
+        cs.run_lint(root, write=True)
+        # complete would need a 1.1 line too
+        (root / "tests/qa/results/v0.5.0.md").write_text(results("| 1.2 | x | - | - | - | - |"), encoding="utf-8")
+        self.assertEqual(cs.run_lint(root), [])
+        self.files = []
+        self.body = ""
+        self.base_sha = BASE_SHA
+        self.base_doc = self.head_doc
+        self.calls = []
+
+    def tearDown(self):
+        self.tree.close()
+
+    def fake_gh(self, args):
+        self.calls.append(args)
+        endpoint = next(a for a in args if a.startswith("repos/"))
+        if endpoint == "repos/o/r/pulls/7/files":
+            return "".join(f"{status}\t{name}\t\n" for status, name in self.files)
+        if endpoint == "repos/o/r/pulls/7":
+            return {'.body // ""': self.body + "\n", ".base.sha": self.base_sha + "\n"}[args[-1]]
+        if endpoint == f"repos/o/r/contents/tests/qa?ref={self.base_sha}":
+            return "README.md\ncheck-smoke.py\n" + ("smoke-test.md\n" if self.base_doc is not None else "")
+        if endpoint == f"repos/o/r/contents/{cs.DOC}?ref={self.base_sha}" and self.base_doc is not None:
+            return self.base_doc
+        raise subprocess.CalledProcessError(1, ["gh", *args])
+
+    def run_gate(self):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cs, "gh", self.fake_gh), mock.patch.object(cs, "ROOT", self.tree.root), \
+                mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r", "PR_NUMBER": "7"}), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cs.gate()
+        return code, out.getvalue(), err.getvalue()
+
+    def test_user_visible_change_without_doc_or_marker_fails(self):
+        self.files = [("modified", "src/launcher.c")]
+        code, _, err = self.run_gate()
+        self.assertEqual(code, 1, err)
+        self.assertIn("src/launcher.c", err)
+
+    def test_reasoned_marker_passes(self):
+        self.files = [("modified", "src/launcher.c")]
+        self.body = "Fix.\n\n<!-- smoke: none -- an internal rename only -->"
+        code, out, err = self.run_gate()
+        self.assertEqual(code, 0, err)
+        self.assertIn("opted out with a reason", out)
+
+    def test_doc_update_with_an_incomplete_results_file_fails(self):
+        self.files = [("modified", "src/launcher.c"), ("modified", cs.DOC), ("added", "tests/qa/results/v0.5.0.md")]
+        code, _, err = self.run_gate()
+        self.assertEqual(code, 1, err)
+        self.assertIn("1.1 has no line", err)
+
+    def test_vanished_id_fails_and_is_named(self):
+        self.base_doc = doc(row("1.1", "All"), row("1.2", "Win"), row("1.3", "KDE"))
+        self.files = [("modified", cs.DOC)]
+        code, _, err = self.run_gate()
+        self.assertEqual(code, 1, err)
+        self.assertIn("1.3", err)
+        self.assertIn("Retired ids", err)
+        self.assertNotIn("1.1 ", err)
+
+    def test_retired_id_passes(self):
+        self.base_doc = doc(row("1.1", "All"), row("1.2", "Win"), row("1.3", "KDE"))
+        (self.tree.root / cs.DOC).write_text(doc(row("1.1", "All"), row("1.2", "Win"), retired=["1.3"]), encoding="utf-8")
+        self.files = [("modified", cs.DOC)]
+        code, _, err = self.run_gate()
+        self.assertEqual(code, 0, err)
+
+    def test_base_without_the_doc_passes(self):
+        self.base_doc = None
+        self.files = [("added", cs.DOC)]
+        code, _, err = self.run_gate()
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"repos/o/r/contents/tests/qa?ref={BASE_SHA}", [a for c in self.calls for a in c])
+
+    def test_failed_base_fetch_fails_closed(self):
+        self.files = [("modified", cs.DOC)]
+        real = self.fake_gh
+
+        def broken(args):
+            if any(a.startswith("repos/o/r/contents/") for a in args):
+                raise subprocess.CalledProcessError(1, ["gh", *args])
+            return real(args)
+
+        with mock.patch.object(self, "fake_gh", broken):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.run_gate()
+
+    def test_base_sha_that_is_not_a_commit_id_fails_closed(self):
+        self.base_sha = "main; rm -rf /"
+        self.files = [("modified", cs.DOC)]
+        code, _, err = self.run_gate()
+        self.assertNotEqual(code, 0)
+        self.assertIn("base", err)
+
+    def test_missing_environment_is_refused(self):
+        with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "", "PR_NUMBER": ""}), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cs.gate(), 2)
 
 
 if __name__ == "__main__":
