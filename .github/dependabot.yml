@@ -27,8 +27,8 @@ updates:
         patterns:
           - "*"
 
-  # The headless test images' bases (tests/headless/Dockerfile and Dockerfile.fedora) are pinned
-  # by digest
+  # The headless test images' bases (tests/headless/Dockerfile and Dockerfile.fedora) come through
+  # mirror.gcr.io, pinned by digest; Dependabot follows that registry.
   - package-ecosystem: docker
     directory: /tests/headless
     schedule:

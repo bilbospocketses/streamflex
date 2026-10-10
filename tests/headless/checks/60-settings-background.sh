@@ -159,7 +159,8 @@ release_loader() { loader_running && : > /tmp/loader-held-at-release; : > "$LOAD
 
 # Stepping the mode while the slideshow's loader thread is still loading the next image. The hook
 # holds it from its start (the first change, 5 s in) until the step has been sent, the thread
-# still running then; the step waits for it. Once let go, the loader's image must be dropped, before
+# still running then; the step waits for it, so it draws no frame until the loader is let go, and
+# is pressed with no wait for one (!Right). Once let go, the loader's image must be dropped, before
 # any fade began. ~/loading also holds c.png, a pipe named like an image that nothing writes: a scan
 # that took it would hold the launcher, or this loader, in its read for good.
 rm -rf "$TESTER_HOME/loading" /tmp/loader-held /tmp/loader-still-held /tmp/loader-held-at-release "$LOADER_RELEASE" "$LOG"
@@ -169,7 +170,7 @@ cp "$TESTER_HOME/Pictures/blue.png" "$TESTER_HOME/loading/b.png"
 mkfifo "$TESTER_HOME/loading/c.png"
 chown -R tester:tester "$TESTER_HOME/loading"
 STREAMFLEX_TEST_SLIDESHOW_HOLD=$LOADER_RELEASE UNTIL='Settings: nothing changed' \
-    run_keys f60-loading +loader_held Menu Down Return +still_held Right +release_loader Left BackSpace BackSpace
+    run_keys f60-loading +loader_held Menu Down Return +still_held !Right +release_loader Left BackSpace BackSpace
 ok=1
 [ -e /tmp/loader-held ] && [ -e /tmp/loader-still-held ] && [ -e /tmp/loader-held-at-release ] && ran_clean f60-loading \
     && grep -q 'Found 2 images in directory /home/tester/loading' "$out/f60-loading.log" \
