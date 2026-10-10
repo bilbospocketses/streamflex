@@ -10,7 +10,10 @@ Design: design/specs/2026-10-10-smoke-doc-design.md
 """
 
 import argparse
+import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -59,6 +62,14 @@ CARRY_RE = re.compile(r"^x \(v(\d+)\.(\d+)\.(\d+)\)$")
 RESULTS_VERSION_RE = re.compile(r"(?:^|/)v(\d+)\.(\d+)\.(\d+)\.md$")
 ENTRY_RE = re.compile(r"^- \*\*([FS][1-9]\d*)\*\*")
 ENTRY_SECTION = {"F": "Findings", "S": "Not measured"}
+
+# Trees whose changes a user can see: the program and what is linked into it, what it ships
+# beside it, the default config and packaging, and the Windows dependency versions. Tests, docs,
+# design, branding sources and workflows decide what is checked or published, not what runs.
+WATCHED_PREFIXES = ("src/", "assets/", "config/")
+WATCHED_FILES = ("CMakeLists.txt", "vcpkg.json")
+UNWATCHED = ("src/test_hooks.c", "src/test_hooks.h")
+MARKER_RE = re.compile(r"<!--\s*smoke:\s*none\s*--\s*([\s\S]*?)\s*-->", re.I)
 
 
 class Row(NamedTuple):
@@ -361,6 +372,83 @@ def lint_results(path, table, rows, retired, complete):
     return errors
 
 
+def is_watched(path):
+    return path not in UNWATCHED and (path in WATCHED_FILES or path.startswith(WATCHED_PREFIXES))
+
+
+def parse_opt_out(body):
+    """The marker's reason, '' for a marker with an empty reason, or None for no marker."""
+    m = MARKER_RE.search(body or "")
+    return None if m is None else m.group(1).strip()
+
+
+def evaluate(files, body):
+    """The gate's decision as data: (verdict, watched files, reason)."""
+    watched = [f for f in files if is_watched(f)]
+    if not watched:
+        return "not-applicable", watched, None
+    if DOC in files:
+        return "smoke-doc-updated", watched, None
+    reason = parse_opt_out(body)
+    if reason:
+        return "opted-out", watched, reason
+    return ("empty-reason" if reason == "" else "missing"), watched, None
+
+
+def changed_results(entries):
+    """The results files a PR adds or changes, from its (status, filename) pairs."""
+    return [f for status, f in entries if status != "removed" and RESULTS_NAME_RE.match(f)]
+
+
+def gh(args):
+    return subprocess.run(["gh", *args], check=True, stdout=subprocess.PIPE, text=True, encoding="utf-8").stdout
+
+
+def gate():
+    """CI: a PR that changes user-visible code updates the smoke doc or says why not in its body,
+    and every results file it adds or changes covers every row. The body is read live through the
+    API, not from the event payload, so re-running after a body edit sees the edit."""
+    repo, pr = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("PR_NUMBER")
+    if not repo or not pr:
+        print("smoke gate: GITHUB_REPOSITORY and PR_NUMBER must be set", file=sys.stderr)
+        return 2
+    rows = gh(["api", "--paginate", f"repos/{repo}/pulls/{pr}/files",
+               "--jq", '.[] | [.status, .filename, (.previous_filename // "")] | @tsv'])
+    entries, files = [], []
+    for line in rows.splitlines():
+        status, filename, previous = (line.split("\t") + ["", "", ""])[:3]
+        entries.append((status, filename))
+        files += [filename] + ([previous] if previous else [])
+    body = gh(["api", f"repos/{repo}/pulls/{pr}", "--jq", '.body // ""'])
+    verdict, watched, reason = evaluate(files, body)
+    failed = False
+    if verdict == "not-applicable":
+        print("smoke gate: no user-visible change -- nothing to decide")
+    elif verdict == "smoke-doc-updated":
+        print(f"smoke gate OK -- {DOC} is updated in this PR")
+    elif verdict == "opted-out":
+        # PR-body text goes out as data, never as a format string
+        print("smoke gate OK -- opted out with a reason:", json.dumps(reason))
+    else:
+        failed = True
+        shown = "\n".join(f"    - {f}" for f in watched[:20])
+        more = f"\n    - ... and {len(watched) - 20} more" if len(watched) > 20 else ""
+        empty = ("The PR body has a smoke: none marker, but its reason is empty, and a marker with no reason "
+                 "does not count.\n\n") if verdict == "empty-reason" else ""
+        print(f"This PR changes code a user can see, and {DOC} is untouched:\n{shown}{more}\n\n{empty}"
+              f"Decide one of:\n  - add or update the rows in {DOC} that cover the change, or\n"
+              "  - put this in the PR body, with the real reason:\n"
+              "        <!-- smoke: none -- <why this change has no smoke impact> -->\n\n"
+              "Editing the PR body re-runs this check on its own.", file=sys.stderr)
+    complete = changed_results(entries)
+    errors = run_lint(ROOT, complete=[str(ROOT / f) for f in complete])
+    for e in errors:
+        print(e, file=sys.stderr)
+    if complete and not errors:
+        print("smoke gate OK -- complete:", ", ".join(complete))
+    return 1 if failed or errors else 0
+
+
 def run_lint(root, write=False, complete=()):
     """Every lint error in the tree at root, as a list of messages."""
     doc_path, reg_path = root / DOC, root / REGISTER
@@ -406,6 +494,7 @@ def main(argv=None):
     lint.add_argument("--write", action="store_true", help="regenerate the register's summary block")
     lint.add_argument("--complete", nargs="+", default=[], metavar="FILE",
                       help="results files that must cover every row of the doc (a relative path is from the repo root)")
+    sub.add_parser("gate", help="CI only: the PR rule, then completeness of the results files it adds or changes")
     args = parser.parse_args(argv)
     if args.mode == "lint":
         errors = run_lint(ROOT, write=args.write, complete=args.complete)
@@ -416,6 +505,8 @@ def main(argv=None):
             return 1
         print("smoke lint OK")
         return 0
+    if args.mode == "gate":
+        return gate()
     return 2
 
 

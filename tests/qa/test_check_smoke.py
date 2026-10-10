@@ -455,5 +455,43 @@ class ResultsLint(unittest.TestCase):
             tree.close()
 
 
+class Gate(unittest.TestCase):
+    def test_watched_paths(self):
+        for path in ("src/launcher.c", "src/platform/win32.c", "src/external/inih/ini.c", "assets/fonts/x.ttf",
+                     "config/config.ini.in", "CMakeLists.txt", "vcpkg.json"):
+            with self.subTest(path=path):
+                self.assertTrue(cs.is_watched(path))
+        for path in ("src/test_hooks.c", "src/test_hooks.h", "tests/test_layout.c", "tests/CMakeLists.txt",
+                     "docs/configuration.md", "design/specs/x.md", "branding/library/x.py", ".github/workflows/build.yml",
+                     "README.md", "src.txt"):
+            with self.subTest(path=path):
+                self.assertFalse(cs.is_watched(path))
+
+    def test_verdicts(self):
+        self.assertEqual(cs.evaluate(["docs/index.md"], "")[0], "not-applicable")
+        self.assertEqual(cs.evaluate(["src/a.c", cs.DOC], "")[0], "smoke-doc-updated")
+        verdict, watched, reason = cs.evaluate(["src/a.c"], "Body\n<!-- smoke: none -- internal rename only -->\n")
+        self.assertEqual((verdict, watched, reason), ("opted-out", ["src/a.c"], "internal rename only"))
+        self.assertEqual(cs.evaluate(["src/a.c"], "<!-- smoke: none --   -->")[0], "empty-reason")
+        self.assertEqual(cs.evaluate(["src/a.c"], "no marker here")[0], "missing")
+
+    def test_marker_is_case_and_space_tolerant(self):
+        self.assertEqual(cs.parse_opt_out("<!--SMOKE:None--  a reason\n spanning lines -->"), "a reason\n spanning lines")
+
+    def test_null_body_is_missing(self):
+        self.assertEqual(cs.evaluate(["src/a.c"], None)[0], "missing")
+        self.assertIsNone(cs.parse_opt_out(None))
+
+    def test_renamed_doc_counts_as_updated(self):
+        # the API's file list carries a rename's old path too, so a doc renamed away still shows
+        self.assertEqual(cs.evaluate(["src/a.c", "tests/qa/smoke.md", cs.DOC], "")[0], "smoke-doc-updated")
+
+    def test_changed_results(self):
+        entries = [("added", "tests/qa/results/v0.5.0.md"), ("modified", "tests/qa/results/v0.4.9.md"),
+                   ("removed", "tests/qa/results/v0.4.8.md"), ("modified", "tests/qa/results/README.md"),
+                   ("added", "src/a.c")]
+        self.assertEqual(cs.changed_results(entries), ["tests/qa/results/v0.5.0.md", "tests/qa/results/v0.4.9.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

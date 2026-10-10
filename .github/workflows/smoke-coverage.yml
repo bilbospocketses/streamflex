@@ -1,0 +1,51 @@
+# Every PR that changes user-visible code either updates the smoke doc or says in its body why not,
+# and the smoke doc, the coverage register and the results files stay well-formed. See
+# tests/qa/check-smoke.py for the rules, and design/specs/2026-10-10-smoke-doc-design.md for why.
+#
+# A workflow of its own, not a job in build.yml, for one reason: `edited`. The usual way to satisfy
+# the gate is the opt-out marker in the PR body, and a body edit must re-run the check in seconds
+# rather than re-run the ~30-minute build. The check is required on master under the context name
+# `smoke-coverage`, so keep the job named exactly that.
+
+name: Smoke coverage
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: smoke-coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Standard library only: no pip install
+      - name: Test the checker
+        run: python -m unittest discover -s tests/qa -p "test_*.py" -v
+
+      - name: Lint the smoke doc, the register and the results files
+        run: python tests/qa/check-smoke.py lint
+
+      - name: The PR rule
+        run: python tests/qa/check-smoke.py gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
