@@ -48,8 +48,8 @@ SUMMARY_BEGIN = "<!-- summary:begin -->"
 SUMMARY_END = "<!-- summary:end -->"
 # qa-harness picks its lane's rows mechanically by these exact cells, so a near miss would drop a row silently
 PLANNED = "qa-harness item 75, planned"
-PLANNED_HINT_RE = re.compile(r"item\s*75|\bplanned\b", re.I)
-ARC_RE = re.compile(r"^five-desktop lane, arc [A-Za-z0-9-]+$")
+QA_HINT_RE = re.compile(r"qa[-\s]?harness|\bitem\s*#?\s*75\b|five-desktop", re.I)
+ARC_RE = re.compile(r"^five-desktop lane, arc [A-Za-z0-9][A-Za-z0-9-]*$")
 HEADLESS_RE = re.compile(r"`(\d\d-[a-z0-9-]+\.sh)` run `([A-Za-z0-9_.-]+)`")
 CTEST_RE = re.compile(r"`(test_[a-z0-9_]+\.c)` `([A-Za-z_][A-Za-z0-9_]*)`")
 
@@ -176,7 +176,9 @@ def check_evidence(half, root):
             path = root / "tests/headless/checks" / check
             if not path.is_file():
                 errors.append(f"{REGISTER}:{half.line}: {half.row}: headless check {check} does not exist")
-            elif not re.search(rf"\brun_[a-z_]+\s+{re.escape(run)}(?=\s|$)", path.read_text(encoding="utf-8"), re.M):
+            # run_keys_at takes a size before the run name; a comment never names a run
+            elif not re.search(rf"^[^#\n]*\brun_(?:keys_at\s+\S+|(?!keys_at\b)[a-z_]+)\s+{re.escape(run)}(?=\s|$)",
+                               path.read_text(encoding="utf-8"), re.M):
                 errors.append(f"{REGISTER}:{half.line}: {half.row}: headless check {check} has no run named {run}")
     elif half.owner == "streamflex-ctest":
         pairs = CTEST_RE.findall(half.where)
@@ -218,10 +220,15 @@ def lint_register(rows, halves, root):
             elif desktop not in want and desktop in seen:
                 errors.append(f"{REGISTER}: {r.id}: {desktop} is outside the row's tag [{r.tag}]")
     for h in halves:
-        if PLANNED_HINT_RE.search(h.where) and (h.where != PLANNED or h.owner != "manual"):
-            errors.append(f"{REGISTER}:{h.line}: {h.row}: a half waiting on qa-harness is owner manual and reads exactly '{PLANNED}'")
-        if h.owner == "qa-harness" and not ARC_RE.match(h.where):
-            errors.append(f"{REGISTER}:{h.line}: {h.row}: a qa-harness half reads exactly 'five-desktop lane, arc <name>'")
+        waiting = f"{REGISTER}:{h.line}: {h.row}: a half waiting on qa-harness is owner manual and reads exactly '{PLANNED}'"
+        if h.owner == "qa-harness":
+            if not ARC_RE.match(h.where):
+                errors.append(f"{REGISTER}:{h.line}: {h.row}: a qa-harness half reads exactly 'five-desktop lane, arc <name>'")
+        elif h.where == PLANNED:
+            if h.owner != "manual":
+                errors.append(waiting)
+        elif QA_HINT_RE.search(h.where):
+            errors.append(f"{waiting}; a reason that only mentions qa-harness must be reworded")
         errors += check_evidence(h, root)
     return errors
 

@@ -129,7 +129,9 @@ class Tree:
         checks = self.root / "tests/headless/checks"
         checks.mkdir(parents=True)
         (checks / "58-settings-pickers.sh").write_text(
-            "CFG=$cfg run_keys f58-hex Menu Down Return\nresult \"pickers: hex\" $ok\n", encoding="utf-8")
+            "CFG=$cfg run_keys f58-hex Menu Down Return\nresult \"pickers: hex\" $ok\n"
+            "CFG=$cfg run_keys_at 1280x800 f58-sized Menu Return\n"
+            "# comment run_keys waits here\n", encoding="utf-8")
         (self.root / "tests/test_layout.c").write_text(
             "// A function to test it\nstatic void test_resolve(void)\n{\n}\n", encoding="utf-8")
 
@@ -199,6 +201,18 @@ class RegisterLint(unittest.TestCase):
                 errors = self.lint(register(*lines))
                 self.assertTrue(any("1.1" in e and "headless" in e for e in errors), errors)
 
+    def test_headless_run_keys_at_takes_a_size_first(self):
+        lines = [half("1.1", "Linux", "streamflex-headless", "`58-settings-pickers.sh` run `f58-sized`")] + self.good()[1:]
+        self.assertEqual(self.lint(register(*lines)), [])
+
+    def test_headless_size_and_comment_are_not_run_names(self):
+        for run in ("1280x800", "waits"):
+            with self.subTest(run=run):
+                where = f"`58-settings-pickers.sh` run `{run}`"
+                lines = [half("1.1", "Linux", "streamflex-headless", where)] + self.good()[1:]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("1.1" in e and f"has no run named {run}" in e for e in errors), errors)
+
     def test_ctest_evidence_must_exist(self):
         for where in ("`test_layout.c`", "`test_none.c` `test_resolve`", "`test_layout.c` `test_missing`"):
             with self.subTest(where=where):
@@ -240,6 +254,22 @@ class RegisterLint(unittest.TestCase):
                 lines = self.good()[:1] + [half("1.1", "Win", owner, where)] + self.good()[2:]
                 errors = self.lint(register(*lines))
                 self.assertTrue(any("1.1" in e and "exactly" in e for e in errors), errors)
+
+    def test_honest_manual_reason_mentioning_planned_passes(self):
+        lines = self.good()[:1] + [half("1.1", "Win", "manual", "A real TV; no automation planned")] + self.good()[2:]
+        self.assertEqual(self.lint(register(*lines)), [])
+
+    def test_manual_half_naming_the_lane_fails(self):
+        for where in ("five-desktop lane, arc S3", "qa-harness item #75"):
+            with self.subTest(where=where):
+                lines = self.good()[:1] + [half("1.1", "Win", "manual", where)] + self.good()[2:]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("1.1" in e and "exactly" in e and "reworded" in e for e in errors), errors)
+
+    def test_qa_harness_arc_name_starts_with_a_letter_or_digit(self):
+        lines = self.good()[:1] + [half("1.1", "Win", "qa-harness", "five-desktop lane, arc -")] + self.good()[2:]
+        errors = self.lint(register(*lines))
+        self.assertTrue(any("five-desktop lane, arc <name>" in e for e in errors), errors)
 
     def test_qa_harness_arc_form(self):
         lines = self.good()[:1] + [half("1.1", "Win", "qa-harness", "five-desktop lane, arc S3")] + self.good()[2:]
