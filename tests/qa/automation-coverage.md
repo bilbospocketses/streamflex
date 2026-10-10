@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 50 |
-| Row halves | 52 |
-| Verdicts per release (row x desktop) | 165 |
+| Rows | 57 |
+| Row halves | 59 |
+| Verdicts per release (row x desktop) | 185 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
 | `streamflex-headless` halves | 2 (8 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 50 (157 verdicts) |
-| **Automated today** | 2 of 52 halves; 8 of 165 verdicts (4 %) |
+| `manual` halves | 57 (177 verdicts) |
+| **Automated today** | 2 of 59 halves; 8 of 185 verdicts (4 %) |
 
 <!-- summary:end -->
 
@@ -37,28 +37,33 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.2 | `[Win]` | manual | qa-harness item 75, planned |
 | 1.3 | `[Ubuntu]` | manual | qa-harness item 75, planned |
 | 1.4 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.5 | `[Linux]` | manual | qa-harness item 75, planned |
-| 1.6 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.5 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.6 | `[Kubuntu]` | manual | qa-harness item 75, planned |
 | 1.7 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.8 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.9 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.10 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.11 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.12 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.13 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.14 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.15 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.16 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.17 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.18 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.19 | `[All]` | manual | qa-harness item 75, planned |
+| 1.8 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.9 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.10 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.11 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.12 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.13 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.14 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.15 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.16 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.17 | `[Kubuntu]` | manual | qa-harness item 75, planned |
+| 1.18 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 1.19 | `[Kubuntu]` | manual | qa-harness item 75, planned |
 | 1.20 | `[All]` | manual | qa-harness item 75, planned |
-| 1.21 | `[Win]` | manual | qa-harness item 75, planned |
-| 1.22 | `[Linux]` | manual | qa-harness item 75, planned |
-| 1.23 | `[All]` | manual | qa-harness item 75, planned |
+| 1.21 | `[All]` | manual | qa-harness item 75, planned |
+| 1.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.23 | `[Linux]` | manual | qa-harness item 75, planned |
 | 1.24 | `[All]` | manual | qa-harness item 75, planned |
 | 1.25 | `[All]` | manual | qa-harness item 75, planned |
 | 1.26 | `[All]` | manual | qa-harness item 75, planned |
+| 1.27 | `[All]` | manual | qa-harness item 75, planned |
+| 1.28 | `[All]` | manual | qa-harness item 75, planned |
+| 1.29 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
+| 1.29 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.30 | `[Win]` | manual | qa-harness item 75, planned |
 | 3.1 | `[All]` | manual | qa-harness item 75, planned |
 | 3.2 | `[All]` | manual | qa-harness item 75, planned |
 | 3.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -72,8 +77,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 3.10 | `[All]` | manual | qa-harness item 75, planned |
 | 3.11 | `[All]` | manual | qa-harness item 75, planned |
 | 3.12 | `[All]` | manual | qa-harness item 75, planned |
-| 13.1 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
-| 13.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.4 | `[Linux]` | manual | qa-harness item 75, planned |
@@ -85,5 +89,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 13.10 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.11 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.12 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.13 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.14 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.15 | `[Linux]` | manual | qa-harness item 75, planned |
 
 ## Findings
