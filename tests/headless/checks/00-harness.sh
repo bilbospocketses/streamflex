@@ -1,9 +1,10 @@
 # The harness's own helpers (run.sh), checked before anything relies on them: a launcher that
 # starts slowly still gets its keys, the frame line each key waits for follows that frame's own
 # lines, a launcher that ignores TERM is killed and fails its check, one that exits without
-# logging does not hold the run up, a zombie is not running whatever its name, a quick run that has to be stopped fails, a log range must be closed to count, the log
-# helpers take their strings as written, a pixel probe must have points to read, the checks run
-# with nullglob off, and a listed leak is a failure
+# logging does not hold the run up, a zombie is not running whatever its name, a quick run that
+# has to be stopped fails, a log range must be closed to count, the log helpers take their strings
+# as written, a pixel probe must have points to read, the checks run with nullglob off, and a
+# listed leak is a failure
 
 # Every shard runs this file (run.sh <label> [leaks] K/N): a shard is a run of its own, so it
 # proves the helpers it relies on itself.
@@ -47,11 +48,12 @@ result "harness: a launcher that starts 6 s late still gets its keys (exit $(cat
 # handled: Menu and each Down move settings' cursor to a new row, and the first frame after the key
 # logs that row, so each of those keys' lines must have a cursor-row line, and then a frame line,
 # before the next key. A hook logged ahead of its frame would let a slow launcher take the next key
-# before the frame, and every other check would still pass.
+# before the frame, and every other check would still pass. Menu (#40000065) and Down (#40000051)
+# are matched by keycode: SDL names #40000065 Application or Menu, by version.
 CFG=$FX/f13-selfsub.ini run_keys h-order Menu Down Down Down BackSpace
 ok=1
 awk '
-    /^Key (Menu|Down) \(#[0-9A-F]+\) detected$/ { if (open) bad = 1; open = 1; row = 0; keys++; next }
+    /^Key .* \(#(40000065|40000051)\) detected$/ { if (open) bad = 1; open = 1; row = 0; keys++; next }
     /^Key / { if (open) bad = 1; open = 0; next }
     open && /^Settings: the cursor.s row reads / { row = 1 }
     open && /^Test hook: a frame was drawn after a key$/ { if (!row) bad = 1; open = 0; drawn++ }

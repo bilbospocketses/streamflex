@@ -361,7 +361,8 @@ wait_frame() {
 
 # A function to tell whether no key is owed its frame: the count frames_drawn gives has passed
 # frame_owed (taken as a key was pressed with no wait), and no key the launcher handled ("Key ...
-# detected") comes after the log's last frame line, as one from a batch or a held key's repeats can
+# detected") comes after the log's last frame line, as one from a batch or a held key's repeats
+# can while its frame is still being drawn
 frames_settled() {
     [ -z "${frame_owed:-}" ] || [ "$(frames_drawn)" -gt "$frame_owed" ] || return 1
     [ -f "$LOG" ] || return 0
@@ -387,9 +388,8 @@ frame_settle() {
 # more: a slow launcher would otherwise handle several keys with no frame between them, and a line
 # that only a drawn frame logs would never come. A key written !KEY is pressed with no wait for its
 # frame, for a key whose frame can come only once a later +key has let the launcher go; the next
-# key waited for waits for that frame first. A key
-# written +name calls the function `name` with the run's name and PID instead: that is how a check
-# does something at a moment the log chooses.
+# key waited for waits for that frame first. A key written +name calls the function `name` with
+# the run's name and PID instead: that is how a check does something at a moment the log chooses.
 # Every wait is bounded; a line that never came, or a key whose frame never did (the run then sends
 # no more keys), is written into NAME.code beside the exit code, so the check's exit code test
 # fails. run_after_line and run_slideshow use this too.
