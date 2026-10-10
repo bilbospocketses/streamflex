@@ -52,6 +52,11 @@ QA_HINT_RE = re.compile(r"qa[-\s]?harness|\bitem\s*#?\s*75\b|five-desktop", re.I
 ARC_RE = re.compile(r"^five-desktop lane, arc [A-Za-z0-9][A-Za-z0-9-]*$")
 HEADLESS_RE = re.compile(r"`(\d\d-[a-z0-9-]+\.sh)` run `([A-Za-z0-9_.-]+)`")
 CTEST_RE = re.compile(r"`(test_[a-z0-9_]+\.c)` `([A-Za-z_][A-Za-z0-9_]*)`")
+RESULTS_HEADER = "| Row | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |"
+RESULTS_NAME_RE = re.compile(r"^tests/qa/results/v\d+\.\d+\.\d+\.md$")
+CELL_RE = re.compile(r"^(?:x|-|[FS][1-9]\d*|x \(v\d+\.\d+\.\d+\))$")
+ENTRY_RE = re.compile(r"^- \*\*([FS][1-9]\d*)\*\*")
+ENTRY_SECTION = {"F": "Findings", "S": "Not measured"}
 
 
 class Row(NamedTuple):
@@ -268,6 +273,83 @@ def replace_summary(text, block):
     return text[:start] + block + text[end + len(SUMMARY_END):], []
 
 
+def parse_results(text, path):
+    """Return (table, errors). table maps a row id to (its five cells, its line). Only the table
+    under RESULTS_HEADER is read; the header's own tables (desktops, images) are not results."""
+    table, entries, errors = {}, {}, []
+    section, in_table, header_seen = None, False, False
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.startswith("## "):
+            section, in_table = line[3:].strip(), False
+            continue
+        if section in ENTRY_SECTION.values():
+            m = ENTRY_RE.match(line)
+            if m:
+                eid = m.group(1)
+                if section != ENTRY_SECTION[eid[0]]:
+                    errors.append(f"{path}:{n}: {eid} belongs under ## {ENTRY_SECTION[eid[0]]}")
+                elif eid in entries:
+                    errors.append(f"{path}:{n}: {eid} has two entries")
+                entries[eid] = section
+            continue
+        if line.startswith("| Row |"):
+            header_seen = in_table = True
+            if line.strip() != RESULTS_HEADER:
+                errors.append(f"{path}:{n}: the results table's header must be exactly {RESULTS_HEADER}")
+            continue
+        if not in_table:
+            continue
+        if not line.startswith("|"):
+            in_table = False
+            continue
+        c = cells(line)
+        if c and set(c[0]) <= set("-: "):
+            continue
+        if len(c) != 6 or not ID_RE.match(c[0]):
+            errors.append(f"{path}:{n}: a results line is | <id> | Win | Ubuntu | Kubuntu | Fedora | Fedora-KDE |")
+            continue
+        if c[0] in table:
+            errors.append(f"{path}:{n}: {c[0]} appears more than once")
+        for desktop, cell in zip(DESKTOPS, c[1:]):
+            if cell and not CELL_RE.match(cell):
+                errors.append(f"{path}:{n}: {c[0]}: {desktop}: {cell!r} is not a results cell (x, F<n>, S<n>, -, x (vA.B.C))")
+        table[c[0]] = (c[1:], n)
+    if not header_seen:
+        errors.append(f"{path}: no results table (its header is {RESULTS_HEADER})")
+    for rid, (row_cells, n) in table.items():
+        for cell in row_cells:
+            if re.match(r"^[FS][1-9]\d*$", cell) and entries.get(cell) != ENTRY_SECTION[cell[0]]:
+                errors.append(f"{path}:{n}: {cell} has no entry under ## {ENTRY_SECTION[cell[0]]}")
+    return table, errors
+
+
+def lint_results(path, table, rows, retired, complete):
+    """Form checks for every results file; completeness only for the files a PR adds or changes."""
+    errors = []
+    by_id = {r.id: r for r in rows}
+    retired_ids = {rid for rid, _ in retired}
+    for rid, (row_cells, n) in table.items():
+        if rid not in by_id and rid not in retired_ids:
+            errors.append(f"{path}:{n}: {rid} is not a row of the smoke doc")
+            continue
+        r = by_id.get(rid)
+        if r is None or r.tag is None:
+            continue
+        for desktop, cell in zip(DESKTOPS, row_cells):
+            inside = desktop in TAGS[r.tag]
+            if cell == "-" and inside:
+                errors.append(f"{path}:{n}: {rid}: {desktop} is inside the row's tag [{r.tag}]; it needs a verdict, not -")
+            elif complete and inside and not cell:
+                errors.append(f"{path}:{n}: {rid}: {desktop} is empty")
+            elif complete and not inside and cell != "-":
+                errors.append(f"{path}:{n}: {rid}: {desktop} is outside the row's tag [{r.tag}]; write -")
+    if complete:
+        for r in rows:
+            if r.id not in table:
+                errors.append(f"{path}: {r.id} has no line")
+    return errors
+
+
 def run_lint(root, write=False, complete=()):
     """Every lint error in the tree at root, as a list of messages."""
     doc_path, reg_path = root / DOC, root / REGISTER
@@ -287,6 +369,18 @@ def run_lint(root, write=False, complete=()):
             reg_path.write_text(new_text, encoding="utf-8", newline="\n")
         else:
             errors.append(f"{REGISTER}: the summary is stale; run python tests/qa/check-smoke.py lint --write")
+    results_dir = root / RESULTS_DIR
+    files = sorted(results_dir.glob("v*.md")) if results_dir.is_dir() else []
+    wanted = {Path(c).resolve() for c in complete}
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        if not RESULTS_NAME_RE.match(rel):
+            errors.append(f"{rel}: a results file is named v<major>.<minor>.<patch>.md")
+            continue
+        table, res_errors = parse_results(path.read_text(encoding="utf-8"), rel)
+        errors += res_errors + lint_results(rel, table, rows, retired, path.resolve() in wanted)
+    for c in sorted(wanted - {p.resolve() for p in files}):
+        errors.append(f"{c}: not a results file under {RESULTS_DIR}")
     return errors
 
 

@@ -289,5 +289,106 @@ class RegisterLint(unittest.TestCase):
         self.assertIn(f"{cs.REGISTER}: missing", errors)
 
 
+def results(*lines, findings=(), skips=()):
+    out = ["# Smoke results: v0.5.0", "", "| Desktop | OS | Image | Build |", "|---|---|---|---|", "| Win | Windows 11 24H2 | sha256:abc | sha256:def |", ""]
+    out += [cs.RESULTS_HEADER, "|---|---|---|---|---|---|", *lines, ""]
+    out += ["## Findings", ""] + [f"- **{f}** It failed." for f in findings] + [""]
+    out += ["## Not measured", ""] + [f"- **{s}** NOT MEASURED -- no pad | none attached" for s in skips] + [""]
+    return "\n".join(out)
+
+
+class ResultsLint(unittest.TestCase):
+    def setUp(self):
+        self.rows, self.retired, _ = cs.parse_doc(doc(row("1.1", "All"), row("1.2", "Win"), row("5.3a", "KDE"),
+                                                      row("4.2-system-gui", "GNOME"), retired=["1.9"]))
+
+    def lint(self, text, complete=False):
+        table, errors = cs.parse_results(text, "tests/qa/results/v0.5.0.md")
+        return errors + cs.lint_results("tests/qa/results/v0.5.0.md", table, self.rows, self.retired, complete)
+
+    def full(self):
+        return [
+            "| 1.1 | x | x | F1 | S1 | x (v0.4.1) |",
+            "| 1.2 | x | - | - | - | - |",
+            "| 5.3a | - | - | x | - | x |",
+            "| 4.2-system-gui | - | x | - | x | - |",
+        ]
+
+    def test_complete_file_passes(self):
+        self.assertEqual(self.lint(results(*self.full(), findings=["F1"], skips=["S1"]), complete=True), [])
+
+    def test_bad_cells(self):
+        for cell in ("pass", "F", "F0", "S01", "SKIP: NOT MEASURED -- x", "x (0.4.1)"):
+            with self.subTest(cell=cell):
+                errors = self.lint(results(f"| 1.2 | {cell} | - | - | - | - |"))
+                self.assertTrue(any("not a results cell" in e for e in errors), errors)
+
+    def test_finding_and_skip_need_entries(self):
+        errors = self.lint(results("| 1.2 | F2 | - | - | - | - |", "| 5.3a | - | - | S3 | - | x |"))
+        self.assertTrue(any("F2 has no entry under ## Findings" in e for e in errors), errors)
+        self.assertTrue(any("S3 has no entry under ## Not measured" in e for e in errors), errors)
+
+    def test_entry_in_wrong_section(self):
+        text = results("| 1.2 | S1 | - | - | - | - |", findings=["S1"])
+        errors = self.lint(text)
+        self.assertTrue(any("S1 belongs under ## Not measured" in e for e in errors), errors)
+
+    def test_dash_inside_tag(self):
+        errors = self.lint(results("| 1.2 | - | - | - | - | - |"))
+        self.assertTrue(any("1.2: Win is inside the row's tag [Win]" in e for e in errors), errors)
+
+    def test_unknown_row(self):
+        errors = self.lint(results("| 7.7 | x | x | x | x | x |"))
+        self.assertTrue(any("7.7 is not a row of the smoke doc" in e for e in errors), errors)
+
+    def test_retired_row_is_allowed_in_old_files(self):
+        self.assertEqual(self.lint(results("| 1.9 | x | x | x | x | x |")), [])
+
+    def test_form_only_allows_missing_rows_and_empty_cells(self):
+        self.assertEqual(self.lint(results("| 1.2 |  | - | - | - | - |")), [])
+
+    def test_complete_requires_every_row_and_cell(self):
+        errors = self.lint(results("| 1.2 |  | - | - | - | - |"), complete=True)
+        self.assertTrue(any("1.1 has no line" in e for e in errors), errors)
+        self.assertTrue(any("1.2: Win is empty" in e for e in errors), errors)
+
+    def test_complete_refuses_a_verdict_outside_the_tag(self):
+        lines = self.full()
+        lines[1] = "| 1.2 | x | x | - | - | - |"
+        errors = self.lint(results(*lines, findings=["F1"], skips=["S1"]), complete=True)
+        self.assertTrue(any("1.2: Ubuntu is outside the row's tag [Win]" in e for e in errors), errors)
+
+    def test_duplicate_line_and_wrong_header(self):
+        errors = self.lint(results("| 1.2 | x | - | - | - | - |", "| 1.2 | x | - | - | - | - |"))
+        self.assertTrue(any("1.2 appears more than once" in e for e in errors), errors)
+        errors = self.lint(results().replace(cs.RESULTS_HEADER, "| Row | Windows | Ubuntu | Kubuntu | Fedora | Fedora-KDE |"))
+        self.assertTrue(any("header" in e for e in errors), errors)
+
+    def test_suffixed_ids_and_other_tables(self):
+        table, errors = cs.parse_results(results(*self.full(), findings=["F1"], skips=["S1"]), "r.md")
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(table), ["1.1", "1.2", "4.2-system-gui", "5.3a"])
+        self.assertNotIn("Win", table)
+
+    def test_run_lint_completes_only_named_files(self):
+        tree = Tree()
+        try:
+            root = tree.root
+            (root / "tests/qa/results").mkdir(parents=True)
+            (root / cs.DOC).write_text(doc(row("1.2", "Win")), encoding="utf-8")
+            reg = register(half("1.2", "Win"))
+            (root / cs.REGISTER).write_text(reg, encoding="utf-8")
+            cs.run_lint(root, write=True)
+            old = root / "tests/qa/results/v0.4.1.md"
+            old.write_text(results(), encoding="utf-8")
+            self.assertEqual(cs.run_lint(root), [])
+            errors = cs.run_lint(root, complete=[str(old)])
+            self.assertTrue(any("1.2 has no line" in e for e in errors), errors)
+            errors = cs.run_lint(root, complete=[str(root / "tests/qa/results/v9.9.9.md")])
+            self.assertTrue(any("not a results file" in e for e in errors), errors)
+        finally:
+            tree.close()
+
+
 if __name__ == "__main__":
     unittest.main()
