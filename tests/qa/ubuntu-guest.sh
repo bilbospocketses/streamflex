@@ -1,5 +1,6 @@
 #!/bin/bash
-# ubuntu-guest.sh: the guest-side steps of StreamFlex's Ubuntu hands-on check.
+# ubuntu-guest.sh: guest-side setup for StreamFlex's hands-on checks on the Linux desktops
+# (tests/qa/smoke-test.md).
 #
 # PURPOSE
 #   Everything the smoke doc (tests/qa/smoke-test.md) does inside a Linux guest that
