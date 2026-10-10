@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 195 |
-| Row halves | 260 |
-| Verdicts per release (row x desktop) | 848 |
+| Rows | 270 |
+| Row halves | 385 |
+| Verdicts per release (row x desktop) | 1215 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 72 (288 verdicts) |
+| `streamflex-headless` halves | 127 (508 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 188 (560 verdicts) |
-| **Automated today** | 72 of 260 halves; 288 of 848 verdicts (33 %) |
+| `manual` halves | 258 (707 verdicts) |
+| **Automated today** | 127 of 385 halves; 508 of 1215 verdicts (41 %) |
 
 <!-- summary:end -->
 
@@ -248,6 +248,131 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.62 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.63 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slowdecode` |
 | 5.63 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.1 | `[All]` | manual | qa-harness item 75, planned |
+| 6.2 | `[All]` | manual | qa-harness item 75, planned |
+| 6.3 | `[All]` | manual | qa-harness item 75, planned |
+| 6.4 | `[All]` | manual | qa-harness item 75, planned |
+| 6.5 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-grid` |
+| 6.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.6 | `[All]` | manual | qa-harness item 75, planned |
+| 6.7 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-system` |
+| 6.8 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-system` |
+| 6.9 | `[Linux]` | manual | qa-harness item 75, planned |
+| 6.10 | `[Linux]` | manual | qa-harness item 75, planned |
+| 6.11 | `[All]` | manual | qa-harness item 75, planned |
+| 6.12 | `[Linux]` | manual | qa-harness item 75, planned |
+| 6.13 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-grid` |
+| 6.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.14 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-grid` |
+| 6.14 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.15 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-alias` |
+| 6.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.16 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-inherit` |
+| 6.16 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.17 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-empty` |
+| 6.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.18 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-empty` |
+| 6.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-manymenus` |
+| 6.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.20 | `[All]` | manual | qa-harness item 75, planned |
+| 6.21 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-discard` |
+| 6.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.22 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-discard` |
+| 6.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.23 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-home` |
+| 6.23 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.24 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-screensaver` |
+| 6.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.25 | `[All]` | manual | qa-harness item 75, planned |
+| 6.26 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
+| 6.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.27 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-longpath` |
+| 6.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.28 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
+| 6.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.29 | `[All]` | manual | qa-harness item 75, planned |
+| 6.30 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
+| 6.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.31 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
+| 6.31 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.32 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-cwd` |
+| 6.33 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-cwd` |
+| 6.33 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.34 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-link` |
+| 7.1 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.2 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.3 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.4 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.5 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.6 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.7 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.8 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.9 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-tour` |
+| 7.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.10 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-frame` |
+| 7.10 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.11 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-rows` |
+| 7.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.12 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-rows` |
+| 7.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.13 | `[All]` | manual | qa-harness item 75, planned |
+| 7.14 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-why` |
+| 7.14 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.15 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-frame` |
+| 7.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.16 | `[All]` | manual | qa-harness item 75, planned |
+| 7.17 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-frame` |
+| 7.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.18 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-frame` |
+| 7.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.19 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-padfps` |
+| 7.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.20 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-padfps` |
+| 7.20 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.21 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-default` |
+| 7.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.22 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-default` |
+| 7.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.23 | `[Linux]` | streamflex-headless | `65-settings-reasons.sh` run `f65-network` |
+| 7.24 | `[Linux]` | streamflex-headless | `65-settings-reasons.sh` run `f65-comment` |
+| 7.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.25 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-vcenter` |
+| 7.25 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.26 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-vcenter` |
+| 7.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.27 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-odd` |
+| 7.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.28 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-odd` |
+| 7.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.29 | `[All]` | manual | qa-harness item 75, planned |
+| 7.30 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-rows` |
+| 7.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.31 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-rows` |
+| 7.31 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.32 | `[All]` | manual | qa-harness item 75, planned |
+| 7.33 | `[All]` | manual | qa-harness item 75, planned |
+| 7.34 | `[All]` | manual | qa-harness item 75, planned |
+| 7.35 | `[All]` | manual | qa-harness item 75, planned |
+| 7.36 | `[All]` | manual | qa-harness item 75, planned |
+| 7.37 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-clock` |
+| 7.37 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.38 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-dim` |
+| 7.38 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.39 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-pads` |
+| 7.39 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.40 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-plug` |
+| 7.40 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.41 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-plug` |
+| 7.41 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
