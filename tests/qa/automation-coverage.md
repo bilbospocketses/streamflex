@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 270 |
-| Row halves | 384 |
-| Verdicts per release (row x desktop) | 1215 |
-| `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 126 (504 verdicts) |
+| Rows | 408 |
+| Row halves | 623 |
+| Verdicts per release (row x desktop) | 1886 |
+| `streamflex-ctest` halves | 2 (10 verdicts) |
+| `streamflex-headless` halves | 230 (920 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 258 (711 verdicts) |
-| **Automated today** | 126 of 384 halves; 504 of 1215 verdicts (41 %) |
+| `manual` halves | 391 (956 verdicts) |
+| **Automated today** | 232 of 623 halves; 930 of 1886 verdicts (49 %) |
 
 <!-- summary:end -->
 
@@ -372,6 +372,245 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 7.40 | `[Win]` | manual | qa-harness item 75, planned |
 | 7.41 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-plug` |
 | 7.41 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.1 | `[All]` | manual | qa-harness item 75, planned |
+| 8.2 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-loading` |
+| 8.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.3 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-loading` |
+| 8.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.4 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.5 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.6 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-samples` |
+| 8.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.7 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-ttc`, with `59-settings-fonts.sh` run `f59-face` |
+| 8.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.8 | `[All]` | manual | qa-harness item 75, planned |
+| 8.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.10 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 8.11 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-system` |
+| 8.12 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.13 | `[All]` | manual | qa-harness item 75, planned |
+| 8.14 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.15 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.16 | `[All]` | manual | qa-harness item 75, planned |
+| 8.17 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
+| 8.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.18 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-book` |
+| 8.19 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-ttc` |
+| 8.19 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.20 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-ttc` |
+| 8.20 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.23 | `[All]` | manual | qa-harness item 75, planned |
+| 8.24 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-swatches` |
+| 8.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.25 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-swatches` |
+| 8.25 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.26 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.27 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.28 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-digits`, with `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.29 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.29 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.30 | `[All]` | streamflex-ctest | `test_colorpick.c` `test_hex` |
+| 8.31 | `[All]` | manual | qa-harness item 75, planned |
+| 8.32 | `[All]` | manual | qa-harness item 75, planned |
+| 8.33 | `[All]` | manual | qa-harness item 75, planned |
+| 8.34 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-lowcontrast` |
+| 8.34 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.35 | `[All]` | manual | qa-harness item 75, planned |
+| 8.36 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-contrast` |
+| 8.36 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.37 | `[All]` | manual | qa-harness item 75, planned |
+| 8.38 | `[All]` | manual | qa-harness item 75, planned |
+| 8.39 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-gone` |
+| 8.39 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.40 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-gone` |
+| 8.40 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.41 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-goneok` |
+| 8.41 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.42 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-relok` |
+| 8.42 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.43 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-noneok` |
+| 8.43 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.44 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-face` |
+| 8.44 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.45 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-clock` |
+| 8.45 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.46 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-clock` |
+| 8.46 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.47 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-custom` |
+| 8.47 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.48 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-member` |
+| 8.48 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.49 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-symbols` |
+| 8.49 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.50 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hex` |
+| 8.50 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.51 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hex` |
+| 8.51 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.52 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hex`, with `58-settings-pickers.sh` run `f58-colorback` |
+| 8.52 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.53 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-colorback` |
+| 8.53 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.54 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.54 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.55 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-hexhome` |
+| 8.55 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.56 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-listhome` |
+| 8.56 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.57 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-colorhome` |
+| 8.57 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.58 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-custom` |
+| 8.58 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.59 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-custom` |
+| 8.59 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.60 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-custom` |
+| 8.60 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.61 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-custom` |
+| 8.61 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.62 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-page` |
+| 8.62 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.63 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-page` |
+| 8.63 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.64 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-page` |
+| 8.64 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.65 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-command` |
+| 8.65 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.66 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-command` |
+| 8.66 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.67 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-device` |
+| 8.67 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.68 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-unplug` |
+| 8.68 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.69 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-keeppin` |
+| 8.69 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.70 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-cmdplug`, with `62-settings-bindings.sh` run `f62-cmdplug` |
+| 8.70 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.71 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-image` |
+| 8.71 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.72 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-overlay` |
+| 8.72 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.73 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-overlay` |
+| 8.73 | `[Win]` | manual | qa-harness item 75, planned |
+| 8.74 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-slide` |
+| 8.74 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.1 | `[All]` | manual | qa-harness item 75, planned |
+| 9.2 | `[All]` | manual | qa-harness item 75, planned |
+| 9.3 | `[All]` | manual | qa-harness item 75, planned |
+| 9.4 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.5 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.6 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.7 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.8 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.9 | `[All]` | manual | qa-harness item 75, planned |
+| 9.10 | `[All]` | manual | qa-harness item 75, planned |
+| 9.11 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.12 | `[All]` | manual | qa-harness item 75, planned |
+| 9.13 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-pad` |
+| 9.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.14 | `[All]` | manual | qa-harness item 75, planned |
+| 9.15 | `[All]` | manual | qa-harness item 75, planned |
+| 9.16 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-pad` |
+| 9.16 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.17 | `[All]` | manual | qa-harness item 75, planned |
+| 9.18 | `[All]` | manual | qa-harness item 75, planned |
+| 9.19 | `[All]` | manual | qa-harness item 75, planned |
+| 9.20 | `[All]` | streamflex-ctest | `test_bindings.c` `test_floor` |
+| 9.21 | `[All]` | manual | qa-harness item 75, planned |
+| 9.22 | `[All]` | manual | qa-harness item 75, planned |
+| 9.23 | `[All]` | manual | qa-harness item 75, planned |
+| 9.24 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-menu` |
+| 9.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.25 | `[All]` | manual | qa-harness item 75, planned |
+| 9.26 | `[All]` | manual | qa-harness item 75, planned |
+| 9.27 | `[All]` | manual | qa-harness item 75, planned |
+| 9.28 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-held` |
+| 9.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.29 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.29 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.30 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert`, with `62-settings-bindings.sh` run `f62-norepeat`, with `62-settings-bindings.sh` run `f62-capture`, with `62-settings-bindings.sh` run `f62-holdok` |
+| 9.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.31 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.31 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.32 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padholdkey` |
+| 9.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.33 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-keyholdpad` |
+| 9.33 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.34 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.34 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.35 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padheld` |
+| 9.35 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.36 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-hotkeyok` |
+| 9.36 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.37 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-holdok` |
+| 9.37 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.38 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.38 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.39 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.39 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.40 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.40 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.41 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-confirm` |
+| 9.41 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.42 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-norepeat` |
+| 9.42 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.43 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-norepeat` |
+| 9.43 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.44 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-live` |
+| 9.44 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.45 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-live` |
+| 9.45 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.46 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-close` |
+| 9.46 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.47 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-discard` |
+| 9.47 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.48 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padlive` |
+| 9.48 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.49 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padlive` |
+| 9.49 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.50 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padok` |
+| 9.50 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.51 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-gpon` |
+| 9.51 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.52 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padstart` |
+| 9.52 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.53 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padstart` |
+| 9.53 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.54 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padkey` |
+| 9.54 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.55 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padaxis` |
+| 9.55 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.56 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padtap` |
+| 9.56 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.57 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capheld` |
+| 9.57 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.58 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-mappings` |
+| 9.58 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.59 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-mappings`, with `63-settings-mappings.sh` run `f63-folder` |
+| 9.59 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.60 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-mappings` |
+| 9.60 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.61 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-mappings` |
+| 9.61 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.62 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-folder` |
+| 9.62 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.63 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-broken` |
+| 9.63 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.64 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-longrow` |
+| 9.64 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
