@@ -8,13 +8,13 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | Measure | Count |
 |---|---|
 | Rows | 270 |
-| Row halves | 385 |
+| Row halves | 384 |
 | Verdicts per release (row x desktop) | 1215 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 127 (508 verdicts) |
+| `streamflex-headless` halves | 126 (504 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 258 (707 verdicts) |
-| **Automated today** | 127 of 385 halves; 508 of 1215 verdicts (41 %) |
+| `manual` halves | 258 (711 verdicts) |
+| **Automated today** | 126 of 384 halves; 504 of 1215 verdicts (41 %) |
 
 <!-- summary:end -->
 
@@ -289,8 +289,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 6.26 | `[Win]` | manual | qa-harness item 75, planned |
 | 6.27 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-longpath` |
 | 6.27 | `[Win]` | manual | qa-harness item 75, planned |
-| 6.28 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
-| 6.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 6.28 | `[All]` | manual | qa-harness item 75, planned |
 | 6.29 | `[All]` | manual | qa-harness item 75, planned |
 | 6.30 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-readonly` |
 | 6.30 | `[Win]` | manual | qa-harness item 75, planned |
