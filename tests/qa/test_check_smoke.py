@@ -108,5 +108,156 @@ class DocLint(unittest.TestCase):
         self.assertEqual(cs.parse_doc(text)[1], cs.parse_doc(crlf)[1])
 
 
+def register(*lines, summary_block=None):
+    out = ["# Automation coverage", ""]
+    out += [summary_block] if summary_block is not None else [cs.SUMMARY_BEGIN, cs.SUMMARY_END]
+    out += ["", "## Every row", "", "| Row | Platforms | Owner | Where it runs, or why not |", "|---|---|---|---|"]
+    out += list(lines) + [""]
+    return "\n".join(out)
+
+
+def half(rid, tag, owner="manual", where="A real TV"):
+    return f"| {rid} | `[{tag}]` | {owner} | {where} |"
+
+
+class Tree:
+    """A throwaway repo root with the files the evidence check reads."""
+
+    def __init__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        checks = self.root / "tests/headless/checks"
+        checks.mkdir(parents=True)
+        (checks / "58-settings-pickers.sh").write_text(
+            "CFG=$cfg run_keys f58-hex Menu Down Return\nresult \"pickers: hex\" $ok\n", encoding="utf-8")
+        (self.root / "tests/test_layout.c").write_text(
+            "// A function to test it\nstatic void test_resolve(void)\n{\n}\n", encoding="utf-8")
+
+    def close(self):
+        self.tmp.cleanup()
+
+
+class RegisterLint(unittest.TestCase):
+    def setUp(self):
+        self.tree = Tree()
+        self.rows, _, _ = cs.parse_doc(doc(row("1.1", "All"), row("1.2", "Win"), row("1.3", "KDE")))
+
+    def tearDown(self):
+        self.tree.close()
+
+    def lint(self, text):
+        halves, errors = cs.parse_register(text)
+        return errors + cs.lint_register(self.rows, halves, self.tree.root)
+
+    def good(self):
+        return [
+            half("1.1", "Linux", "streamflex-headless", "`58-settings-pickers.sh` run `f58-hex`"),
+            half("1.1", "Win", "manual", "qa-harness item 75, planned"),
+            half("1.2", "Win", "streamflex-ctest", "`test_layout.c` `test_resolve`"),
+            half("1.3", "KDE"),
+        ]
+
+    def test_good_register_passes(self):
+        self.assertEqual(self.lint(register(*self.good())), [])
+
+    def test_missing_desktop(self):
+        lines = self.good()[:1] + self.good()[2:]
+        errors = self.lint(register(*lines))
+        self.assertTrue(any("1.1: no half covers Win" in e for e in errors), errors)
+
+    def test_desktop_covered_twice(self):
+        errors = self.lint(register(*self.good(), half("1.3", "Kubuntu")))
+        self.assertTrue(any("1.3: Kubuntu is covered by more than one half" in e for e in errors), errors)
+
+    def test_half_outside_the_tag(self):
+        errors = self.lint(register(*self.good(), half("1.2", "Ubuntu")))
+        self.assertTrue(any("1.2: Ubuntu is outside the row's tag [Win]" in e for e in errors), errors)
+
+    def test_orphan_half(self):
+        errors = self.lint(register(*self.good(), half("9.9", "All")))
+        self.assertTrue(any("9.9 is not a row of the smoke doc" in e for e in errors), errors)
+
+    def test_unknown_owner_and_empty_where(self):
+        errors = self.lint(register(half("1.1", "All", "robot"), half("1.2", "Win", "manual", ""), half("1.3", "KDE")))
+        self.assertTrue(any("owner 'robot'" in e for e in errors), errors)
+        self.assertTrue(any("empty" in e for e in errors), errors)
+
+    def test_bad_platforms_cell(self):
+        errors = self.lint(register("| 1.1 | Linux | manual | x |", *self.good()[1:]))
+        self.assertTrue(any("one tag" in e for e in errors), errors)
+
+    def test_headless_evidence_must_exist(self):
+        cases = {
+            "no pair": "the pickers check",
+            "no file": "`99-nothing.sh` run `f58-hex`",
+            "no run": "`58-settings-pickers.sh` run `f58-nothing`",
+            "prefix only": "`58-settings-pickers.sh` run `f58-he`",
+        }
+        for name, where in cases.items():
+            with self.subTest(name=name):
+                lines = [half("1.1", "Linux", "streamflex-headless", where)] + self.good()[1:]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("1.1" in e and "headless" in e for e in errors), errors)
+
+    def test_ctest_evidence_must_exist(self):
+        for where in ("`test_layout.c`", "`test_none.c` `test_resolve`", "`test_layout.c` `test_missing`"):
+            with self.subTest(where=where):
+                lines = self.good()[:2] + [half("1.2", "Win", "streamflex-ctest", where), self.good()[3]]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("1.2" in e and "unit test" in e for e in errors), errors)
+
+    def test_summary_counts(self):
+        halves, _ = cs.parse_register(register(*self.good()))
+        block = cs.summary(self.rows, halves)
+        self.assertTrue(block.startswith(cs.SUMMARY_BEGIN) and block.endswith(cs.SUMMARY_END))
+        self.assertIn("| Rows | 3 |", block)
+        self.assertIn("| Row halves | 4 |", block)
+        # verdicts: 1.1 is 5 desktops, 1.2 is 1, 1.3 is 2; automated: Linux (4) + Win ctest (1)
+        self.assertIn("| Verdicts per release (row x desktop) | 8 |", block)
+        self.assertIn("| **Automated today** | 2 of 4 halves; 5 of 8 verdicts (62 %) |", block)
+
+    def test_summary_stale_then_written(self):
+        text = register(*self.good())
+        (self.tree.root / "tests/qa").mkdir(parents=True)
+        (self.tree.root / cs.DOC).write_text(doc(row("1.1", "All"), row("1.2", "Win"), row("1.3", "KDE")), encoding="utf-8")
+        (self.tree.root / cs.REGISTER).write_text(text, encoding="utf-8")
+        errors = cs.run_lint(self.tree.root)
+        self.assertTrue(any("summary is stale" in e for e in errors), errors)
+        self.assertEqual(cs.run_lint(self.tree.root, write=True), [])
+        self.assertEqual(cs.run_lint(self.tree.root), [])
+
+    def test_summary_markers_required(self):
+        new, errors = cs.replace_summary("# no markers\n", "block")
+        self.assertIsNone(new)
+        self.assertTrue(any("summary markers" in e for e in errors), errors)
+
+    def test_planned_marker_is_exact(self):
+        cases = [("manual", "qa-harness, planned"), ("manual", "item 75 planned"),
+                 ("manual", "qa-harness item 75, planned."), ("manual", "Qa-harness item 75, planned"),
+                 ("qa-harness", "qa-harness item 75, planned")]
+        for owner, where in cases:
+            with self.subTest(owner=owner, where=where):
+                lines = self.good()[:1] + [half("1.1", "Win", owner, where)] + self.good()[2:]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("1.1" in e and "exactly" in e for e in errors), errors)
+
+    def test_qa_harness_arc_form(self):
+        lines = self.good()[:1] + [half("1.1", "Win", "qa-harness", "five-desktop lane, arc S3")] + self.good()[2:]
+        self.assertEqual(self.lint(register(*lines)), [])
+        for where in ("five-desktop lane arc S3", "five-desktop lane, arc S3 (Wave 2)", "five-desktop lane, arc"):
+            with self.subTest(where=where):
+                lines = self.good()[:1] + [half("1.1", "Win", "qa-harness", where)] + self.good()[2:]
+                errors = self.lint(register(*lines))
+                self.assertTrue(any("five-desktop lane, arc <name>" in e for e in errors), errors)
+
+    def test_missing_files_are_reported(self):
+        errors = cs.run_lint(self.tree.root)
+        self.assertEqual(errors, [f"{cs.DOC}: missing"])
+        (self.tree.root / "tests/qa").mkdir(parents=True)
+        (self.tree.root / cs.DOC).write_text(doc(row("1.1")), encoding="utf-8")
+        errors = cs.run_lint(self.tree.root)
+        self.assertIn(f"{cs.REGISTER}: missing", errors)
+
+
 if __name__ == "__main__":
     unittest.main()
