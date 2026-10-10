@@ -94,3 +94,11 @@ unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsig
     unsigned int from = count < delay ? count : delay;
     return from > interval ? from - interval : 0;
 }
+
+// A function to decide if the Windows exit hotkey is tried again now: only while Windows refuses it,
+// and then at once (the window came to the front, settings closed) or DERIVE_EXIT_RETRY_MS after the
+// last try. The times are SDL's ticks, so the subtraction is unsigned and holds across their wrap.
+bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try)
+{
+    return refused && (at_once || now - last_try >= DERIVE_EXIT_RETRY_MS);
+}

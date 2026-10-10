@@ -2509,6 +2509,9 @@ int main(int argc, char *argv[])
                     else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
                         log_debug("Gained keyboard focus");
                         state.has_focus = true;
+#ifdef _WIN32
+                        retry_exit_hotkey(true);   // The application that held its key may have just quit
+#endif
                     }
                     else if (event.window.event == SDL_WINDOWEVENT_LEAVE)
                         log_debug("Lost mouse focus");
@@ -2520,6 +2523,13 @@ int main(int argc, char *argv[])
 #endif
             }
         }
+
+#ifdef _WIN32
+        // Try the exit hotkey Windows refused again when it is due. Taken while an application runs,
+        // its key must reach the loop now, as pre_launch() lets it when the hotkey was there at launch
+        if (retry_exit_hotkey(false) && state.application_running)
+            SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+#endif
 
         // Update application state
         if (state.application_running && state.has_focus) {
