@@ -69,7 +69,10 @@ ENTRY_SECTION = {"F": "Findings", "S": "Not measured"}
 WATCHED_PREFIXES = ("src/", "assets/", "config/")
 WATCHED_FILES = ("CMakeLists.txt", "vcpkg.json")
 UNWATCHED = ("src/test_hooks.c", "src/test_hooks.h")
-MARKER_RE = re.compile(r"<!--\s*smoke:\s*none\s*--\s*([\s\S]*?)\s*-->", re.I)
+# the reason is one lazy group stripped afterwards; whitespace runs beside it made the regex cubic
+MARKER_RE = re.compile(r"<!--\s*smoke:\s*none\s*(?:--(.*?))?-->", re.I | re.S)
+# the template's own placeholder, or any reason that is one <...> token, is not a reason
+PLACEHOLDER_RE = re.compile(r"<[^<>]*>")
 
 
 class Row(NamedTuple):
@@ -377,9 +380,12 @@ def is_watched(path):
 
 
 def parse_opt_out(body):
-    """The marker's reason, '' for a marker with an empty reason, or None for no marker."""
+    """The marker's reason, '' for a marker with an empty or placeholder reason, or None for no marker."""
     m = MARKER_RE.search(body or "")
-    return None if m is None else m.group(1).strip()
+    if m is None:
+        return None
+    reason = (m.group(1) or "").strip()
+    return "" if PLACEHOLDER_RE.fullmatch(reason) else reason
 
 
 def evaluate(files, body):
@@ -400,6 +406,21 @@ def changed_results(entries):
     return [f for status, f in entries if status != "removed" and RESULTS_NAME_RE.match(f)]
 
 
+def parse_file_rows(text):
+    """(entries, files) from the gate's `status<TAB>filename<TAB>previous` lines. entries holds
+    (status, filename) pairs; files holds every filename, plus a rename's previous one. Lines are
+    split on newline alone: jq's @tsv escapes a tab or newline inside a value, but splitlines()
+    would also break a filename at a U+2028 or a form feed."""
+    entries, files = [], []
+    for line in text.split("\n"):
+        if not line:
+            continue
+        status, filename, previous = (line.split("\t") + ["", "", ""])[:3]
+        entries.append((status, filename))
+        files += [filename] + ([previous] if previous else [])
+    return entries, files
+
+
 def gh(args):
     return subprocess.run(["gh", *args], check=True, stdout=subprocess.PIPE, text=True, encoding="utf-8").stdout
 
@@ -414,11 +435,7 @@ def gate():
         return 2
     rows = gh(["api", "--paginate", f"repos/{repo}/pulls/{pr}/files",
                "--jq", '.[] | [.status, .filename, (.previous_filename // "")] | @tsv'])
-    entries, files = [], []
-    for line in rows.splitlines():
-        status, filename, previous = (line.split("\t") + ["", "", ""])[:3]
-        entries.append((status, filename))
-        files += [filename] + ([previous] if previous else [])
+    entries, files = parse_file_rows(rows)
     body = gh(["api", f"repos/{repo}/pulls/{pr}", "--jq", '.body // ""'])
     verdict, watched, reason = evaluate(files, body)
     failed = False

@@ -2,6 +2,7 @@
 
 import importlib.util
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -491,6 +492,43 @@ class Gate(unittest.TestCase):
                    ("removed", "tests/qa/results/v0.4.8.md"), ("modified", "tests/qa/results/README.md"),
                    ("added", "src/a.c")]
         self.assertEqual(cs.changed_results(entries), ["tests/qa/results/v0.5.0.md", "tests/qa/results/v0.4.9.md"])
+
+    def test_bare_marker_is_empty_reason(self):
+        self.assertEqual(cs.parse_opt_out("<!-- smoke: none -->"), "")
+        self.assertEqual(cs.evaluate(["src/a.c"], "<!-- smoke: none -->")[0], "empty-reason")
+
+    def test_long_whitespace_run_returns_promptly(self):
+        start = time.perf_counter()
+        self.assertIsNone(cs.parse_opt_out("<!-- smoke: none --" + " " * 20000))
+        self.assertLess(time.perf_counter() - start, 1.0)
+
+    def test_placeholder_reason_is_empty(self):
+        template = "<!-- smoke: none -- <why this change has no smoke impact> -->"
+        self.assertEqual(cs.evaluate(["src/a.c"], template)[0], "empty-reason")
+        self.assertEqual(cs.evaluate(["src/a.c"], "<!-- smoke: none -- <reason> -->")[0], "empty-reason")
+        # a real reason that merely mentions a <tag> still counts
+        self.assertEqual(cs.evaluate(["src/a.c"], "<!-- smoke: none -- renames <ini> keys only -->")[0], "opted-out")
+
+    def test_parse_file_rows_rename(self):
+        entries, files = cs.parse_file_rows("renamed\ttests/qa/smoke-test.md\ttests/qa/smoke.md\n")
+        self.assertEqual(entries, [("renamed", "tests/qa/smoke-test.md")])
+        self.assertEqual(files, ["tests/qa/smoke-test.md", "tests/qa/smoke.md"])
+
+    def test_parse_file_rows_empty_previous(self):
+        entries, files = cs.parse_file_rows("modified\tsrc/a.c\t\nadded\tsrc/b.c\t\n\n")
+        self.assertEqual(entries, [("modified", "src/a.c"), ("added", "src/b.c")])
+        self.assertEqual(files, ["src/a.c", "src/b.c"])
+
+    def test_parse_file_rows_escaped_tab_stays_one_field(self):
+        # jq's @tsv writes a tab inside a value as the two characters backslash and t
+        entries, files = cs.parse_file_rows("added\tsrc/odd\\tname.c\t\n")
+        self.assertEqual(entries, [("added", "src/odd\\tname.c")])
+        self.assertEqual(files, ["src/odd\\tname.c"])
+
+    def test_parse_file_rows_line_separator_does_not_split(self):
+        entries, files = cs.parse_file_rows("added\tsrc/a\u2028b.c\t\n")
+        self.assertEqual(entries, [("added", "src/a\u2028b.c")])
+        self.assertEqual(files, ["src/a\u2028b.c"])
 
 
 if __name__ == "__main__":
