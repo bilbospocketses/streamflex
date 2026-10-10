@@ -134,6 +134,20 @@ Use conventional-commit-style prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change.
 - Update the relevant page in `docs/` when user-facing behavior or configuration changes.
 
+## Smoke Tests
+
+`tests/qa/smoke-test.md` is the hands-on check every release runs, one observable claim per row, and `tests/qa/automation-coverage.md` says which rows the unit tests and the headless harness already prove. A PR that changes code a user can see (`src/`, `assets/`, `config/`, `CMakeLists.txt`, `vcpkg.json`) updates the rows that cover the change, or says why it needs none in its body:
+
+    <!-- smoke: none -- <why this change has no smoke impact> -->
+
+A marker with no reason does not count. The `smoke-coverage` check enforces both, and editing the PR body re-runs it.
+
+Before pushing a change to the doc, the register or a results file, run:
+
+    python tests/qa/check-smoke.py lint
+
+Row ids are never renumbered or reused: retire a row by moving its id to the doc's **Retired ids** list. A row's tag is part of its claim, so change it by retiring the row and adding a new one. After adding or moving register lines, `lint --write` regenerates the summary.
+
 ## Reporting Bugs
 
 Open an issue with:

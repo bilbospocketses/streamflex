@@ -15,3 +15,5 @@ docs/assets/library/
 # Python caches and review output from branding/library tools
 branding/library/__pycache__/
 branding/library/build/
+# Python caches from the tests/qa smoke lint
+tests/qa/__pycache__/

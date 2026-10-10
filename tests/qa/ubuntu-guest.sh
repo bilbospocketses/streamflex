@@ -1,8 +1,9 @@
 #!/bin/bash
-# ubuntu-guest.sh: the guest-side steps of StreamFlex's Ubuntu hands-on check.
+# ubuntu-guest.sh: guest-side setup for StreamFlex's hands-on checks on the Linux desktops
+# (tests/qa/smoke-test.md).
 #
 # PURPOSE
-#   Everything the Ubuntu checklist (checklists/ubuntu-hands-on.md) does inside the guest that
+#   Everything the smoke doc (tests/qa/smoke-test.md) does inside a Linux guest that
 #   would be fragile as a one-line ssh command: non-ASCII names, section-scoped config edits,
 #   the launch wrapper and the facts the check records first. Copy it to the guest with
 #   virtual-gamepad.py and make-test-images.py (all three in one folder) and run it as root.

@@ -327,7 +327,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bilbospocketses/american-spelling
-          ref: 21ed7e5524c511d9ee584778d42b72e6ddaeba86 # v1.0.2
+          ref: 4fe6f6e29181ae120545165643d81e601e376092 # v1.0.3
           path: .american-spelling
           persist-credentials: false
 

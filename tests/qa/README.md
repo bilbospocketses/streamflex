@@ -1,16 +1,16 @@
-# Hands-on checks: what StreamFlex supplies
-
-These files are the StreamFlex side of the hands-on checks for the settings screen, which no headless check can stand in for. They are run in two guests, Windows 11 and Ubuntu 26.04 GNOME/Wayland, by hand or by a QA harness. The 3a checklists cover the settings screen as 0.3.0 shipped it; the 3b checklists cover what 3b added (every setting, the pickers, the bindings and the restart question) and are run after them, Windows first.
+# Hands-on checks
 
 | File | What it is |
 |---|---|
-| `checklists/windows-hands-on.md` | The Windows 11 check of 3a. It also lists the zip (no DLL, no VC++ runtime needed), and W10 checks the pad is ignored behind a launched app. It has the nine hands-on steps of the 3a plan, and confirms the fixes of its last fix wave: a held Start or Menu opens settings once, and upper-case extensions count while hidden files do not. It also checks the real transparent window, a setup step W0, and what to send back. Inputs are SendInput keys and the ViGEm Xbox 360 pad. |
-| `checklists/ubuntu-hands-on.md` | The Ubuntu 26.04 check of 3a. U7b checks the pad is ignored behind a launched app. It has the nine Linux items of the 3a plan, run as pass A (`SDL_VIDEODRIVER=wayland`, driven by the pad) and pass B (`SDL_VIDEODRIVER=x11`, driven by the keyboard). Before them come a step that records the unknowns (U0), the `.deb` install (U1) and an app-menu launch (U2). Inputs are HMP `sendkey` and the virtual pad; frames come from `screendump`. |
-| `checklists/windows-3b-hands-on.md` | The Windows 11 check of 3b: a key and a pad button bound, the safety floor, a system font, a color by hex, the clock, a restart that keeps it all, the exit hotkey, VSync switched live, the font picker's Windows fonts, the Menu key's name, and the restart question with the exit hotkey and the startup and quit commands. It reads its steps the way `windows-hands-on.md` does. |
-| `checklists/ubuntu-3b-hands-on.md` | The Ubuntu 26.04 check of 3b: the same steps as Windows but the exit hotkey and the Windows fonts, with the restart question checked on Linux too. It reads its steps the way `ubuntu-hands-on.md` does. |
-| `tests/qa/virtual-gamepad.py` | A stdlib-only python3 uinput gamepad: a wired Xbox 360 pad (USB 045e:028e, xpad's button, stick, trigger and hat codes), with StreamFlex's button names. It has the subcommands `press`, `sequence`, `axis`, `serve --keep-open S` (one device that lives across the whole check, driven through a FIFO) with `send`, `list` and `selftest`. It tears down with UI_DEV_DESTROY on exit, SIGTERM, SIGINT and SIGHUP. |
-| `tests/qa/make-test-images.py` | Makes the Ubuntu picture folder: red `rouge.png`, green `VERT.PNG`, blue `BLEU.JPG`, a hidden `.caché.png` and `notes.txt`. The expected count is 3, and an old scan gives 1 or 2, so the count alone tells them apart. Standard library only; `BLEU.JPG` is a real JPEG when python3-gi's GdkPixbuf is present. |
-| `tests/qa/ubuntu-guest.sh` | The guest-side steps that would be fragile as one-line ssh commands. `facts` records the GPU, resolution, session, XWayland, audio, SDL libraries and uinput. `setup` loads uinput and turns on `[Gamepad] Enabled=true` in the system config. It also installs the `sf-run.sh` launch wrapper and the *StreamFlex Debug* app-menu entry, writes `user-dirs.dirs`, and makes the fixtures. The other subcommands are `reset-pass wayland\|x11\|default`, `add-cafe-entry` and `pad-node`. |
+| [`smoke-test.md`](smoke-test.md) | The smoke doc: every release's hands-on check, one observable claim per row, on five desktops (Windows 11, Ubuntu GNOME, Kubuntu, Fedora Workstation, Fedora KDE). Pre-flight per desktop is at its top. |
+| [`automation-coverage.md`](automation-coverage.md) | The coverage register: for each row and desktop, the unit test or headless check that proves it, or why a person checks it. |
+| [`results/`](results/README.md) | One results file per release: every row's verdict on every desktop. |
+| [`check-smoke.py`](check-smoke.py) | Lints the three, and is the `smoke-coverage` CI check. `python tests/qa/check-smoke.py lint`. |
+| `virtual-gamepad.py` | A standard-library uinput Xbox 360 pad for the Linux guests: `press`, `sequence`, `axis`, `serve --keep-open S` with `send`, `list` and `selftest`. |
+| `make-test-images.py` | Makes the Linux picture folder the background rows use (expected count 3). |
+| `ubuntu-guest.sh` | Guest-side setup for the Linux desktops: `facts`, `setup`, `reset-pass`, `add-cafe-entry`, `pad-node`. |
+
+The rows are scripted by qa-harness's five-desktop lane (its item 75), which keys on the row ids, so an id is never renumbered or reused (see CONTRIBUTING.md, Smoke Tests).
 
 ## How the gamepad script was tested (2026-09-29)
 
@@ -22,21 +22,5 @@ On the Docker Desktop VM (kernel 6.18.33.2-microsoft-standard-WSL2), `uinput` an
 - **SDL sees a game controller.** An SDL2 probe reported `SDL_IsGameController=1`, named the device *X360 Controller*, and picked up the mapping `a:b0,b:b1,back:b6,guide:b8,start:b7,…,dpup:h0.1,…,lefttrigger:a2,righttrigger:a5`. It saw every one of the 15 buttons press and release, and every stick direction and both triggers at full range. That held both when the device existed before SDL started (`serve`) and when it was hot-plugged afterwards.
 - **Teardown.** SIGTERM, including SIGTERM in the middle of a 30 s hold, and `send quit` all destroyed the device; `/proc/bus/input/devices` then listed no pad.
 - **The error paths.** A missing `/dev/uinput` exits 2 and says to `modprobe uinput` and run as root. A non-root user exits 2 with "permission denied; run as root". A bad button name exits 1, `send` with no server exits 3, and an out-of-range axis value exits 1.
-- **What the container could not show.** The container ran SDL with `SDL_JOYSTICK_DISABLE_UDEV=1`, because there is no udevd. The guest uses udev, so U0 checks that udev tags the pad `ID_INPUT_JOYSTICK=1` and gives `qa` an ACL on its event node.
+- **What the container could not show.** The container ran SDL with `SDL_JOYSTICK_DISABLE_UDEV=1`, because there is no udevd. The guest uses udev, so the Linux pre-flight checks that udev tags the pad `ID_INPUT_JOYSTICK=1` and gives `qa` an ACL on its event node.
 - `make-test-images.py` and `ubuntu-guest.sh` were exercised in the same image, with a stub system config: the files, ownership, the section-scoped Gamepad edit, `add-cafe-entry`, `reset-pass` and the wrapper. `ubuntu-guest.sh` passes shellcheck at warning level. Nothing was run against a real StreamFlex build or a GNOME session.
-
-## What the qa-harness session must confirm before the Ubuntu run
-
-1. **The Ubuntu guest exists and boots to the desktop.** This is qa-harness M1's base v2, with GDM autologin as `qa`; M1 was not merged when this was written. It also needs ssh as root, and `Copy-QaToGuest` for the four files.
-2. **`Send-QaGuestKeys` passes a hold time.** The held-Menu checks need HMP `sendkey <key> 2000`. The qa-harness's monitor helper turns each `-Keys` value into `sendkey <value>` and rejects only a newline, so `-Keys 'compose 2000'` should work. Confirm it once: a held `compose` in a text field repeats.
-3. **Which HMP key gives which Menu code.** `compose` should reach SDL as `SDLK_APPLICATION` (#40000065) and `menu` as `SDLK_MENU` (#40000076). This depends on the guest's keyboard model (PS/2 or USB); U4 records it. If one code never arrives, U4 marks that half BLOCKED.
-4. **`modprobe uinput` works in the guest** (`ubuntu-guest.sh setup` stops if it does not). It also checks that `/dev/input/eventN` for the pad gets `ID_INPUT_JOYSTICK=1` and an ACL for `qa` (`ubuntu-guest.sh pad-node`).
-5. **Focus for the launched StreamFlex.** The checklists launch through the app menu, whose activation token gives the new window focus. If the harness launches with `systemd-run --user`, it must check the log for `Gained keyboard focus`.
-6. **Windows: the SendInput Menu key.** It is `VK_APPS` (0x5D) with its scan code and `KEYEVENTF_EXTENDEDKEY`, never `VK_MENU` (that is Alt). The held-key check also needs repeated key-downs, because SendInput does not auto-repeat.
-
-## Open points for the StreamFlex side
-
-- **The gamepad is on by default** (`DEFAULT_GAMEPAD_ENABLED` is `true`, and the shipped config says `Enabled=true`). Neither checklist edits the config any more; each checks that it holds `true` or no line, and that Start opens settings out of the box. `ubuntu-guest.sh setup` still runs its `Enabled=false` to `true` sed, which is now a no-op.
-- **The `Video:` line is debug-level and names the renderer** (`Video: SDL's x11 driver, the opengl renderer`), so both checklists run with `-d` and record it. The `glxinfo` fallback is no longer needed.
-- **Linux Transparent under GNOME.** `make_window_transparent()` exists only in win32.c; on Linux, the chroma color needs picom on X11. U8 therefore expects **no** see-through on GNOME, and passes on a clean run. If "the real Transparent window under the compositor" was meant to see through, the guest needs picom, and GNOME/Wayland cannot provide it.
-- **Held Menu key evidence.** The held-key checks count `Key … detected` lines to prove the repeats arrived. A key repeat is logged before the launcher drops it (`launcher.c` logs the key, then returns on a repeat), and the headless checks f50-held and f50-heldkb require more than one such line on both images, so the count is a sound marker.
