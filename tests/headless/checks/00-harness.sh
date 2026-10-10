@@ -1,7 +1,7 @@
 # The harness's own helpers (run.sh), checked before anything relies on them: a launcher that
-# starts slowly still gets its keys, one that ignores TERM is killed and fails its check, one
-# that exits without logging does not hold the run up, a zombie is not running whatever its
-# name, a quick run that has to be stopped fails, a log range must be closed to count, the log
+# starts slowly still gets its keys, the frame line each key waits for follows that frame's own
+# lines, a launcher that ignores TERM is killed and fails its check, one that exits without
+# logging does not hold the run up, a zombie is not running whatever its name, a quick run that has to be stopped fails, a log range must be closed to count, the log
 # helpers take their strings as written, a pixel probe must have points to read, the checks run
 # with nullglob off, and a listed leak is a failure
 
@@ -42,6 +42,23 @@ ok=1
 [ "$(grep -o "Loading menu '[^']*'" "$out/h-slow.log" | tail -1)" = "Loading menu 'Main'" ] \
     && [ "$(grep -c "Loading menu 'Games'" "$out/h-slow.log")" = 2 ] && ran_clean h-slow && ok=0
 result "harness: a launcher that starts 6 s late still gets its keys (exit $(cat "$out/h-slow.code"))" $ok
+
+# The line run_keys waits for after each key comes after the frame it names, not as the key is
+# handled: Menu and each Down move settings' cursor to a new row, and the first frame after the key
+# logs that row, so each of those keys' lines must have a cursor-row line, and then a frame line,
+# before the next key. A hook logged ahead of its frame would let a slow launcher take the next key
+# before the frame, and every other check would still pass.
+CFG=$FX/f13-selfsub.ini run_keys h-order Menu Down Down Down BackSpace
+ok=1
+awk '
+    /^Key (Menu|Down) \(#[0-9A-F]+\) detected$/ { if (open) bad = 1; open = 1; row = 0; keys++; next }
+    /^Key / { if (open) bad = 1; open = 0; next }
+    open && /^Settings: the cursor.s row reads / { row = 1 }
+    open && /^Test hook: a frame was drawn after a key$/ { if (!row) bad = 1; open = 0; drawn++ }
+    END { exit !(keys == 4 && drawn == 4 && !bad) }
+' "$out/h-order.log" && ran_clean h-order && ok=0
+result "harness: the frame line each key waits for follows the lines that frame drew (exit $(cat "$out/h-order.code"))" $ok
+grep -E "^Key |the cursor's row reads|^Test hook: a frame was drawn" "$out/h-order.log" | sed 's/^/      /'
 
 # A launcher that ignores TERM is killed 10 s later (exit 137), and its check fails on the exit
 # code alone: its sanitizers are quiet

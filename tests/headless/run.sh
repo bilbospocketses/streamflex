@@ -166,10 +166,23 @@ xdotool getdisplaygeometry > /dev/null 2>&1 || { echo "Xvfb DID NOT START"; exit
 # else goes to xdotool itself. While run_keys drives a launcher (frame_pid, its PID), a key pressed
 # (key or keydown, from run_keys or from a +key's function) then waits for the frame drawn after it,
 # as wait_frame does; a key whose frame never came is kept in frame_missed, which ends the run as a
-# failure. A key let go (keyup) is not waited for: only a key pressed makes the launcher draw.
+# failure. A key let go (keyup) is not waited for: only a key pressed makes the launcher draw. A key
+# pressed with frame_nowait set is not waited for either (the launcher is stopped or held up until
+# later), but its frame is still owed: before the next key it waits for, the wrapper first waits
+# for every frame owed (frame_settle), so that frame cannot stand in for the next key's own.
 xdotool() {
-    local drawn="" status
-    [ -n "${frame_pid:-}" ] && [[ ${1:-} =~ ^key(down)?$ ]] && drawn=$(frames_drawn)
+    local drawn="" status owed
+    if [ -n "${frame_pid:-}" ] && [[ ${1:-} =~ ^key(down)?$ ]]; then
+        if [ -n "${frame_nowait:-}" ]; then
+            frame_owed=$(frames_drawn) frame_owed_by="'xdotool $*', pressed with no wait,"
+        elif frame_settle "$frame_pid"; then
+            drawn=$(frames_drawn)
+        else
+            owed="${frame_owed_by:-a key already handled} before 'xdotool $*'"
+            frame_missed=${frame_missed:-$owed}
+            return 1
+        fi
+    fi
     if [ $# = 2 ] && [[ $1 =~ ^key(down|up)?$ ]] && [[ $2 =~ ^F[0-9]+$ ]]; then
         python3 "$HERE/key.py" "$1" "$2"
     else
@@ -177,7 +190,7 @@ xdotool() {
     fi
     status=$?
     if [ -n "$drawn" ] && ! wait_frame "$drawn" "$frame_pid"; then
-        frame_missed=${frame_missed:-$*}
+        frame_missed=${frame_missed:-"'xdotool $*'"}
     fi
     return $status
 }
@@ -330,11 +343,14 @@ frames_drawn() {
     echo "${n:-0}"
 }
 
-# A function to wait up to 20 s, as wait_line does, for the frame drawn after a key: for the count
-# frames_drawn gives to pass BEFORE, the count when the key was sent. A launcher (PID) that has
-# exited ends the wait too, as no frame comes after a key that ended it. Fails when nothing came.
+# A function to wait at least 60 s for the frame drawn after a key: for the count frames_drawn
+# gives to pass BEFORE, the count when the key was sent. A launcher (PID) that has exited ends the
+# wait too, as no frame comes after a key that ended it. Fails when nothing came. The bound is three
+# times wait_line's: CI has shown a launcher draw nothing for at least 13 s, how much longer is
+# unknown, and the bound costs nothing unless the frame never comes. SECONDS counts whole seconds,
+# hence the 61.
 wait_frame() {
-    local before=$1 pid=$2 end=$((SECONDS + 20))
+    local before=$1 pid=$2 end=$((SECONDS + 61))
     while [ "$SECONDS" -lt "$end" ]; do
         [ "$(frames_drawn)" -gt "$before" ] && return 0
         running "$pid" || return 0
@@ -343,13 +359,35 @@ wait_frame() {
     [ "$(frames_drawn)" -gt "$before" ]
 }
 
+# A function to tell whether no key is owed its frame: the count frames_drawn gives has passed
+# frame_owed (taken as a key was pressed with no wait), and no key the launcher handled ("Key ...
+# detected") comes after the log's last frame line, as one from a batch or a held key's repeats can
+frames_settled() {
+    [ -z "${frame_owed:-}" ] || [ "$(frames_drawn)" -gt "$frame_owed" ] || return 1
+    [ -f "$LOG" ] || return 0
+    awk -v frame="$frame_lines" '/^Key .* detected$/ { key = NR } $0 ~ frame { drawn = NR } END { exit !(key <= drawn) }' "$LOG"
+}
+
+# A function to wait as wait_frame does (at least 60 s, or until the launcher PID has exited) until
+# no key is owed its frame (frames_settled), then forget frame_owed; fails when one still is
+frame_settle() {
+    local pid=$1 end=$((SECONDS + 61))
+    while ! frames_settled; do
+        running "$pid" || break
+        [ "$SECONDS" -lt "$end" ] || return 1
+        sleep 0.05
+    done
+    frame_owed="" frame_owed_by=""
+}
+
 # A function to run a config that keeps running, and drive it. It starts the launcher, waits for
 # a line in its log (WAIT_FOR, by default the first "Loading menu"), sends the keys, waits for the
 # line UNTIL when that is set, then ends it with stop_run (TERM, and KILL 10 s later). After each
 # key it waits for the frame the launcher draws after it (xdotool and wait_frame), then a second
 # more: a slow launcher would otherwise handle several keys with no frame between them, and a line
 # that only a drawn frame logs would never come. A key written !KEY is pressed with no wait for its
-# frame, for a key whose frame can come only once a later +key has let the launcher go. A key
+# frame, for a key whose frame can come only once a later +key has let the launcher go; the next
+# key waited for waits for that frame first. A key
 # written +name calls the function `name` with the run's name and PID instead: that is how a check
 # does something at a moment the log chooses.
 # Every wait is bounded; a line that never came, or a key whose frame never did (the run then sends
@@ -358,7 +396,7 @@ wait_frame() {
 run_keys() {
     local name=$1; shift
     local args; mapfile -t args < <(config_args "$name")
-    local start=${WAIT_FOR:-Loading menu} missing="" pid code k frame_pid="" frame_missed=""
+    local start=${WAIT_FOR:-Loading menu} missing="" pid code k frame_pid="" frame_missed="" frame_owed="" frame_owed_by=""
     rm -f "$LOG" "$out/$name.seen" "$out/$name.pixels"
     "${TESTER[@]}" "$exe" "${args[@]}" -d > "$out/$name.out" 2> "$out/$name.err" &
     pid=$!
@@ -367,7 +405,7 @@ run_keys() {
         for k in "$@"; do
             case $k in
                 +*) "${k#+}" "$name" "$pid" ;;
-                \!*) frame_pid= xdotool key "${k#!}"; sleep 1 ;;
+                \!*) frame_nowait=yes xdotool key "${k#!}"; sleep 1 ;;
                 *) xdotool key "$k"; [ -n "$frame_missed" ] || sleep 1 ;;
             esac
             [ -z "$frame_missed" ] || break
@@ -379,7 +417,7 @@ run_keys() {
     fi
     stop_run "$pid"; code=$?
     [ -z "$missing" ] || code="$code, and never logged '$missing'"
-    [ -z "$frame_missed" ] || code="$code, and drew no frame within 20 s of 'xdotool $frame_missed'"
+    [ -z "$frame_missed" ] || code="$code, and drew no frame within 60 s of $frame_missed"
     echo "$code" > "$out/$name.code"
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }
