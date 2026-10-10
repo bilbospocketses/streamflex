@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.18)
 project("StreamFlex" 
   LANGUAGES C
-  VERSION 0.4.0
+  VERSION 0.4.1
   DESCRIPTION "Customizable HTPC Application Launcher"
   HOMEPAGE_URL "https://github.com/bilbospocketses/streamflex"
 )

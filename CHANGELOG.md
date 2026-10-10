@@ -8,6 +8,10 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-10
+
+On Windows, an exit hotkey that another program held when StreamFlex started now starts working once that program lets go of the key, with no restart. Checked by hand on Windows 11. CI now checks for American spelling and pulls its images through mirror.gcr.io, and the headless tests no longer fail at random on a slow runner.
+
 ### Changed
 - CI checks that added lines and commit messages use American spelling.
 - CI pulls the test images' bases, and the Linux, Raspberry Pi and Arch Linux build containers, through mirror.gcr.io.
