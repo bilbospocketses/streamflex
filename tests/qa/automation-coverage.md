@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 108 |
-| Row halves | 136 |
-| Verdicts per release (row x desktop) | 435 |
+| Rows | 111 |
+| Row halves | 138 |
+| Verdicts per release (row x desktop) | 449 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
 | `streamflex-headless` halves | 33 (132 verdicts) |
 | `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 103 (303 verdicts) |
-| **Automated today** | 33 of 136 halves; 132 of 435 verdicts (30 %) |
+| `manual` halves | 105 (317 verdicts) |
+| **Automated today** | 33 of 138 halves; 132 of 449 verdicts (29 %) |
 
 <!-- summary:end -->
 
@@ -64,6 +64,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.29 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
 | 1.29 | `[Win]` | manual | qa-harness item 75, planned |
 | 1.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.31 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
 | 2.1 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
 | 2.1 | `[Win]` | manual | qa-harness item 75, planned |
 | 2.2 | `[All]` | manual | qa-harness item 75, planned |
@@ -110,6 +111,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 2.32 | `[Win]` | manual | qa-harness item 75, planned |
 | 2.33 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-shadowlong` |
 | 2.33 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.34 | `[All]` | manual | qa-harness item 75, planned |
+| 2.35 | `[All]` | manual | qa-harness item 75, planned |
 | 3.1 | `[All]` | manual | qa-harness item 75, planned |
 | 3.2 | `[All]` | manual | qa-harness item 75, planned |
 | 3.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -138,8 +141,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 13.13 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.14 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.15 | `[Linux]` | manual | qa-harness item 75, planned |
-| 14.1 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-all` |
-| 14.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.1 | `[All]` | manual | qa-harness item 75, planned |
 | 14.2 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-fps10` |
 | 14.2 | `[Win]` | manual | qa-harness item 75, planned |
 | 14.3 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-values` |
