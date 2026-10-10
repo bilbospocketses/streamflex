@@ -8,6 +8,9 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+### Changed
+- The configuration guide's Exit Hotkey section says what happens when another program holds the key: Windows refuses it, and StreamFlex keeps trying until the key is free.
+
 ## [0.4.1] - 2026-10-10
 
 On Windows, an exit hotkey that another program held when StreamFlex started now starts working once that program lets go of the key, with no restart. Checked by hand on Windows 11. CI now checks for American spelling and pulls its images through mirror.gcr.io, and the headless tests no longer fail at random on a slow runner.

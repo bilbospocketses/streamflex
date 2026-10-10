@@ -842,6 +842,8 @@ The exit hotkey feature allows a user to quit the running application using a bu
 
 Only the function keys F1-F24 may be used as an exit hotkey, with the exception of F12 which is forbidden by Windows. Pressing an exit hotkey is functionally equivalent to using the Alt+F4 keyboard shortcut on the active window; it is not a forceful method, so the application is able to close cleanly. However, the application could also choose to ignore it, display a confirmation dialog, or not respond if it's hung.
 
+If another program already holds the key when StreamFlex starts, Windows refuses the exit hotkey, and the log says why. StreamFlex then tries again every 5 seconds, whenever it comes back to the front, and whenever settings close, so the exit hotkey starts working as soon as the other program lets go of the key, with no restart. The log says once when it succeeds.
+
 The following example maps F10 as an exit hotkey:
 ```ini
 Hotkey=#40000043;:exit
