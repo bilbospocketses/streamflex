@@ -34,6 +34,7 @@ Setup, not tests: nothing here takes a verdict. Every row assumes its desktop wa
   - The arrow keys are extended keys: set `KEYEVENTF_EXTENDEDKEY`.
   - The Menu key is `VK_APPS` (0x5D), with its scan code 0x5D and `KEYEVENTF_EXTENDEDKEY`. Never `VK_MENU`: that is the Alt key.
   - SendInput does not auto-repeat, so a held key is sent as repeated key-downs.
+  - SendInput cannot produce `SDLK_MENU` (`#40000076`): no Windows virtual key gives it. A row that needs `#40000076` is therefore never tagged to include Windows; it is `[Linux]` or narrower.
 
   The pad is the ViGEm virtual Xbox 360 pad, connected before StreamFlex starts. Hold a pad press for 150 ms: StreamFlex samples the pad once a frame, so a shorter press can be missed. Leave at least 500 ms between inputs.
 - **Logs.** Start `C:\StreamFlex\streamflex.exe -d`. The log is `C:\StreamFlex\streamflex.log`, beside the executable. It is emptied at each start by hand, so copy it away before starting again; StreamFlex's own restart carries on the same log. `-d` writes the debug lines, among them `Video: SDL's windows driver, the <renderer> renderer`, which names the driver and the renderer. A key that arrives logs `Key <name> (#<hex>) detected`, and a pad press logs `Gamepad <Button> detected`, so the log tells an input the harness never delivered from a fail of StreamFlex.
@@ -47,37 +48,45 @@ Setup, not tests: nothing here takes a verdict. Every row assumes its desktop wa
   - `sendkey compose` reaches SDL as `SDLK_APPLICATION` (`#40000065`), as the 3b Ubuntu run used it.
   - **`SDLK_MENU` (`#40000076`) comes from a uinput keyboard's `KEY_MENU`, never `sendkey menu`**, which did not reach the app in qa-harness's v0.3.0 run. A row that needs `#40000076` says so in its steps, so a hand pass cannot read a harness miss as an app Fail.
 
-  The pad is `tests/qa/virtual-gamepad.py`, served as root before any StreamFlex run (`systemd-run --unit=sf-vgp /usr/bin/python3 virtual-gamepad.py serve --keep-open 14400`) and driven with `send` (`virtual-gamepad.py send "press ButtonStart"`, or `"press ButtonStart --hold 2000"`). Its journal shows `created 'Microsoft X-Box 360 pad' (045e:028e) at /dev/input/eventN`, and `ubuntu-guest.sh pad-node` shows `ID_INPUT_JOYSTICK=1` and an ACL entry `user:qa:rw-`; without that ACL, StreamFlex running as the desktop user cannot read the pad. The pad needs `uinput` loaded (`modprobe uinput`, which `ubuntu-guest.sh setup` does). Leave at least 500 ms between inputs.
+  The pad is `tests/qa/virtual-gamepad.py`, copied with the other guest helpers to `/root/sf-qa/`. Serve it as root before any StreamFlex run (`systemd-run --unit=sf-vgp /usr/bin/python3 /root/sf-qa/virtual-gamepad.py serve --keep-open 14400`), and drive it with `send` (`python3 /root/sf-qa/virtual-gamepad.py send "press ButtonStart"`, or `python3 /root/sf-qa/virtual-gamepad.py send "press ButtonStart --hold 2000"`). Its journal shows `created 'Microsoft X-Box 360 pad' (045e:028e) at /dev/input/eventN`, and `bash /root/sf-qa/ubuntu-guest.sh pad-node` shows `ID_INPUT_JOYSTICK=1` and an ACL entry `user:qa:rw-`; without that ACL, StreamFlex running as the desktop user cannot read the pad. The pad needs `uinput` loaded (`modprobe uinput`, which `ubuntu-guest.sh setup` does). Leave at least 500 ms between inputs.
 - **Logs.** Start `streamflex -d`. The log is `~/.local/share/streamflex/streamflex.log`, emptied at each start by hand; StreamFlex's own restart carries on the same log. `-d` writes the debug lines, among them `Config file found: <path>` and `Video: SDL's <driver> driver, the <renderer> renderer`, which names the driver and the renderer. A key that arrives logs `Key <name> (#<hex>) detected`, and a pad press logs `Gamepad <Button> detected`; a key repeat is logged before StreamFlex drops it, so a held key shows as more than one such line.
-- **Session.** GNOME on Wayland: the user's session `Type` is `wayland`. Launch StreamFlex from the app menu, whose activation token gives the new window keyboard focus. Started any other way (for example `systemd-run --user`), check the log for `Gained keyboard focus`; without it, keys go to another window.
+- **Session.** GNOME on Wayland: the user's session `Type` is `wayland`. Launch the *StreamFlex Debug* app-menu entry, which `ubuntu-guest.sh setup` installs. It runs `~/sf-run.sh`, which runs `streamflex -d`, and the app menu's activation token gives the new window keyboard focus. The shipped *StreamFlex* entry runs plain `streamflex`, with no `-d`, so do not use it. Any other launch (for example `systemd-run --user`) must pass `-d`. After it, check the log for `Gained keyboard focus`: without that line, keys go to another window.
+
+  The focus check, and every log line a row expects, need `-d`. Without it, `Key … detected`, `Gamepad … detected`, `Video:`, `Config file found` and `Gained keyboard focus` are never written, so an input that arrived looks as if it never did.
 
 ### Kubuntu
 
 - **Build.** The release `.deb`, installed as on Ubuntu GNOME.
 - **Config.** As on Ubuntu GNOME: the packaged `/usr/share/streamflex/config.ini` until the first save writes `~/.config/streamflex/config.ini`; delete `~/.config/streamflex` to reset.
-- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and `tests/qa/virtual-gamepad.py serve` for the pad.
+- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and the pad served with `python3 /root/sf-qa/virtual-gamepad.py serve --keep-open 14400` and driven with `python3 /root/sf-qa/virtual-gamepad.py send "press <Button>"`.
 - **Logs.** As on Ubuntu GNOME: `streamflex -d`, logging to `~/.local/share/streamflex/streamflex.log`, with the `Video:` line naming the driver and renderer.
-- **Session.** Plasma. Record the session type and whether a compositor is running: the Transparent rows depend on it. Check the log for `Gained keyboard focus` after each launch.
+- **Session.** Plasma. Record the session type and whether a compositor is running: the Transparent rows depend on it. Launch the *StreamFlex Debug* entry (`ubuntu-guest.sh setup` installs it; it runs `streamflex -d`) or another launch that passes `-d`, never the shipped *StreamFlex* entry. After each launch, check the log for `Gained keyboard focus`. That check, and every log line a row expects, need `-d`, as on Ubuntu GNOME.
 
 ### Fedora Workstation
 
-- **Build.** A build from StreamFlex's own CI, named in the results header by its run id and sha256, until StreamFlex ships an `.rpm` (todo item 25). Never a build compiled inside the guest.
-- **Config.** The same search as on Ubuntu GNOME: the folder StreamFlex starts in, the executable's folder, `~/.config/streamflex/`, then the packaged copy under the build's `share/streamflex/`. A packaged copy that cannot be written sends the first save to `~/.config/streamflex/config.ini`. Delete `~/.config/streamflex` to reset.
-- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and `tests/qa/virtual-gamepad.py serve` for the pad.
+- **Build.** A build from StreamFlex's own CI, named in the results header by its run id and sha256, until StreamFlex ships an `.rpm` (todo item 25). Never a build compiled inside the guest. No CI job uploads a Fedora build yet; that job is added under todo item 25 when the lane first needs it.
+- **Config.** The same search as on Ubuntu GNOME: the folder StreamFlex starts in, the executable's folder, `~/.config/streamflex/`, then the packaged copy under the build's `share/streamflex/`.
+  - When the build is installed at its own prefix, StreamFlex finds the packaged config at `<prefix>/share/streamflex/config.ini`, and the desktop user cannot write it there. Then the first save goes to `~/.config/streamflex/config.ini`, and deleting `~/.config/streamflex` resets to the shipped config.
+  - When StreamFlex finds a `config.ini` in the folder it starts in or beside the executable, or finds the packaged copy writable, the save writes that file in place. Resetting then means restoring that file.
+- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and the pad served with `python3 /root/sf-qa/virtual-gamepad.py serve --keep-open 14400` and driven with `python3 /root/sf-qa/virtual-gamepad.py send "press <Button>"`.
 - **Logs.** As on Ubuntu GNOME: `streamflex -d`, logging to `~/.local/share/streamflex/streamflex.log`, with the `Video:` line naming the driver and renderer.
-- **Session.** GNOME on Wayland. Launch from the app menu for keyboard focus, or check the log for `Gained keyboard focus`.
+- **Session.** GNOME on Wayland. Launch with `-d`, never through the shipped *StreamFlex* entry, which runs plain `streamflex`. The *StreamFlex Debug* entry comes from `ubuntu-guest.sh setup`, which needs the `.deb` layout. Where setup cannot run, make a `-d` launch yourself (see Guest helpers). After each launch, check the log for `Gained keyboard focus`. That check, and every log line a row expects, need `-d`, as on Ubuntu GNOME.
 
 ### Fedora KDE
 
 - **Build.** A build from StreamFlex's own CI, as on Fedora Workstation: named by run id and sha256, never compiled inside the guest, until an `.rpm` ships (todo item 25).
 - **Config.** As on Fedora Workstation.
-- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and `tests/qa/virtual-gamepad.py serve` for the pad.
+- **Input.** As on Ubuntu GNOME: HMP `sendkey`, `sendkey <key> 2000` for a hold, `sendkey compose` for `SDLK_APPLICATION` (`#40000065`), a uinput keyboard's `KEY_MENU` (never `sendkey menu`) for `SDLK_MENU` (`#40000076`), and the pad served with `python3 /root/sf-qa/virtual-gamepad.py serve --keep-open 14400` and driven with `python3 /root/sf-qa/virtual-gamepad.py send "press <Button>"`.
 - **Logs.** As on Ubuntu GNOME: `streamflex -d`, logging to `~/.local/share/streamflex/streamflex.log`, with the `Video:` line naming the driver and renderer.
-- **Session.** Plasma. Record the session type and whether a compositor is running: the Transparent rows depend on it. Check the log for `Gained keyboard focus` after each launch.
+- **Session.** Plasma. Record the session type and whether a compositor is running: the Transparent rows depend on it. Launch with `-d`, as on Fedora Workstation: a `-d` launch you make yourself, never the shipped *StreamFlex* entry. After each launch, check the log for `Gained keyboard focus`. That check, and every log line a row expects, need `-d`.
 
 ### Guest helpers
 
-Copy these into the Linux guest, all three in one folder, and run them as root.
+Copy these into `/root/sf-qa/` in the Linux guest, all three in one folder, and run them as root.
+
+`ubuntu-guest.sh setup` needs the `.deb` layout: it stops when `/usr/share/streamflex/config.ini` is missing. On any other layout, such as a Fedora CI build until an `.rpm` ships, do two things by hand instead:
+- run `make-test-images.py` directly (`python3 /root/sf-qa/make-test-images.py <folder> --owner <user>`);
+- make a launch that passes `-d` yourself.
 
 - **`tests/qa/ubuntu-guest.sh`**, written for the Ubuntu guest:
   - `facts` records the GPU, the resolution, the session, XWayland, audio, the SDL libraries StreamFlex loads, and uinput;
