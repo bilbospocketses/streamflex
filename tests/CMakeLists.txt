@@ -148,12 +148,15 @@ target_link_libraries(test_harfbuzz SDL3_ttf::SDL3_ttf SDL3::SDL3)
 add_test(NAME harfbuzz COMMAND test_harfbuzz)
 
 # The Windows exe carries the Vulkan fix of the sdl3 overlay port (spec section 9, test 13). The control
-# runs the same script on an exe that links no SDL and must fail, so a script that passed anything
-# would show
+# runs the same script on an exe that links no SDL and must report the string missing, so a script
+# that passed anything would show; it passes on that message only, not on any other failure
 if (WIN32)
   add_test(NAME vulkan_fix COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:${EXECUTABLE_TITLE}>"
            -P "${CMAKE_CURRENT_SOURCE_DIR}/check_vulkan_fix.cmake")
   add_test(NAME vulkan_fix_control COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:test_layout>"
            -P "${CMAKE_CURRENT_SOURCE_DIR}/check_vulkan_fix.cmake")
-  set_tests_properties(vulkan_fix_control PROPERTIES WILL_FAIL TRUE)
+  # CMake wraps a long error at a space, wherever the exe's path puts the 80th column, so any
+  # whitespace may stand between the message's words
+  string(REPLACE " " "[ \t\r\n]+" missing_fix "lacks the Vulkan fix's error string")
+  set_tests_properties(vulkan_fix_control PROPERTIES PASS_REGULAR_EXPRESSION "${missing_fix}")
 endif ()

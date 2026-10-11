@@ -78,7 +78,9 @@ if (WIN32)
   # A static SDL3_ttf finds HarfBuzz through its own Findharfbuzz.cmake, whose harfbuzz::harfbuzz is
   # one find_library() path: the debug library, for the reason above, so the Release link took the
   # debug C runtime (LNK2001 _CrtDbgReport). That module makes the target only when none exists, so
-  # this one, with each configuration's own library, is made first, before find_package(SDL3_ttf)
+  # this one, with each configuration's own library, is made first, before find_package(SDL3_ttf).
+  # The module still runs, so Configure still prints "Found harfbuzz: .../debug/lib/harfbuzz.lib";
+  # that is its unused search, not the bug back: the target linked is this per-configuration one
   find_vcpkg_library(HARFBUZZ harfbuzz)
   add_library(harfbuzz::harfbuzz INTERFACE IMPORTED)
   target_link_libraries(harfbuzz::harfbuzz INTERFACE ${HARFBUZZ})

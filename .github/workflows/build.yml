@@ -366,30 +366,20 @@ jobs:
       - name: Build the test image
         run: docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
 
+      # tests/unit.sh is the one recipe, the same file a local run uses (CONTRIBUTING.md): it builds
+      # a copy of the read-only /src and prints CONFIGURE FAILED, BUILD FAILED or WARNINGS OUTSIDE
+      # src/external when a step before ctest fails
       - name: Build and run the unit tests
         run: |
-          docker run --rm -i --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
-            streamflex-test-debian bash -s <<'EOF'
-          set -u
-          rm -rf /work; mkdir -p /work
-          tar -C /src --exclude=./build --exclude=./.git -cf - . | tar -C /work -xf -
-          chown -R tester /work
-          flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
-          su tester -c "cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='$flags' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DEXTRA_WARNINGS=ON" > /tmp/configure.log 2>&1 \
-            || { echo "::error::CMake configure failed"; cat /tmp/configure.log; exit 2; }
-          su tester -c "cmake --build /work/build -j$(nproc)" > /tmp/build.log 2>&1 \
-            || { echo "::error::The build failed"; cat /tmp/build.log; exit 2; }
-          ours=$(grep -iE 'warning:' /tmp/build.log | grep -vE '^g?make(\[[0-9]+\])?: ' | grep -v '^/work/src/external/')
-          if [ -n "$ours" ]; then echo "::error::Compiler warnings outside src/external"; echo "$ours"; exit 1; fi
-          su tester -c "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 setarch $(uname -m) -R ctest --test-dir /work/build --output-on-failure"
-          EOF
+          docker run --rm --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+            streamflex-test-debian bash /src/tests/unit.sh
 
   # What only a running launcher shows: the settings screen, key handling and startup paths,
   # driven by key presses under a virtual display (tests/headless). It runs in its own container
   # because the harness turns off address randomization for ASan (setarch -R), which Docker's
-  # default seccomp profile refuses. One image per distro: Debian, and Fedora, whose SDL2 is
-  # sdl2-compat (SDL2's API over SDL3) rather than SDL2 itself. One run.sh serves both; what
-  # differs between them is detected, not named.
+  # default seccomp profile refuses. One image per distro: Debian trixie, with SDL3 at the port's
+  # floor, and Fedora 44, with its own newer SDL3. One run.sh serves both; what differs between
+  # them is detected, not named.
   # A pass (every check, plain or with LeakSanitizer on) is too long for one job, so each runs in
   # 2 shards, one job each, as run-shards.ps1 does locally: run.sh <label> [leaks] K/2 runs shard
   # K, and headless_merge adds a pass's two shard consoles up into its one result. A shard alone

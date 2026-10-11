@@ -15,7 +15,8 @@ no font tools:
 A rename replaces OLD in both spellings a name table uses (one byte per letter, and UTF-16 big
 endian), in place, so no offset moves; FreeType does not check table checksums. A collection is
 the TTC header (version 1.0) and each font's own tables, with each table's offset moved to where
-the font now starts. A blank font holds only the tables FreeType needs, its one glyph empty; a box font's glyph is one square contour."""
+the font now starts. A blank font holds only the tables FreeType needs, its one glyph empty;
+a box font's glyph is one square contour."""
 import struct
 import sys
 

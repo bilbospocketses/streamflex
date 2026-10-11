@@ -1,8 +1,9 @@
 #!/bin/bash
-# The unit tests as CI's "Unit tests (ASan, UBSan)" job runs them (.github/workflows/build.yml,
-# unit_sanitizers), in either harness image (streamflex-test or streamflex-test-fedora): a copy of
-# /src built with ASan, UBSan and the extra warnings, as the user tester, then ctest. The repository
-# is mounted read-only and never written; everything happens in the copy at /work.
+# The unit tests as CI's "Unit tests (ASan, UBSan)" job runs them: that job (unit_sanitizers in
+# .github/workflows/build.yml) runs this file in the Debian image, and it runs in either harness
+# image (streamflex-test or streamflex-test-fedora): a copy of /src built with ASan, UBSan and the
+# extra warnings, as the user tester, then ctest. The repository is mounted read-only and never
+# written; everything happens in the copy at /work.
 #   bash /src/tests/unit.sh [CTEST-REGEX]   CTEST-REGEX: ctest's -R filter; none runs every test
 # UNIT_TARGETS, when set, builds only those targets (space-separated), as before the launcher builds.
 # MUTANT_FILE and MUTANT_SED, when set, apply one sed program to that file in the copy only: a unit

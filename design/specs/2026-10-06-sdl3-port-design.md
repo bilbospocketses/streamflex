@@ -85,7 +85,7 @@ These are the traps that compile cleanly and then misbehave; the renames are not
 - **Both ends of the range are built.** Debian and the Pi build against the floor (3.2.x); Arch and Windows build against the newest (3.4.x). Code that only compiles on 3.4 fails CI.
 
 **Packages.**
-- The `.deb` depends on `libsdl3-0`, `libsdl3-image-0` and `libsdl3-ttf-0`, and gains `libfontconfig1` through `shlibdeps`. The note at `CMakeLists.txt:194-196`, which explains where SDL2's version floor came from (the `SDL_RenderSetVSync` symbol), is rewritten for the symbol that sets SDL3's.
+- The `.deb` depends on `libsdl3-0`, `libsdl3-image0` and `libsdl3-ttf0`, and gains `libfontconfig1` through `shlibdeps`. The note at `CMakeLists.txt:194-196`, which explains where SDL2's version floor came from (the `SDL_RenderSetVSync` symbol), is rewritten for the symbol that sets SDL3's.
 - The Arch package depends on `sdl3`, `sdl3_image`, `sdl3_ttf` and `fontconfig`.
 - The Windows zip stays static, with no DLLs beside the exe.
 - Nothing is bundled on Linux. nanosvg stays vendored, even though SDL3_image can load SVG.
