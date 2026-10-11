@@ -9,8 +9,11 @@ KILL 10 s later), and judges its log. It runs in the streamflex-test image: /src
 verdict "holds": an unmutated control, whose expectations all hold. "fires": a failure forced, whose
 failure branch's expectations all hold. "caught": the old form put back, whose expectations (the
 check's) must NOT all hold: the check catches the mutant. A run that never got far enough to be
-judged (no log at all, or keys to press and the line they wait for never came) is NOT-RUN, which is
-wrong whatever its verdict: a mutant that stops the launcher before its check can look is not caught.
+judged is NOT-RUN, which is wrong whatever its verdict: one with no log at all, one with keys to press
+whose wait line never came, and one whose entry sets wait when that line is not in its log. A "caught"
+entry's expectations cannot show that the launcher reached the site, as one failing is enough, so a
+"caught" entry with no keys must set wait to a line its run logs at or just before the site: a mutant
+that stops the launcher before then is NOT-RUN, never caught. One that sets none is wrong, and not run.
 Each verdict is followed by every expectation, and whether it held."""
 import json
 import os
@@ -114,6 +117,10 @@ def main():
     for entry in entries:
         for path in touched:   # Every file an earlier entry mutated goes back first
             shutil.copyfile(f"{SRC}/{path}", f"{WORK}/{path}")
+        if entry["verdict"] == "caught" and not entry.get("keys") and "wait" not in entry:
+            print(f"NO WITNESS {entry['name']} (caught): no keys, and no wait line to show the run reached its site")
+            wrong += 1
+            continue
         if entry.get("find") is not None:
             touched.add(entry["file"])
         if not mutate(entry):
@@ -130,13 +137,14 @@ def main():
         absents = [(rx, re.search(rx, text, re.M) is None) for rx in entry.get("absent", [])]
         exited = "exit" not in entry or code == entry["exit"]
         held = all(ok for _, ok in expects + absents) and exited
-        if not text or not pressed:
+        reached = "wait" not in entry or entry["wait"] in text
+        if not text or not pressed or not reached:
             ok, mark = False, "NOT-RUN"
         else:
             ok = held if entry["verdict"] in ("holds", "fires") else not held
             mark = "OK     " if ok else "WRONG  "
         wrong += 0 if ok else 1
-        why = "no log" if not text else "its keys never pressed: no line '" + entry.get("wait", "Begin program loop") + "'"
+        why = "no log" if not text else f"no line '{entry.get('wait', 'Begin program loop')}'" + ("" if pressed else ", so its keys were never pressed")
         print(f"{mark} {entry['name']} ({entry['verdict']}): exit {code}" + ("" if mark != "NOT-RUN" else f", {why}"))
         for rx, ok in expects:
             print(f"        expect {'held  ' if ok else 'FAILED'} {rx}")
