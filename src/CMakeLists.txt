@@ -42,6 +42,8 @@ set(SOURCES
   fontscan.h
   bindings.c
   bindings.h
+  keycodes.c
+  keycodes.h
   browser.c
   browser.h
   settings_screen.c

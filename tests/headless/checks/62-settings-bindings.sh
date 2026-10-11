@@ -658,3 +658,24 @@ ok=1
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-capheld && ok=0
 result "bindings: a held OK refused a pad's capture once, and a new press refuses again (exit $(cat "$out/f62-capheld.code"))" $ok
 echo "      refusals: $(grep -c 'Settings: the capture cannot start' "$log")"
+
+# An SDL2-era config's media keys still mean what they meant (spec section 1, item 2; plan Task 1.4).
+# #40000105 is SDL2's AudioPlay; a remote's play/pause key sends SDL3's MediaPlayPause (#4000010F)
+# now, and a play key MediaPlay (#40000106): either is read as #40000105, runs its hotkey, and the log
+# names it by the code the file holds
+CFG=$FX/f62-media.ini run_keys f62-media XF86AudioPlay
+ok=1
+grep -qx 'Key MediaPlayPause (#40000105) detected' "$out/f62-media.log" && grep -q '^Quitting program' "$out/f62-media.log" \
+    && ran_clean f62-media && ok=0
+result "keys: an SDL2-era config's play key still runs its hotkey (exit $(cat "$out/f62-media.code"))" $ok
+grep -E '^Key ' "$out/f62-media.log" | sed 's/^/      /'
+
+# A media key captured is saved as the code SDL2 gave it, so what an SDL3 StreamFlex writes an SDL2-era
+# one reads the same: next track is #40000102 (SDL2's AudioNext), not SDL3's #4000010B
+cfg=$(writable_config f62-keys)
+CFG=$cfg run_keys f62-mediabind $TO_KEYBOARD Return Return XF86AudioNext Return Down Return $QUIT $SAVE
+ok=1
+grep -q 'Settings: capture got MediaTrackNext (#40000102)' "$out/f62-mediabind.log" \
+    && sed -n '/^\[Hotkeys\]/,/^\[/p' "$cfg" | grep -qx 'Hotkey1=#40000102;:quit' && ran_clean f62-mediabind && ok=0
+result "keys: a captured media key saves as SDL2's code (exit $(cat "$out/f62-mediabind.code"))" $ok
+grep -h -E 'Settings: capture got|^Hotkey' "$out/f62-mediabind.log" "$cfg" | sed 's/^/      /'

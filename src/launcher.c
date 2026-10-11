@@ -20,6 +20,7 @@
 #include "platform/platform.h"
 #include "alloc.h"
 #include "test_hooks.h"
+#include "keycodes.h"
 
 static int display_refresh_rate(void);
 static void init_sdl(void);
@@ -576,12 +577,12 @@ static bool menu_key(SDL_Keycode keycode)
     return (keycode == SDLK_APPLICATION || keycode == SDLK_MENU) && !hotkey_bound(keycode);
 }
 
-// A function to handle key presses from keyboard; `repeat` marks the keyboard's own repeats of a
-// held key
+// A function to handle key presses from keyboard; `key` is the stored code (keycodes.h), SDL2's
+// numbering as config.ini holds it, and `repeat` marks the keyboard's own repeats of a held key
 static void handle_keypress(SDL_Keycode key, bool repeat)
 {
     if (config.debug)
-        log_debug("Key %s (#%X) detected", SDL_GetKeyName(key), key);
+        log_debug("Key %s (#%X) detected", SDL_GetKeyName((SDL_Keycode) keycode_from_stored(key)), key);
 
     // A capture takes every key, and the 10 s the key that confirms them, before any other meaning
     if (settings_is_open() && settings_raw_key((int) key, repeat))
@@ -2518,7 +2519,8 @@ int main(int argc, char *argv[])
 
                 case SDL_EVENT_KEY_DOWN:
                     ticks.last_input = ticks.main;
-                    handle_keypress(event.key.key, event.key.repeat);
+                    // Every key code StreamFlex holds is SDL2's, as config.ini stores it (keycodes.h)
+                    handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat);
 #ifdef STREAMFLEX_TEST_HOOKS
                     test_key_undrawn = true;
 #endif
@@ -2526,7 +2528,7 @@ int main(int argc, char *argv[])
 
                 case SDL_EVENT_KEY_UP:
                     if (settings_is_open())
-                        settings_raw_release((int) event.key.key);
+                        settings_raw_release((int) keycode_to_stored(event.key.key, KEYCODES_WINDOWS));
                     break;
 
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:

@@ -160,3 +160,17 @@ if (WIN32)
   string(REPLACE " " "[ \t\r\n]+" missing_fix "lacks the Vulkan fix's error string")
   set_tests_properties(vulkan_fix_control PROPERTIES PASS_REGULAR_EXPRESSION "${missing_fix}")
 endif ()
+
+# Unit tests for the key codes config.ini stores (SDL2's numbering) against the codes keys send on SDL3 (pure)
+add_executable(test_keycodes test_keycodes.c "${PROJECT_SOURCE_DIR}/src/keycodes.c")
+target_include_directories(test_keycodes PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME keycodes COMMAND test_keycodes)
+
+# 3b's bindings fixtures load to the bindings they held, and their codes read as the same keys on SDL3
+add_executable(test_bindings_fixtures test_bindings_fixtures.c "${PROJECT_SOURCE_DIR}/src/bindings.c"
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c"
+  "${PROJECT_SOURCE_DIR}/src/keycodes.c")
+target_include_directories(test_bindings_fixtures PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_bindings_fixtures PRIVATE FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/headless/fixtures")
+link_fileio(test_bindings_fixtures)
+add_test(NAME bindings_fixtures COMMAND test_bindings_fixtures)

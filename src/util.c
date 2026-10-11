@@ -555,6 +555,32 @@ static const struct gamepad_info GAMEPAD_INFO[] = {
 };
 SDL_COMPILE_TIME_ASSERT(gamepad_info_labels, sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]) == BINDINGS_LABELS);
 
+// A label reads the button SDL2 numbered for it: SDL3 names the face buttons by position and keeps
+// SDL2's numbers (SDL_CONTROLLER_BUTTON_A was 0, as SDL_GAMEPAD_BUTTON_SOUTH is), so a ButtonA in an
+// SDL2-era config is the same button on Xbox and PlayStation pads; on Nintendo pads it is now the
+// south button (user ruling, 2026-10-11; labels are todo item 26; spec section 1, item 7)
+SDL_COMPILE_TIME_ASSERT(pad_south_is_sdl2_a, SDL_GAMEPAD_BUTTON_SOUTH == 0);
+SDL_COMPILE_TIME_ASSERT(pad_east_is_sdl2_b, SDL_GAMEPAD_BUTTON_EAST == 1);
+SDL_COMPILE_TIME_ASSERT(pad_west_is_sdl2_x, SDL_GAMEPAD_BUTTON_WEST == 2);
+SDL_COMPILE_TIME_ASSERT(pad_north_is_sdl2_y, SDL_GAMEPAD_BUTTON_NORTH == 3);
+SDL_COMPILE_TIME_ASSERT(pad_back, SDL_GAMEPAD_BUTTON_BACK == 4);
+SDL_COMPILE_TIME_ASSERT(pad_guide, SDL_GAMEPAD_BUTTON_GUIDE == 5);
+SDL_COMPILE_TIME_ASSERT(pad_start, SDL_GAMEPAD_BUTTON_START == 6);
+SDL_COMPILE_TIME_ASSERT(pad_left_stick, SDL_GAMEPAD_BUTTON_LEFT_STICK == 7);
+SDL_COMPILE_TIME_ASSERT(pad_right_stick, SDL_GAMEPAD_BUTTON_RIGHT_STICK == 8);
+SDL_COMPILE_TIME_ASSERT(pad_left_shoulder, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER == 9);
+SDL_COMPILE_TIME_ASSERT(pad_right_shoulder, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER == 10);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_up, SDL_GAMEPAD_BUTTON_DPAD_UP == 11);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_down, SDL_GAMEPAD_BUTTON_DPAD_DOWN == 12);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_left, SDL_GAMEPAD_BUTTON_DPAD_LEFT == 13);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_right, SDL_GAMEPAD_BUTTON_DPAD_RIGHT == 14);
+SDL_COMPILE_TIME_ASSERT(pad_left_x, SDL_GAMEPAD_AXIS_LEFTX == 0);
+SDL_COMPILE_TIME_ASSERT(pad_left_y, SDL_GAMEPAD_AXIS_LEFTY == 1);
+SDL_COMPILE_TIME_ASSERT(pad_right_x, SDL_GAMEPAD_AXIS_RIGHTX == 2);
+SDL_COMPILE_TIME_ASSERT(pad_right_y, SDL_GAMEPAD_AXIS_RIGHTY == 3);
+SDL_COMPILE_TIME_ASSERT(pad_left_trigger, SDL_GAMEPAD_AXIS_LEFT_TRIGGER == 4);
+SDL_COMPILE_TIME_ASSERT(pad_right_trigger, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER == 5);
+
 // How many times the gamepad's controls were freed: poll_gamepad() stops reading a list a command
 // it ran rebuilt under it
 static unsigned int gamepad_controls_freed = 0;

@@ -9,6 +9,7 @@
 #include "settings_pickers.h"
 #include "settings_fonts.h"
 #include "bindings.h"
+#include "keycodes.h"
 #include "listpick.h"
 #include "colorpick.h"
 #include "fileio.h"
@@ -365,8 +366,9 @@ static void fill_open_fonts(void)
     forget_list_log();
 }
 
-// A function to name a key or button for the screen: a key by SDL's name ("Menu" for both of the
-// Menu key's codes), a pad's control by its label; "#<HEX>" for a key SDL cannot name
+// A function to name a key or button for the screen: a key by SDL's name for the key its stored code
+// is ("Menu" for both of the Menu key's codes), a pad's control by its label; "#<HEX>" for a key SDL
+// cannot name, or one SDL3 never sends
 void pickers_key_name(int device, int code, char *out, size_t size)
 {
     if (device == BINDINGS_GAMEPAD) {
@@ -377,7 +379,7 @@ void pickers_key_name(int device, int code, char *out, size_t size)
         snprintf(out, size, "Menu");
         return;
     }
-    const char *name = SDL_GetKeyName((SDL_Keycode) code);
+    const char *name = SDL_GetKeyName((SDL_Keycode) keycode_from_stored((uint32_t) code));
     if (name != NULL && name[0] != '\0')
         snprintf(out, size, "%s", name);
     else
