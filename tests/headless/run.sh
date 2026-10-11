@@ -253,9 +253,10 @@ echo "Vulkan: lavapipe, from $lvp_driver"
 # VK_DRIVER_FILES=... prefix (the OpenGL fallback runs hide Vulkan that way); setpriv, env and setarch
 # pass an exported variable through
 export VK_DRIVER_FILES="$lvp_icd"
-# lavapipe takes SDL's VSync and still presents as fast as it can (its X11 swapchain does not wait
-# for Xvfb), where SDL2 simulated VSync: the launcher waits out each frame as a display would, so
-# what a check times in frames takes the time it would on screen. Temporary: Task 1.5b removes it
+# SDL3's VULKAN_SetVSync always succeeds and lavapipe's X11 swapchain ignores FIFO, so the launcher
+# presents as fast as it can with VSync "given", where SDL2 simulated VSync: the launcher waits out
+# each frame as a display would, so what a check times in frames takes the time it would on screen.
+# Temporary: Task 1.5b paces such a renderer for real and removes it
 export STREAMFLEX_TEST_SIMULATE_VSYNC=1
 
 # The leak pass preloads Mesa's driver into the launcher. The Vulkan loader and lavapipe are
@@ -280,9 +281,11 @@ if [ "$fault" = leaks ]; then
     # cannot preload
     libasan=$(ldd "$exe" | awk '$1 ~ /^libasan\.so/ { print $3; exit }')
     [ -f "$libasan" ] || { echo "NO ASAN RUNTIME TO PRELOAD"; exit 2; }
+    # SDL3 dlopens libX11 and SDL_Quit dlcloses it (under SDL2, libGL kept it mapped): preloaded
+    # when the image has it
     libx11=$(ldconfig -p | awk '$1 == "libX11.so.6" { print $NF; exit }')
-    [ -f "$libx11" ] || { echo "NO LIBX11 TO PRELOAD"; exit 2; }
-    preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver $libx11")
+    [ -f "$libx11" ] || libx11=
+    preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver${libx11:+ $libx11}")
 fi
 TESTER=(setpriv --reuid=tester --regid=tester --init-groups --
         env HOME=$TESTER_HOME DISPLAY=:99 ASAN_OPTIONS=$asan_options UBSAN_OPTIONS=print_stacktrace=1
