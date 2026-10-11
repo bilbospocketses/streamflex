@@ -262,8 +262,9 @@ static void init_sdl()
     geo.screen_height = display_mode.h;
 
     // SDL reports 0 when the display does not say (Xvfb, some VMs and remote desktops), and
-    // every timing below divides by the rate: create_window() reads it again from display_mode
-    if (display_mode.refresh_rate <= 0.0f) {
+    // every timing below divides by the rate: create_window() reads it again from display_mode.
+    // The whole-hertz rate is the one divided by, so a rate under half a hertz counts as none too
+    if (display_refresh_rate() < 1) {
         log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
         display_mode.refresh_rate = (float) DEFAULT_REFRESH_RATE;
     }
@@ -277,7 +278,8 @@ static void init_sdl()
 static bool renderer_vsync()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: its SDL simulates VSync, so a refusal is made up here.
+    // Only the headless harness builds this: its renderer reports every VSync it is asked for as
+    // given, so a refusal is made up here.
     // "off" is a renderer that keeps VSync on when it is not wanted; any other value never gives it.
     const char *refused = getenv("STREAMFLEX_TEST_VSYNC_REFUSED");
     if (refused != NULL)
