@@ -278,8 +278,9 @@ static void init_sdl()
 static bool renderer_vsync()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: its renderer reports every VSync it is asked for as
-    // given, so a refusal is made up here.
+    // Only the headless harness builds this: its renderer (lavapipe) reports every VSync it is asked
+    // for as given and does not honor it (STREAMFLEX_TEST_SIMULATE_VSYNC stands in for the display),
+    // so a refusal is made up here.
     // "off" is a renderer that keeps VSync on when it is not wanted; any other value never gives it.
     const char *refused = getenv("STREAMFLEX_TEST_VSYNC_REFUSED");
     if (refused != NULL)
