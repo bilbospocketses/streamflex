@@ -44,12 +44,6 @@ endif ()
 # Import settings
 include(${PROJECT_SOURCE_DIR}/config/config_settings.cmake)
 
-# Find dependencies: SDL3 and its libraries ship CMake config files on every platform, Debian's -dev
-# packages and vcpkg's ports alike
-find_package(SDL3 ${MIN_SDL_VERSION} CONFIG REQUIRED)
-find_package(SDL3_image ${MIN_SDL_IMAGE_VERSION} CONFIG REQUIRED)
-find_package(SDL3_ttf ${MIN_SDL_TTF_VERSION} CONFIG REQUIRED)
-
 # Find dependencies - Linux: inih through pkg-config, and fontconfig, which finds the fallback fonts
 if (UNIX)
   find_package(PkgConfig MODULE REQUIRED)
@@ -81,6 +75,14 @@ if (WIN32)
   find_path(GETOPT_INCLUDE_DIR "getopt.h" REQUIRED)
   find_vcpkg_library(GETOPT getopt)
 
+  # A static SDL3_ttf finds HarfBuzz through its own Findharfbuzz.cmake, whose harfbuzz::harfbuzz is
+  # one find_library() path: the debug library, for the reason above, so the Release link took the
+  # debug C runtime (LNK2001 _CrtDbgReport). That module makes the target only when none exists, so
+  # this one, with each configuration's own library, is made first, before find_package(SDL3_ttf)
+  find_vcpkg_library(HARFBUZZ harfbuzz)
+  add_library(harfbuzz::harfbuzz INTERFACE IMPORTED)
+  target_link_libraries(harfbuzz::harfbuzz INTERFACE ${HARFBUZZ})
+
   # A static triplet's libraries are built against the static C runtime (/MT), so build ours the
   # same way; the default /MD made the link search both MSVCRT and LIBCMT. A runtime given on the
   # command line (-DCMAKE_MSVC_RUNTIME_LIBRARY=...) still wins
@@ -88,6 +90,12 @@ if (WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   endif ()
 endif ()
+
+# Find dependencies: SDL3 and its libraries ship CMake config files on every platform, Debian's -dev
+# packages and vcpkg's ports alike. After the Windows block, whose harfbuzz::harfbuzz SDL3_ttf links
+find_package(SDL3 ${MIN_SDL_VERSION} CONFIG REQUIRED)
+find_package(SDL3_image ${MIN_SDL_IMAGE_VERSION} CONFIG REQUIRED)
+find_package(SDL3_ttf ${MIN_SDL_TTF_VERSION} CONFIG REQUIRED)
 
 # Build configuration - Linux
 if (UNIX)
