@@ -186,10 +186,14 @@ jobs:
       - name: Show package metadata
         run: |
           dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
-          # shlibdeps derives the dependencies from the binary: SDL3's three libraries, never SDL2's
+          # SDL3's three libraries at the floors StreamFlex is built and tested at, CMakeLists.txt's
+          # MIN_*_VERSION, never SDL2's. shlibdeps adds each again at 3.2.0, which is not checked
           depends=$(dpkg-deb -f build/*.deb Depends)
-          for lib in libsdl3-0 libsdl3-image libsdl3-ttf; do
-            grep -q "$lib" <<< "$depends" || { echo "::error::The package does not depend on $lib: $depends"; exit 1; }
+          for pair in libsdl3-0:MIN_SDL_VERSION libsdl3-image0:MIN_SDL_IMAGE_VERSION libsdl3-ttf0:MIN_SDL_TTF_VERSION; do
+            lib=${pair%%:*} var=${pair#*:}
+            floor=$(sed -n "s/^set($var \"\(.*\)\")\$/\1/p" CMakeLists.txt)
+            if [ -z "$floor" ]; then echo "::error::CMakeLists.txt sets no $var"; exit 1; fi
+            grep -qF "$lib (>= $floor)" <<< "$depends" || { echo "::error::The package does not depend on $lib (>= $floor): $depends"; exit 1; }
           done
           if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 
@@ -239,10 +243,14 @@ jobs:
       - name: Show package metadata
         run: |
           dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
-          # shlibdeps derives the dependencies from the binary: SDL3's three libraries, never SDL2's
+          # SDL3's three libraries at the floors StreamFlex is built and tested at, CMakeLists.txt's
+          # MIN_*_VERSION, never SDL2's. shlibdeps adds each again at 3.2.0, which is not checked
           depends=$(dpkg-deb -f build/*.deb Depends)
-          for lib in libsdl3-0 libsdl3-image libsdl3-ttf; do
-            grep -q "$lib" <<< "$depends" || { echo "::error::The package does not depend on $lib: $depends"; exit 1; }
+          for pair in libsdl3-0:MIN_SDL_VERSION libsdl3-image0:MIN_SDL_IMAGE_VERSION libsdl3-ttf0:MIN_SDL_TTF_VERSION; do
+            lib=${pair%%:*} var=${pair#*:}
+            floor=$(sed -n "s/^set($var \"\(.*\)\")\$/\1/p" CMakeLists.txt)
+            if [ -z "$floor" ]; then echo "::error::CMakeLists.txt sets no $var"; exit 1; fi
+            grep -qF "$lib (>= $floor)" <<< "$depends" || { echo "::error::The package does not depend on $lib (>= $floor): $depends"; exit 1; }
           done
           if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 

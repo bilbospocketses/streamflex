@@ -200,14 +200,14 @@ if (UNIX)
     # the docs download page match on.
     set(CPACK_DEBIAN_FILE_NAME "${CPACK_DEBIAN_PACKAGE_NAME}_${CMAKE_PROJECT_VERSION}_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}.deb")
     # dpkg-shlibdeps derives every dependency and its minimum version (glibc
-    # included) from the built binary. No explicit CPACK_DEBIAN_PACKAGE_DEPENDS:
-    # CPack appends shlibdeps' list to it without merging, so each library
-    # would appear twice. SDL3's floor comes from its symbols file: every
-    # symbol the launcher uses is 3.2.0 there (SDL_CreateWindow among them;
-    # the file's one later symbol, SDL_StretchSurface 3.2.4, is unused), so
-    # the package depends on libsdl3-0 (>= 3.2.0).
-    # MIN_SDL_VERSION above is the build's floor, Debian trixie's 3.2.10; no
-    # release older than trixie packages libsdl3-0 at all.
+    # included) from the built binary. No symbol sets SDL3's floor: Debian's
+    # symbols files date every SDL3 symbol the launcher uses 3.2.0, and they
+    # see API, not the fixes StreamFlex is built and tested with. So the
+    # package also depends on the tested versions, MIN_*_VERSION above (Debian
+    # trixie's). CPack appends shlibdeps' list to these without merging, so
+    # each SDL3 library is listed twice, at its tested floor and at 3.2.0;
+    # dpkg requires both, so the tested floor is the one that holds.
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl3-0 (>= ${MIN_SDL_VERSION}), libsdl3-image0 (>= ${MIN_SDL_IMAGE_VERSION}), libsdl3-ttf0 (>= ${MIN_SDL_TTF_VERSION})")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "bilbospocketses <104535858+bilbospocketses@users.noreply.github.com>")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE ${CMAKE_PROJECT_HOMEPAGE_URL})
