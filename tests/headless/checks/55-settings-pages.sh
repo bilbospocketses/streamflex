@@ -86,12 +86,15 @@ in_range "$out/f55-clock.log" 'Settings opened' 'Settings closed' 'Clock stopped
     && sed -n '/^\[Clock\]/,/^\[/p' "$cfg" | grep -qx 'Enabled=false' && ran_clean f55-clock && ok=0
 result "settings: the clock switched off mid-render waits for it and frees it (exit $(cat "$out/f55-clock.code"))" $ok
 
-# VSync off, then an FPS limit of 30: the frame timing follows live, and both are saved
+# VSync off, then an FPS limit of 30: the frame timing follows live, and both are saved. SDL3's
+# SDL_SetRenderVSync returns true on success, so a test left in SDL2's form would log a refusal of
+# every change that worked (plan Task 1.3)
 cfg=$(writable_config f55-frame)
 CFG=$cfg run_keys f55-frame Menu Return Down Down Down Down Down Left Down Right BackSpace BackSpace
 ok=1
 grep -q 'Frame timing: FPS limit 30, 33 ms a frame' "$out/f55-frame.log" \
-    && grep -qx 'VSync=false' "$cfg" && grep -qx 'FPSLimit=30' "$cfg" && ran_clean f55-frame && ok=0
+    && grep -qx 'VSync=false' "$cfg" && grep -qx 'FPSLimit=30' "$cfg" \
+    && ! grep -q '^Could not turn VSync' "$out/f55-frame.log" && ran_clean f55-frame && ok=0
 result "settings: VSync and the FPS limit apply live and save (exit $(cat "$out/f55-frame.code"))" $ok
 # Between the two, VSync is off with no FPS limit yet: frames keep the display's rate (Xvfb's 0 Hz
 # reads as 60), and the log says so rather than calling it VSync

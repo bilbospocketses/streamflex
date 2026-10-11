@@ -16,3 +16,13 @@ grep -qx 'Could not load default font' "$out/f05-basepath.log" && ran_clean f05-
     && ! grep -q 'Could not load default font' "$out/f05-basepath-control.log" && ran_clean f05-basepath-control && ok=0
 result "SDL with no base path: the bundled font is not looked for beside the launcher, and nothing crashes (exit $(cat "$out/f05-basepath.code"), $(cat "$out/f05-basepath-control.code"))" $ok
 grep -h -E '^(Could not|Quitting)' "$out/f05-basepath.log" "$out/f05-basepath-control.log" | sed 's/^/      /'
+
+# The return-value flip (spec section 1, item 1; plan Task 1.3): SDL3's functions that returned a
+# negative code on failure return false, so the port tests SDL_Init with ! where SDL2's code tested
+# < 0. A video driver that does not exist makes SDL_Init fail for real, and its failure branch must
+# still fire: the line, SDL's reason after it, and exit 1. Every other check runs the success branch.
+STREAMFLEX_TEST_NO_MESSAGE_BOX=1 SDL_VIDEO_DRIVER=nosuchdriver run_quick f05-init
+ok=1
+grep -qx 'Could not initialize SDL' "$out/f05-init.log" && ran_clean f05-init 1 && ok=0
+result "SDL that cannot start stops the launcher, with SDL's reason (exit $(cat "$out/f05-init.code"))" $ok
+grep -A1 -x 'Could not initialize SDL' "$out/f05-init.log" | sed 's/^/      /'
