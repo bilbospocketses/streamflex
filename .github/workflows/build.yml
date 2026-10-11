@@ -184,7 +184,14 @@ jobs:
           fi
 
       - name: Show package metadata
-        run: dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+        run: |
+          dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+          # shlibdeps derives the dependencies from the binary: SDL3's three libraries, never SDL2's
+          depends=$(dpkg-deb -f build/*.deb Depends)
+          for lib in libsdl3-0 libsdl3-image libsdl3-ttf; do
+            grep -q "$lib" <<< "$depends" || { echo "::error::The package does not depend on $lib: $depends"; exit 1; }
+          done
+          if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 
       - name: Check the icon library is in the package
         run: |
@@ -230,7 +237,14 @@ jobs:
           ctest --test-dir build --output-on-failure
 
       - name: Show package metadata
-        run: dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+        run: |
+          dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+          # shlibdeps derives the dependencies from the binary: SDL3's three libraries, never SDL2's
+          depends=$(dpkg-deb -f build/*.deb Depends)
+          for lib in libsdl3-0 libsdl3-image libsdl3-ttf; do
+            grep -q "$lib" <<< "$depends" || { echo "::error::The package does not depend on $lib: $depends"; exit 1; }
+          done
+          if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 
       - name: Check the icon library is in the package
         run: |

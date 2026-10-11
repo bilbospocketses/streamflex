@@ -202,9 +202,12 @@ if (UNIX)
     # dpkg-shlibdeps derives every dependency and its minimum version (glibc
     # included) from the built binary. No explicit CPACK_DEBIAN_PACKAGE_DEPENDS:
     # CPack appends shlibdeps' list to it without merging, so each library
-    # would appear twice. SDL2's floor comes from its symbols file:
-    # SDL_RenderSetVSync (2.0.18) makes the package depend on libsdl2-2.0-0
-    # (>= 2.0.18), matching MIN_SDL_VERSION above.
+    # would appear twice. SDL3's floor comes from its symbols file: every
+    # symbol the launcher uses is 3.2.0 there (SDL_CreateWindow among them;
+    # the file's one later symbol, SDL_StretchSurface 3.2.4, is unused), so
+    # the package depends on libsdl3-0 (>= 3.2.0).
+    # MIN_SDL_VERSION above is the build's floor, Debian trixie's 3.2.10; no
+    # release older than trixie packages libsdl3-0 at all.
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "bilbospocketses <104535858+bilbospocketses@users.noreply.github.com>")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE ${CMAKE_PROJECT_HOMEPAGE_URL})
