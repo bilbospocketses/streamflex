@@ -423,6 +423,7 @@ The timing measurement on the slowest Linux target, the Ubuntu qa-harness guest,
   - **5.17** `[Win]`: its step's "While Mode read Transparent (5.11 to 5.14), Windows may have shown the desktop through the window: record whether it did" becomes "must have shown": 5.11's frame rests on Transparent, which recreates the window.
   - **5.48** `[All]`: its claim's Windows clause ("on Windows the desktop shows through no part of Plex's icon") goes, since the keep-off pass is Linux-only and Windows has no key to cut the icon; the Linux clause, no pixel inside the icon reads (1,1,1), stays, and the row's tag becomes `[Linux]`.
   - **`tests/headless/checks/70-chroma.sh`**: its header comment, which opens "Transparent mode on Windows makes every pixel of the window that is exactly the chroma key color see-through", describes Linux's chroma key instead.
+  - **`src/chroma.h`**: its opening comment ("On Windows, Transparent mode makes every pixel ...") describes Linux's chroma key instead, as the header above does.
 
 ## Out of scope
 
