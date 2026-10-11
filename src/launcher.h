@@ -103,13 +103,13 @@ typedef struct {
     bool application_running;
     bool has_focus;
     bool slideshow_transition;
-    SDL_atomic_t slideshow_background_rendering; // Both also written by the slideshow's loader thread
-    SDL_atomic_t slideshow_background_ready;
+    SDL_AtomicInt slideshow_background_rendering; // Both also written by the slideshow's loader thread
+    SDL_AtomicInt slideshow_background_ready;
     bool slideshow_paused;
     bool screensaver_active;
     bool screensaver_transition;
-    SDL_atomic_t clock_rendering;   // Both also written by the clock's render thread
-    SDL_atomic_t clock_ready;
+    SDL_AtomicInt clock_rendering;   // Both also written by the clock's render thread
+    SDL_AtomicInt clock_ready;
 } State;
 
 // Timing information
@@ -154,7 +154,7 @@ typedef struct menu {
 } Menu;
 
 typedef struct gamepad {
-    SDL_GameController *controller;
+    SDL_Gamepad *controller;
     int id;                          // The instance id; its device index is looked up when it opens
     struct gamepad *previous;
     struct gamepad *next;

@@ -3,11 +3,11 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
-#include <SDL_image.h>
-#include <SDL_ttf.h>
-#include <SDL_thread.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_syswm.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3/SDL_thread.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "image.h"
@@ -330,7 +330,7 @@ void apply_frame_timing()
     // The renderer is asked only when the wish changes, so one that refused VSync is not asked, or
     // logged, again for each FPSLimit change. A failure to switch counts as a refusal.
     if (renderer != NULL && changed) {
-        if (SDL_RenderSetVSync(renderer, wanted ? 1 : 0) != 0)
+        if (SDL_SetRenderVSync(renderer, wanted ? 1 : 0) != 0)
             log_error("Could not turn VSync %s\n%s", wanted ? "on" : "off", SDL_GetError());
         check_vsync();
     }
@@ -356,13 +356,8 @@ void apply_default_menu()
 // A function to create the window and renderer
 static void create_window()
 {
-    window = SDL_CreateWindow(PROJECT_NAME,
-                 SDL_WINDOWPOS_UNDEFINED,
-                 SDL_WINDOWPOS_UNDEFINED,
-                 0,
-                 0,
-                 SDL_WINDOW_FULLSCREEN_DESKTOP
-             );
+    window = SDL_CreateWindow(PROJECT_NAME, 0, 0,
+                              SDL_WINDOW_FULLSCREEN_DESKTOP);
     if (window == NULL)
         log_fatal("Could not create SDL Window\n%s", SDL_GetError());
     SDL_ShowCursor(SDL_DISABLE);
@@ -372,7 +367,7 @@ static void create_window()
     Uint32 renderer_flags = SDL_RENDERER_ACCELERATED;
     if (vsync_wanted)
         renderer_flags |= SDL_RENDERER_PRESENTVSYNC;
-    renderer = SDL_CreateRenderer(window, -1, renderer_flags);
+    renderer = SDL_CreateRenderer(window, NULL, renderer_flags);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     if (renderer == NULL)
         log_fatal("Could not initialize renderer\n%s", SDL_GetError());
@@ -412,7 +407,7 @@ static void init_sdl_image()
 {
     int img_flags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_WEBP;
     if (!(IMG_Init(img_flags) & img_flags))
-        log_fatal("Could not initialize SDL_image\n%s", IMG_GetError());
+        log_fatal("Could not initialize SDL_image\n%s", SDL_GetError());
 }
 
 // A function to set the color of the renderer
@@ -451,7 +446,7 @@ void refresh_effective()
 static void init_sdl_ttf()
 {
     if (TTF_Init() == -1)
-        log_fatal("Could not initialize SDL_ttf\n%s", TTF_GetError());
+        log_fatal("Could not initialize SDL_ttf\n%s", SDL_GetError());
 
     title_info = (TextInfo) {
         .font_size = (int) config.title_font_size,
@@ -476,12 +471,12 @@ static void init_sdl_ttf()
 #endif
     log_debug("Title font: %s (face %i)", title_info.font_path, title_info.font_face);
     fixed_title_font = title_info.font;
-    geo.font_height = config.titles_enabled ? TTF_FontHeight(title_info.font) : 0;
+    geo.font_height = config.titles_enabled ? TTF_GetFontHeight(title_info.font) : 0;
 
     // A percentage FontSize sizes each menu's titles from its buttons, so measure the font's line
     // height per point once, at a large size, for the layout to reserve room for any size
-    TTF_Font *probe = TTF_OpenFontIndex(title_info.font_path, TITLE_MEASURE_SIZE, title_info.font_face);
-    geo.title_line_pm = probe != NULL ? TTF_FontHeight(probe) * 1000 / TITLE_MEASURE_SIZE : 1500;
+    TTF_Font *probe = open_font_face(title_info.font_path, TITLE_MEASURE_SIZE, title_info.font_face);
+    geo.title_line_pm = probe != NULL ? TTF_GetFontHeight(probe) * 1000 / TITLE_MEASURE_SIZE : 1500;
     if (probe != NULL)
         TTF_CloseFont(probe);
 }
@@ -709,7 +704,7 @@ static void fall_back_from_slideshow(SDL_Surface *surface)
         log_error("Could only load one image from slideshow directory %s, showing it as a single image",
             config.slideshow_directory
         );
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         background_shown = BACKGROUND_IMAGE;
     }
     else {
@@ -793,12 +788,14 @@ static void start_screensaver()
         log_error("Invalid screensaver intensity value, so the screensaver was not started");
         return;
     }
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, geo.screen_width, geo.screen_height, 32, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width,
+                                             geo.screen_height,
+                                             SDL_PIXELFORMAT_ARGB8888);
     if (surface == NULL) {
         log_error("Could not start the screensaver\n%s", SDL_GetError());
         return;
     }
-    SDL_FillRect(surface, NULL, SDL_MapRGBA(surface->format, 0, 0, 0, 0xFF));
+    SDL_FillSurfaceRect(surface, NULL, SDL_MapRGBA(surface->format, 0, 0, 0, 0xFF));
     screensaver = malloc(sizeof(Screensaver));
     screensaver->alpha_end_value = (float) eff.screensaver_alpha;
     screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
@@ -848,12 +845,14 @@ static void start_overlay()
 {
     if (!config.background_overlay || background_overlay != NULL)
         return;
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, geo.screen_width, geo.screen_height, 32, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width,
+                                             geo.screen_height,
+                                             SDL_PIXELFORMAT_ARGB8888);
     if (surface == NULL) {
         log_error("Could not start the overlay\n%s", SDL_GetError());
         return;
     }
-    SDL_FillRect(surface, NULL, SDL_MapRGBA(surface->format,
+    SDL_FillSurfaceRect(surface, NULL, SDL_MapRGBA(surface->format,
         eff.overlay_color.r, eff.overlay_color.g, eff.overlay_color.b, eff.overlay_color.a));
     background_overlay = load_texture(surface);
     log_debug("Overlay started");
@@ -934,8 +933,8 @@ static void start_clock()
     if (!config.clock_enabled || clk != NULL)
         return;
     clk = calloc(1, sizeof(Clock));
-    SDL_AtomicSet(&state.clock_rendering, 0);
-    SDL_AtomicSet(&state.clock_ready, 0);
+    SDL_SetAtomicInt(&state.clock_rendering, 0);
+    SDL_SetAtomicInt(&state.clock_ready, 0);
     if (init_clock(clk)) {
         free(clk->text_info.font_path);
         free(clk);
@@ -957,12 +956,12 @@ void stop_clock()
         SDL_WaitThread(clock_thread, NULL);
         clock_thread = NULL;
     }
-    SDL_AtomicSet(&state.clock_rendering, 0);
-    SDL_AtomicSet(&state.clock_ready, 0);
+    SDL_SetAtomicInt(&state.clock_rendering, 0);
+    SDL_SetAtomicInt(&state.clock_ready, 0);
     if (clk->time_surface != NULL)
-        SDL_FreeSurface(clk->time_surface);
+        SDL_DestroySurface(clk->time_surface);
     if (clk->date_surface != NULL)
-        SDL_FreeSurface(clk->date_surface);
+        SDL_DestroySurface(clk->date_surface);
     if (clk->time_texture != NULL)
         SDL_DestroyTexture(clk->time_texture);
     if (clk->date_texture != NULL)
@@ -1017,7 +1016,7 @@ static void stop_slideshow()
         if (slideshow->transition_surface != NULL || slideshow->transition_texture != NULL)
             log_debug("Slideshow: dropped the fade in progress");
         if (slideshow->transition_surface != NULL)
-            SDL_FreeSurface(slideshow->transition_surface);
+            SDL_DestroySurface(slideshow->transition_surface);
         if (slideshow->transition_texture != NULL)
             SDL_DestroyTexture(slideshow->transition_texture);
         quit_slideshow();
@@ -1031,8 +1030,8 @@ void reload_background()
 {
     stop_slideshow();
     state.slideshow_transition = false;
-    SDL_AtomicSet(&state.slideshow_background_rendering, 0);
-    SDL_AtomicSet(&state.slideshow_background_ready, 0);
+    SDL_SetAtomicInt(&state.slideshow_background_rendering, 0);
+    SDL_SetAtomicInt(&state.slideshow_background_ready, 0);
     if (background_texture != NULL) {
         SDL_DestroyTexture(background_texture);
         background_texture = NULL;
@@ -1239,7 +1238,7 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
             title_info.font_size = geometry->title_size;
         }
     }
-    int line_height = TTF_FontHeight(title_info.font);
+    int line_height = TTF_GetFontHeight(title_info.font);
     title_info.max_width = layout_title_width(config.title_shadows, size, line_height);   // Room for the shadow
     for (unsigned int i = 0; i < menu->num_entries; i++) {
         Entry *entry = menu->items[i];
@@ -1317,7 +1316,7 @@ void reload_titles()
     title_info.shadow = config.title_shadows;
     title_info.shadow_color = config.title_shadows ? &title_shadow_color : NULL;
     title_info.oversize_mode = config.title_oversize_mode;
-    geo.font_height = config.titles_enabled ? TTF_FontHeight(fixed_title_font) : 0;
+    geo.font_height = config.titles_enabled ? TTF_GetFontHeight(fixed_title_font) : 0;
 
     // A new size may open where the last one failed
     for (Menu *menu = config.first_menu; menu != NULL; menu = menu->next) {
@@ -1340,8 +1339,8 @@ void reload_title_font()
     if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT))
         return;   // log_fatal has quit: not even the bundled font opens
     fixed_title_font = title_info.font;
-    TTF_Font *probe = TTF_OpenFontIndex(title_info.font_path, TITLE_MEASURE_SIZE, title_info.font_face);
-    geo.title_line_pm = probe != NULL ? TTF_FontHeight(probe) * 1000 / TITLE_MEASURE_SIZE : 1500;
+    TTF_Font *probe = open_font_face(title_info.font_path, TITLE_MEASURE_SIZE, title_info.font_face);
+    geo.title_line_pm = probe != NULL ? TTF_GetFontHeight(probe) * 1000 / TITLE_MEASURE_SIZE : 1500;
     if (probe != NULL)
         TTF_CloseFont(probe);
     log_debug("Titles: opened %s (face %i)", title_info.font_path, title_info.font_face);
@@ -1395,7 +1394,7 @@ static void draw_checkerboard()
             Uint8 shade = ((x / square) + (y / square)) % 2 == 0 ? 0x55 : 0x88;
             SDL_Rect cell = { x, y, square, square };
             SDL_SetRenderDrawColor(renderer, shade, shade, shade, 0xFF);
-            SDL_RenderFillRect(renderer, &cell);
+            fill_rect(renderer, &cell);
         }
     }
 }
@@ -1409,19 +1408,19 @@ void draw_scene(bool preview)
     set_draw_color();
     SDL_RenderClear(renderer);
     if (preview && background_override != NULL)
-        SDL_RenderCopy(renderer, background_override, NULL, NULL);
+        draw_texture(renderer, background_override, NULL, NULL);
     else if (preview && background_shown == BACKGROUND_TRANSPARENT)
         draw_checkerboard();
     else {
         if (background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW)
-            SDL_RenderCopy(renderer, background_texture, NULL, NULL);
+            draw_texture(renderer, background_texture, NULL, NULL);
         if (background_shown == BACKGROUND_SLIDESHOW && state.slideshow_transition)
-            SDL_RenderCopy(renderer, slideshow->transition_texture, NULL, NULL);
+            draw_texture(renderer, slideshow->transition_texture, NULL, NULL);
     }
 
     // Draw background overlay
     if (background_overlay != NULL)
-        SDL_RenderCopy(renderer, background_overlay, NULL, NULL);
+        draw_texture(renderer, background_overlay, NULL, NULL);
 
     // Draw scroll indicators: a strip's point left and right from the bottom corners,
     // a grid's are the same arrow turned to point up and down from the top and bottom margins
@@ -1430,28 +1429,28 @@ void draw_scene(bool preview)
         LayoutPosition position = current_menu->position;
         if (layout.rows == 1) {
             if (layout_can_scroll(&layout, count, position, LAYOUT_RIGHT))
-                SDL_RenderCopy(renderer, scroll->texture, NULL, &scroll->rect_right);
+                draw_texture(renderer, scroll->texture, NULL, &scroll->rect_right);
             if (layout_can_scroll(&layout, count, position, LAYOUT_LEFT))
-                SDL_RenderCopyEx(renderer, scroll->texture, NULL, &scroll->rect_left, 0, NULL, SDL_FLIP_HORIZONTAL);
+                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_left, 0, NULL, SDL_FLIP_HORIZONTAL);
         }
         else {
             if (layout_can_scroll(&layout, count, position, LAYOUT_UP))
-                SDL_RenderCopyEx(renderer, scroll->texture, NULL, &scroll->rect_up, 270.0, NULL, SDL_FLIP_NONE);
+                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_up, 270.0, NULL, SDL_FLIP_NONE);
             if (layout_can_scroll(&layout, count, position, LAYOUT_DOWN))
-                SDL_RenderCopyEx(renderer, scroll->texture, NULL, &scroll->rect_down, 90.0, NULL, SDL_FLIP_NONE);
+                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_down, 90.0, NULL, SDL_FLIP_NONE);
         }
     }
 
     // Draw clock
     if (clk != NULL) {
-        SDL_RenderCopy(renderer, clk->time_texture, NULL, &clk->time_rect);
+        draw_texture(renderer, clk->time_texture, NULL, &clk->time_rect);
         if (clk->show_date)
-            SDL_RenderCopy(renderer, clk->date_texture, NULL, &clk->date_rect);
+            draw_texture(renderer, clk->date_texture, NULL, &clk->date_rect);
     }
 
     // Draw highlight
     if (highlight != NULL)
-        SDL_RenderCopy(renderer,
+        draw_texture(renderer,
             highlight->texture,
             NULL,
             &highlight->rect
@@ -1465,9 +1464,9 @@ void draw_scene(bool preview)
         Entry *entry = current_menu->items[i];
         SDL_Texture *icon = (entry->icon_selected != NULL && (int) i == current_menu->position.selected)
                             ? entry->icon_selected : entry->icon;
-        SDL_RenderCopy(renderer, icon, NULL, &entry->icon_rect);
+        draw_texture(renderer, icon, NULL, &entry->icon_rect);
         if (config.titles_enabled)
-            SDL_RenderCopy(renderer, entry->title_texture, NULL, &entry->text_rect);
+            draw_texture(renderer, entry->title_texture, NULL, &entry->text_rect);
     }
 }
 
@@ -1483,7 +1482,7 @@ static void test_frame_report(bool paced)
     const char *span = getenv("STREAMFLEX_TEST_FRAME_REPORT_MS");
     if (span == NULL || reported)
         return;
-    Uint32 now = SDL_GetTicks();
+    Uint32 now = ticks_ms();
     if (frames == 0)
         start = now;
     frames++;
@@ -1518,7 +1517,7 @@ void present_frame()
     // wanted still gets the delay, which holds the FPS limit: the present waits at most one refresh more.
     bool paced = !vsync_wanted || !vsync_on;
     if (paced) {
-        Uint32 elapsed = SDL_GetTicks() - ticks.main;
+        Uint32 elapsed = ticks_ms() - ticks.main;
         if (elapsed < refresh_period)
             SDL_Delay(refresh_period - elapsed);
     }
@@ -1535,11 +1534,11 @@ static void draw_screen()
     if (!(state.application_launching && config.on_launch == ON_LAUNCH_BLANK)) {
         draw_scene(false);
         if (state.screensaver_active && screensaver != NULL)
-            SDL_RenderCopy(renderer, screensaver->texture, NULL, NULL);
+            draw_texture(renderer, screensaver->texture, NULL, NULL);
     }
     else {
         SDL_RenderClear(renderer);
-        SDL_RenderFillRect(renderer, NULL);
+        fill_rect(renderer, NULL);
     }
     present_frame();
 }
@@ -1652,16 +1651,16 @@ static void open_controller(Gamepad *gamepad, bool raise_error)
         log_debug("Gamepad with instance id %i is no longer present, so it is not opened", gamepad->id);
         return;
     }
-    gamepad->controller = SDL_GameControllerOpen(device_index);
+    gamepad->controller = SDL_OpenGamepad(device_index);
     if (gamepad->controller == NULL) {
         if (raise_error)
             log_error("Could not open gamepad at device index %i", device_index);
         return;
     }
     log_debug("Gamepad opened at device index %i, instance id %i", device_index,
-        (int) SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(gamepad->controller)));
+        (int) SDL_GetJoystickID(SDL_GetGamepadJoystick(gamepad->controller)));
     if (config.debug && raise_error) {
-        char *mapping = SDL_GameControllerMapping(gamepad->controller);
+        char *mapping = SDL_GetGamepadMapping(gamepad->controller);
         log_debug("Gamepad Mapping:\n%s", mapping);
         SDL_free(mapping);
     }
@@ -1713,7 +1712,7 @@ static void disconnect_gamepad(int id, bool disconnect, bool remove)
     for (Gamepad *i = gamepads; i != NULL;) {
         if (id < 0 || i->id == id) {
             if (disconnect)
-                SDL_GameControllerClose(i->controller);
+                SDL_CloseGamepad(i->controller);
             if (remove) {
                 if (i->next != NULL)
                     i->next->previous = i->previous;
@@ -1750,9 +1749,10 @@ static void test_pad_attach()
 {
     if (getenv("STREAMFLEX_TEST_PAD") == NULL || !gamepad_on || test_pad_index >= 0)
         return;
-    test_pad_index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
-                         SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
-    test_pad = test_pad_index >= 0 ? SDL_JoystickOpen(test_pad_index) : NULL;
+    test_pad_index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
+                                               SDL_GAMEPAD_AXIS_COUNT,
+                                               SDL_GAMEPAD_BUTTON_COUNT, 0);
+    test_pad = test_pad_index >= 0 ? SDL_OpenJoystick(test_pad_index) : NULL;
     if (test_pad == NULL)
         log_error("Test hook: no virtual gamepad\n%s", SDL_GetError());
 }
@@ -1792,14 +1792,15 @@ static void test_pad_swap()
     if (step == 2) {
         int index = test_pad_device(test_swap[0]);
         if (index >= 0)
-            SDL_JoystickDetachVirtual(index);
+            SDL_DetachVirtualJoystick(index);
         test_swap[0] = -1;
         log_debug("Test hook: pad A detached from device index %i", index);
         return;
     }
     int slot = step == 3 ? 2 : step;
-    int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
-                    SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
+    int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
+                                          SDL_GAMEPAD_AXIS_COUNT,
+                                          SDL_GAMEPAD_BUTTON_COUNT, 0);
     if (index < 0) {
         log_error("Test hook: no virtual gamepad %s\n%s", names[slot], SDL_GetError());
         return;
@@ -1818,8 +1819,9 @@ static void test_pad_plug()
         return;
     bool wanted = file_exists(plug);
     if (wanted && test_plug < 0) {
-        int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
-                        SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
+        int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
+                                              SDL_GAMEPAD_AXIS_COUNT,
+                                              SDL_GAMEPAD_BUTTON_COUNT, 0);
         if (index < 0) {
             log_error("Test hook: no virtual gamepad to plug in\n%s", SDL_GetError());
             return;
@@ -1830,7 +1832,7 @@ static void test_pad_plug()
     else if (!wanted && test_plug >= 0) {
         int index = test_pad_device(test_plug);
         if (index >= 0)
-            SDL_JoystickDetachVirtual(index);
+            SDL_DetachVirtualJoystick(index);
         test_plug = -1;
         log_debug("Test hook: pad unplugged");
     }
@@ -1862,33 +1864,34 @@ static void test_pad_update()
     }
     test_pad_file = there;
     const char *name = getenv("STREAMFLEX_TEST_PAD_BUTTON");
-    SDL_GameControllerButton button = name != NULL ? SDL_GameControllerGetButtonFromString(name) : SDL_CONTROLLER_BUTTON_START;
-    SDL_GameControllerAxis axis = button == SDL_CONTROLLER_BUTTON_INVALID ? SDL_GameControllerGetAxisFromString(name)
-                                                                        : SDL_CONTROLLER_AXIS_INVALID;
-    if (test_pad != NULL && button != SDL_CONTROLLER_BUTTON_INVALID)
-        SDL_JoystickSetVirtualButton(test_pad, button, pressed ? SDL_PRESSED : SDL_RELEASED);
-    else if (test_pad != NULL && axis != SDL_CONTROLLER_AXIS_INVALID)
-        SDL_JoystickSetVirtualAxis(test_pad, axis, pressed ? SDL_JOYSTICK_AXIS_MAX : 0);
+    SDL_GamepadButton button = name != NULL ? SDL_GetGamepadButtonFromString(name) : SDL_GAMEPAD_BUTTON_START;
+    SDL_GamepadAxis axis = button == SDL_GAMEPAD_BUTTON_INVALID ? SDL_GetGamepadAxisFromString(name)
+                                                                        : SDL_GAMEPAD_AXIS_INVALID;
+    if (test_pad != NULL && button != SDL_GAMEPAD_BUTTON_INVALID)
+        SDL_SetJoystickVirtualButton(test_pad, button,
+                                     pressed ? true : false);
+    else if (test_pad != NULL && axis != SDL_GAMEPAD_AXIS_INVALID)
+        SDL_SetJoystickVirtualAxis(test_pad, axis, pressed ? SDL_JOYSTICK_AXIS_MAX : 0);
 }
 
 // A function to let the virtual gamepads go before their subsystem stops
 static void test_pad_stop()
 {
     if (test_pad != NULL)
-        SDL_JoystickClose(test_pad);
+        SDL_CloseJoystick(test_pad);
     if (test_pad_index >= 0)
-        SDL_JoystickDetachVirtual(test_pad_index);
+        SDL_DetachVirtualJoystick(test_pad_index);
     test_pad = NULL;
     test_pad_index = -1;
     // The plugged pad goes with the subsystem; test_pad_plug() plugs it in again once it restarts
     int plugged = test_plug >= 0 ? test_pad_device(test_plug) : -1;
     if (plugged >= 0)
-        SDL_JoystickDetachVirtual(plugged);
+        SDL_DetachVirtualJoystick(plugged);
     test_plug = -1;
     for (int i = 0; i < 3; i++) {
         int index = test_swap[i] >= 0 ? test_pad_device(test_swap[i]) : -1;
         if (index >= 0)
-            SDL_JoystickDetachVirtual(index);
+            SDL_DetachVirtualJoystick(index);
         test_swap[i] = -1;
     }
 }
@@ -1924,7 +1927,8 @@ static void connect_present_pads()
 {
     int count = SDL_NumJoysticks();
     for (int i = 0; i < count; i++) {
-        if (SDL_IsGameController(i) == SDL_TRUE && (config.gamepad_device < 0 || config.gamepad_device == i))
+        if (/* FIXME MIGRATION: check for valid instance */
+            SDL_IsGamepad(GetJoystickInstanceFromIndex(i)) == true && (config.gamepad_device < 0 || config.gamepad_device == i))
             connect_gamepad(i, !state.application_running, true);
     }
 }
@@ -1936,7 +1940,7 @@ static void start_gamepad()
     static bool mappings_loaded = false;
     if (!config.gamepad_enabled || gamepad_on)
         return;
-    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0) {
+    if (SDL_InitSubSystem(SDL_INIT_GAMEPAD) < 0) {
         log_error("Could not start the gamepad\n%s", SDL_GetError());
         return;
     }
@@ -1949,7 +1953,7 @@ static void start_gamepad()
 #endif
     if (!mappings_loaded && config.gamepad_mappings_file != NULL) {
         mappings_loaded = true;
-        int added = SDL_GameControllerAddMappingsFromFile(config.gamepad_mappings_file);
+        int added = SDL_AddGamepadMappingsFromFile(config.gamepad_mappings_file);
         if (added < 0)
             log_error("Could not load gamepad mappings from %s\n%s", config.gamepad_mappings_file, SDL_GetError());
         else
@@ -1971,7 +1975,7 @@ static void stop_gamepad()
     disconnect_gamepad(-1, true, true);
     for (GamepadControl *i = gamepad_controls; i != NULL; i = i->next)
         i->repeat = 0;
-    SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     gamepad_on = false;
     log_debug("Gamepad stopped");
 }
@@ -1993,8 +1997,10 @@ int gamepad_pressed_label()
             if (pad->controller == NULL)
                 continue;
             bool held = control->type == TYPE_BUTTON
-                        ? SDL_GameControllerGetButton(pad->controller, (SDL_GameControllerButton) control->index) != 0
-                        : (control->type == TYPE_AXIS_POS ? 1 : -1) * SDL_GameControllerGetAxis(pad->controller, (SDL_GameControllerAxis) control->index) > GAMEPAD_DEADZONE;
+                        ? SDL_GetGamepadButton(pad->controller,
+                                                      (SDL_GamepadButton) control->index) != 0
+                        : (control->type == TYPE_AXIS_POS ? 1 : -1) * SDL_GetGamepadAxis(pad->controller,
+                                                                                                (SDL_GamepadAxis) control->index) > GAMEPAD_DEADZONE;
             if (held)
                 return i;
         }
@@ -2017,7 +2023,7 @@ static void poll_gamepad()
             // Check if axis value exceeds dead zone
             if (i->type == TYPE_AXIS_POS || i->type == TYPE_AXIS_NEG) {
                 value_multiplier = i->type == TYPE_AXIS_POS ? 1 : -1;
-                if (value_multiplier*SDL_GameControllerGetAxis(gamepad->controller, i->index) > GAMEPAD_DEADZONE) {
+                if (value_multiplier*SDL_GetGamepadAxis(gamepad->controller, i->index) > GAMEPAD_DEADZONE) {
                     i->repeat++;
                     pressed = true;
                     break;
@@ -2026,7 +2032,7 @@ static void poll_gamepad()
 
             // Check buttons
             else if (i->type == TYPE_BUTTON) {
-                if (SDL_GameControllerGetButton(gamepad->controller, i->index)) {
+                if (SDL_GetGamepadButton(gamepad->controller, i->index)) {
                     i->repeat++;
                     pressed = true;
                     break;
@@ -2072,19 +2078,19 @@ static void update_slideshow()
         // Render the new background image in a separate thread so we don't block the main thread.
         // It is marked as rendering before it starts: a thread that finished first would find
         // the mark still unset, and leave it set for good once the main thread set it.
-        if (!SDL_AtomicGet(&state.slideshow_background_rendering) && !SDL_AtomicGet(&state.slideshow_background_ready)) {
-            SDL_AtomicSet(&state.slideshow_background_rendering, 1);
+        if (!SDL_GetAtomicInt(&state.slideshow_background_rendering) && !SDL_GetAtomicInt(&state.slideshow_background_ready)) {
+            SDL_SetAtomicInt(&state.slideshow_background_rendering, 1);
             Slideshowhread = SDL_CreateThread(load_next_slideshow_background_async, "Slideshow Thread", (void*) slideshow);
         }
 
         // Convert background to texture after the rendering thread has completed
-        else if (SDL_AtomicGet(&state.slideshow_background_ready)) {
+        else if (SDL_GetAtomicInt(&state.slideshow_background_ready)) {
             SDL_WaitThread(Slideshowhread, NULL);
             Slideshowhread = NULL;
 
             // The loader found no image that loads, or only the one on show: stop the slideshow
             if (slideshow->transition_surface == NULL || slideshow->only_one) {
-                SDL_AtomicSet(&state.slideshow_background_ready, 0);
+                SDL_SetAtomicInt(&state.slideshow_background_ready, 0);
                 fall_back_from_slideshow(slideshow->transition_surface);
                 return;
             }
@@ -2102,7 +2108,7 @@ static void update_slideshow()
                 ticks.slideshow_load = ticks.main;
             }
         slideshow->transition_surface = NULL;
-        SDL_AtomicSet(&state.slideshow_background_ready, 0);
+        SDL_SetAtomicInt(&state.slideshow_background_ready, 0);
         }
     }
     else if (state.slideshow_transition) {
@@ -2186,7 +2192,7 @@ static SDL_Thread *start_clock_thread()
 static void update_clock(bool block)
 {
     if (ticks.main - ticks.clock_update > CLOCK_UPDATE_PERIOD) {
-        if (!SDL_AtomicGet(&state.clock_rendering)) {
+        if (!SDL_GetAtomicInt(&state.clock_rendering)) {
 
             // Check to see if the time has changed
             get_time(clk);
@@ -2196,7 +2202,7 @@ static void update_clock(bool block)
                 clk->render_time = true;
 #endif
             if (clk->render_time) {
-                SDL_AtomicSet(&state.clock_rendering, 1);
+                SDL_SetAtomicInt(&state.clock_rendering, 1);
                 if (block)
                     render_clock(clk);
                 else {
@@ -2220,7 +2226,7 @@ static void update_clock(bool block)
         }
 
         // Render texture
-        if (SDL_AtomicGet(&state.clock_ready)) {
+        if (SDL_GetAtomicInt(&state.clock_ready)) {
             SDL_WaitThread(clock_thread, NULL);
             clock_thread = NULL;
             clk->time_rect = clk->next_time_rect;   // The render placed them where the main thread
@@ -2236,8 +2242,8 @@ static void update_clock(bool block)
             ticks.clock_update = ticks.main;
             clk->render_time = false;
             clk->render_date = false;
-            SDL_AtomicSet(&state.clock_rendering, 0);
-            SDL_AtomicSet(&state.clock_ready, 0);
+            SDL_SetAtomicInt(&state.clock_rendering, 0);
+            SDL_SetAtomicInt(&state.clock_ready, 0);
         }
     }
 }
@@ -2250,14 +2256,14 @@ static inline void pre_launch()
 // Initialize exit hotkey for Windows
 #ifdef _WIN32
     if (has_exit_hotkey())
-        SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+        SDL_SetEventEnabled(SDL_EVENT_SYSWM, true);
 #endif
 }
 
 static inline void post_launch()
 {
     // Rebaseline the timing after the program is done
-    ticks.main = SDL_GetTicks();
+    ticks.main = ticks_ms();
     ticks.last_input = ticks.main;
 
     // Post-application updates
@@ -2271,7 +2277,7 @@ static inline void post_launch()
         set_draw_color();
 
 #ifdef _WIN32
-    SDL_EventState(SDL_SYSWMEVENT, SDL_DISABLE);
+    SDL_SetEventEnabled(SDL_EVENT_SYSWM, false);
     if (background_shown == BACKGROUND_TRANSPARENT)
         hide_cursor(current_entry);
 #endif
@@ -2284,7 +2290,7 @@ static inline void post_launch()
 static void retry_exit_hotkey_events(bool at_once)
 {
     if (retry_exit_hotkey(at_once) && state.application_running)
-        SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+        SDL_SetEventEnabled(SDL_EVENT_SYSWM, true);
 }
 #endif
 
@@ -2428,7 +2434,7 @@ int main(int argc, char *argv[])
         raise_restarted_window();
 
     // Initialize timing
-    ticks.main = SDL_GetTicks();
+    ticks.main = ticks_ms();
     ticks.last_input = ticks.main;
     ticks.program_start = ticks.main;
 
@@ -2475,17 +2481,17 @@ int main(int argc, char *argv[])
     // Main program loop
     log_debug("Begin program loop");
     while (1) {
-        ticks.main = SDL_GetTicks();
+        ticks.main = ticks_ms();
 #ifdef STREAMFLEX_TEST_HOOKS
         test_pad_update();
 #endif
         while (SDL_PollEvent(&event)) {
             switch(event.type) {
-                case SDL_QUIT:
+                case SDL_EVENT_QUIT :
                     quit(EXIT_SUCCESS);
                     break;
 
-                case SDL_KEYDOWN:
+                case SDL_EVENT_KEY_DOWN :
                     ticks.last_input = ticks.main;
                     handle_keypress(&event.key.keysym, event.key.repeat != 0);
 #ifdef STREAMFLEX_TEST_HOOKS
@@ -2493,26 +2499,27 @@ int main(int argc, char *argv[])
 #endif
                     break;
 
-                case SDL_KEYUP:
+                case SDL_EVENT_KEY_UP :
                     if (settings_is_open())
-                        settings_raw_release(event.key.keysym.sym);
+                        settings_raw_release(event.key.key);
                     break;
 
-                case SDL_MOUSEBUTTONDOWN:
+                case SDL_EVENT_MOUSE_BUTTON_DOWN :
                     if (config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
                         ticks.last_input = ticks.main;
                         execute_command(current_entry->cmd);
                     }
                     break;
 
-                case SDL_JOYDEVICEADDED:
-                    if (gamepad_on && SDL_IsGameController(event.jdevice.which) == SDL_TRUE &&
+                case SDL_EVENT_JOYSTICK_ADDED :
+                    if (gamepad_on && /* FIXME MIGRATION: check for valid instance */
+                        SDL_IsGamepad(GetJoystickInstanceFromIndex(event.jdevice.which)) == true &&
                         (config.gamepad_device < 0 || config.gamepad_device == event.jdevice.which))
                         connect_gamepad(event.jdevice.which, !state.application_running, true);
                     settings_pads_changed();   // The Device row names every pad present, while settings are open
                     break;
 
-                case SDL_JOYDEVICEREMOVED:
+                case SDL_EVENT_JOYSTICK_REMOVED :
                     // `which` is the instance id here: only a pad in the list is removed, whatever Device says
                     log_debug("Gamepad disconnected");
                     disconnect_gamepad(event.jdevice.which, true, true);
@@ -2520,7 +2527,7 @@ int main(int argc, char *argv[])
                     break;
 
                 case SDL_WINDOWEVENT:
-                    if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    if (event.window.event == SDL_EVENT_WINDOW_FOCUS_LOST) {
                         log_debug("Lost keyboard focus");
                         state.has_focus = false;
                         if (state.application_launching) {
@@ -2537,18 +2544,18 @@ int main(int argc, char *argv[])
                             set_foreground_window();
 #endif
                     }
-                    else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                    else if (event.window.event == SDL_EVENT_WINDOW_FOCUS_GAINED) {
                         log_debug("Gained keyboard focus");
                         state.has_focus = true;
 #ifdef _WIN32
                         retry_exit_hotkey_events(true);   // The application that held its key may have just quit
 #endif
                     }
-                    else if (event.window.event == SDL_WINDOWEVENT_LEAVE)
+                    else if (event.window.event == SDL_EVENT_WINDOW_MOUSE_LEAVE)
                         log_debug("Lost mouse focus");
                     break;
 #ifdef _WIN32
-                case SDL_SYSWMEVENT:
+                case SDL_EVENT_SYSWM :
                     check_exit_hotkey(event.syswm.msg);
                     break;
 #endif

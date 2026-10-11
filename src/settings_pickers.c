@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "settings.h"
@@ -17,7 +17,7 @@
 #include "util.h"
 #include "debug.h"
 #ifdef _WIN32
-#include <SDL_syswm.h>
+#include <SDL3/SDL_syswm.h>
 #include "platform/platform.h"
 #endif
 
@@ -406,7 +406,7 @@ void pickers_capture(int device)
     }
     int starting = device == BINDINGS_KEYBOARD ? key_held : gamepad_pressed_label();
     capture_device = device;
-    capture_begin(&capture, SDL_GetTicks(), starting);
+    capture_begin(&capture, ticks_ms(), starting);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_CAPTURE_SECONDS=<s> listens that long
     // instead of 5 s, so a held control can run past the repeat's delay on a slow runner
@@ -456,7 +456,7 @@ static void captured(int code)
 void pickers_probation(int device, int code, const char *command)
 {
     char name[64];
-    probation_begin(&probation, SDL_GetTicks(), code);
+    probation_begin(&probation, ticks_ms(), code);
     probation_device = device;
     snprintf(probation_command, sizeof(probation_command), "%s", command);
     pickers_key_name(device, code, name, sizeof(name));
@@ -478,7 +478,7 @@ static void revert(const char *why)
 // (probation_press() has no clock of its own).
 static void run_clocks(void)
 {
-    unsigned int now = SDL_GetTicks();
+    unsigned int now = ticks_ms();
     clock_now = now;
     if (capture_expired(&capture, now)) {
         end_capture(-1);
@@ -519,7 +519,7 @@ bool pickers_raw_key(int code, bool repeat)
     run_clocks();
     key_held = code;   // A repeat is of the key last pressed, which is this one already
     if (capture_device == BINDINGS_KEYBOARD) {
-        if (capture_press(&capture, SDL_GetTicks(), code, repeat))
+        if (capture_press(&capture, ticks_ms(), code, repeat))
             captured(code);
         return true;
     }
@@ -587,7 +587,7 @@ bool pickers_raw_pad(int label)
         // caught on its first frame
         if (was >= 0 && was != label)
             capture_release(&capture, was);
-        if (label >= 0 && capture_press(&capture, SDL_GetTicks(), label, false))
+        if (label >= 0 && capture_press(&capture, ticks_ms(), label, false))
             captured(label);
         test_pad_taken(label, TAKEN_CAPTURE);
         return true;
@@ -886,7 +886,7 @@ static int draw_list_row(const ListPickRow *row, bool highlighted, int x, int y)
         int room = host.column_width - host.margin;
         SDL_Rect rect = { x + host.margin / 2, y + (drawn - h) / 2, w < room ? w : room, h };
         SDL_Rect from = { 0, 0, rect.w, h };
-        SDL_RenderCopy(renderer, sample, &from, &rect);
+        draw_texture(renderer, sample, &from, &rect);
     }
     return drawn;
 }
@@ -942,18 +942,18 @@ static void draw_color(int x, int top, int bottom)
         SDL_Rect box = { x + pad + (i % COLORPICK_COLUMNS) * cell + 3, top + (i / COLORPICK_COLUMNS) * cell + 3,
                          cell - 6, cell - 6 };
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0xFF);
-        SDL_RenderFillRect(renderer, &box);
+        fill_rect(renderer, &box);
         if (i == current) {
             SDL_Rect mark = { box.x + box.w / 3, box.y + box.h / 3, box.w / 3, box.h / 3 };
             SDL_SetRenderDrawColor(renderer, (Uint8) (0xFF - c.r), (Uint8) (0xFF - c.g), (Uint8) (0xFF - c.b), 0xFF);
-            SDL_RenderFillRect(renderer, &mark);
+            fill_rect(renderer, &mark);
         }
         if (i == color_pick.cursor) {
             SDL_Rect outline = { box.x - 3, box.y - 3, box.w + 6, box.h + 6 };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
-            SDL_RenderDrawRect(renderer, &outline);
+            outline_rect(renderer, &outline);
             SDL_Rect inner = { outline.x + 1, outline.y + 1, outline.w - 2, outline.h - 2 };
-            SDL_RenderDrawRect(renderer, &inner);
+            outline_rect(renderer, &inner);
         }
     }
     int y = top + COLORPICK_ROWS * cell + pad;
@@ -977,7 +977,7 @@ static void draw_color(int x, int top, int bottom)
     snprintf(digits, sizeof(digits), "%02X%02X%02X", color_pick.hex.r, color_pick.hex.g, color_pick.hex.b);
     int w = 0;
     int h = 0;
-    TTF_SizeUTF8(host.font_row, "W", &w, &h);
+    TTF_GetStringSize(host.font_row, "W", &w, &h);
     int step = w + pad;
     host.text(host.font_row, "#", x + pad, y, step, 255, false);
     for (int i = 0; i < 6; i++) {
@@ -987,7 +987,7 @@ static void draw_color(int x, int top, int bottom)
         if (i == color_pick.digit) {
             SDL_Rect box = { cx - pad / 2, y, step, h };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
-            SDL_RenderDrawRect(renderer, &box);
+            outline_rect(renderer, &box);
         }
     }
 }

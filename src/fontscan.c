@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "fontscan.h"
 #include "fontlist.h"
 #include "fileio.h"
@@ -19,7 +19,7 @@
 
 struct FontScan {
     SDL_Thread *thread;     // NULL once it has been waited for
-    SDL_atomic_t done;
+    SDL_AtomicInt done;
     char *bundled_folder;
     char **files;
     bool *bundled;
@@ -167,7 +167,7 @@ static int scan_thread(void *data)
     const char *dirs = getenv("STREAMFLEX_TEST_FONT_DIRS");
     if (dirs != NULL) {
         scan_test_folders(scan, dirs);
-        SDL_AtomicSet(&scan->done, 1);
+        SDL_SetAtomicInt(&scan->done, 1);
         return 0;
     }
 #endif
@@ -190,7 +190,7 @@ static int scan_thread(void *data)
         scan_folder(scan, path, false, 0);
     }
 #endif
-    SDL_AtomicSet(&scan->done, 1);
+    SDL_SetAtomicInt(&scan->done, 1);
     return 0;
 }
 
@@ -212,7 +212,7 @@ FontScan *fontscan_start(const char *bundled_folder)
     }
     scan->bundled_folder = folder;
     scan->fail_adds = test_failing("fontadd");
-    SDL_AtomicSet(&scan->done, 0);
+    SDL_SetAtomicInt(&scan->done, 0);
     scan->thread = test_failing("fontthread") ? NULL : SDL_CreateThread(scan_thread, "Font scan", scan);
     if (scan->thread == NULL) {
         fontscan_free(scan);
@@ -223,12 +223,12 @@ FontScan *fontscan_start(const char *bundled_folder)
 
 // A function to tell whether the list is complete. Once the thread says so it is waited for, which
 // costs nothing (it has finished) and makes everything it wrote safe to read here, on any CPU:
-// SDL_AtomicSet() alone does not order the thread's earlier writes on a weakly ordered one.
+// SDL_SetAtomicInt() alone does not order the thread's earlier writes on a weakly ordered one.
 bool fontscan_done(FontScan *scan)
 {
     if (scan->thread == NULL)
         return true;
-    if (SDL_AtomicGet(&scan->done) == 0)
+    if (SDL_GetAtomicInt(&scan->done) == 0)
         return false;
     SDL_WaitThread(scan->thread, NULL);
     scan->thread = NULL;

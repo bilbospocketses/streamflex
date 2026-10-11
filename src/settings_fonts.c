@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "settings_fonts.h"
@@ -93,7 +93,9 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
         return NULL;
     font_cache[oldest].face = face;
     font_cache[oldest].used = font_clock;
-    TTF_Font *font = TTF_OpenFontIndex(path, TTF_FontHeight(row_font) * FONT_SAMPLE_PERCENT / 100, face);
+    TTF_Font *font = open_font_face(path,
+                                    TTF_GetFontHeight(row_font) * FONT_SAMPLE_PERCENT / 100,
+                                    face);
     SDL_Surface *surface = NULL;
 
     // A symbol font's name is drawn in the settings' font, not in its own symbols. A face counts as
@@ -108,21 +110,21 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
     // in the settings' font as well: readable, by design. The cost: a Latin font with ASCII alone
     // draws its name in the settings' font. Its titles, once chosen, still use its own face.
     // Windows' symbol fonts (Wingdings, Symbol) map no "Aa0", so read_font_file() never lists them.
-    if (font != NULL && (!TTF_GlyphIsProvided(font, 0x2019) || !TTF_GlyphIsProvided(font, 0x2013))) {
+    if (font != NULL && (!TTF_FontHasGlyph(font, 0x2019) || !TTF_FontHasGlyph(font, 0x2013))) {
         TTF_CloseFont(font);
         log_debug("Settings: the font picker draws %s in the settings' font: its face lacks common punctuation (no U+2019 or U+2013)", name);
         return NULL;
     }
     if (font != NULL) {
         SDL_Color white = { 0xFF, 0xFF, 0xFF, 0xFF };
-        surface = TTF_RenderUTF8_Blended(font, name, white);
+        surface = TTF_RenderText_Blended(font, name, white);
         TTF_CloseFont(font);
     }
     if (surface != NULL) {
         font_cache[oldest].texture = SDL_CreateTextureFromSurface(renderer, surface);
         font_cache[oldest].w = surface->w;
         font_cache[oldest].h = surface->h;
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
     }
     if (font_cache[oldest].texture == NULL) {
         log_debug("Settings: the font picker could not draw %s in its own face", name);
@@ -204,21 +206,21 @@ bool fonts_fill(ListPick *to)
 // memory marks the list as failed.
 static void read_font_file(const char *path, bool bundled)
 {
-    TTF_Font *font = TTF_OpenFontIndex(path, 12, 0);
+    TTF_Font *font = open_font_face(path, 12, 0);
     if (font == NULL) {
         font_files_skipped++;
         return;
     }
-    long faces = TTF_FontFaces(font);
+    long faces = TTF_GetNumFontFaces(font);
     TTF_CloseFont(font);
     for (long i = 0; i < faces && i < 64; i++) {
-        TTF_Font *face = TTF_OpenFontIndex(path, 12, i);
+        TTF_Font *face = open_font_face(path, 12, i);
         if (face == NULL)
             continue;
-        const char *family = TTF_FontFaceFamilyName(face);
-        const char *style = TTF_FontFaceStyleName(face);
-        if (family != NULL && TTF_GlyphIsProvided(face, 'A') && TTF_GlyphIsProvided(face, 'a') &&
-            TTF_GlyphIsProvided(face, '0')) {
+        const char *family = TTF_GetFontFamilyName(face);
+        const char *style = TTF_GetFontStyleName(face);
+        if (family != NULL && TTF_FontHasGlyph(face, 'A') && TTF_FontHasGlyph(face, 'a') &&
+            TTF_FontHasGlyph(face, '0')) {
             test_fail("faces", true);
             bool added = fontlist_add(fonts, path, (int) i, family, style != NULL ? style : "", bundled);
             test_fail("faces", false);
@@ -249,7 +251,7 @@ bool fonts_start(void)
         log_error("Settings: the fonts cannot be listed: out of memory, or no thread");
         return false;
     }
-    font_scan_start = SDL_GetTicks();
+    font_scan_start = ticks_ms();
     font_files_read = 0;
     font_files_skipped = 0;
     font_read_failed = false;
@@ -294,7 +296,7 @@ bool fonts_tick(void)
     fontlist_finish(fonts);
     ready = true;
     log_debug("Fonts: found %i families in %i files, skipped %i (%u ms)", fontlist_count(fonts), total,
-        font_files_skipped, SDL_GetTicks() - font_scan_start);
+        font_files_skipped, ticks_ms() - font_scan_start);
     return true;
 }
 

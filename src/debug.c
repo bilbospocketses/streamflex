@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "util.h"

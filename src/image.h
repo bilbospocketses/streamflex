@@ -23,7 +23,7 @@ typedef struct {
 
 int init_svg(void);
 char *find_default_font(const char *font);
-TTF_Font *open_font_file(const char *path, int size, int face);   // TTF_OpenFontIndex, refusing what is not a regular file
+TTF_Font *open_font_file(const char *path, int size, int face);   // open_font_face, refusing what is not a regular file
 int load_font(TextInfo *info, const char *configured, int face, const char *default_font);
 bool font_file_found(const char *configured);   // There, as given or beside the executable, as load_font() looks
 void quit_svg(void);

@@ -5,8 +5,8 @@
 #include <windows.h>
 #include <psapi.h>
 #include <powrprof.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_syswm.h>
 #include "../launcher.h"
 #include <launcher_config.h>
 #include "platform.h"
@@ -444,7 +444,7 @@ void register_exit_hotkey()
     if (!ret) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         refused_exit_code = exit_hotkey_code;
-        refused_exit_ticks = SDL_GetTicks();
+        refused_exit_ticks = ticks_ms();
         exit_hotkey = 0;
         log_error("Failed to register exit hotkey with Windows: %s", refused_exit_why);
     }
@@ -456,7 +456,7 @@ void register_exit_hotkey()
 // log's list. True when it was taken just now.
 bool retry_exit_hotkey(bool at_once)
 {
-    Uint32 now = SDL_GetTicks();
+    Uint32 now = ticks_ms();
     if (!derive_exit_retry_due(refused_exit_code != 0, at_once, now, refused_exit_ticks))
         return false;
     refused_exit_ticks = now;

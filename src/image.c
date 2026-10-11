@@ -3,9 +3,9 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
-#include <SDL.h>
-#include <SDL_image.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "image.h"
@@ -71,18 +71,18 @@ TTF_Font *title_font(int size)
         if (title_fonts[i].size == size)
             return title_fonts[i].font;
     }
-    TTF_Font *font = TTF_OpenFontIndex(title_info.font_path, size, title_info.font_face);
+    TTF_Font *font = open_font_face(title_info.font_path, size, title_info.font_face);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_FAIL_TITLE_SIZE names a size that fails
     const char *fail = getenv("STREAMFLEX_TEST_FAIL_TITLE_SIZE");
     if (fail != NULL && atoi(fail) == size && font != NULL) {
         TTF_CloseFont(font);
         font = NULL;
-        TTF_SetError("the test hook failed it");
+        SDL_SetError("the test hook failed it");
     }
 #endif
     if (font == NULL) {
-        log_error("Could not open the title font at %i pt\n%s", size, TTF_GetError());
+        log_error("Could not open the title font at %i pt\n%s", size, SDL_GetError());
         return NULL;
     }
     if (title_font_count == MAX_TITLE_FONTS) {
@@ -140,17 +140,13 @@ SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transitio
         // If the loaded image has no alpha channel (e.g. JPEG), create one
         // so that we can have transparency for the background transition
         if (surface != NULL && surface->format->format == SDL_PIXELFORMAT_RGB24 && transition) {
-            SDL_Surface *tmp = SDL_CreateRGBSurfaceWithFormat(0,
-                                   surface->w,
-                                   surface->h,
-                                   32,
-                                   SDL_PIXELFORMAT_ARGB8888
-                                );
+            SDL_Surface *tmp = SDL_CreateSurface(surface->w, surface->h,
+                                                 SDL_PIXELFORMAT_ARGB8888);
             if (tmp != NULL) {
                 Uint32 color = SDL_MapRGBA(tmp->format, 0, 0, 0, 0xFF);
-                SDL_FillRect(tmp, NULL, color);
+                SDL_FillSurfaceRect(tmp, NULL, color);
                 SDL_BlitSurface(surface, NULL, tmp, NULL);
-                SDL_FreeSurface(surface);
+                SDL_DestroySurface(surface);
                 surface = tmp;
             }
         }
@@ -175,8 +171,8 @@ int load_next_slideshow_background_async(void *data)
     slideshow->transition_surface = load_next_slideshow_background(slideshow, true);
     slideshow->transition_luminance = slideshow->transition_surface != NULL
                                       ? surface_luminance(slideshow->transition_surface) : -1.0;
-    SDL_AtomicSet(&state.slideshow_background_rendering, 0);
-    SDL_AtomicSet(&state.slideshow_background_ready, 1);
+    SDL_SetAtomicInt(&state.slideshow_background_rendering, 0);
+    SDL_SetAtomicInt(&state.slideshow_background_ready, 1);
     return 0;
 }
 
@@ -186,11 +182,11 @@ int load_next_slideshow_background_async(void *data)
 // slideshow's thread can use it; each image is measured once, as it is decoded.
 double surface_luminance(SDL_Surface *surface)
 {
-    SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_Surface *rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_NO_LUMINANCE fails the conversion
     if (rgba != NULL && getenv("STREAMFLEX_TEST_NO_LUMINANCE") != NULL) {
-        SDL_FreeSurface(rgba);
+        SDL_DestroySurface(rgba);
         rgba = NULL;
     }
 #endif
@@ -198,7 +194,7 @@ double surface_luminance(SDL_Surface *surface)
         return -1.0;
     // A surface converted without flags is never RLE-encoded, so its pixels can be read unlocked
     double luminance = color_mean_luminance(rgba->pixels, rgba->w, rgba->h, rgba->pitch);
-    SDL_FreeSurface(rgba);
+    SDL_DestroySurface(rgba);
     return luminance;
 }
 
@@ -217,7 +213,7 @@ SDL_Texture *load_texture_measured(const char *path, double *luminance)
     }
     SDL_Surface *surface = IMG_Load(path);
     if (surface == NULL) {
-        log_error("Could not load image %s\n%s", path, IMG_GetError());
+        log_error("Could not load image %s\n%s", path, SDL_GetError());
         return NULL;
     }
     if (luminance != NULL)
@@ -242,7 +238,7 @@ SDL_Texture *load_texture(SDL_Surface *surface)
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture == NULL)
         log_error("Could not create texture %s", SDL_GetError());
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     return texture;
 }
 
@@ -264,12 +260,12 @@ static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int 
 static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char *what)
 {
     if (surface->format->format != SDL_PIXELFORMAT_RGBA32) {
-        SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+        SDL_Surface *converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
         if (converted == NULL) {
             log_error("Could not convert %s to keep it off the chroma key\n%s", what, SDL_GetError());
             return surface;
         }
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         surface = converted;
     }
     if (SDL_LockSurface(surface) == 0) {
@@ -346,7 +342,7 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
         rect->h = height;
     }
     free(pixel_buffer);
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     nsvgDelete(image);
     return texture;
 }
@@ -391,7 +387,7 @@ SDL_Texture *load_icon(const char *path, int size)
     }
     SDL_Surface *surface = IMG_Load(path);
     if (surface == NULL) {
-        log_error("Could not load image %s\n%s", path, IMG_GetError());
+        log_error("Could not load image %s\n%s", path, SDL_GetError());
         return NULL;
     }
     return load_texture(keep_surface_off_chroma_key(surface, path));
@@ -491,9 +487,9 @@ int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo)
 static void truncate_to_fit(TTF_Font *font, char *text, int max_width, int *w, int *h)
 {
     utf8_truncate(text, *w, max_width);
-    TTF_SizeUTF8(font, text, w, h);
+    TTF_GetStringSize(font, text, w, h);
     while (*w > max_width && utf8_shorten(text))
-        TTF_SizeUTF8(font, text, w, h);
+        TTF_GetStringSize(font, text, w, h);
 }
 
 // A function to render text
@@ -507,7 +503,7 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     char *text_buffer = strdup(text);
 
     // Calculate size of the rendered title
-    TTF_SizeUTF8(info->font, text_buffer, &w, &h);
+    TTF_GetStringSize(info->font, text_buffer, &w, &h);
 
     // If title is too large to fit
     if (info->oversize_mode != OVERSIZE_NONE && w > info->max_width) {
@@ -523,15 +519,15 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
             if (size < info->min_size)
                 size = info->min_size;
             if (size > 0 && size < info->font_size) {
-                reduced_font = TTF_OpenFontIndex(info->font_path, size, info->font_face);
+                reduced_font = open_font_face(info->font_path, size, info->font_face);
 
                 // The font's own rounding can leave it a pixel or two too wide: step down to the minimum
                 while (reduced_font != NULL) {
-                    TTF_SizeUTF8(reduced_font, text_buffer, &w, &h);
+                    TTF_GetStringSize(reduced_font, text_buffer, &w, &h);
                     if (w <= info->max_width || size <= info->min_size)
                         break;
                     TTF_CloseFont(reduced_font);
-                    reduced_font = TTF_OpenFontIndex(info->font_path, --size, info->font_face);
+                    reduced_font = open_font_face(info->font_path, --size, info->font_face);
 #ifdef STREAMFLEX_TEST_HOOKS
                     // Only the headless harness builds this: every step down fails to open
                     if (getenv("STREAMFLEX_TEST_FAIL_SHRINK_STEP") != NULL && reduced_font != NULL) {
@@ -555,31 +551,28 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     SDL_Surface *surface = NULL;
     if (info->shadow) {
         int shadow_offset = layout_shadow_offset(h);
-        SDL_Surface *foreground = TTF_RenderUTF8_Blended(output_font,
+        SDL_Surface *foreground = TTF_RenderText_Blended(output_font,
                                       text_buffer,
                                       *info->color
                                   );
-        SDL_Surface *shadow = TTF_RenderUTF8_Blended(output_font, 
+        SDL_Surface *shadow = TTF_RenderText_Blended(output_font, 
                                   text_buffer, 
                                   *info->shadow_color
                               );
-        surface = SDL_CreateRGBSurfaceWithFormat(0, 
-                      foreground->w + shadow_offset, 
-                      foreground->h + shadow_offset, 
-                      32,
-                      SDL_PIXELFORMAT_ARGB8888
-                  );
+        surface = SDL_CreateSurface(foreground->w + shadow_offset,
+                                    foreground->h + shadow_offset,
+                                    SDL_PIXELFORMAT_ARGB8888);
         Uint32 color = SDL_MapRGBA(surface->format, 0, 0, 0, 0);
-        SDL_FillRect(surface, NULL, color);
+        SDL_FillSurfaceRect(surface, NULL, color);
         SDL_Rect shadow_rect = {shadow_offset, shadow_offset, shadow->w, shadow->h};
         SDL_BlitSurface(shadow, NULL, surface, &shadow_rect);
         SDL_Rect foreground_rect = {0, 0, foreground->w, foreground->h};
         SDL_BlitSurface(foreground, NULL, surface, &foreground_rect);
-        SDL_FreeSurface(foreground);
-        SDL_FreeSurface(shadow);
+        SDL_DestroySurface(foreground);
+        SDL_DestroySurface(shadow);
     }
     else
-        surface = TTF_RenderUTF8_Blended(output_font,
+        surface = TTF_RenderText_Blended(output_font,
                       text_buffer,
                       *info->color
                   );
@@ -631,14 +624,14 @@ char *find_default_font(const char *font)
 
 // A function to open a font file at a size and face. A path to something that is not a regular file
 // (a pipe, say, whose read would wait for good) is never opened: it fails as a missing file does,
-// and TTF_GetError() says why.
+// and SDL_GetError() says why.
 TTF_Font *open_font_file(const char *path, int size, int face)
 {
     if (fileio_not_a_file(path)) {
-        TTF_SetError("%s", fileio_last_error());
+        SDL_SetError("%s", fileio_last_error());
         return NULL;
     }
-    return TTF_OpenFontIndex(path, size, face);
+    return open_font_face(path, size, face);
 }
 
 // A function to open a text's font: the configured file and face (a relative path is also tried
@@ -671,14 +664,14 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
         if (info->font != NULL)
             info->font_face = face;
         else
-            log_error("Could not open the font %s (face %i), using the default font\n%s", configured, face, TTF_GetError());
+            log_error("Could not open the font %s (face %i), using the default font\n%s", configured, face, SDL_GetError());
     }
     if (info->font == NULL) {
         char *default_font_path = find_default_font(default_font);
         if (default_font_path != NULL) {
             info->font = open_font_file(default_font_path, info->font_size, 0);
             if (info->font == NULL)
-                log_error("Could not open the default font %s\n%s", default_font_path, TTF_GetError());
+                log_error("Could not open the default font %s\n%s", default_font_path, SDL_GetError());
         }
         if (info->font == NULL) {
             free(default_font_path);

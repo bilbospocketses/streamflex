@@ -3,9 +3,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
-#include <SDL_thread.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3/SDL_thread.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "util.h"
@@ -40,7 +40,7 @@ static void calculate_text_metrics(TTF_Font *font, Alignment alignment, const ch
     // Get text height, x offset
     while (*p != '\0') {
         code_point = get_unicode_code_point(p, &bytes);
-        TTF_GlyphMetrics(font, 
+        TTF_GetGlyphMetrics(font, 
             code_point, 
             &xmin, 
             &xmax, 
@@ -65,7 +65,7 @@ static void calculate_text_metrics(TTF_Font *font, Alignment alignment, const ch
 // A function to calculate the spacing and offsets of the clock text
 static void calculate_clock_geometry(Clock *clk)
 {
-    int line_skip = TTF_FontLineSkip(clk->text_info.font);
+    int line_skip = TTF_GetFontLineSkip(clk->text_info.font);
     int h_time, h_date;
 
     // Calculate text height and x offset
@@ -296,7 +296,7 @@ void render_clock(Clock *clk)
         calculate_clock_geometry(clk);
     }
     calculate_clock_positioning(clk, &clk->next_time_rect, &clk->next_date_rect);
-    SDL_AtomicSet(&state.clock_ready, 1);
+    SDL_SetAtomicInt(&state.clock_ready, 1);
 }
 
 // A functio nto render the time to image in a separate thread
