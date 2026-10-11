@@ -12,8 +12,10 @@ check's) must NOT all hold: the check catches the mutant. A run that never got f
 judged is NOT-RUN, which is wrong whatever its verdict: one with no log at all, one with keys to press
 whose wait line never came, and one whose entry sets wait when that line is not in its log. A "caught"
 entry's expectations cannot show that the launcher reached the site, as one failing is enough, so a
-"caught" entry with no keys must set wait to a line its run logs at or just before the site: a mutant
-that stops the launcher before then is NOT-RUN, never caught. One that sets none is wrong, and not run.
+"caught" entry with no keys must set wait to a line the run prints only if it reached the site: at the
+site, or just past it on the path the mutated form takes, or just before it when nothing at or past it
+is printed; never a line only the success path the old form skips prints. A mutant that stops the
+launcher before then is NOT-RUN, never caught. One that sets no wait is wrong, and not run.
 Each verdict is followed by every expectation, and whether it held."""
 import json
 import os
