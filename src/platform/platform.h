@@ -36,7 +36,7 @@ SDL_Keycode refused_exit_hotkey(const char **why);    // The exit hotkey Windows
 void register_exit_hotkey(void);
 bool retry_exit_hotkey(bool at_once);   // The exit hotkey Windows refused, tried again when due; true when taken now
 void clear_exit_hotkey(void);
-void check_exit_hotkey(SDL_SysWMmsg *msg);
+void listen_exit_hotkey(bool on);   // While an app runs, the exit hotkey's WM_HOTKEY closes it
 void set_foreground_window(void);
 bool make_self(void);           // A restart: the fresh copy, made and given the foreground before the teardown
 bool take_foreground(void);     // A restart's fresh copy: true when its window came to the front

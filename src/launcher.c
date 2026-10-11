@@ -4,10 +4,9 @@
 #include <stdbool.h>
 #include <time.h>
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_syswm.h>
+#include <SDL3/SDL_main.h>     // main() is here: on Windows this header gives SDL3's WinMain
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
-#include <SDL3/SDL_thread.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "image.h"
@@ -22,8 +21,8 @@
 #include "alloc.h"
 #include "test_hooks.h"
 
+static int display_refresh_rate(void);
 static void init_sdl(void);
-static void init_sdl_image(void);
 static void create_window(void);
 static void raise_restarted_window(void);
 static void init_sdl_ttf(void);
@@ -50,7 +49,6 @@ static void stop_gamepad(void);
 static void connect_present_pads(void);
 #ifdef STREAMFLEX_TEST_HOOKS
 static void test_pad_attach(void);
-static int test_pad_device(SDL_JoystickID id);
 static void test_pad_swap(void);
 static void test_pad_update(void);
 static void test_pad_stop(void);
@@ -71,7 +69,7 @@ static void move_selection(LayoutDirection direction);
 static void load_submenu(const char *submenu);
 static void load_back_menu(Menu *menu);
 static void draw_screen(void);
-static void handle_keypress(SDL_Keysym *key, bool repeat);
+static void handle_keypress(SDL_Keycode key, bool repeat);
 static bool hotkey_bound(SDL_Keycode keycode);
 static bool menu_key(SDL_Keycode keycode);
 static void execute_command(const char *command);
@@ -213,7 +211,6 @@ Clock *clk                            = NULL;
 SDL_Thread *Slideshowhread            = NULL;
 SDL_Thread *clock_thread              = NULL;
 SDL_Event event;
-SDL_SysWMinfo wm_info;
 SDL_DisplayMode display_mode;
 static char **start_argv              = NULL; // The arguments StreamFlex was started with, as main() had them,
                                               // and --restarted after them for a restart; NULL-terminated
@@ -234,39 +231,49 @@ static bool vsync_wanted = true; // VSync and FPSLimit ask the renderer for VSyn
 static bool vsync_on = false;    // The renderer really gives it; unless both are true present_frame() paces each frame
 
 
+// A function to give the display's refresh rate in whole hertz, as SDL2 gave it: SDL3's is a float (59.94)
+static int display_refresh_rate(void)
+{
+    return (int) (display_mode.refresh_rate + 0.5f);
+}
+
 // A function to initialize SDL
 static void init_sdl()
-{    
-    // Set flags, hints
-    Uint32 sdl_flags = SDL_INIT_VIDEO;
+{
+    // Set flags, hints. SDL3 has no SDL_HINT_RENDER_SCALE_QUALITY: each texture is made linear as it is
+    // created (surface_texture()); the other two hints are SDL3's under the same names
+    SDL_InitFlags sdl_flags = SDL_INIT_VIDEO;
 #ifdef __unix__
     SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
 #endif
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, config.inhibit_os_screensaver ? "0" : "1");
 
     // Initialize SDL
-    if (SDL_Init(sdl_flags) < 0)
+    if (!SDL_Init(sdl_flags))
         log_fatal("Could not initialize SDL\n%s", SDL_GetError());
 
-    SDL_GetDesktopDisplayMode(0, &display_mode);
+    // The screen size is the primary display's desktop mode: SDL3 has no display 0. Interim, until
+    // Task 1.6 takes it from the window's pixels (spec section 1, item 9). A mode that cannot be read
+    // leaves display_mode zero, as SDL2's failed call did
+    const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
+    if (mode != NULL)
+        display_mode = *mode;
     geo.screen_width = display_mode.w;
     geo.screen_height = display_mode.h;
 
     // SDL reports 0 when the display does not say (Xvfb, some VMs and remote desktops), and
     // every timing below divides by the rate: create_window() reads it again from display_mode
-    if (display_mode.refresh_rate <= 0) {
+    if (display_mode.refresh_rate <= 0.0f) {
         log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
-        display_mode.refresh_rate = DEFAULT_REFRESH_RATE;
+        display_mode.refresh_rate = (float) DEFAULT_REFRESH_RATE;
     }
-    refresh_period = 1000 / (Uint32) display_mode.refresh_rate;
+    refresh_period = 1000 / (Uint32) display_refresh_rate();
     geo.screen_margin = (int) (SCREEN_MARGIN * (float) geo.screen_height);
     geo.title_min_size = (int) (TITLE_MIN_SIZE * (float) geo.screen_height + 0.5F);
 }
 
-// A function to tell whether the renderer really presents with VSync. Before SDL 2.26 nothing
-// stands in for a VSync the driver refuses: the OpenGL renderer then reports none, and the software
-// renderer reports VSync it does not give.
+// A function to tell whether the renderer really presents with VSync, by what SDL3 says it runs with.
+// Interim: Task 1.5 re-bases the VSync check per renderer
 static bool renderer_vsync()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
@@ -276,14 +283,10 @@ static bool renderer_vsync()
     if (refused != NULL)
         return strcmp(refused, "off") == 0;
 #endif
-    SDL_RendererInfo info;
-    if (renderer == NULL || SDL_GetRendererInfo(renderer, &info) != 0 || !(info.flags & SDL_RENDERER_PRESENTVSYNC))
+    int vsync = 0;
+    if (renderer == NULL || !SDL_GetRenderVSync(renderer, &vsync))
         return false;
-    SDL_version version;
-    SDL_GetVersion(&version);
-    if (version.major == 2 && version.minor < 26 && strcmp(info.name, "software") == 0)
-        return false;
-    return true;
+    return vsync != 0;
 }
 
 // A function to find out whether the renderer gives the VSync wanted, and say so; without it,
@@ -300,12 +303,12 @@ static void check_vsync()
 
 // A function to work out the frame timing from VSync and FPSLimit, live: VSync, or the FPS limit's
 // own frame time when it is off and the limit lies between the minimum and the display's rate
-// (otherwise VSync, as always). The settings stay as written; the renderer follows (SDL 2.0.18).
+// (otherwise VSync, as always). The settings stay as written; the renderer follows (SDL_SetRenderVSync).
 // The gamepad's repeat, the slideshow's fade and the screensaver's dim are timed in frames, so
 // they are worked out again too.
 void apply_frame_timing()
 {
-    int rate = display_mode.refresh_rate;
+    int rate = display_refresh_rate();
     bool wanted = config.vsync || config.fps_limit < MIN_FPS_LIMIT || config.fps_limit > rate;
     bool changed = wanted != vsync_wanted;
     vsync_wanted = wanted;
@@ -330,7 +333,7 @@ void apply_frame_timing()
     // The renderer is asked only when the wish changes, so one that refused VSync is not asked, or
     // logged, again for each FPSLimit change. A failure to switch counts as a refusal.
     if (renderer != NULL && changed) {
-        if (SDL_SetRenderVSync(renderer, wanted ? 1 : 0) != 0)
+        if (!SDL_SetRenderVSync(renderer, wanted ? 1 : 0))
             log_error("Could not turn VSync %s\n%s", wanted ? "on" : "off", SDL_GetError());
         check_vsync();
     }
@@ -356,35 +359,31 @@ void apply_default_menu()
 // A function to create the window and renderer
 static void create_window()
 {
-    window = SDL_CreateWindow(PROJECT_NAME, 0, 0,
-                              SDL_WINDOW_FULLSCREEN_DESKTOP);
+    window = SDL_CreateWindow(PROJECT_NAME, 0, 0, SDL_WINDOW_FULLSCREEN);
     if (window == NULL)
         log_fatal("Could not create SDL Window\n%s", SDL_GetError());
-    SDL_ShowCursor(SDL_DISABLE);
+    SDL_HideCursor();
 
-    // Create HW accelerated renderer, get screen resolution for geometry calculations
+    // The renderer from the platform's list, Vulkan first: SDL takes the first that works (spec
+    // section 3). Interim: Task 1.5 moves this into create_renderer(), with SDL_RENDER_DRIVER and
+    // the Renderer: lines
     apply_frame_timing();
-    Uint32 renderer_flags = SDL_RENDERER_ACCELERATED;
-    if (vsync_wanted)
-        renderer_flags |= SDL_RENDERER_PRESENTVSYNC;
-    renderer = SDL_CreateRenderer(window, NULL, renderer_flags);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+#ifdef _WIN32
+    renderer = SDL_CreateRenderer(window, "vulkan,direct3d12,direct3d11,opengl");
+#else
+    renderer = SDL_CreateRenderer(window, "vulkan,opengl");
+#endif
     if (renderer == NULL)
         log_fatal("Could not initialize renderer\n%s", SDL_GetError());
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderVSync(renderer, vsync_wanted ? 1 : 0);   // A refusal is check_vsync()'s to report
 
-    // Which video driver and renderer SDL chose: X11 or Wayland, OpenGL or software
-    SDL_RendererInfo renderer_info;
-    if (SDL_GetRendererInfo(renderer, &renderer_info) == 0)
-        log_debug("Video: SDL's %s driver, the %s renderer", SDL_GetCurrentVideoDriver(), renderer_info.name);
+    // Which video driver and renderer SDL chose: X11 or Wayland, Vulkan or OpenGL
+    log_debug("Video: SDL's %s driver, the %s renderer", SDL_GetCurrentVideoDriver(), SDL_GetRendererName(renderer));
     check_vsync();
 
     // Set background color
     set_draw_color();
-
-#ifdef _WIN32
-    SDL_VERSION(&wm_info.version);
-    SDL_GetWindowWMInfo(window, &wm_info);
-#endif
 }
 
 // A function to bring a restart's fresh copy to the front, with the keyboard: on Windows the copy
@@ -400,14 +399,6 @@ static void raise_restarted_window()
     else
         log_error("Restart: Windows kept the window behind another, so it has no keyboard until it is brought to the front");
 #endif
-}
-
-// A function to initialize the SDL_image library
-static void init_sdl_image()
-{
-    int img_flags = IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_WEBP;
-    if (!(IMG_Init(img_flags) & img_flags))
-        log_fatal("Could not initialize SDL_image\n%s", SDL_GetError());
 }
 
 // A function to set the color of the renderer
@@ -445,7 +436,7 @@ void refresh_effective()
 // A function to initialize SDL's TTF subsystem and open the title font
 static void init_sdl_ttf()
 {
-    if (TTF_Init() == -1)
+    if (!TTF_Init())
         log_fatal("Could not initialize SDL_ttf\n%s", SDL_GetError());
 
     title_info = (TextInfo) {
@@ -513,7 +504,6 @@ static void cleanup()
 
     // Quit subsystems
     SDL_Quit();
-    IMG_Quit();
 
     // Close every title font while SDL_ttf is still open (stop_clock() closed the clock's)
     title_fonts_free();
@@ -585,24 +575,24 @@ static bool menu_key(SDL_Keycode keycode)
 
 // A function to handle key presses from keyboard; `repeat` marks the keyboard's own repeats of a
 // held key
-static void handle_keypress(SDL_Keysym *key, bool repeat)
+static void handle_keypress(SDL_Keycode key, bool repeat)
 {
     if (config.debug)
-        log_debug("Key %s (#%X) detected", SDL_GetKeyName(key->sym), key->sym);
+        log_debug("Key %s (#%X) detected", SDL_GetKeyName(key), key);
 
     // A capture takes every key, and the 10 s the key that confirms them, before any other meaning
-    if (settings_is_open() && settings_raw_key(key->sym, repeat))
+    if (settings_is_open() && settings_raw_key((int) key, repeat))
         return;
 
     // A held Menu key opens (or closes) settings once: its repeats would strobe them
-    if (repeat && menu_key(key->sym))
+    if (repeat && menu_key(key))
         return;
 
     // While settings are open, the built-in keys are their commands; other keys run their hotkey,
     // which execute_command() hands to settings (and settings ignore unless it is one of theirs)
     if (settings_is_open()) {
         const char *command = NULL;
-        switch (key->sym) {
+        switch (key) {
             case SDLK_LEFT:
                 command = SCMD_LEFT;
                 break;
@@ -622,7 +612,7 @@ static void handle_keypress(SDL_Keysym *key, bool repeat)
                 command = SCMD_BACK;
                 break;
             default:
-                if (menu_key(key->sym))
+                if (menu_key(key))
                     command = SCMD_SETTINGS;
                 break;
         }
@@ -634,13 +624,13 @@ static void handle_keypress(SDL_Keysym *key, bool repeat)
 
     // Check default keys. Up and Down give way to a hotkey bound to the same key, so an
     // existing config's binding keeps working after the upgrade.
-    if (key->sym == SDLK_LEFT)
+    if (key == SDLK_LEFT)
         move_selection(LAYOUT_LEFT);
-    else if (key->sym == SDLK_RIGHT)
+    else if (key == SDLK_RIGHT)
         move_selection(LAYOUT_RIGHT);
-    else if ((key->sym == SDLK_UP || key->sym == SDLK_DOWN) && !hotkey_bound(key->sym))
-        move_selection(key->sym == SDLK_UP ? LAYOUT_UP : LAYOUT_DOWN);
-    else if (key->sym == SDLK_RETURN) {
+    else if ((key == SDLK_UP || key == SDLK_DOWN) && !hotkey_bound(key))
+        move_selection(key == SDLK_UP ? LAYOUT_UP : LAYOUT_DOWN);
+    else if (key == SDLK_RETURN) {
         log_debug("Selected Entry:\n"
             "Title: %s\n"
             "Icon Path: %s\n"
@@ -652,17 +642,17 @@ static void handle_keypress(SDL_Keysym *key, bool repeat)
         
         execute_command(current_entry->cmd);
     }
-    else if (key->sym == SDLK_BACKSPACE)
+    else if (key == SDLK_BACKSPACE)
         load_back_menu(current_menu);
 
     // The Menu key opens settings, unless a hotkey has it
-    else if (menu_key(key->sym))
+    else if (menu_key(key))
         execute_command(SCMD_SETTINGS);
 
     //Check hotkeys
     else {
         for (Hotkey *i = hotkeys; i != NULL; i = i->next) {
-            if (key->sym == i->keycode) {
+            if (key == i->keycode) {
                 // A hotkey for :settings acts once however long it is held, as the Menu key does
                 if (!repeat || strcmp(i->cmd, SCMD_SETTINGS) != 0)
                     execute_command(i->cmd);
@@ -788,14 +778,12 @@ static void start_screensaver()
         log_error("Invalid screensaver intensity value, so the screensaver was not started");
         return;
     }
-    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width,
-                                             geo.screen_height,
-                                             SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width, geo.screen_height, SDL_PIXELFORMAT_ARGB8888);
     if (surface == NULL) {
         log_error("Could not start the screensaver\n%s", SDL_GetError());
         return;
     }
-    SDL_FillSurfaceRect(surface, NULL, SDL_MapRGBA(surface->format, 0, 0, 0, 0xFF));
+    SDL_FillSurfaceRect(surface, NULL, SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0xFF));
     screensaver = malloc(sizeof(Screensaver));
     screensaver->alpha_end_value = (float) eff.screensaver_alpha;
     screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
@@ -845,14 +833,12 @@ static void start_overlay()
 {
     if (!config.background_overlay || background_overlay != NULL)
         return;
-    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width,
-                                             geo.screen_height,
-                                             SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width, geo.screen_height, SDL_PIXELFORMAT_ARGB8888);
     if (surface == NULL) {
         log_error("Could not start the overlay\n%s", SDL_GetError());
         return;
     }
-    SDL_FillSurfaceRect(surface, NULL, SDL_MapRGBA(surface->format,
+    SDL_FillSurfaceRect(surface, NULL, SDL_MapSurfaceRGBA(surface,
         eff.overlay_color.r, eff.overlay_color.g, eff.overlay_color.b, eff.overlay_color.a));
     background_overlay = load_texture(surface);
     log_debug("Overlay started");
@@ -1431,13 +1417,13 @@ void draw_scene(bool preview)
             if (layout_can_scroll(&layout, count, position, LAYOUT_RIGHT))
                 draw_texture(renderer, scroll->texture, NULL, &scroll->rect_right);
             if (layout_can_scroll(&layout, count, position, LAYOUT_LEFT))
-                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_left, 0, NULL, SDL_FLIP_HORIZONTAL);
+                draw_texture_rotated(renderer, scroll->texture, &scroll->rect_left, 0, SDL_FLIP_HORIZONTAL);
         }
         else {
             if (layout_can_scroll(&layout, count, position, LAYOUT_UP))
-                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_up, 270.0, NULL, SDL_FLIP_NONE);
+                draw_texture_rotated(renderer, scroll->texture, &scroll->rect_up, 270.0, SDL_FLIP_NONE);
             if (layout_can_scroll(&layout, count, position, LAYOUT_DOWN))
-                SDL_RenderTextureRotated(renderer, scroll->texture, NULL, &scroll->rect_down, 90.0, NULL, SDL_FLIP_NONE);
+                draw_texture_rotated(renderer, scroll->texture, &scroll->rect_down, 90.0, SDL_FLIP_NONE);
         }
     }
 
@@ -1522,6 +1508,15 @@ void present_frame()
             SDL_Delay(refresh_period - elapsed);
     }
 #ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_SIMULATE_VSYNC stands in for the display
+    // under a renderer that claims VSync and does not give it (lavapipe under Xvfb), as SDL2 simulated
+    // VSync there: the rest of the frame is waited out, and the frame is not counted as paced.
+    // Temporary: Task 1.5b paces such a renderer for real, and deletes this hook
+    if (!paced && getenv("STREAMFLEX_TEST_SIMULATE_VSYNC") != NULL) {
+        Uint32 elapsed = ticks_ms() - ticks.main;
+        if (elapsed < refresh_period)
+            SDL_Delay(refresh_period - elapsed);
+    }
     test_frame_report(paced);
     test_frame_after_key();
 #endif
@@ -1619,13 +1614,50 @@ static void execute_command(const char *command)
     free(cmd);
 }
 
+// SDL3 names joysticks by instance id alone. A device index, as the Device setting and the log name
+// one, is a joystick's place in the list SDL_GetJoysticks() gives now, as SDL2's device index was.
+// A function to get the joystick at a device index now; 0, which no joystick has, when there is none
+static SDL_JoystickID joystick_at(int device_index)
+{
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    SDL_JoystickID id = ids != NULL && device_index >= 0 && device_index < count ? ids[device_index] : 0;
+    SDL_free(ids);
+    return id;
+}
+
+// A function to find a joystick's device index now, from its instance id; -1 when it is gone
+static int joystick_index(SDL_JoystickID id)
+{
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    int index = -1;
+    for (int i = 0; ids != NULL && i < count && index < 0; i++) {
+        if (ids[i] == id)
+            index = i;
+    }
+    SDL_free(ids);
+    return index;
+}
+
+// A function to count the joysticks present
+static int joystick_count(void)
+{
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    if (ids == NULL)
+        return 0;
+    SDL_free(ids);
+    return count;
+}
+
 // A function to initialize the gamepad struct. Only the instance id is kept: a device index moves
 // whenever a pad before it goes, so it is looked up again each time the pad is opened.
 static void init_gamepad(Gamepad **gamepad, int device_index)
 {
     *gamepad = malloc(sizeof(Gamepad));
     **gamepad = (Gamepad) {
-        .id = (int) SDL_JoystickGetDeviceInstanceID(device_index),
+        .id = (int) joystick_at(device_index),
         .controller = NULL,
         .next = NULL,
         .previous = NULL,
@@ -1635,12 +1667,7 @@ static void init_gamepad(Gamepad **gamepad, int device_index)
 // A function to find a pad's device index now, from its instance id; -1 when it is gone
 static int gamepad_device_index(const Gamepad *gamepad)
 {
-    int count = SDL_NumJoysticks();
-    for (int i = 0; i < count; i++) {
-        if ((int) SDL_JoystickGetDeviceInstanceID(i) == gamepad->id)
-            return i;
-    }
-    return -1;
+    return joystick_index((SDL_JoystickID) gamepad->id);
 }
 
 // A function to open the SDL controller, at the pad's device index as it is now
@@ -1651,7 +1678,7 @@ static void open_controller(Gamepad *gamepad, bool raise_error)
         log_debug("Gamepad with instance id %i is no longer present, so it is not opened", gamepad->id);
         return;
     }
-    gamepad->controller = SDL_OpenGamepad(device_index);
+    gamepad->controller = SDL_OpenGamepad((SDL_JoystickID) gamepad->id);
     if (gamepad->controller == NULL) {
         if (raise_error)
             log_error("Could not open gamepad at device index %i", device_index);
@@ -1673,7 +1700,7 @@ static void connect_gamepad(int device_index, bool open, bool raise_error)
 {
     if (device_index >= 0) {
         Gamepad *gamepad = NULL;
-        SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device_index);
+        SDL_JoystickID id = joystick_at(device_index);
         for (gamepad = gamepads; gamepad != NULL; gamepad = gamepad->next) {
             if (gamepad->id == (int) id)
                 break;
@@ -1736,37 +1763,36 @@ static void disconnect_gamepad(int id, bool disconnect, bool remove)
 
 #ifdef STREAMFLEX_TEST_HOOKS
 static SDL_Joystick *test_pad = NULL;   // The harness's virtual gamepad, while attached
-static int test_pad_index = -1;
-static SDL_JoystickID test_swap[3] = { -1, -1, -1 };   // STREAMFLEX_TEST_PAD_SWAP's pads A, B and C
-static SDL_JoystickID test_plug = -1;   // STREAMFLEX_TEST_PAD_PLUG's pad, while it is plugged in
+static SDL_JoystickID test_pad_id = 0;  // Its instance id; 0, which no joystick has, while none is attached
+static SDL_JoystickID test_swap[3] = { 0, 0, 0 };   // STREAMFLEX_TEST_PAD_SWAP's pads A, B and C
+static SDL_JoystickID test_plug = 0;    // STREAMFLEX_TEST_PAD_PLUG's pad, while it is plugged in
 static int test_swap_step = 0;
 static bool test_pad_file = false;      // STREAMFLEX_TEST_PAD's file was there last frame
 static int test_pad_frames = 0;         // Frames STREAMFLEX_TEST_PAD_FRAMES's press has left
+
+// A function only the headless harness builds: attach a virtual gamepad with every button and axis
+// SDL3 has, which SDL maps to them in their order (its masks left 0, SDL_virtualjoystick.c:201-222 at
+// 3.2.10), so joystick button N is gamepad button N, as on SDL2. Its instance id; 0 when it failed.
+static SDL_JoystickID test_pad_attach_virtual(void)
+{
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = (Uint16) SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = (Uint16) SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = (Uint16) SDL_GAMEPAD_BUTTON_COUNT;
+    return SDL_AttachVirtualJoystick(&desc);
+}
 
 // A function only the headless harness builds: with STREAMFLEX_TEST_PAD set, it attaches the
 // virtual gamepad once the gamepad runs
 static void test_pad_attach()
 {
-    if (getenv("STREAMFLEX_TEST_PAD") == NULL || !gamepad_on || test_pad_index >= 0)
+    if (getenv("STREAMFLEX_TEST_PAD") == NULL || !gamepad_on || test_pad_id != 0)
         return;
-    test_pad_index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
-                                               SDL_GAMEPAD_AXIS_COUNT,
-                                               SDL_GAMEPAD_BUTTON_COUNT, 0);
-    test_pad = test_pad_index >= 0 ? SDL_OpenJoystick(test_pad_index) : NULL;
+    test_pad_id = test_pad_attach_virtual();
+    test_pad = test_pad_id != 0 ? SDL_OpenJoystick(test_pad_id) : NULL;
     if (test_pad == NULL)
         log_error("Test hook: no virtual gamepad\n%s", SDL_GetError());
-}
-
-// A function only the headless harness builds, to find a joystick's device index from its
-// instance id; -1 when it is gone
-static int test_pad_device(SDL_JoystickID id)
-{
-    int count = SDL_NumJoysticks();
-    for (int i = 0; i < count; i++) {
-        if (SDL_JoystickGetDeviceInstanceID(i) == id)
-            return i;
-    }
-    return -1;
 }
 
 // A function only the headless harness builds: with STREAMFLEX_TEST_PAD_SWAP set, it takes one step
@@ -1790,23 +1816,21 @@ static void test_pad_swap()
         return;
     }
     if (step == 2) {
-        int index = test_pad_device(test_swap[0]);
+        int index = joystick_index(test_swap[0]);
         if (index >= 0)
-            SDL_DetachVirtualJoystick(index);
-        test_swap[0] = -1;
+            SDL_DetachVirtualJoystick(test_swap[0]);
+        test_swap[0] = 0;
         log_debug("Test hook: pad A detached from device index %i", index);
         return;
     }
     int slot = step == 3 ? 2 : step;
-    int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
-                                          SDL_GAMEPAD_AXIS_COUNT,
-                                          SDL_GAMEPAD_BUTTON_COUNT, 0);
-    if (index < 0) {
+    SDL_JoystickID id = test_pad_attach_virtual();
+    if (id == 0) {
         log_error("Test hook: no virtual gamepad %s\n%s", names[slot], SDL_GetError());
         return;
     }
-    test_swap[slot] = SDL_JoystickGetDeviceInstanceID(index);
-    log_debug("Test hook: pad %s attached at device index %i, instance id %i", names[slot], index, (int) test_swap[slot]);
+    test_swap[slot] = id;
+    log_debug("Test hook: pad %s attached at device index %i, instance id %i", names[slot], joystick_index(id), (int) id);
 }
 
 // A function only the headless harness builds: with STREAMFLEX_TEST_PAD_PLUG set, a virtual pad is
@@ -1818,22 +1842,19 @@ static void test_pad_plug()
     if (plug == NULL || !gamepad_on)
         return;
     bool wanted = file_exists(plug);
-    if (wanted && test_plug < 0) {
-        int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMEPAD,
-                                              SDL_GAMEPAD_AXIS_COUNT,
-                                              SDL_GAMEPAD_BUTTON_COUNT, 0);
-        if (index < 0) {
+    if (wanted && test_plug == 0) {
+        SDL_JoystickID id = test_pad_attach_virtual();
+        if (id == 0) {
             log_error("Test hook: no virtual gamepad to plug in\n%s", SDL_GetError());
             return;
         }
-        test_plug = SDL_JoystickGetDeviceInstanceID(index);
-        log_debug("Test hook: pad plugged in at device index %i", index);
+        test_plug = id;
+        log_debug("Test hook: pad plugged in at device index %i", joystick_index(id));
     }
-    else if (!wanted && test_plug >= 0) {
-        int index = test_pad_device(test_plug);
-        if (index >= 0)
-            SDL_DetachVirtualJoystick(index);
-        test_plug = -1;
+    else if (!wanted && test_plug != 0) {
+        if (joystick_index(test_plug) >= 0)
+            SDL_DetachVirtualJoystick(test_plug);
+        test_plug = 0;
         log_debug("Test hook: pad unplugged");
     }
 }
@@ -1866,10 +1887,9 @@ static void test_pad_update()
     const char *name = getenv("STREAMFLEX_TEST_PAD_BUTTON");
     SDL_GamepadButton button = name != NULL ? SDL_GetGamepadButtonFromString(name) : SDL_GAMEPAD_BUTTON_START;
     SDL_GamepadAxis axis = button == SDL_GAMEPAD_BUTTON_INVALID ? SDL_GetGamepadAxisFromString(name)
-                                                                        : SDL_GAMEPAD_AXIS_INVALID;
+                                                                : SDL_GAMEPAD_AXIS_INVALID;
     if (test_pad != NULL && button != SDL_GAMEPAD_BUTTON_INVALID)
-        SDL_SetJoystickVirtualButton(test_pad, button,
-                                     pressed ? true : false);
+        SDL_SetJoystickVirtualButton(test_pad, button, pressed);
     else if (test_pad != NULL && axis != SDL_GAMEPAD_AXIS_INVALID)
         SDL_SetJoystickVirtualAxis(test_pad, axis, pressed ? SDL_JOYSTICK_AXIS_MAX : 0);
 }
@@ -1879,20 +1899,18 @@ static void test_pad_stop()
 {
     if (test_pad != NULL)
         SDL_CloseJoystick(test_pad);
-    if (test_pad_index >= 0)
-        SDL_DetachVirtualJoystick(test_pad_index);
+    if (test_pad_id != 0)
+        SDL_DetachVirtualJoystick(test_pad_id);
     test_pad = NULL;
-    test_pad_index = -1;
+    test_pad_id = 0;
     // The plugged pad goes with the subsystem; test_pad_plug() plugs it in again once it restarts
-    int plugged = test_plug >= 0 ? test_pad_device(test_plug) : -1;
-    if (plugged >= 0)
-        SDL_DetachVirtualJoystick(plugged);
-    test_plug = -1;
+    if (test_plug != 0 && joystick_index(test_plug) >= 0)
+        SDL_DetachVirtualJoystick(test_plug);
+    test_plug = 0;
     for (int i = 0; i < 3; i++) {
-        int index = test_swap[i] >= 0 ? test_pad_device(test_swap[i]) : -1;
-        if (index >= 0)
-            SDL_DetachVirtualJoystick(index);
-        test_swap[i] = -1;
+        if (test_swap[i] != 0 && joystick_index(test_swap[i]) >= 0)
+            SDL_DetachVirtualJoystick(test_swap[i]);
+        test_swap[i] = 0;
     }
 }
 #endif
@@ -1925,10 +1943,9 @@ bool gamepad_connected()
 // Starting the subsystem also queues a connect event for each, which then finds the pad open already.
 static void connect_present_pads()
 {
-    int count = SDL_NumJoysticks();
+    int count = joystick_count();
     for (int i = 0; i < count; i++) {
-        if (/* FIXME MIGRATION: check for valid instance */
-            SDL_IsGamepad(GetJoystickInstanceFromIndex(i)) == true && (config.gamepad_device < 0 || config.gamepad_device == i))
+        if (SDL_IsGamepad(joystick_at(i)) && (config.gamepad_device < 0 || config.gamepad_device == i))
             connect_gamepad(i, !state.application_running, true);
     }
 }
@@ -1940,7 +1957,7 @@ static void start_gamepad()
     static bool mappings_loaded = false;
     if (!config.gamepad_enabled || gamepad_on)
         return;
-    if (SDL_InitSubSystem(SDL_INIT_GAMEPAD) < 0) {
+    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
         log_error("Could not start the gamepad\n%s", SDL_GetError());
         return;
     }
@@ -1997,10 +2014,8 @@ int gamepad_pressed_label()
             if (pad->controller == NULL)
                 continue;
             bool held = control->type == TYPE_BUTTON
-                        ? SDL_GetGamepadButton(pad->controller,
-                                                      (SDL_GamepadButton) control->index) != 0
-                        : (control->type == TYPE_AXIS_POS ? 1 : -1) * SDL_GetGamepadAxis(pad->controller,
-                                                                                                (SDL_GamepadAxis) control->index) > GAMEPAD_DEADZONE;
+                        ? SDL_GetGamepadButton(pad->controller, (SDL_GamepadButton) control->index)
+                        : (control->type == TYPE_AXIS_POS ? 1 : -1) * SDL_GetGamepadAxis(pad->controller, (SDL_GamepadAxis) control->index) > GAMEPAD_DEADZONE;
             if (held)
                 return i;
         }
@@ -2256,7 +2271,7 @@ static inline void pre_launch()
 // Initialize exit hotkey for Windows
 #ifdef _WIN32
     if (has_exit_hotkey())
-        SDL_SetEventEnabled(SDL_EVENT_SYSWM, true);
+        listen_exit_hotkey(true);
 #endif
 }
 
@@ -2277,7 +2292,7 @@ static inline void post_launch()
         set_draw_color();
 
 #ifdef _WIN32
-    SDL_SetEventEnabled(SDL_EVENT_SYSWM, false);
+    listen_exit_hotkey(false);
     if (background_shown == BACKGROUND_TRANSPARENT)
         hide_cursor(current_entry);
 #endif
@@ -2290,7 +2305,7 @@ static inline void post_launch()
 static void retry_exit_hotkey_events(bool at_once)
 {
     if (retry_exit_hotkey(at_once) && state.application_running)
-        SDL_SetEventEnabled(SDL_EVENT_SYSWM, true);
+        listen_exit_hotkey(true);
 }
 #endif
 
@@ -2375,21 +2390,29 @@ void restart_streamflex(const char *names)
 // A function to print the version and other info to command line
 void print_version(FILE *stream)
 {
-    SDL_version sdl_version;
-    SDL_GetVersion(&sdl_version);
-    const SDL_version *img_version = IMG_Linked_Version();
-    const SDL_version *ttf_version = TTF_Linked_Version();
+    int sdl_version = SDL_GetVersion();
+    int img_version = IMG_Version();
+    int ttf_version = TTF_Version();
     fprintf(stream, PROJECT_NAME " version " PROJECT_VERSION ", using:" endline);
-    fprintf(stream, "  SDL       %u.%u.%u" endline, sdl_version.major, sdl_version.minor, sdl_version.patch);
-    fprintf(stream, "  SDL_image %u.%u.%u" endline, img_version->major, img_version->minor, img_version->patch);
-    fprintf(stream, "  SDL_ttf   %u.%u.%u" endline, ttf_version->major, ttf_version->minor, ttf_version->patch);
+    fprintf(stream, "  SDL       %d.%d.%d" endline, SDL_VERSIONNUM_MAJOR(sdl_version), SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+    fprintf(stream, "  SDL_image %d.%d.%d" endline, SDL_VERSIONNUM_MAJOR(img_version), SDL_VERSIONNUM_MINOR(img_version),
+            SDL_VERSIONNUM_MICRO(img_version));
+    fprintf(stream, "  SDL_ttf   %d.%d.%d" endline, SDL_VERSIONNUM_MAJOR(ttf_version), SDL_VERSIONNUM_MINOR(ttf_version),
+            SDL_VERSIONNUM_MICRO(ttf_version));
 }
 
 int main(int argc, char *argv[]) 
 {
     int error;
     char *config_file_path = NULL;
-    config.exe_path = SDL_GetBasePath();
+    const char *base_path = SDL_GetBasePath();   // SDL3's own copy, freed at SDL_Quit; release_last() frees ours
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: SDL_GetBasePath() failing, as it can (05-sdl-results.sh)
+    if (getenv("STREAMFLEX_TEST_NO_BASE_PATH") != NULL)
+        base_path = NULL;
+#endif
+    config.exe_path = base_path != NULL ? strdup(base_path) : NULL;
     config_apply_defaults();
 
     // Keep the arguments as they are now, before getopt reorders them, for a restart to start with
@@ -2423,7 +2446,6 @@ int main(int argc, char *argv[])
 
     // Initialize SDL, verify all settings are in their allowable range
     init_sdl();
-    init_sdl_image();
     init_sdl_ttf();
     refresh_effective();
 
@@ -2486,79 +2508,77 @@ int main(int argc, char *argv[])
         test_pad_update();
 #endif
         while (SDL_PollEvent(&event)) {
-            switch(event.type) {
-                case SDL_EVENT_QUIT :
+            switch (event.type) {
+                case SDL_EVENT_QUIT:
                     quit(EXIT_SUCCESS);
                     break;
 
-                case SDL_EVENT_KEY_DOWN :
+                case SDL_EVENT_KEY_DOWN:
                     ticks.last_input = ticks.main;
-                    handle_keypress(&event.key.keysym, event.key.repeat != 0);
+                    handle_keypress(event.key.key, event.key.repeat);
 #ifdef STREAMFLEX_TEST_HOOKS
                     test_key_undrawn = true;
 #endif
                     break;
 
-                case SDL_EVENT_KEY_UP :
+                case SDL_EVENT_KEY_UP:
                     if (settings_is_open())
-                        settings_raw_release(event.key.key);
+                        settings_raw_release((int) event.key.key);
                     break;
 
-                case SDL_EVENT_MOUSE_BUTTON_DOWN :
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
                     if (config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
                         ticks.last_input = ticks.main;
                         execute_command(current_entry->cmd);
                     }
                     break;
 
-                case SDL_EVENT_JOYSTICK_ADDED :
-                    if (gamepad_on && /* FIXME MIGRATION: check for valid instance */
-                        SDL_IsGamepad(GetJoystickInstanceFromIndex(event.jdevice.which)) == true &&
-                        (config.gamepad_device < 0 || config.gamepad_device == event.jdevice.which))
-                        connect_gamepad(event.jdevice.which, !state.application_running, true);
+                case SDL_EVENT_JOYSTICK_ADDED: {
+                    // `which` is the instance id in SDL3; the Device setting counts device indexes
+                    int index = joystick_index(event.jdevice.which);
+                    if (gamepad_on && index >= 0 && SDL_IsGamepad(event.jdevice.which) &&
+                        (config.gamepad_device < 0 || config.gamepad_device == index))
+                        connect_gamepad(index, !state.application_running, true);
                     settings_pads_changed();   // The Device row names every pad present, while settings are open
                     break;
+                }
 
-                case SDL_EVENT_JOYSTICK_REMOVED :
+                case SDL_EVENT_JOYSTICK_REMOVED:
                     // `which` is the instance id here: only a pad in the list is removed, whatever Device says
                     log_debug("Gamepad disconnected");
-                    disconnect_gamepad(event.jdevice.which, true, true);
+                    disconnect_gamepad((int) event.jdevice.which, true, true);
                     settings_pads_changed();
                     break;
 
-                case SDL_WINDOWEVENT:
-                    if (event.window.event == SDL_EVENT_WINDOW_FOCUS_LOST) {
-                        log_debug("Lost keyboard focus");
-                        state.has_focus = false;
-                        if (state.application_launching) {
-                            log_debug("Application detected");
-                            state.application_launching = false;
-                            state.application_running = true;
-                            pre_launch();
-                        }
-#ifdef _WIN32
-                        // Sometimes the launcher will lose focus on Windows when autostarting
-                        // So if we lose the window focus within 10 seconds of the launcher starting
-                        // we will grab back th Window focus. This is a bit of a hack
-                        else if (ticks.main - ticks.program_start < 10000)
-                            set_foreground_window();
-#endif
+                case SDL_EVENT_WINDOW_FOCUS_LOST:
+                    log_debug("Lost keyboard focus");
+                    state.has_focus = false;
+                    if (state.application_launching) {
+                        log_debug("Application detected");
+                        state.application_launching = false;
+                        state.application_running = true;
+                        pre_launch();
                     }
-                    else if (event.window.event == SDL_EVENT_WINDOW_FOCUS_GAINED) {
-                        log_debug("Gained keyboard focus");
-                        state.has_focus = true;
 #ifdef _WIN32
-                        retry_exit_hotkey_events(true);   // The application that held its key may have just quit
+                    // Sometimes the launcher will lose focus on Windows when autostarting
+                    // So if we lose the window focus within 10 seconds of the launcher starting
+                    // we will grab back th Window focus. This is a bit of a hack
+                    else if (ticks.main - ticks.program_start < 10000)
+                        set_foreground_window();
 #endif
-                    }
-                    else if (event.window.event == SDL_EVENT_WINDOW_MOUSE_LEAVE)
-                        log_debug("Lost mouse focus");
                     break;
+
+                case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                    log_debug("Gained keyboard focus");
+                    state.has_focus = true;
 #ifdef _WIN32
-                case SDL_EVENT_SYSWM :
-                    check_exit_hotkey(event.syswm.msg);
-                    break;
+                    retry_exit_hotkey_events(true);   // The application that held its key may have just quit
 #endif
+                    break;
+
+                case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+                    log_debug("Lost mouse focus");
+                    break;
             }
         }
 

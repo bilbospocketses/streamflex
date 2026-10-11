@@ -146,7 +146,7 @@ static int text_width(TTF_Font *font, const char *text)
     int w = 0;
     int h = 0;
     if (text[0] != '\0')
-        TTF_GetStringSize(font, text, &w, &h);
+        TTF_GetStringSize(font, text, 0, &w, &h);
     return w;
 }
 
@@ -170,10 +170,10 @@ static CachedText *cached_text(TTF_Font *font, const char *text)
         free(entry->text);
         memset(entry, 0, sizeof(*entry));
     }
-    SDL_Surface *surface = TTF_RenderText_Blended(font, text, WHITE);
+    SDL_Surface *surface = TTF_RenderText_Blended(font, text, 0, WHITE);
     if (surface == NULL)
         return NULL;
-    entry->texture = SDL_CreateTextureFromSurface(renderer, surface);
+    entry->texture = surface_texture(surface);
     entry->w = surface->w;
     entry->h = surface->h;
     SDL_DestroySurface(surface);
@@ -224,11 +224,11 @@ static int draw_wrapped(TTF_Font *font, const char *text, int x, int y, int widt
 {
     if (text == NULL || text[0] == '\0' || width <= 0)
         return 0;
-    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, WHITE, (Uint32) width);
+    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
     int h = surface->h;
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Texture *texture = surface_texture(surface);
     SDL_Rect rect = { x, y, surface->w, surface->h };
     SDL_DestroySurface(surface);
     if (texture != NULL) {
@@ -280,17 +280,21 @@ static const char *refresh_name(SettingRefresh refresh)
 
 // A function to name the gamepads present for the Device row, by their device index now (the
 // launcher opens them by instance id, so an index is only good at the moment it is listed): every
-// joystick SDL lists while the gamepad runs, as SDL names it. A nameless one, or a failed count,
-// is the model's to describe ("Pad N", or none).
+// joystick SDL lists while the gamepad runs, as SDL names it. A nameless one, or a failed list, is
+// the model's to describe ("Pad N", or none).
 static void list_pads(void)
 {
     const char *names[SETTINGS_MAX_PADS] = { NULL };
-    int count = gamepad_running() ? SDL_NumJoysticks() : 0;
+    int count = 0;
+    SDL_JoystickID *ids = gamepad_running() ? SDL_GetJoysticks(&count) : NULL;
+    if (ids == NULL)
+        count = 0;
     if (count > SETTINGS_MAX_PADS)
         count = SETTINGS_MAX_PADS;
     for (int i = 0; i < count; i++)
-        names[i] = SDL_JoystickNameForIndex(i);
-    settings_set_pads(model, names, count);
+        names[i] = SDL_GetJoystickNameForID(ids[i]);
+    settings_set_pads(model, names, count);   // It copies the names
+    SDL_free(ids);
 }
 
 // A function to name the pads again after one was plugged in or pulled out, while settings are
@@ -584,7 +588,7 @@ static void poll_decode(bool wait)
             log_debug("Settings: the caption says %s for %s", CANNOT_OPEN, decode_path);
     }
     else if (strcmp(decode_path, wanted_path) == 0) {
-        SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, decode_surface);
+        SDL_Texture *texture = surface_texture(decode_surface);
         if (texture != NULL) {
             if (background_override != NULL)
                 SDL_DestroyTexture(background_override);
@@ -1176,7 +1180,7 @@ static int wrapped_height(TTF_Font *font, const char *text, int width)
 #ifdef STREAMFLEX_TEST_HOOKS
     measures++;   // Only the headless harness builds this: free_screen() logs the count
 #endif
-    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, WHITE, (Uint32) width);
+    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
     int h = surface->h;
@@ -1663,7 +1667,7 @@ void settings_open(void)
         .row_height = row_height, .column_width = column_width, .margin = margin
     };
     pickers_begin(&host);
-    bool targets = SDL_RenderTargetSupported(renderer);
+    bool targets = true;   // Every SDL3 renderer has render targets (README-migration, SDL_render.h)
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: it draws as a renderer without render targets would
     if (getenv("STREAMFLEX_TEST_NO_RENDER_TARGETS") != NULL)
@@ -1677,6 +1681,7 @@ void settings_open(void)
             log_error("Settings: no preview texture, the menu is drawn behind the settings instead\n%s", SDL_GetError());
         else {
             SDL_SetTextureBlendMode(preview, SDL_BLENDMODE_NONE);
+            SDL_SetTextureScaleMode(preview, SDL_SCALEMODE_LINEAR);
             log_debug("Settings: the preview is at %i,%i, %i x %i", preview_rect.x, preview_rect.y,
                 preview_rect.w, preview_rect.h);
         }

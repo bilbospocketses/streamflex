@@ -6,7 +6,6 @@
 #include <time.h>
 #include <getopt.h>
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_syswm.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "util.h"
@@ -528,34 +527,31 @@ void add_hotkey(const char *keycode, const char *cmd)
 // label of entry i is bindings_label(i), the one list of labels both read, so they cannot drift apart.
 // The table must hold one entry per label, which the assert below holds it to; each row names its label.
 static const struct gamepad_info GAMEPAD_INFO[] = {
-    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTX},               // LStickX-
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTX},               // LStickX+
-    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTY},               // LStickY-
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTY},               // LStickY+
-    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTX},              // RStickX-
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTX},              // RStickX+
-    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTY},              // RStickY-
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTY},              // RStickY+
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFT_TRIGGER},         // LTrigger
-    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},        // RTrigger
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_SOUTH},                 // ButtonA
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_EAST},                 // ButtonB
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_WEST},                 // ButtonX
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_NORTH},                 // ButtonY
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_BACK},              // ButtonBack
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_GUIDE},             // ButtonGuide
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_START},             // ButtonStart
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_STICK},         // ButtonLeftStick
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_STICK},
-            // ButtonRightStick
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
-          // ButtonLeftShoulder
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
-         // ButtonRightShoulder
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_UP},           // ButtonDPadUp
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_DOWN},         // ButtonDPadDown
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_LEFT},         // ButtonDPadLeft
-    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_RIGHT}         // ButtonDPadRight
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTX},              // LStickX-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTX},              // LStickX+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTY},              // LStickY-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTY},              // LStickY+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTX},             // RStickX-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTX},             // RStickX+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTY},             // RStickY-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTY},             // RStickY+
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFT_TRIGGER},       // LTrigger
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},      // RTrigger
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_SOUTH},            // ButtonA
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_EAST},             // ButtonB
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_WEST},             // ButtonX
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_NORTH},            // ButtonY
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_BACK},             // ButtonBack
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_GUIDE},            // ButtonGuide
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_START},            // ButtonStart
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_STICK},       // ButtonLeftStick
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_STICK},      // ButtonRightStick
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},    // ButtonLeftShoulder
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},   // ButtonRightShoulder
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_UP},          // ButtonDPadUp
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_DOWN},        // ButtonDPadDown
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_LEFT},        // ButtonDPadLeft
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_RIGHT}        // ButtonDPadRight
 };
 SDL_COMPILE_TIME_ASSERT(gamepad_info_labels, sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]) == BINDINGS_LABELS);
 

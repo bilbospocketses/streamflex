@@ -23,7 +23,7 @@ typedef struct {
 
 int init_svg(void);
 char *find_default_font(const char *font);
-TTF_Font *open_font_file(const char *path, int size, int face);   // open_font_face, refusing what is not a regular file
+TTF_Font *open_font_file(const char *path, int size, int face);   // open_font_face(), refusing what is not a regular file
 int load_font(TextInfo *info, const char *configured, int face, const char *default_font);
 bool font_file_found(const char *configured);   // There, as given or beside the executable, as load_font() looks
 void quit_svg(void);
@@ -43,3 +43,10 @@ SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rec
 TTF_Font *title_font(int size);
 void title_fonts_free(void);
 void title_fonts_keep(const int *sizes, int count);
+SDL_Texture *surface_texture(SDL_Surface *surface);   // Linear scaling set on every texture (no SDL3 hint does it)
+TTF_Font *open_font_face(const char *path, int size, int face);
+void draw_texture(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *src, const SDL_Rect *dst);
+void draw_texture_rotated(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *dst, double angle, SDL_FlipMode flip);
+void fill_rect(SDL_Renderer *r, const SDL_Rect *rect);
+void outline_rect(SDL_Renderer *r, const SDL_Rect *rect);
+void draw_line(SDL_Renderer *r, int x1, int y1, int x2, int y2);

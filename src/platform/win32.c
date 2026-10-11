@@ -6,7 +6,6 @@
 #include <psapi.h>
 #include <powrprof.h>
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_syswm.h>
 #include "../launcher.h"
 #include <launcher_config.h>
 #include "platform.h"
@@ -24,7 +23,7 @@ static UINT sdl_to_win32_keycode(SDL_Keycode keycode);
 static bool get_shutdown_privilege(void);
 
 extern Config config;
-extern SDL_SysWMinfo wm_info;
+extern SDL_Window *window;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
 static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
@@ -49,6 +48,13 @@ bool file_exists(const char *path)
 bool directory_exists(const char *path)
 {
     return fileio_is_dir(path);
+}
+
+// A function to get a window's HWND, from its SDL3 property (SDL3 has no SDL_SysWMinfo). It is read
+// each time: the OpenGL renderer replaces the native window when it starts (spec section 3)
+static HWND hwnd_of(SDL_Window *w)
+{
+    return (HWND) SDL_GetPointerProperty(SDL_GetWindowProperties(w), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
 }
 
 // A function that parses the command string into a file and parameters
@@ -117,12 +123,12 @@ static void parse_command(char *cmd, char *file, size_t file_size, char **params
 
 void set_foreground_window()
 {
-    SetForegroundWindow(wm_info.info.win.window);
+    SetForegroundWindow(hwnd_of(window));
 }
 
 void make_window_transparent()
 {
-    HWND hwnd = wm_info.info.win.window;
+    HWND hwnd = hwnd_of(window);
     SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hwnd,
         RGB(config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b),
@@ -134,7 +140,7 @@ void make_window_transparent()
 // A function to make the window solid again after a transparent background
 void make_window_opaque()
 {
-    HWND hwnd = wm_info.info.win.window;
+    HWND hwnd = hwnd_of(window);
     SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
 }
 
@@ -187,7 +193,7 @@ bool start_process(char *cmd, bool application)
     else {
         // Go down in the window stack so the launched application can take focus
         if (successful) {
-            HWND hwnd = wm_info.info.win.window;
+            HWND hwnd = hwnd_of(window);
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOREDRAW | SWP_NOSIZE | SWP_NOMOVE);
             ret = true;
         }
@@ -354,7 +360,7 @@ bool start_self(char **argv)
 // it allowed (make_self()); true when Windows put it in front
 bool take_foreground(void)
 {
-    HWND hwnd = wm_info.info.win.window;
+    HWND hwnd = hwnd_of(window);
     return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
 }
 
@@ -440,7 +446,7 @@ SDL_Keycode refused_exit_hotkey(const char **why)
 // debug log's list still names the hotkey the bindings count.
 void register_exit_hotkey()
 {
-    BOOL ret = RegisterHotKey(wm_info.info.win.window, 1, 0, exit_hotkey);
+    BOOL ret = RegisterHotKey(hwnd_of(window), 1, 0, exit_hotkey);
     if (!ret) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         refused_exit_code = exit_hotkey_code;
@@ -461,7 +467,7 @@ bool retry_exit_hotkey(bool at_once)
         return false;
     refused_exit_ticks = now;
     UINT key = sdl_to_win32_keycode(refused_exit_code);
-    if (!RegisterHotKey(wm_info.info.win.window, 1, 0, key)) {
+    if (!RegisterHotKey(hwnd_of(window), 1, 0, key)) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         return false;
     }
@@ -477,24 +483,40 @@ bool retry_exit_hotkey(bool at_once)
 void clear_exit_hotkey()
 {
     if (exit_hotkey)
-        UnregisterHotKey(wm_info.info.win.window, 1);
+        UnregisterHotKey(hwnd_of(window), 1);
     exit_hotkey = 0;
     refused_exit_code = 0;
     unused_exit_count = 0;
 }
 
-// A function to check if the exit hotkey was pressed, and close the active window if so
-void check_exit_hotkey(SDL_SysWMmsg *msg)
+static bool exit_hotkey_listening = false;   // While an app runs: its WM_HOTKEY then closes the app
+
+// A function SDL calls with each Windows message before it handles it (SDL3 has no SDL_SYSWMEVENT):
+// the exit hotkey's WM_HOTKEY, while an app runs, closes the window in front. SDL then handles every
+// message as it would have (true).
+static bool SDLCALL exit_hotkey_hook(void *userdata, MSG *msg)
 {
-    if (msg->msg.win.msg == WM_HOTKEY) {
+    UNUSED(userdata);
+    if (exit_hotkey_listening && msg->message == WM_HOTKEY) {
         log_debug("Exit hotkey detected");
         HWND hwnd = GetForegroundWindow();
-        if (hwnd == NULL) {
+        if (hwnd == NULL)
             log_error("Could not get top window");
-            return;
-        }
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
+        else
+            PostMessage(hwnd, WM_CLOSE, 0, 0);
     }
+    return true;
+}
+
+// A function to listen for the exit hotkey (on while an app runs) or stop; the first call sets the hook
+void listen_exit_hotkey(bool on)
+{
+    static bool hooked = false;
+    if (!hooked) {
+        SDL_SetWindowsMessageHook(exit_hotkey_hook, NULL);
+        hooked = true;
+    }
+    exit_hotkey_listening = on;
 }
 
 // A function to convert an SDL keycode to a WIN32 virtual keycode

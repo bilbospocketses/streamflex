@@ -2,7 +2,7 @@
 # StreamFlex headless checks. Builds the launcher with ASan and UBSan, starts a virtual X display,
 # runs fixture configs (some with key presses) and reads the debug log, the files they write and
 # the screen. Runs inside the image built from this folder's Dockerfile (Debian) or
-# Dockerfile.fedora (whose SDL2 is sdl2-compat over SDL3), with the repo mounted read-only at
+# Dockerfile.fedora (Fedora 44), with the repo mounted read-only at
 # /src and an output folder at /out. No step branches on the distribution: what differs between
 # the images is detected.
 #   run.sh <label>              every check in checks/, in name order
@@ -238,16 +238,40 @@ gallium=llvmpipe
 grep -qa softpipe "$mesa_driver" && gallium=softpipe
 echo "Mesa: $gallium, from $mesa_driver"
 
-# The leak pass preloads Mesa's driver into the launcher. Unpreloaded, libGL unloads it at exit,
-# before LeakSanitizer looks, so the few blocks the driver still holds (from context creation and
-# its first flush) lose their only pointers and read as leaks, with stacks in an unknown module.
-# A libgallium driver, which libGLX_mesa links, was clean without the preload (Fedora 44); it is
-# preloaded all the same, so both kinds of Mesa take one path. ASan must come first in the
-# preload list. Only the launcher gets the preload (the env after setarch): an ASan runtime in
-# setarch starts before randomization is off, and crashes. Whole stacks
-# (fast_unwind_on_malloc=0) reach our code through libraries built without frame pointers; that
-# is slower, so only this pass does it. It keeps setarch -R: the ASan build crashes at random
-# without it whether or not leaks are looked for.
+# Mesa's Vulkan driver, lavapipe, which the launcher's Vulkan-first renderer list uses: found from its
+# ICD file, which names the library. VK_DRIVER_FILES keeps the Vulkan loader to it alone, so no other
+# ICD in the image is tried first. lavapipe always uses LLVM's JIT (llvmpipe's; softpipe has no Vulkan).
+# Debian names the file lvp_icd.json, Fedora lvp_icd.<arch>.json
+lvp_icd=$(ls /usr/share/vulkan/icd.d/lvp_icd.json "/usr/share/vulkan/icd.d/lvp_icd.$(uname -m).json" 2> /dev/null | head -1)
+lvp_driver=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ICD"]["library_path"])' "$lvp_icd" 2> /dev/null)
+[ -f "$lvp_driver" ] || lvp_driver=$(ldconfig -p | awk -v name="$(basename "${lvp_driver:-none}")" '$1 == name { print $NF; exit }')
+vulkan_loader=$(ldconfig -p | awk '$1 == "libvulkan.so.1" { print $NF; exit }')
+[ -n "$lvp_icd" ] && [ -f "$lvp_driver" ] && [ -f "$vulkan_loader" ] \
+    || { echo "NO LAVAPIPE FOUND (ICD: '$lvp_icd', driver: '$lvp_driver', loader: '$vulkan_loader')"; exit 2; }
+echo "Vulkan: lavapipe, from $lvp_driver"
+# Exported, never set in TESTER's env below: env would set it again for every run, over a check's own
+# VK_DRIVER_FILES=... prefix (the OpenGL fallback runs hide Vulkan that way); setpriv, env and setarch
+# pass an exported variable through
+export VK_DRIVER_FILES="$lvp_icd"
+# lavapipe takes SDL's VSync and still presents as fast as it can (its X11 swapchain does not wait
+# for Xvfb), where SDL2 simulated VSync: the launcher waits out each frame as a display would, so
+# what a check times in frames takes the time it would on screen. Temporary: Task 1.5b removes it
+export STREAMFLEX_TEST_SIMULATE_VSYNC=1
+
+# The leak pass preloads Mesa's driver into the launcher. The Vulkan loader and lavapipe are
+# preloaded for the same reason: SDL unloads the loader when the renderer goes, and the loader
+# unloads lavapipe. Unpreloaded, libGL unloads it at exit, before LeakSanitizer looks, so the few
+# blocks the driver still holds (from context creation and its first flush) lose their only
+# pointers and read as leaks, with stacks in an unknown module. A libgallium driver, which
+# libGLX_mesa links, was clean without the preload (Fedora 44); it is preloaded all the same, so
+# both kinds of Mesa take one path. libX11 is preloaded for the same reason again: an SDL that
+# loads it at run time (Fedora's) unloads it at SDL_Quit, and the blocks its input method and
+# resource database keep from SDL_Init read as leaks; with OpenGL, libGL linked it and kept it, and
+# Vulkan does not. ASan must come first in the preload list. Only the launcher gets the preload
+# (the env after setarch): an ASan runtime in setarch starts before randomization is off, and
+# crashes. Whole stacks (fast_unwind_on_malloc=0) reach our code through libraries built without
+# frame pointers; that is slower, so only this pass does it. It keeps setarch -R: the ASan build
+# crashes at random without it whether or not leaks are looked for.
 asan_options=detect_leaks=0
 preload=()
 if [ "$fault" = leaks ]; then
@@ -256,7 +280,9 @@ if [ "$fault" = leaks ]; then
     # cannot preload
     libasan=$(ldd "$exe" | awk '$1 ~ /^libasan\.so/ { print $3; exit }')
     [ -f "$libasan" ] || { echo "NO ASAN RUNTIME TO PRELOAD"; exit 2; }
-    preload=(env "LD_PRELOAD=$libasan $mesa_driver")
+    libx11=$(ldconfig -p | awk '$1 == "libX11.so.6" { print $NF; exit }')
+    [ -f "$libx11" ] || { echo "NO LIBX11 TO PRELOAD"; exit 2; }
+    preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver $libx11")
 fi
 TESTER=(setpriv --reuid=tester --regid=tester --init-groups --
         env HOME=$TESTER_HOME DISPLAY=:99 ASAN_OPTIONS=$asan_options UBSAN_OPTIONS=print_stacktrace=1

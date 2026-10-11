@@ -53,6 +53,71 @@ void quit_svg()
     nsvgDeleteRasterizer(rasterizer);
 }
 
+// A function to make a texture from a surface, filtered linearly when it is drawn scaled, as SDL2's
+// SDL_HINT_RENDER_SCALE_QUALITY "1" asked for every texture. SDL3 has no such hint, and is linear by
+// default, but each texture is set anyway, whatever the default becomes (spec section 1, item 8).
+// NULL when the texture could not be made, with SDL's reason still in SDL_GetError()
+SDL_Texture *surface_texture(SDL_Surface *surface)
+{
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture != NULL)
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
+    return texture;
+}
+
+// A function to open a font file at a point size and face: SDL3_ttf takes the face as a property
+// (TTF_OpenFontIndex is gone, spec section 1, item 5)
+TTF_Font *open_font_face(const char *path, int size, int face)
+{
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetStringProperty(props, TTF_PROP_FONT_CREATE_FILENAME_STRING, path);
+    SDL_SetFloatProperty(props, TTF_PROP_FONT_CREATE_SIZE_FLOAT, (float) size);
+    SDL_SetNumberProperty(props, TTF_PROP_FONT_CREATE_FACE_NUMBER, face);
+    TTF_Font *font = TTF_OpenFontWithProperties(props);
+    SDL_DestroyProperties(props);
+    return font;
+}
+
+// The layout is in whole pixels and SDL3 draws with float rectangles. These convert at the draw call
+// only, a cast of whole numbers, so nothing lands half a pixel off (spec section 1, item 3). A NULL
+// rectangle is the whole texture, or the whole target, as in SDL.
+void draw_texture(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *src, const SDL_Rect *dst)
+{
+    SDL_FRect from, to;
+    if (src != NULL)
+        SDL_RectToFRect(src, &from);
+    if (dst != NULL)
+        SDL_RectToFRect(dst, &to);
+    SDL_RenderTexture(r, texture, src != NULL ? &from : NULL, dst != NULL ? &to : NULL);
+}
+
+void draw_texture_rotated(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *dst, double angle, SDL_FlipMode flip)
+{
+    SDL_FRect to;
+    SDL_RectToFRect(dst, &to);
+    SDL_RenderTextureRotated(r, texture, NULL, &to, angle, NULL, flip);
+}
+
+void fill_rect(SDL_Renderer *r, const SDL_Rect *rect)
+{
+    SDL_FRect area;
+    if (rect != NULL)
+        SDL_RectToFRect(rect, &area);
+    SDL_RenderFillRect(r, rect != NULL ? &area : NULL);
+}
+
+void outline_rect(SDL_Renderer *r, const SDL_Rect *rect)
+{
+    SDL_FRect area;
+    SDL_RectToFRect(rect, &area);
+    SDL_RenderRect(r, &area);
+}
+
+void draw_line(SDL_Renderer *r, int x1, int y1, int x2, int y2)
+{
+    SDL_RenderLine(r, (float) x1, (float) y1, (float) x2, (float) y2);
+}
+
 #define MAX_TITLE_FONTS 16
 
 // Title fonts by point size, for menus whose titles scale with their buttons
@@ -62,9 +127,8 @@ static struct {
 } title_fonts[MAX_TITLE_FONTS];
 static int title_font_count = 0;
 
-// A function to get the title font at a point size, opening it the first time. SDL_ttf 2.0.15
-// cannot resize an open font, so each size is its own; the cache keeps MAX_TITLE_FONTS of them
-// and closes the oldest to make room.
+// A function to get the title font at a point size, opening it the first time. Each size is its own
+// font; the cache keeps MAX_TITLE_FONTS of them and closes the oldest to make room.
 TTF_Font *title_font(int size)
 {
     for (int i = 0; i < title_font_count; i++) {
@@ -139,11 +203,10 @@ SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transitio
 
         // If the loaded image has no alpha channel (e.g. JPEG), create one
         // so that we can have transparency for the background transition
-        if (surface != NULL && surface->format->format == SDL_PIXELFORMAT_RGB24 && transition) {
-            SDL_Surface *tmp = SDL_CreateSurface(surface->w, surface->h,
-                                                 SDL_PIXELFORMAT_ARGB8888);
+        if (surface != NULL && surface->format == SDL_PIXELFORMAT_RGB24 && transition) {
+            SDL_Surface *tmp = SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_ARGB8888);
             if (tmp != NULL) {
-                Uint32 color = SDL_MapRGBA(tmp->format, 0, 0, 0, 0xFF);
+                Uint32 color = SDL_MapSurfaceRGBA(tmp, 0, 0, 0, 0xFF);
                 SDL_FillSurfaceRect(tmp, NULL, color);
                 SDL_BlitSurface(surface, NULL, tmp, NULL);
                 SDL_DestroySurface(surface);
@@ -235,7 +298,7 @@ SDL_Texture *load_texture(SDL_Surface *surface)
         return NULL;
 
     //Convert surface to screen format
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    texture = surface_texture(surface);
     if (texture == NULL)
         log_error("Could not create texture %s", SDL_GetError());
     SDL_DestroySurface(surface);
@@ -259,7 +322,7 @@ static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int 
 // converted copy, which replaces it.
 static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char *what)
 {
-    if (surface->format->format != SDL_PIXELFORMAT_RGBA32) {
+    if (surface->format != SDL_PIXELFORMAT_RGBA32) {
         SDL_Surface *converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
         if (converted == NULL) {
             log_error("Could not convert %s to keep it off the chroma key\n%s", what, SDL_GetError());
@@ -268,7 +331,7 @@ static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char
         SDL_DestroySurface(surface);
         surface = converted;
     }
-    if (SDL_LockSurface(surface) == 0) {
+    if (SDL_LockSurface(surface)) {
         keep_off_chroma_key(surface->pixels, surface->w, surface->h, surface->pitch, what);
         SDL_UnlockSurface(surface);
     }
@@ -329,14 +392,8 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     // Rasterize image
     nsvgRasterize(rasterizer, image, 0, 0, scale, pixel_buffer, width, height, pitch);
     keep_off_chroma_key(pixel_buffer, width, height, pitch, what);
-    SDL_Surface *surface = SDL_CreateRGBSurfaceFrom(pixel_buffer,
-                               width,
-                               height,
-                               32,
-                               pitch,
-                               COLOR_MASKS
-                           );
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Surface *surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32, pixel_buffer, pitch);
+    SDL_Texture *texture = surface_texture(surface);
     if (rect != NULL) {
         rect->w = width;
         rect->h = height;
@@ -487,9 +544,9 @@ int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo)
 static void truncate_to_fit(TTF_Font *font, char *text, int max_width, int *w, int *h)
 {
     utf8_truncate(text, *w, max_width);
-    TTF_GetStringSize(font, text, w, h);
+    TTF_GetStringSize(font, text, 0, w, h);
     while (*w > max_width && utf8_shorten(text))
-        TTF_GetStringSize(font, text, w, h);
+        TTF_GetStringSize(font, text, 0, w, h);
 }
 
 // A function to render text
@@ -503,7 +560,7 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     char *text_buffer = strdup(text);
 
     // Calculate size of the rendered title
-    TTF_GetStringSize(info->font, text_buffer, &w, &h);
+    TTF_GetStringSize(info->font, text_buffer, 0, &w, &h);
 
     // If title is too large to fit
     if (info->oversize_mode != OVERSIZE_NONE && w > info->max_width) {
@@ -523,7 +580,7 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
 
                 // The font's own rounding can leave it a pixel or two too wide: step down to the minimum
                 while (reduced_font != NULL) {
-                    TTF_GetStringSize(reduced_font, text_buffer, &w, &h);
+                    TTF_GetStringSize(reduced_font, text_buffer, 0, &w, &h);
                     if (w <= info->max_width || size <= info->min_size)
                         break;
                     TTF_CloseFont(reduced_font);
@@ -553,16 +610,16 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
         int shadow_offset = layout_shadow_offset(h);
         SDL_Surface *foreground = TTF_RenderText_Blended(output_font,
                                       text_buffer,
+                                      0,
                                       *info->color
                                   );
-        SDL_Surface *shadow = TTF_RenderText_Blended(output_font, 
-                                  text_buffer, 
+        SDL_Surface *shadow = TTF_RenderText_Blended(output_font,
+                                  text_buffer,
+                                  0,
                                   *info->shadow_color
                               );
-        surface = SDL_CreateSurface(foreground->w + shadow_offset,
-                                    foreground->h + shadow_offset,
-                                    SDL_PIXELFORMAT_ARGB8888);
-        Uint32 color = SDL_MapRGBA(surface->format, 0, 0, 0, 0);
+        surface = SDL_CreateSurface(foreground->w + shadow_offset, foreground->h + shadow_offset, SDL_PIXELFORMAT_ARGB8888);
+        Uint32 color = SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0);
         SDL_FillSurfaceRect(surface, NULL, color);
         SDL_Rect shadow_rect = {shadow_offset, shadow_offset, shadow->w, shadow->h};
         SDL_BlitSurface(shadow, NULL, surface, &shadow_rect);
@@ -574,6 +631,7 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     else
         surface = TTF_RenderText_Blended(output_font,
                       text_buffer,
+                      0,
                       *info->color
                   );
 
@@ -613,7 +671,11 @@ char *find_default_font(const char *font)
 {
     const char *prefixes[2];
     char fonts_exe_buffer[MAX_PATH_CHARS + 1];
-    prefixes[0] = join_paths(fonts_exe_buffer, sizeof(fonts_exe_buffer), 3, config.exe_path, PATH_ASSETS_EXE, PATH_FONTS_EXE);
+    // No base path (SDL_GetBasePath() failed): the folder beside the executable is unknown, so only
+    // where the packages install the fonts is searched (find_file() skips a NULL prefix)
+    prefixes[0] = config.exe_path != NULL
+                  ? join_paths(fonts_exe_buffer, sizeof(fonts_exe_buffer), 3, config.exe_path, PATH_ASSETS_EXE, PATH_FONTS_EXE)
+                  : NULL;
 #ifdef __unix__
     prefixes[1] = PATH_FONTS_SYSTEM;
 #else

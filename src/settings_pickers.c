@@ -17,7 +17,6 @@
 #include "util.h"
 #include "debug.h"
 #ifdef _WIN32
-#include <SDL3/SDL_syswm.h>
 #include "platform/platform.h"
 #endif
 
@@ -977,7 +976,7 @@ static void draw_color(int x, int top, int bottom)
     snprintf(digits, sizeof(digits), "%02X%02X%02X", color_pick.hex.r, color_pick.hex.g, color_pick.hex.b);
     int w = 0;
     int h = 0;
-    TTF_GetStringSize(host.font_row, "W", &w, &h);
+    TTF_GetStringSize(host.font_row, "W", 0, &w, &h);
     int step = w + pad;
     host.text(host.font_row, "#", x + pad, y, step, 255, false);
     for (int i = 0; i < 6; i++) {

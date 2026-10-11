@@ -93,9 +93,7 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
         return NULL;
     font_cache[oldest].face = face;
     font_cache[oldest].used = font_clock;
-    TTF_Font *font = open_font_face(path,
-                                    TTF_GetFontHeight(row_font) * FONT_SAMPLE_PERCENT / 100,
-                                    face);
+    TTF_Font *font = open_font_face(path, TTF_GetFontHeight(row_font) * FONT_SAMPLE_PERCENT / 100, face);
     SDL_Surface *surface = NULL;
 
     // A symbol font's name is drawn in the settings' font, not in its own symbols. A face counts as
@@ -117,11 +115,11 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
     }
     if (font != NULL) {
         SDL_Color white = { 0xFF, 0xFF, 0xFF, 0xFF };
-        surface = TTF_RenderText_Blended(font, name, white);
+        surface = TTF_RenderText_Blended(font, name, 0, white);
         TTF_CloseFont(font);
     }
     if (surface != NULL) {
-        font_cache[oldest].texture = SDL_CreateTextureFromSurface(renderer, surface);
+        font_cache[oldest].texture = surface_texture(surface);
         font_cache[oldest].w = surface->w;
         font_cache[oldest].h = surface->h;
         SDL_DestroySurface(surface);
@@ -214,7 +212,7 @@ static void read_font_file(const char *path, bool bundled)
     long faces = TTF_GetNumFontFaces(font);
     TTF_CloseFont(font);
     for (long i = 0; i < faces && i < 64; i++) {
-        TTF_Font *face = open_font_face(path, 12, i);
+        TTF_Font *face = open_font_face(path, 12, (int) i);
         if (face == NULL)
             continue;
         const char *family = TTF_GetFontFamilyName(face);

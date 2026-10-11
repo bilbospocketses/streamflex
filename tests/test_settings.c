@@ -1174,11 +1174,11 @@ static void test_other_pages(void)
     settings_command(state, SETTINGS_LEFT);
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_PICK);
 
-    // A failed count (SDL_NumJoysticks() is negative on error) names no pads
+    // A failed list (SDL_GetJoysticks() is NULL on error) names no pads
     settings_set_pads(state, NULL, -1);
     CHECK_INT(settings_pad_count(state), 0);
 
-    // A pad with no name (SDL_JoystickNameForIndex() gives NULL) is "Pad N", in the row and in the list
+    // A pad with no name (SDL_GetJoystickNameForID() gives NULL) is "Pad N", in the row and in the list
     static const char *const nameless[] = { NULL, "8BitDo Pro 2" };
     settings_set_pads(state, nameless, 2);
     settings_command(state, SETTINGS_LEFT);

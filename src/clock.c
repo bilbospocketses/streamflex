@@ -30,7 +30,7 @@ static void calculate_text_metrics(TTF_Font *font, Alignment alignment, const ch
 {
     int ymin = 0;
     int ymax = 0; 
-    // Zero for an empty text, or a glyph TTF_GlyphMetrics cannot measure (it then sets none of them)
+    // Zero for an empty text, or a glyph TTF_GetGlyphMetrics cannot measure (it then sets none of them)
     int xmin = 0, xmax = 0, xadvance = 0;
     int current_ymin = 0, current_ymax = 0;
     char *p = (char*) text;

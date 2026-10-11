@@ -51,7 +51,14 @@ static int init_log()
               "so the log goes to stderr\n", stderr);
     }
 #else
-    join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
+    if (config.exe_path != NULL)
+        join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
+    else {
+        // No base path (SDL_GetBasePath() failed): no folder beside the executable to keep a log
+        // file in, so the log goes to stderr
+        log_file = stderr;
+        fputs("No base path: SDL gives no folder for the executable, so the log goes to stderr\n", stderr);
+    }
 #endif
 
     // Open log; a restart's fresh copy goes on with the log the restart wrote to
@@ -367,18 +374,19 @@ void debug_slideshow(Slideshow *slideshow)
         log_debug("  %s", slideshow->images[slideshow->order[i]]);
 }
 
-// A function to debug the video settings
+// A function to debug the video settings. Interim: Task 1.5 moves the renderer's part to SDL3's
+// renderer properties (name, maximum texture size, VSync)
 void debug_video(SDL_Renderer *renderer, SDL_DisplayMode *display_mode)
 {
     log_debug("================== Video Information ===================\n");
     log_debug("Resolution:    %ix%i", display_mode->w, display_mode->h);
-    log_debug("Refresh rate:  %i Hz", display_mode->refresh_rate);
+    log_debug("Refresh rate:  %i Hz", (int) (display_mode->refresh_rate + 0.5f));
     log_debug("Video driver:  %s", SDL_GetCurrentVideoDriver());
     log_debug("");
-    SDL_RendererInfo info;
-    SDL_GetRendererInfo(renderer, &info);
+    const SDL_PixelFormat *formats = (const SDL_PixelFormat *) SDL_GetPointerProperty(
+        SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, NULL);
     log_debug("Supported Texture formats:");
-    for(size_t i = 0; i < info.num_texture_formats; i++)
-        log_debug("  %s", SDL_GetPixelFormatName(info.texture_formats[i]));
+    for (size_t i = 0; formats != NULL && formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++)
+        log_debug("  %s", SDL_GetPixelFormatName(formats[i]));
     log_debug("");
 }

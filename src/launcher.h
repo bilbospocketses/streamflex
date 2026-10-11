@@ -1,20 +1,6 @@
 #include "layout.h"
 #include "derive.h"
 
-// Color masking bit logic
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-#define RMASK 0xff000000
-#define GMASK 0x00ff0000
-#define BMASK 0x0000ff00
-#define AMASK 0x000000ff
-#else
-#define RMASK 0x000000ff
-#define GMASK 0x0000ff00
-#define BMASK 0x00ff0000
-#define AMASK 0xff000000
-#endif
-#define COLOR_MASKS RMASK, GMASK, BMASK, AMASK
-
 // Launcher parameters
 #define DEFAULT_REFRESH_RATE 60
 #define MIN_FPS_LIMIT 10
@@ -28,6 +14,14 @@
 #define APPLICATION_WAIT_PERIOD 100
 #define TITLE_MIN_SIZE 0.02F       // The readable minimum title size: 2% of the screen height
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
+
+// SDL3's SDL_GetTicks() counts milliseconds in 64 bits; StreamFlex keeps SDL2's 32-bit count, which
+// every tick field and every "now - then" below is written for (each difference survives the wrap at
+// 49.7 days, as it did on SDL2)
+static inline Uint32 ticks_ms(void)
+{
+    return (Uint32) SDL_GetTicks();
+}
 
 // Special commands
 #define SCMD_SELECT ":select"
