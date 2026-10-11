@@ -26,9 +26,11 @@ defaults:
   run:
     shell: bash
 env:
-  # vcpkg 2026.07.29. The previous pin (10b7a17) fetched getopt-win32 from a
-  # GitHub archive that now 404s, which broke the Windows build.
-  VCPKG_COMMITTISH: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+  # vcpkg master at 12788a7 (2026-10-06, "[sdl3-image] Update to 3.4.8"): the first commit with sdl3
+  # 3.4.18, sdl3-image 3.4.8 and sdl3-ttf 3.2.2. No vcpkg release carries them yet (2026.07.29's sdl3
+  # is 3.4.12). The overlay ports in vcpkg-overlays/ are copies of this commit's sdl3 and sdl3-ttf, so
+  # moving this pin means copying them again from the new commit.
+  VCPKG_COMMITTISH: 12788a7e255cc937fa3d30618e487e02a983d4ad
 
 # Read-only by default; only the release job widens its token.
 # All actions are pinned to commit SHAs (repo-level sha_pinning_required) with
@@ -110,6 +112,13 @@ jobs:
       - name: Build
         run: cmake --build build --target package --config ${{ env.CMAKE_BUILD_TYPE }}
 
+      # The zip and the exe it holds, by size: the release notes state what HarfBuzz costs the zip
+      # (spec section 2), measured against a build without it (plan Task 1.2b)
+      - name: Show the package size
+        shell: pwsh
+        run: |
+          Get-ChildItem build/*.zip, build/Release/streamflex.exe | ForEach-Object { '{0}: {1:N0} bytes' -f $_.Name, $_.Length }
+
       - name: Unit tests
         run: ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
 
@@ -143,12 +152,11 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # bookworm: bullseye is past end of life and its security mirror
-          # now 404s on package downloads. Every Docker Hub image here comes
-          # through mirror.gcr.io, Google's public Docker Hub mirror: Docker
-          # Hub rate-limits the runners' unauthenticated pulls.
+          # trixie: the oldest Debian with SDL3, whose 3.2.10 is the port's floor (spec section 2).
+          # Every Docker Hub image here comes through mirror.gcr.io, Google's public Docker Hub
+          # mirror: Docker Hub rate-limits the runners' unauthenticated pulls.
           - name: Debian
-            docker_image: mirror.gcr.io/library/debian:bookworm
+            docker_image: mirror.gcr.io/library/debian:trixie
             package_ext: .deb
 
     container:
@@ -164,7 +172,7 @@ jobs:
       - name: "Install dependencies"
         run: |
           if [[ "${{matrix.config.name}}" == "Debian" ]]; then
-            apt update && apt install -y build-essential file git cmake pkg-config libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libinih-dev
+            apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
           fi
 
       - name: Build
@@ -192,11 +200,9 @@ jobs:
           path: build/*${{matrix.config.package_ext}}
           if-no-files-found: error
 
-  # Native arm64 runner with a Debian bookworm container. This replaces the
-  # QEMU chroot into a 2022 Raspberry Pi OS (bullseye) image, which can no
-  # longer install packages now that bullseye is past end of life. Raspberry
-  # Pi OS is Debian-based and -DRPI=1 only changes the default config, so a
-  # bookworm arm64 build is the equivalent package.
+  # Native arm64 runner with a Debian trixie container. Raspberry Pi OS trixie is Debian-based and
+  # -DRPI=1 only changes the default config, so a trixie arm64 build is the equivalent package, built
+  # at SDL3's floor as the Debian one is.
   build_rpi:
     name: Raspberry Pi
     runs-on: ubuntu-24.04-arm
@@ -205,7 +211,7 @@ jobs:
 
     # Through mirror.gcr.io, as the Linux job's image.
     container:
-      image: mirror.gcr.io/library/debian:bookworm
+      image: mirror.gcr.io/library/debian:trixie
 
     env:
       CMAKE_BUILD_TYPE: Release
@@ -215,7 +221,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
-        run: apt update && apt install -y build-essential file git cmake pkg-config libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libinih-dev
+        run: apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
 
       - name: Build
         run: |
@@ -256,7 +262,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git cmake sdl2 sdl2_image sdl2_ttf libinih
+        run: pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih
 
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

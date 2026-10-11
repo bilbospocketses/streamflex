@@ -141,3 +141,19 @@ if (UNIX)
   target_link_libraries(test_library_svg m)
 endif ()
 add_test(NAME library_svg COMMAND test_library_svg)
+
+# The built SDL_ttf shapes text with HarfBuzz (spec section 9, test 5); it needs no window or GPU
+add_executable(test_harfbuzz test_harfbuzz.c)
+target_link_libraries(test_harfbuzz SDL3_ttf::SDL3_ttf SDL3::SDL3)
+add_test(NAME harfbuzz COMMAND test_harfbuzz)
+
+# The Windows exe carries the Vulkan fix of the sdl3 overlay port (spec section 9, test 13). The control
+# runs the same script on an exe that links no SDL and must fail, so a script that passed anything
+# would show
+if (WIN32)
+  add_test(NAME vulkan_fix COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:${EXECUTABLE_TITLE}>"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_vulkan_fix.cmake")
+  add_test(NAME vulkan_fix_control COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:test_layout>"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_vulkan_fix.cmake")
+  set_tests_properties(vulkan_fix_control PROPERTIES WILL_FAIL TRUE)
+endif ()

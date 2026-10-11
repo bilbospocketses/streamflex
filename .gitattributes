@@ -9,3 +9,8 @@ tests/qa/*.sh text eol=lf
 tests/qa/*.py text eol=lf
 # The CI helper scripts run on the Linux runners and also locally from Git Bash
 .github/scripts/*.sh text eol=lf
+# vcpkg applies the overlay ports' patches to LF sources; a Windows checkout must not turn them CRLF
+vcpkg-overlays/** text eol=lf
+# The unit runner and the mutant driver run in the Linux harness images, as the harness's scripts do
+tests/unit.sh text eol=lf
+tests/mutants/** text eol=lf

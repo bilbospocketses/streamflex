@@ -30,10 +30,10 @@ if (WIN32)
   set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${EXECUTABLE_TITLE})
 endif ()
 
-# Minimum library versions for Linux
-set(MIN_SDL_VERSION "2.0.18")
-set(MIN_SDL_IMAGE_VERSION "2.0.5")
-set(MIN_SDL_TTF_VERSION "2.0.15")
+# Minimum library versions: Debian trixie's, the oldest platform supported (spec section 2)
+set(MIN_SDL_VERSION "3.2.10")
+set(MIN_SDL_IMAGE_VERSION "3.2.4")
+set(MIN_SDL_TTF_VERSION "3.2.2")
 
 # Generate PKGBUILD script for Arch packages
 if (PACKAGE STREQUAL "ARCH")
@@ -44,21 +44,22 @@ endif ()
 # Import settings
 include(${PROJECT_SOURCE_DIR}/config/config_settings.cmake)
 
-# Find dependencies - Linux
+# Find dependencies: SDL3 and its libraries ship CMake config files on every platform, Debian's -dev
+# packages and vcpkg's ports alike
+find_package(SDL3 ${MIN_SDL_VERSION} CONFIG REQUIRED)
+find_package(SDL3_image ${MIN_SDL_IMAGE_VERSION} CONFIG REQUIRED)
+find_package(SDL3_ttf ${MIN_SDL_TTF_VERSION} CONFIG REQUIRED)
+
+# Find dependencies - Linux: inih through pkg-config, and fontconfig, which finds the fallback fonts
 if (UNIX)
   find_package(PkgConfig MODULE REQUIRED)
-  pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2>=${MIN_SDL_VERSION})
-  pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image>=${MIN_SDL_IMAGE_VERSION})
-  pkg_check_modules(SDL2_TTF REQUIRED IMPORTED_TARGET SDL2_ttf>=${MIN_SDL_TTF_VERSION})
   pkg_check_modules(INIH REQUIRED IMPORTED_TARGET inih)
+  find_package(Fontconfig REQUIRED)
 endif ()
 
 # Find dependencies - Windows
 if (WIN32)
-  find_package(SDL2 CONFIG REQUIRED)
-  find_package(sdl2_image CONFIG REQUIRED)
-  find_package(SDL2_ttf CONFIG REQUIRED)
-  
+
   # A function to find a vcpkg library once per configuration, so each configuration links its own.
   # A multi-config generator has no build type, so vcpkg searches its debug folder first, and a
   # plain find_library() gave the Release link the debug library and its debug C runtime (LIBCMTD)

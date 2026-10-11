@@ -9,11 +9,13 @@ no font tools:
   make_fonts.py blank DST FAMILY CHARS   write a TrueType font with a glyph for each character of
                                          CHARS and no other, as a symbol font has none of "Aa0";
                                          FAMILY - names no family
+  make_fonts.py box DST FAMILY CHARS     the same, with each glyph a filled square instead of empty:
+                                         the fallback-font checks' font of boxes
 
 A rename replaces OLD in both spellings a name table uses (one byte per letter, and UTF-16 big
 endian), in place, so no offset moves; FreeType does not check table checksums. A collection is
 the TTC header (version 1.0) and each font's own tables, with each table's offset moved to where
-the font now starts. A blank font holds only the tables FreeType needs, its one glyph empty."""
+the font now starts. A blank font holds only the tables FreeType needs, its one glyph empty; a box font's glyph is one square contour."""
 import struct
 import sys
 
@@ -72,15 +74,38 @@ def sfnt(tables):
     return header + records + body
 
 
-def blank(dst, family, chars):
+# A box font's glyph: one closed square contour, its points clockwise (TrueType fills a clockwise
+# contour), every one on the curve
+BOX_POINTS = [(50, 0), (50, 700), (750, 700), (750, 0)]
+
+
+def box_glyph():
+    """The glyf entry of BOX_POINTS: one contour, each point's x and y a 16-bit delta from the last"""
+    xs = [x for x, _ in BOX_POINTS]
+    ys = [y for _, y in BOX_POINTS]
+    dx = [x - last for x, last in zip(xs, [0] + xs[:-1])]
+    dy = [y - last for y, last in zip(ys, [0] + ys[:-1])]
+    return struct.pack(">hhhhh", 1, min(xs), min(ys), max(xs), max(ys)) \
+        + struct.pack(">HH", len(BOX_POINTS) - 1, 0) + bytes([0x01] * len(BOX_POINTS)) \
+        + struct.pack(f">{len(dx)}h", *dx) + struct.pack(f">{len(dy)}h", *dy)
+
+
+def font(dst, family, chars, filled):
+    """A TrueType font with a glyph for each character of CHARS and no other: empty (blank), or the
+    filled square of BOX_POINTS (box)"""
     glyphs = 2
+    glyph = box_glyph() if filled else b""
+    advance = 800 if filled else 500
+    x_max = 750 if filled else 500
     head = struct.pack(">IIIIHHqqhhhhHHhhh", 0x00010000, 0x00010000, 0, 0x5F0F3CF5, 0x000B, 1000, 0, 0,
-                       0, 0, 500, 700, 0, 8, 2, 0, 0)
-    hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x00010000, 800, -200, 0, 500, 0, 0, 500, 1, 0, 0, 0, 0, 0, 0, 0, glyphs)
-    maxp = struct.pack(">IH13H", 0x00010000, glyphs, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
-    hmtx = struct.pack(">HhHh", 500, 0, 500, 0)
-    loca = struct.pack(">3H", 0, 0, 0)
-    glyf = b"\0" * 4
+                       0, 0, x_max, 700, 0, 8, 2, 0, 0)
+    hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x00010000, 800, -200, 0, advance, 0, 0, x_max, 1, 0, 0, 0, 0, 0, 0, 0,
+                       glyphs)
+    points, contours = (len(BOX_POINTS), 1) if filled else (0, 0)
+    maxp = struct.pack(">IH13H", 0x00010000, glyphs, points, contours, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
+    hmtx = struct.pack(">HhHh", 500, 0, advance, BOX_POINTS[0][0] if filled else 0)
+    loca = struct.pack(">3H", 0, 0, len(glyph) // 2)
+    glyf = glyph if filled else b"\0" * 4
     # cmap format 4: a segment for each character, to glyph 1, then the closing 0xFFFF segment
     codes = sorted({ord(c) for c in chars}) + [0xFFFF]
     count = len(codes)
@@ -101,9 +126,9 @@ def blank(dst, family, chars):
         records += struct.pack(">6H", 3, 1, 0x409, name_id, len(data), len(strings))
         strings += data
     name = struct.pack(">3H", 0, len(names), 6 + 12 * len(names)) + records + strings
-    font = sfnt({"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf,
+    data = sfnt({"head": head, "hhea": hhea, "maxp": maxp, "hmtx": hmtx, "loca": loca, "glyf": glyf,
                  "cmap": cmap, "name": name})
-    open(dst, "wb").write(font)
+    open(dst, "wb").write(data)
 
 
 if __name__ == "__main__":
@@ -111,7 +136,7 @@ if __name__ == "__main__":
         rename(*sys.argv[2:6])
     elif len(sys.argv) >= 4 and sys.argv[1] == "ttc":
         ttc(sys.argv[2], sys.argv[3:])
-    elif len(sys.argv) == 5 and sys.argv[1] == "blank":
-        blank(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif len(sys.argv) == 5 and sys.argv[1] in ("blank", "box"):
+        font(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[1] == "box")
     else:
         sys.exit(__doc__)
