@@ -23,12 +23,13 @@ typedef struct {
     const char *render_list;   // NULL: pass no list (SDL_RENDER_DRIVER chose)
     bool mark_fullscreen;      // ITaskbarList2::MarkFullscreenWindow on the HWND
     bool refused;              // An override outside the transparent list: use the opaque window
-    char reason[128];          // Set when refused: "SDL_RENDER_DRIVER=<name> is not in the transparent list"
+    char reason[128];          // Set when refused: "SDL_RENDER_DRIVER=<value> is not in the transparent list"
 } WindowPlan;
 
 // background: the ModeBackground wanted; windows: built for Windows; render_driver_env: SDL_getenv("SDL_RENDER_DRIVER"), NULL or "" for unset
 WindowPlan window_plan(int background, bool windows, const char *render_driver_env);
-// The log's Renderer: line for the renderer SDL chose from render_list (NULL: SDL_RENDER_DRIVER chose)
+// The log's Renderer: line for the renderer SDL chose from render_list (NULL: SDL_RENDER_DRIVER chose);
+// chosen must not be NULL: it is SDL_GetRendererName's result for a valid renderer
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size);
 
 #endif

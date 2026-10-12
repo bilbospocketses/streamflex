@@ -51,17 +51,22 @@ static void test_linux(void)
     CHECK_PLAN(window_plan(BG_TRANSPARENT, false, NULL), WINDOW_FULLSCREEN, RENDER_LIST_UNIX, false, false);
 }
 
-// SDL_RENDER_DRIVER takes the list away and changes nothing else: not the window's kind, not the mark
+// SDL_RENDER_DRIVER takes the list away and changes nothing else: not the window's kind, not the mark.
+// Its names match in any case, and a list of them is taken when every one is in the transparent list,
+// as SDL reads the hint
 static void test_override_takes_only_the_list(void)
 {
     CHECK_PLAN(window_plan(BG_COLOR, true, "opengl"), WINDOW_FULLSCREEN, NULL, false, false);
     CHECK_PLAN(window_plan(BG_TRANSPARENT, false, "opengl"), WINDOW_FULLSCREEN, NULL, false, false);
     CHECK_PLAN(window_plan(BG_TRANSPARENT, true, "direct3d11"), WINDOW_TRANSPARENT_SHORT, NULL, true, false);
     CHECK_PLAN(window_plan(BG_TRANSPARENT, true, "vulkan"), WINDOW_TRANSPARENT_SHORT, NULL, true, false);
+    CHECK_PLAN(window_plan(BG_TRANSPARENT, true, "Vulkan"), WINDOW_TRANSPARENT_SHORT, NULL, true, false);
+    CHECK_PLAN(window_plan(BG_TRANSPARENT, true, "vulkan,direct3d11"), WINDOW_TRANSPARENT_SHORT, NULL, true, false);
 }
 
-// An override outside the transparent list is refused by its name alone, for the opaque window,
-// with the reason the Video: line gives; a name is matched whole, never as a prefix
+// An override outside the transparent list is refused by its names alone, for the opaque window,
+// with the reason the Video: line gives; a name is matched whole, never as a prefix, and a list with
+// any name outside is refused whole
 static void test_override_outside_the_transparent_list(void)
 {
     WindowPlan plan = window_plan(BG_TRANSPARENT, true, "direct3d12");
@@ -76,6 +81,9 @@ static void test_override_outside_the_transparent_list(void)
     plan = window_plan(BG_TRANSPARENT, true, "direct3d1");
     CHECK_PLAN(plan, WINDOW_FULLSCREEN, NULL, false, true);
     CHECK_STR(plan.reason, "SDL_RENDER_DRIVER=direct3d1 is not in the transparent list");
+    plan = window_plan(BG_TRANSPARENT, true, "vulkan,opengl");
+    CHECK_PLAN(plan, WINDOW_FULLSCREEN, NULL, false, true);
+    CHECK_STR(plan.reason, "SDL_RENDER_DRIVER=vulkan,opengl is not in the transparent list");
 }
 
 // The Renderer: line (spec section 3, Logging): the list's first choice plain, any other with the
