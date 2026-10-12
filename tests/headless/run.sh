@@ -4,7 +4,7 @@
 # the screen. Runs inside the image built from this folder's Dockerfile (Debian) or
 # Dockerfile.fedora (Fedora 44), with the repo mounted read-only at
 # /src and an output folder at /out. No step branches on the distribution: what differs between
-# the images is detected.
+# the images is detected, or declared by the image (LEAK_SUPPRESSIONS, the leak pass's suppressions).
 #   run.sh <label>              every check in checks/, in name order
 #   run.sh <label> scrollfail   item 11 only: the scroll arrow's texture is forced to fail,
 #                               a path no config or input can reach
@@ -281,6 +281,14 @@ if [ "$fault" = leaks ]; then
     libx11=$(ldconfig -p | awk '$1 == "libX11.so.6" { print $NF; exit }')
     [ -f "$libx11" ] || libx11=
     preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver${libx11:+ $libx11}")
+    # The image names the suppressions its own libraries need, if any (LEAK_SUPPRESSIONS, a file
+    # beside this one): each names one function in a library's code, and says why. Debian's image
+    # names lsan-debian.supp; Fedora's names none, so its leak pass suppresses nothing.
+    if [ -n "${LEAK_SUPPRESSIONS:-}" ]; then
+        [ -f "$HERE/$LEAK_SUPPRESSIONS" ] || { echo "NO SUPPRESSIONS FILE $HERE/$LEAK_SUPPRESSIONS"; exit 2; }
+        preload+=("LSAN_OPTIONS=suppressions=$HERE/$LEAK_SUPPRESSIONS")
+        echo "Leak suppressions: $LEAK_SUPPRESSIONS ($(grep -c '^leak:' "$HERE/$LEAK_SUPPRESSIONS") entries)"
+    fi
 fi
 TESTER=(setpriv --reuid=tester --regid=tester --init-groups --
         env HOME=$TESTER_HOME DISPLAY=:99 ASAN_OPTIONS=$asan_options UBSAN_OPTIONS=print_stacktrace=1
