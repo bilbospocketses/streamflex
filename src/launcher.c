@@ -50,6 +50,7 @@ static void start_clock(void);
 static void start_gamepad(void);
 static void stop_gamepad(void);
 static void connect_present_pads(void);
+static void rebase_held_controls(void);
 #ifdef STREAMFLEX_TEST_HOOKS
 static void test_pad_attach(void);
 static void test_pad_swap(void);
@@ -2074,6 +2075,22 @@ int gamepad_pressed_label()
     return -1;
 }
 
+// A function to time every control still held from now, after a gap in which the pad was not polled (an
+// application launched or ran, or every pad was gone): it counts as pressed now, not pressed again, so
+// its first repeat is a whole delay away. Left as it was, the gap would have made its repeat due at once.
+static void rebase_held_controls()
+{
+    for (GamepadControl *i = gamepad_controls; i != NULL; i = i->next) {
+        if (!i->hold.held)
+            continue;
+        i->hold.pressed_at = ticks.main;
+        i->hold.repeat_due = GAMEPAD_REPEAT_DELAY;
+#ifdef STREAMFLEX_TEST_HOOKS
+        log_debug("Test hook: pad %s held through a gap in polling, timed from now", i->label);   // Only the headless harness builds this
+#endif
+    }
+}
+
 // A function to poll the connected gamepad for commands. A command can rebuild the controls under
 // this loop (the settings screen's bindings), freeing the one it is on: the loop then stops, for this
 // frame.
@@ -2328,9 +2345,10 @@ static inline void pre_launch()
 
 static inline void post_launch()
 {
-    // Rebaseline the timing after the program is done
+    // Rebaseline the timing after the program is done, a held pad control's too
     ticks.main = ticks_ms();
     ticks.last_input = ticks.main;
+    rebase_held_controls();
 
     // Post-application updates
     if (gamepad_on)
@@ -2593,8 +2611,13 @@ int main(int argc, char *argv[])
                     // `which` is the instance id in SDL3; the Device setting counts device indexes
                     int index = joystick_index(event.jdevice.which);
                     if (gamepad_on && index >= 0 && SDL_IsGamepad(event.jdevice.which) &&
-                        (config.gamepad_device < 0 || config.gamepad_device == index))
+                        (config.gamepad_device < 0 || config.gamepad_device == index)) {
+                        // With no pad before it, nothing was polled since the last one went
+                        bool none = gamepads == NULL;
                         connect_gamepad(index, !state.application_running, true);
+                        if (none && gamepads != NULL)
+                            rebase_held_controls();
+                    }
                     settings_pads_changed();   // The Device row names every pad present, while settings are open
                     break;
                 }
@@ -2666,6 +2689,7 @@ int main(int argc, char *argv[])
         if (state.application_launching &&
         ticks.main - ticks.application_launched > config.application_timeout) {
             state.application_launching = false;
+            rebase_held_controls();   // The pad was not polled while the application launched
             if (config.on_launch == ON_LAUNCH_BLANK)
                 set_draw_color();
         }
