@@ -286,23 +286,25 @@ static void test_title_padding_one_of_two(void)
     CHECK_INT(eff.title_padding_pct, 0);
 }
 
-// A held pad control run frame by frame as poll_gamepad() runs it: pressed on frame 0 at `start` (SDL's
-// ticks, so a start near the top crosses their wrap), held `hold_ms`, at `fps` frames a second, each
-// frame at its whole millisecond. How many times it repeated, when it first did (ms after the press; -1
-// for never), and the longest gap between two repeats.
+// A held pad control run frame by frame as poll_gamepad() runs it: pressed on frame 0 (SDL's ticks, at
+// next_start), held `hold_ms`, at `fps` frames a second, each frame at its whole millisecond. How many
+// times it repeated, when it first did (ms after the press; -1 for never), and the longest gap between
+// two repeats.
 typedef struct {
     int repeats;
     int first;
     int longest;
 } HoldRun;
 
-static unsigned int next_start = 0xFFFFF000u;   // Each run its own press time, some across the wrap
+// Each run is pressed at its own time, from 256 ms before the ticks' wrap down to 151 ms before it, so
+// each 2 s hold crosses the wrap, and even its first repeat is due after it
+static unsigned int next_start = 0xFFFFFF00u;
 
 static HoldRun hold_at(int fps, int hold_ms)
 {
     HoldRun run = { 0, -1, 0 };
     unsigned int pressed = next_start;
-    next_start += 7919;
+    next_start += 7;
     unsigned int due = DERIVE_REPEAT_DELAY_MS;
     int last = 0;
     for (int frame = 1;; frame++) {
@@ -375,13 +377,16 @@ static void test_repeat_wall_time(void)
     CHECK(never_repeats(60, 400));
     CHECK(never_repeats(100, 400));
     CHECK(never_repeats(144, 400));
-    // The two functions alone: due at the delay to the millisecond, across the ticks' wrap, and a frame
-    // that came late moves the next repeat an interval past it rather than leaving a burst due
+    // The two functions alone: due at the delay to the millisecond, across the ticks' wrap (and not 16 ms
+    // after a press 256 ms before it, as `now >= pressed + due` would say), and a frame that came late moves
+    // the next repeat an interval past it rather than leaving a burst due
+    CHECK(!derive_repeat_due(0xFFFFFF00u + 16, 0xFFFFFF00u, 500));
     CHECK(!derive_repeat_due(0xFFFFFF00u + 499, 0xFFFFFF00u, 500));
     CHECK(derive_repeat_due(0xFFFFFF00u + 500, 0xFFFFFF00u, 500));
     CHECK_INT((int) derive_next_repeat(1000 + 510, 1000, 500, 25), 525);
     CHECK_INT((int) derive_next_repeat(1000 + 600, 1000, 500, 25), 625);
 }
+
 // A function to test when a refused Windows exit hotkey is tried again: only while refused, every
 // DERIVE_EXIT_RETRY_MS of the clock, or at once (focus gained, settings closed); SDL's ticks wrap
 static void test_exit_retry_due(void)
