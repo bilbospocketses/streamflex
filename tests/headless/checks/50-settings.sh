@@ -172,13 +172,12 @@ result "settings: the Menu key's other code (#40000076) opens and closes them (e
 
 # A gamepad's Start button held opens settings once. The harness has no gamepad, so its build's test
 # hook attaches a virtual one (STREAMFLEX_TEST_PAD), whose Start is held while the file that names
-# exists (hold_start, for 2 s). Its repeats come on a count of frames (31 of 16 ms), not of seconds,
-# so here Start is held for 40 frames however slowly they run (STREAMFLEX_TEST_PAD_FRAMES), and its
-# first repeat is waited for: a hold that ended before it would prove nothing.
+# exists (hold_start, for 2 s). Here Start is held until its first repeat, 500 ms after the press
+# however fast or slowly the frames run, is logged: a hold that ended before it would prove nothing.
 hold_start() { : > /tmp/pad-start; sleep 2; rm -f /tmp/pad-start; sleep 1; }
 p50_hold_start() { : > /tmp/pad-start; wait_line 'Test hook: pad ButtonStart repeated' "$2"; rm -f /tmp/pad-start; sleep 1; }
 rm -f /tmp/pad-start
-STREAMFLEX_TEST_PAD=/tmp/pad-start STREAMFLEX_TEST_PAD_FRAMES=40 WAIT_FOR='Gamepad connected' run_keys f50-padheld +p50_hold_start
+STREAMFLEX_TEST_PAD=/tmp/pad-start WAIT_FOR='Gamepad connected' run_keys f50-padheld +p50_hold_start
 ok=1
 [ "$(grep -c 'Gamepad ButtonStart detected' "$out/f50-padheld.log")" = 1 ] \
     && grep -q 'Test hook: pad ButtonStart repeated' "$out/f50-padheld.log" \

@@ -622,7 +622,7 @@ void add_gamepad_control(const char *label, const char *cmd)
         .type     = GAMEPAD_INFO[i].type,
         .index    = GAMEPAD_INFO[i].index,
         .label    = bindings_label(i),
-        .repeat   = 0,
+        .hold     = { false, 0, 0 },
         .next     = NULL
     };
     control->cmd = command;

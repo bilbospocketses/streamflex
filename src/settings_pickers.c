@@ -552,23 +552,29 @@ void pickers_raw_release(int code)
 }
 
 #ifdef STREAMFLEX_TEST_HOOKS
-// A function only the headless harness builds: it counts the frames on which settings take one held pad
-// control for one reason (`taken`; TAKEN_NONE when not taken), and logs when the count reaches the
-// repeat's delay, the frame the control would have repeated on had the launcher's controls had it
+// A function only the headless harness builds: it times how long settings take one held pad control for
+// one reason (`taken`; TAKEN_NONE when not taken), from the first frame they took it, and logs once that
+// reaches the repeat's delay, when the control would have repeated had the launcher's controls had it
 enum { TAKEN_NONE, TAKEN_CAPTURE, TAKEN_SWALLOWED };
 static void test_pad_taken(int label, int taken)
 {
     static const char *const reasons[] = { "", "the capture", "waiting to be let go" };
     static int last_label = -1;
     static int last_taken = TAKEN_NONE;
-    static Uint32 frames = 0;
-    if (taken == TAKEN_NONE || label < 0 || label != last_label || taken != last_taken)
-        frames = 0;
+    static Uint32 since = 0;
+    static bool said = false;
+    Uint32 now = ticks_ms();
+    if (taken == TAKEN_NONE || label < 0 || label != last_label || taken != last_taken) {
+        since = now;
+        said = false;
+    }
     last_label = label;
     last_taken = taken;
-    if (taken != TAKEN_NONE && label >= 0 && ++frames == test_pad_repeat_delay())
-        log_debug("Test hook: pad %s held while settings took it (%s): %u frames, the repeat's delay",
-            bindings_label(label), reasons[taken], (unsigned int) frames);
+    if (taken != TAKEN_NONE && label >= 0 && !said && now - since >= GAMEPAD_REPEAT_DELAY) {
+        said = true;
+        log_debug("Test hook: pad %s held while settings took it (%s): %u ms, the repeat's delay",
+            bindings_label(label), reasons[taken], (unsigned int) (now - since));
+    }
 }
 #else
 #define test_pad_taken(label, taken)
@@ -605,15 +611,15 @@ bool pickers_raw_pad(int label)
 // A function to rebuild the launcher's hotkeys and gamepad controls from the bindings, as they now are:
 // the exit hotkey let go and taken again on Windows (the first :exit on a key it can register, as the
 // model's floor assumes), the gamepad's defaults added again. A control held as they are rebuilt keeps
-// its count, so it does not press again.
+// its press and its next repeat, so it does not press again.
 void apply_bindings(const Bindings *bindings)
 {
-    Uint32 repeats[BINDINGS_LABELS];
-    memset(repeats, 0, sizeof(repeats));
+    ControlHold holds[BINDINGS_LABELS];
+    memset(holds, 0, sizeof(holds));
     for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
         int label = bindings_label_index(control->label);
-        if (label >= 0 && control->repeat > repeats[label])
-            repeats[label] = control->repeat;
+        if (label >= 0 && control->hold.held && !holds[label].held)
+            holds[label] = control->hold;
     }
 #ifdef _WIN32
     clear_exit_hotkey();
@@ -645,7 +651,7 @@ void apply_bindings(const Bindings *bindings)
     for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
         int label = bindings_label_index(control->label);
         if (label >= 0)
-            control->repeat = repeats[label];
+            control->hold = holds[label];
     }
 #ifdef _WIN32
     if (has_exit_hotkey())

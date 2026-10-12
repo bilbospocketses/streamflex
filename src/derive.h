@@ -13,6 +13,8 @@
 #define DERIVE_MAX_SCROLL_OUTLINE_PM 10       // The scroll arrow's outline: at most 1% of the screen height
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
 #define DERIVE_EXIT_RETRY_MS 5000             // A refused Windows exit hotkey is tried again this often
+#define DERIVE_REPEAT_DELAY_MS 500            // A held pad control first repeats this long after its press
+#define DERIVE_REPEAT_INTERVAL_MS 25          // and then this often, at most once a frame
 #define DERIVE_DEFAULT_REFRESH_RATE 60        // Hz, when the display reports none
 #define DERIVE_MIN_REFRESH_RATE 1.0F          // Hz: a display that reports less reports none
 #define DERIVE_SCREEN_MARGIN 0.05F            // The screen's margin: 5% of its height
@@ -94,7 +96,8 @@ typedef struct Effective {
 
 int derive_alpha(int hundredths);
 void derive_settings(const DeriveInput *in, Effective *out);
-unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval);
+bool derive_repeat_due(unsigned int now, unsigned int pressed, unsigned int due);
+unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned int due, unsigned int interval);
 bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try);
 ScreenGeometry geometry_from_pixels(int width, int height);
 int derive_refresh_rate(float reported);

@@ -85,14 +85,22 @@ void derive_settings(const DeriveInput *in, Effective *out)
     out->screensaver_alpha = derive_alpha(in->screensaver_intensity);
 }
 
-// A function to work out a held gamepad control's count of frames once it has repeated: one interval
-// short of the delay, so the next repeat comes one interval later. A count past the delay (a change of
-// frame timing shortened the delay under a held control) comes back to it, rather than repeating on
-// every frame until it falls under the delay.
-unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval)
+// A function to decide if a held gamepad control repeats now: held since `pressed`, with its next repeat
+// due `due` ms after that. Timed in wall time, never in frames, so the frame rate cannot change it. The
+// times are SDL's ticks, so the subtraction is unsigned and holds across their wrap.
+bool derive_repeat_due(unsigned int now, unsigned int pressed, unsigned int due)
 {
-    unsigned int from = count < delay ? count : delay;
-    return from > interval ? from - interval : 0;
+    return now - pressed >= due;
+}
+
+// A function to work out when a held control's next repeat is due, in ms after its press, once it has
+// repeated now: an interval after the last due time, so the repeats keep the interval on average
+// whatever the frame time, or an interval after now when the frame came later than that, so a slow
+// frame repeats once rather than catching up in a burst
+unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned int due, unsigned int interval)
+{
+    unsigned int held = now - pressed;
+    return due + interval > held ? due + interval : held + interval;
 }
 
 // A function to decide if the Windows exit hotkey is tried again now: only while Windows refuses it,

@@ -286,30 +286,102 @@ static void test_title_padding_one_of_two(void)
     CHECK_INT(eff.title_padding_pct, 0);
 }
 
-// A function to test a held gamepad control's count after a repeat: at a fixed rate one interval short
-// of the delay; past a delay that a change of frame timing shortened, back to it, so the repeats keep
-// their interval rather than coming on every frame
-static void test_repeated_count(void)
+// A held pad control run frame by frame as poll_gamepad() runs it: pressed on frame 0 at `start` (SDL's
+// ticks, so a start near the top crosses their wrap), held `hold_ms`, at `fps` frames a second, each
+// frame at its whole millisecond. How many times it repeated, when it first did (ms after the press; -1
+// for never), and the longest gap between two repeats.
+typedef struct {
+    int repeats;
+    int first;
+    int longest;
+} HoldRun;
+
+static unsigned int next_start = 0xFFFFF000u;   // Each run its own press time, some across the wrap
+
+static HoldRun hold_at(int fps, int hold_ms)
 {
-    CHECK_INT((int) derive_repeated_count(31, 31, 1), 30);   // 60 Hz: 500 ms, then every frame
-    CHECK_INT((int) derive_repeated_count(62, 62, 3), 59);   // 120 fps: every 3 frames
-    CHECK_INT((int) derive_repeated_count(5, 5, 1), 4);      // 10 fps, the slowest frame time
-    CHECK_INT((int) derive_repeated_count(3, 5, 1), 2);      // A count short of the delay keeps its place
-    CHECK_INT((int) derive_repeated_count(1, 1, 3), 0);      // An interval past the count stops at 0
-    // 240 Hz to 120 fps while held: the count is 119 after a repeat at 240 Hz's delay (125, interval
-    // 6); with the delay 62 and the interval 3, the next 30 frames repeat on every third
-    unsigned int count = 119;
-    int repeats = 0;
-    for (int frame = 0; frame < 30; frame++) {
-        count++;
-        if (count >= 62) {
-            repeats++;
-            count = derive_repeated_count(count, 62, 3);
-        }
+    HoldRun run = { 0, -1, 0 };
+    unsigned int pressed = next_start;
+    next_start += 7919;
+    unsigned int due = DERIVE_REPEAT_DELAY_MS;
+    int last = 0;
+    for (int frame = 1;; frame++) {
+        int held = frame * 1000 / fps;
+        if (held > hold_ms)
+            break;
+        unsigned int now = pressed + (unsigned int) held;
+        if (!derive_repeat_due(now, pressed, due))
+            continue;
+        due = derive_next_repeat(now, pressed, due, DERIVE_REPEAT_INTERVAL_MS);
+        if (run.repeats == 0)
+            run.first = held;
+        else if (held - last > run.longest)
+            run.longest = held - last;
+        last = held;
+        run.repeats++;
     }
-    CHECK_INT(repeats, 10);
+    return run;
 }
 
+// The frame time at `fps`, in whole ms rounded up
+static int frame_ms(int fps)
+{
+    return (1000 + fps - 1) / fps;
+}
+
+// A function to tell whether a 2 s hold at `fps` first repeats at the delay, within one frame
+static bool first_repeat_at_delay(int fps)
+{
+    HoldRun run = hold_at(fps, 2000);
+    return run.first >= DERIVE_REPEAT_DELAY_MS && run.first <= DERIVE_REPEAT_DELAY_MS + frame_ms(fps);
+}
+
+// A function to tell whether a 2 s hold at `fps` then repeats every interval, or every frame when a
+// frame is longer: as many repeats as that makes, give or take one, and no gap longer than that by more
+// than a frame
+static bool repeats_keep_interval(int fps)
+{
+    HoldRun run = hold_at(fps, 2000);
+    int every = frame_ms(fps) > DERIVE_REPEAT_INTERVAL_MS ? 1000 / fps : DERIVE_REPEAT_INTERVAL_MS;
+    int wanted = (2000 - run.first) / every + 1;
+    return run.first >= 0 && run.repeats >= wanted - 1 && run.repeats <= wanted + 1
+           && run.longest <= every + frame_ms(fps);
+}
+
+// A function to tell whether a hold of `hold_ms` at `fps` never repeats
+static bool never_repeats(int fps, int hold_ms)
+{
+    return hold_at(fps, hold_ms).repeats == 0;
+}
+
+// A function to test a held pad control's repeat: timed in wall time, it comes at the same times at 30,
+// 60, 100 and 144 fps. Counted in frames, as it was, a 100 fps machine repeated a 300 ms tap and a
+// 30 fps one waited a second.
+static void test_repeat_wall_time(void)
+{
+    CHECK(first_repeat_at_delay(30));
+    CHECK(first_repeat_at_delay(60));
+    CHECK(first_repeat_at_delay(100));
+    CHECK(first_repeat_at_delay(144));
+    CHECK(repeats_keep_interval(30));
+    CHECK(repeats_keep_interval(60));
+    CHECK(repeats_keep_interval(100));
+    CHECK(repeats_keep_interval(144));
+    CHECK(never_repeats(30, 300));
+    CHECK(never_repeats(60, 300));
+    CHECK(never_repeats(100, 300));
+    CHECK(never_repeats(144, 300));
+    CHECK(never_repeats(30, 400));
+    CHECK(never_repeats(60, 400));
+    CHECK(never_repeats(100, 400));
+    CHECK(never_repeats(144, 400));
+    // The two functions alone: due at the delay to the millisecond, across the ticks' wrap, and a frame
+    // that came late moves the next repeat an interval past it rather than leaving a burst due
+    CHECK(!derive_repeat_due(0xFFFFFF00u + 499, 0xFFFFFF00u, 500));
+    CHECK(derive_repeat_due(0xFFFFFF00u + 500, 0xFFFFFF00u, 500));
+    CHECK_INT((int) derive_next_repeat(1000 + 510, 1000, 500, 25), 525);
+    CHECK_INT((int) derive_next_repeat(1000 + 600, 1000, 500, 25), 625);
+}
 // A function to test when a refused Windows exit hotkey is tried again: only while refused, every
 // DERIVE_EXIT_RETRY_MS of the clock, or at once (focus gained, settings closed); SDL's ticks wrap
 static void test_exit_retry_due(void)
@@ -363,7 +435,7 @@ static void test_refresh_rate(void)
 int main(void)
 {
     test_exit_retry_due();
-    test_repeated_count();
+    test_repeat_wall_time();
     test_defaults();
     test_twice();
     test_clamps_restore();

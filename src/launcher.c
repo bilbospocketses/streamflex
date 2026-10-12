@@ -225,8 +225,6 @@ Geometry geo;
 LayoutGeometry layout;                     // The current menu's layout
 LayoutArea layout_area;                    // The part of the screen the buttons may use
 Uint32 refresh_period;
-Uint32 delay_period;
-Uint32 repeat_period;
 Effective eff;                        // The values drawn with, derived from config (derive.h)
 SDL_Color title_color;                // eff's title colors as SDL colors, for the titles (the clock keeps its own)
 SDL_Color title_shadow_color;
@@ -290,8 +288,8 @@ static void check_vsync()
 // A function to work out the frame timing from VSync and FPSLimit, live: VSync, or the FPS limit's
 // own frame time when it is off and the limit lies between the minimum and the display's rate
 // (otherwise VSync, as always). The settings stay as written; the renderer follows (SDL_SetRenderVSync).
-// The gamepad's repeat, the slideshow's fade and the screensaver's dim are timed in frames, so
-// they are worked out again too.
+// The slideshow's fade and the screensaver's dim are timed in frames, so they are worked out again
+// too. (The gamepad's repeat is timed in wall time: poll_gamepad().)
 void apply_frame_timing()
 {
     int rate = display_rate;
@@ -301,10 +299,6 @@ void apply_frame_timing()
 
     // With VSync wanted the frame is the display's, which also paces a renderer that refused it
     refresh_period = 1000 / (Uint32) (wanted ? rate : config.fps_limit);
-    delay_period = GAMEPAD_REPEAT_DELAY / refresh_period;
-    repeat_period = GAMEPAD_REPEAT_INTERVAL / refresh_period;
-    if (!repeat_period)
-        repeat_period = 1;
     update_slideshow_timing();
     if (screensaver != NULL)
         screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
@@ -1560,6 +1554,12 @@ static void test_frame_after_key()
 // A function to show the frame, and without VSync wait out the rest of its time
 void present_frame()
 {
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: a slow machine, each frame held up this long as it is shown
+    const char *frame_sleep = getenv("STREAMFLEX_TEST_FRAME_SLEEP_MS");
+    if (frame_sleep != NULL)
+        SDL_Delay((Uint32) atoi(frame_sleep));
+#endif
     SDL_RenderPresent(renderer);
 
     // Paced unless the renderer gives the VSync wanted. A renderer that keeps VSync on when it is not
@@ -1974,14 +1974,6 @@ static void test_pad_stop()
 }
 #endif
 
-#ifdef STREAMFLEX_TEST_HOOKS
-// A function only the headless harness builds: the frames a held pad control waits before it repeats
-Uint32 test_pad_repeat_delay()
-{
-    return delay_period;
-}
-#endif
-
 // A function to tell whether the gamepad subsystem is running
 bool gamepad_running()
 {
@@ -2050,7 +2042,7 @@ static void stop_gamepad()
 #endif
     disconnect_gamepad(-1, true, true);
     for (GamepadControl *i = gamepad_controls; i != NULL; i = i->next)
-        i->repeat = 0;
+        i->hold.held = false;
     SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
     gamepad_on = false;
     log_debug("Gamepad stopped");
@@ -2098,7 +2090,6 @@ static void poll_gamepad()
             if (i->type == TYPE_AXIS_POS || i->type == TYPE_AXIS_NEG) {
                 value_multiplier = i->type == TYPE_AXIS_POS ? 1 : -1;
                 if (value_multiplier*SDL_GetGamepadAxis(gamepad->controller, i->index) > GAMEPAD_DEADZONE) {
-                    i->repeat++;
                     pressed = true;
                     break;
                 }
@@ -2107,31 +2098,32 @@ static void poll_gamepad()
             // Check buttons
             else if (i->type == TYPE_BUTTON) {
                 if (SDL_GetGamepadButton(gamepad->controller, i->index)) {
-                    i->repeat++;
                     pressed = true;
                     break;
                 }
             }
         }
         if (!pressed) {
-            i->repeat = 0;
+            i->hold.held = false;
             continue;
         }
 
-        // Execute command if first press or valid repeat
-        if (i->repeat == 1) {
+        // Execute the command at the press, and repeat it GAMEPAD_REPEAT_DELAY ms later, then every
+        // GAMEPAD_REPEAT_INTERVAL ms (at most once a frame): wall time, so the frame rate cannot change
+        // either. The hold is set before the command runs, since the command can free this control.
+        if (!i->hold.held) {
+            i->hold = (ControlHold) { true, ticks.main, GAMEPAD_REPEAT_DELAY };
             log_debug("Gamepad %s detected", i->label);
             ticks.last_input = ticks.main;
             execute_command(i->cmd);
         }
-        // At the delay or past it: a repeat that changed the frame timing can shorten the delay under
-        // it, and the count then comes back to the delay, so the repeats keep their interval
-        else if (i->repeat >= delay_period) {
+        else if (derive_repeat_due(ticks.main, i->hold.pressed_at, i->hold.repeat_due)) {
             ticks.last_input = ticks.main;
 #ifdef STREAMFLEX_TEST_HOOKS
             log_debug("Test hook: pad %s repeated", i->label);   // Only the headless harness builds this
 #endif
-            i->repeat = derive_repeated_count(i->repeat, delay_period, repeat_period);
+            i->hold.repeat_due = derive_next_repeat(ticks.main, i->hold.pressed_at, i->hold.repeat_due,
+                                                    GAMEPAD_REPEAT_INTERVAL);
 
             // :settings acts on the first press only: repeating it would strobe settings open and shut
             if (strcmp(i->cmd, SCMD_SETTINGS) != 0)

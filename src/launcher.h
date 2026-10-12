@@ -5,8 +5,8 @@
 #define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
 #define MIN_FPS_LIMIT 10
 #define GAMEPAD_DEADZONE 10000
-#define GAMEPAD_REPEAT_DELAY 500
-#define GAMEPAD_REPEAT_INTERVAL 25
+#define GAMEPAD_REPEAT_DELAY DERIVE_REPEAT_DELAY_MS
+#define GAMEPAD_REPEAT_INTERVAL DERIVE_REPEAT_INTERVAL_MS
 #define CLOCK_UPDATE_PERIOD 1000
 #define SCROLL_INDICATOR_HEIGHT 0.11F
 #define SCREENSAVER_TRANSITION_TIME 1500
@@ -152,11 +152,19 @@ typedef struct gamepad {
     struct gamepad *next;
 } Gamepad;
 
+// A gamepad control's press in progress, in wall time: held since pressed_at (SDL's ticks), with its
+// next repeat due repeat_due ms after that (derive_repeat_due())
+typedef struct {
+    bool   held;
+    Uint32 pressed_at;
+    Uint32 repeat_due;
+} ControlHold;
+
 // Linked list of gamepad controls
 typedef struct gamepad_control {
     ControlType            type;
     int                    index;
-    Uint32                 repeat;
+    ControlHold            hold;
     const char             *label;
     char                   *cmd;
     struct gamepad_control *next;
@@ -341,7 +349,4 @@ void apply_os_screensaver(void);
 void apply_default_menu(void);  // Points :home at config.default_menu
 bool gamepad_running(void);
 bool gamepad_connected(void);                  // A pad is open to read
-#ifdef STREAMFLEX_TEST_HOOKS
-Uint32 test_pad_repeat_delay(void);            // The frames a held pad control waits before it repeats
-#endif
 int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none

@@ -64,9 +64,9 @@ B62_ARROW=$(printf ' \xE2\x80\xBA ')
 B62_ELLIPSIS=$(printf '\xE2\x80\xA6')
 RIGHT_MARK=$(printf '\xE2\x80\xBA')
 TO_GAMEPAD="Menu Down Down Down Down Down Down Down Down Return Down Return"   # Controls, then Gamepad
-# A pad control's repeats come on a count of frames (31 of 16 ms), not of seconds, so a hold that must
-# outlast them waits for the test hook's line saying settings took it for that many frames: during a
-# capture, or waiting to be let go after one
+# A pad control first repeats 500 ms after its press, so a hold that must outlast that waits for the
+# test hook's line saying settings took it for that long: during a capture, or waiting to be let go
+# after one
 B62_HELD_CAPTURE='Test hook: pad ButtonA held while settings took it (the capture)'
 B62_HELD_LET_GO='Test hook: pad ButtonA held while settings took it (waiting to be let go)'
 
@@ -193,7 +193,7 @@ result "bindings: a new control is live, beside the gamepad's defaults (exit $(c
 rm -f /tmp/pad-b
 
 # The pad's OK pressed on Remove rebuilds the controls the launcher is reading the pad through: it
-# stops reading them (no use after free), and the held button keeps its count, so it presses once
+# stops reading them (no use after free), and the held button keeps its press, so it presses once
 b62_press_a_briefly() { : > /tmp/pad-a; sleep 0.3; rm -f /tmp/pad-a; sleep 1; }
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
@@ -487,17 +487,17 @@ result "bindings: the Menu key is named Menu (exit $(cat "$out/f62-menu.code"))"
 
 # The pad's OK held on a binding's Command row: its first press opens the command picker, and its
 # repeat chooses there, which rebuilds the controls the launcher is reading the pad through, on a
-# repeat this time: the held count is taken down before the command runs, so nothing freed is written.
-# The repeat comes on a count of frames (31 of 16 ms), not of seconds, so OK is held for 40 frames
-# however slowly they run (STREAMFLEX_TEST_PAD_FRAMES), and the rebuild's line is waited for. The
-# repeats after it open the binding and start a capture, which runs out in 5 s, as before.
+# repeat this time: the next repeat is set before the command runs, so nothing freed is written.
+# The repeat comes 500 ms after the press, however fast or slowly the frames run, and OK is held until
+# the rebuild's line is logged. The repeats after it open the binding and start a capture, which runs
+# out in 5 s, as before.
 b62_hold_a_repeat() {
     : > /tmp/pad-a; wait_line 'Settings: the bindings now hold 0 hotkeys and 2 controls' "$2"
     rm -f /tmp/pad-a; sleep 6.5
 }
 rm -f /tmp/pad-a
 cfg=$(writable_config f62-padok)
-STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=40 WAIT_FOR='Gamepad connected' CFG=$cfg \
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$cfg \
     run_keys f62-padrepeat $TO_GAMEPAD Down Down Down Down Down Return Down +b62_hold_a_repeat Menu
 log=$out/f62-padrepeat.log
 ok=1
