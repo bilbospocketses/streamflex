@@ -122,6 +122,21 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
 
+      # Unit test 11's built half (spec section 9): the manifest the exe carries asks for per-monitor
+      # v2. CMake merges config/streamflex.manifest.in into the exe as resource 1; mt.exe reads it back.
+      - name: Check the built exe asks for per-monitor v2 DPI awareness
+        shell: pwsh
+        run: |
+          $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\mt.exe" | Sort-Object FullName | Select-Object -Last 1
+          if (-not $mt) { Write-Error 'mt.exe is not in the Windows SDK'; exit 1 }
+          $exe = 'build/Release/streamflex.exe'   # EXECUTABLE_OUTPUT_PATH is the build folder (CMakeLists.txt:10)
+          if (-not (Test-Path $exe)) { Write-Error "$exe was not built"; exit 1 }
+          & $mt.FullName -nologo "-inputresource:$exe;#1" -out:build/embedded.manifest
+          if ($LASTEXITCODE -ne 0) { Write-Error "mt.exe could not read the manifest in $exe"; exit 1 }
+          $text = Get-Content -Raw build/embedded.manifest
+          if ($text -notmatch '<dpiAwareness[^>]*>PerMonitorV2</dpiAwareness>') { Write-Error "the exe's manifest does not ask for PerMonitorV2:`n$text"; exit 1 }
+          'the built exe asks for PerMonitorV2'
+
       - name: Check the icon library is beside the executable in the zip
         shell: pwsh
         run: |
