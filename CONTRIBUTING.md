@@ -51,7 +51,7 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 - `STREAMFLEX_TEST_FAIL_TITLE_SIZE=<pt>`: the title font fails to open at that size. Check 40 sets it.
 - `STREAMFLEX_TEST_FONT_DELAY_MS=<ms>`: the font list's thread waits that long after reading the bundled folder, as a slow disk would, so a check can act while the list loads. Check 59 sets it.
 - `STREAMFLEX_TEST_FONT_DIRS=<dir>[:<dir>...]`: the font list reads these folders, after the bundled one, in place of the system's and the user's. Check 59 sets it.
-- `STREAMFLEX_TEST_FRAME_REPORT_MS=<ms>`: once that long has passed, the log says how many frames were shown and how many of them waited out the FPS limit. Check 42 sets it.
+- `STREAMFLEX_TEST_FRAME_REPORT_MS=<ms>`: once that long has passed, the log says how many frames were shown and how many of them `present_frame()` paced: waited out the frame's time itself, for an FPS limit or for a renderer that does not deliver the VSync wanted. Check 42 sets it.
 - `STREAMFLEX_TEST_NO_BASE_PATH`: SDL gives no base path, as `SDL_GetBasePath()` can fail, so the launcher's folder is unknown and a bundled font is looked for only where the packages install it. Check 05 sets it.
 - `STREAMFLEX_TEST_NO_LUMINANCE`: an image's brightness cannot be measured, as when its conversion fails, so the contrast warning has no reading for it. Check 58 sets it.
 - `STREAMFLEX_TEST_NO_MESSAGE_BOX`: a fatal error quits without its message box, which some SDLs show and wait on. Checks 25 and 59 set it.
@@ -63,7 +63,6 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 - `STREAMFLEX_TEST_PAD_SWAP`: virtual gamepads are attached and detached, one step a frame, so one arrives at another's old device index with an instance id of its own; then a launch and a return close every pad and open each again. Check 42 sets it.
 - `STREAMFLEX_TEST_RELOAD_FONTS`: the title and clock fonts are opened a second time as they start, as a reload does, so the leak pass shows whether the font each replaces is closed. Check 41 sets it.
 - `STREAMFLEX_TEST_RESTART_SELF=<path>`: a restart (Linux) looks for the program at `<path>` in place of `/proc/self/exe`: a missing path makes it go by `argv[0]`, and a file that is not a program makes its `execv` fail after the teardown. Check 64 sets it.
-- `STREAMFLEX_TEST_SIMULATE_VSYNC`: with VSync wanted and the renderer saying it gives it, each frame still waits out the rest of its time, as a display would make it, and is not counted as paced: lavapipe takes SDL's VSync but presents as fast as it can under Xvfb. `run.sh` sets it for every run. Temporary: Task 1.5b paces such a renderer for real and removes it.
 - `STREAMFLEX_TEST_SLIDESHOW_HOLD=<file>`: the slideshow's loader thread waits before its read until `<file>` exists (a minute at most), as a slow disk would hold it, so a check can step the mode or quit while it loads and let it go when it has looked. Check 60 sets it.
 - `STREAMFLEX_TEST_VSYNC_REFUSED[=off]`: the renderer reports the VSync it was asked for as refused; with `off`, it reports VSync kept on when it is not wanted. Check 42 sets it.
 

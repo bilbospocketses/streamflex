@@ -253,11 +253,6 @@ echo "Vulkan: lavapipe, from $lvp_driver"
 # VK_DRIVER_FILES=... prefix (the OpenGL fallback runs hide Vulkan that way); setpriv, env and setarch
 # pass an exported variable through
 export VK_DRIVER_FILES="$lvp_icd"
-# SDL3's VULKAN_SetVSync always succeeds and lavapipe's X11 swapchain ignores FIFO, so the launcher
-# presents as fast as it can with VSync "given", where SDL2 simulated VSync: the launcher waits out
-# each frame as a display would, so what a check times in frames takes the time it would on screen.
-# Temporary: Task 1.5b paces such a renderer for real and removes it
-export STREAMFLEX_TEST_SIMULATE_VSYNC=1
 
 # The leak pass preloads Mesa's driver into the launcher. The Vulkan loader and lavapipe are
 # preloaded for the same reason: SDL unloads the loader when the renderer goes, and the loader

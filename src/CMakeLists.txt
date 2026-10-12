@@ -32,6 +32,8 @@ set(SOURCES
   derive.h
   winplan.c
   winplan.h
+  vsyncwatch.c
+  vsyncwatch.h
   config_fields.c
   config_fields.h
   listpick.c

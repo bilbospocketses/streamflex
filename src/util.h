@@ -15,6 +15,11 @@
 #endif
 
 #define UNUSED(x) (void)(x)
+
+// A check made when the file that uses it compiles: CONDITION false makes an array of size -1, which
+// does not compile. MSVC's default C mode has no _Static_assert, so this stands in for it everywhere.
+#define COMPILE_CHECK(name, condition) typedef char name[(condition) ? 1 : -1]
+
 #define SELECTED_SUFFIX "_selected"
 #define LEN(x) ((sizeof(x)/sizeof(x[0])) - sizeof(x[0]))
 #define MATCH(x, y) !strcmp(x, y)

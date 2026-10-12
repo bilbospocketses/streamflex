@@ -20,11 +20,14 @@
 #include "platform/platform.h"
 #include "alloc.h"
 #include "test_hooks.h"
+#include "winplan.h"
+#include "vsyncwatch.h"
 #include "keycodes.h"
 
 static int display_refresh_rate(void);
 static void init_sdl(void);
 static void create_window(void);
+static bool create_renderer(const WindowPlan *plan);
 static void raise_restarted_window(void);
 static void init_sdl_ttf(void);
 static int load_menu(Menu *menu, bool set_back_menu, bool reset_position);
@@ -230,6 +233,10 @@ SDL_Color title_shadow_color;
 static bool gamepad_on = false;   // The game controller subsystem is running
 static bool vsync_wanted = true; // VSync and FPSLimit ask the renderer for VSync
 static bool vsync_on = false;    // The renderer really gives it; unless both are true present_frame() paces each frame
+static VsyncWatch vsync_watch;   // Whether a renderer that reports VSync presents at the display's pace (vsyncwatch.h)
+static WindowPlan plan_in_force;  // The plan of the window that exists: its renderer list, or none under SDL_RENDER_DRIVER
+
+COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
 
 
 // A function to give the display's refresh rate in whole hertz, as SDL2 gave it: SDL3's is a float (59.94)
@@ -274,30 +281,30 @@ static void init_sdl()
     geo.title_min_size = (int) (TITLE_MIN_SIZE * (float) geo.screen_height + 0.5F);
 }
 
-// A function to tell whether the renderer really presents with VSync, by what SDL3 says it runs with.
-// Interim: Task 1.5 re-bases the VSync check per renderer
+// A function to tell whether the renderer really presents with VSync, by SDL's answer
+// (SDL_GetRenderVSync). SDL3 stands in for VSync a driver refuses, pacing each present itself, so a
+// renderer that is asked for VSync reports it; one that cannot turn VSync off keeps reporting it.
 static bool renderer_vsync()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: its renderer (lavapipe) reports every VSync it is asked
-    // for as given and does not honor it (STREAMFLEX_TEST_SIMULATE_VSYNC stands in for the display),
-    // so a refusal is made up here.
-    // "off" is a renderer that keeps VSync on when it is not wanted; any other value never gives it.
+    // Only the headless harness builds this: its renderers never refuse VSync, so a refusal is made
+    // up here. "off" is a renderer that keeps VSync on when it is not wanted; any other value never
+    // gives it.
     const char *refused = getenv("STREAMFLEX_TEST_VSYNC_REFUSED");
     if (refused != NULL)
         return strcmp(refused, "off") == 0;
 #endif
     int vsync = 0;
-    if (renderer == NULL || !SDL_GetRenderVSync(renderer, &vsync))
-        return false;
-    return vsync != 0;
+    return renderer != NULL && SDL_GetRenderVSync(renderer, &vsync) && vsync != 0;
 }
 
 // A function to find out whether the renderer gives the VSync wanted, and say so; without it,
-// present_frame() paces each frame to refresh_period
+// present_frame() paces each frame to refresh_period. A renderer that says it gives VSync is
+// watched afresh from here, for presents that come faster than the display's
 static void check_vsync()
 {
     vsync_on = renderer_vsync();
+    vsyncwatch_reset(&vsync_watch);
     log_debug("Frame timing: VSync wanted %s, the renderer gives %s", vsync_wanted ? "on" : "off", vsync_on ? "on" : "off");
     if (vsync_wanted && !vsync_on)
         log_error("The renderer refused VSync: each frame is paced to %u ms instead", refresh_period);
@@ -360,6 +367,34 @@ void apply_default_menu()
         default_menu = menu;
 }
 
+// A function to make the renderer for the window in force, the renderer half of create_window()
+// (spec section 3): the plan's list, or none when SDL_RENDER_DRIVER chose; the blend mode; the
+// Video: and Renderer: lines; VSync as the frame timing wants it, and whether the renderer gives it;
+// the draw color. False, with SDL's reason logged, when no renderer could be made: the caller
+// decides what that means.
+static bool create_renderer(const WindowPlan *plan)
+{
+    renderer = SDL_CreateRenderer(window, plan->render_list);
+    if (renderer == NULL) {
+        log_error("Could not initialize renderer\n%s", SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    // Which video driver and renderer SDL chose, and whether the list's first choice was not it
+    const char *name = SDL_GetRendererName(renderer);
+    char line[160];
+    winplan_renderer_line(plan->render_list, name, line, sizeof(line));
+    log_debug("Video: SDL's %s driver, the %s renderer", SDL_GetCurrentVideoDriver(), name);
+    log_debug("%s", line);
+
+    if (!SDL_SetRenderVSync(renderer, vsync_wanted ? 1 : 0))
+        log_error("Could not turn VSync %s\n%s", vsync_wanted ? "on" : "off", SDL_GetError());
+    check_vsync();
+    set_draw_color();
+    return true;
+}
+
 // A function to create the window and renderer
 static void create_window()
 {
@@ -368,26 +403,15 @@ static void create_window()
         log_fatal("Could not create SDL Window\n%s", SDL_GetError());
     SDL_HideCursor();
 
-    // The renderer from the platform's list, Vulkan first: SDL takes the first that works (spec
-    // section 3). Interim: Task 1.5 moves this into create_renderer(), with SDL_RENDER_DRIVER and
-    // the Renderer: lines
+    // The renderer, from the platform's Vulkan-first list (spec section 3). Until Task 1.8 makes the
+    // Transparent window, every window here is the opaque fullscreen one, so a Transparent plan
+    // gives way to the opaque one. SDL_getenv, not getenv: MSVC refuses getenv at /W4 /WX (C4996).
     apply_frame_timing();
-#ifdef _WIN32
-    renderer = SDL_CreateRenderer(window, "vulkan,direct3d12,direct3d11,opengl");
-#else
-    renderer = SDL_CreateRenderer(window, "vulkan,opengl");
-#endif
-    if (renderer == NULL)
-        log_fatal("Could not initialize renderer\n%s", SDL_GetError());
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderVSync(renderer, vsync_wanted ? 1 : 0);   // A refusal is check_vsync()'s to report
-
-    // Which video driver and renderer SDL chose: X11 or Wayland, Vulkan or OpenGL
-    log_debug("Video: SDL's %s driver, the %s renderer", SDL_GetCurrentVideoDriver(), SDL_GetRendererName(renderer));
-    check_vsync();
-
-    // Set background color
-    set_draw_color();
+    plan_in_force = window_plan((int) config.background_mode, WINPLAN_WINDOWS, SDL_getenv("SDL_RENDER_DRIVER"));
+    if (plan_in_force.kind != WINDOW_FULLSCREEN || plan_in_force.refused)
+        plan_in_force = window_plan(BACKGROUND_COLOR, WINPLAN_WINDOWS, SDL_getenv("SDL_RENDER_DRIVER"));
+    if (!create_renderer(&plan_in_force))
+        quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
 }
 
 // A function to bring a restart's fresh copy to the front, with the keyboard: on Windows the copy
@@ -408,6 +432,8 @@ static void raise_restarted_window()
 // A function to set the color of the renderer
 void set_draw_color()
 {
+    if (renderer == NULL)
+        return;   // A new renderer sets its draw color as it is made
     SDL_Color *color = NULL;
     if (background_shown == BACKGROUND_COLOR)
         color = &config.background_color;
@@ -1505,22 +1531,18 @@ void present_frame()
 
     // Paced unless the renderer gives the VSync wanted. A renderer that keeps VSync on when it is not
     // wanted still gets the delay, which holds the FPS limit: the present waits at most one refresh more.
-    bool paced = !vsync_wanted || !vsync_on;
+    // One that says it gives VSync is timed at each present, and paced too once its presents are found
+    // to come faster than the display's (vsyncwatch.h): SDL3 takes its word, where SDL2 simulated VSync
+    bool paced = !vsync_wanted || !vsync_on || vsync_watch.undelivered;
     if (paced) {
         Uint32 elapsed = ticks_ms() - ticks.main;
         if (elapsed < refresh_period)
             SDL_Delay(refresh_period - elapsed);
     }
+    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), (Uint64) SDL_NS_PER_SECOND / (Uint64) display_refresh_rate()))
+        log_error("Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to %u ms",
+                  refresh_period);
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: STREAMFLEX_TEST_SIMULATE_VSYNC stands in for the display
-    // under a renderer that claims VSync and does not give it (lavapipe under Xvfb), as SDL2 simulated
-    // VSync there: the rest of the frame is waited out, and the frame is not counted as paced.
-    // Temporary: Task 1.5b paces such a renderer for real, and deletes this hook
-    if (!paced && getenv("STREAMFLEX_TEST_SIMULATE_VSYNC") != NULL) {
-        Uint32 elapsed = ticks_ms() - ticks.main;
-        if (elapsed < refresh_period)
-            SDL_Delay(refresh_period - elapsed);
-    }
     test_frame_report(paced);
     test_frame_after_key();
 #endif

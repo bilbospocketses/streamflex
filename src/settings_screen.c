@@ -251,10 +251,6 @@ static SettingValue read_value(SettingId id, int menu_index)
     return config_read(id, menu_index >= 0 ? menus[menu_index] : NULL);
 }
 
-// A check made when this file compiles: CONDITION false makes an array of size -1, which does not
-// compile. MSVC's default C mode has no _Static_assert, so this stands in for it everywhere.
-#define COMPILE_CHECK(name, condition) typedef char name[(condition) ? 1 : -1]
-
 // Each refresh group's name for the log, in the enum's order
 static const char *const REFRESH_NAMES[] = { "nothing", "the layout", "the titles", "the background",
     "the title font", "the highlight", "the scroll indicators", "the clock", "the screensaver",

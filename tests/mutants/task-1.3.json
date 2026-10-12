@@ -25,11 +25,11 @@
 
   {"name": "control-vsync-read", "find": null, "fixture": "f42-vsync", "wait": "Frame timing: VSync wanted on, the renderer gives ",
    "expect": ["^Frame timing: VSync wanted on, the renderer gives on$"], "absent": ["The renderer refused VSync"], "verdict": "holds"},
-  {"name": "vsync-read-sdl2-form", "file": "src/launcher.c", "find": "    if (renderer == NULL || !SDL_GetRenderVSync(renderer, &vsync))",
-   "replace": "    if (renderer == NULL || SDL_GetRenderVSync(renderer, &vsync) != 0)", "fixture": "f42-vsync", "wait": "Frame timing: VSync wanted on, the renderer gives ",
+  {"name": "vsync-read-sdl2-form", "file": "src/launcher.c", "find": "    return renderer != NULL && SDL_GetRenderVSync(renderer, &vsync) && vsync != 0;",
+   "replace": "    return renderer != NULL && SDL_GetRenderVSync(renderer, &vsync) == 0 && vsync != 0;", "fixture": "f42-vsync", "wait": "Frame timing: VSync wanted on, the renderer gives ",
    "expect": ["^Frame timing: VSync wanted on, the renderer gives on$"], "absent": ["The renderer refused VSync"], "verdict": "caught"},
-  {"name": "vsync-read-fault", "file": "src/launcher.c", "find": "    if (renderer == NULL || !SDL_GetRenderVSync(renderer, &vsync))",
-   "replace": "    if (renderer == NULL || !(SDL_SetError(\"mutant\"), false))", "fixture": "f42-vsync",
+  {"name": "vsync-read-fault", "file": "src/launcher.c", "find": "    return renderer != NULL && SDL_GetRenderVSync(renderer, &vsync) && vsync != 0;",
+   "replace": "    return renderer != NULL && (SDL_SetError(\"mutant\"), false) && vsync != 0;", "fixture": "f42-vsync",
    "expect": ["^Frame timing: VSync wanted on, the renderer gives off$", "^The renderer refused VSync"], "verdict": "fires"},
 
   {"name": "control-ttf", "find": null, "fixture": "f05-init", "wait": "The display reports no refresh rate", "expect": ["^Title font: "], "absent": ["^Could not initialize SDL_ttf$"], "verdict": "holds"},

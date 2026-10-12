@@ -374,8 +374,7 @@ void debug_slideshow(Slideshow *slideshow)
         log_debug("  %s", slideshow->images[slideshow->order[i]]);
 }
 
-// A function to debug the video settings. Interim: Task 1.5 moves the renderer's part to SDL3's
-// renderer properties (name, maximum texture size, VSync)
+// A function to debug the video settings
 void debug_video(SDL_Renderer *renderer, SDL_DisplayMode *display_mode)
 {
     log_debug("================== Video Information ===================\n");
@@ -383,10 +382,17 @@ void debug_video(SDL_Renderer *renderer, SDL_DisplayMode *display_mode)
     log_debug("Refresh rate:  %i Hz", (int) (display_mode->refresh_rate + 0.5f));
     log_debug("Video driver:  %s", SDL_GetCurrentVideoDriver());
     log_debug("");
-    const SDL_PixelFormat *formats = (const SDL_PixelFormat *) SDL_GetPointerProperty(
-        SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, NULL);
+    // The renderer, from SDL3's renderer properties: its name, its largest texture, its VSync and the
+    // texture formats it takes. "Render" leads each line: "Renderer:" lines are the renderer's choice.
+    SDL_PropertiesID properties = SDL_GetRendererProperties(renderer);
+    int vsync = 0;
+    SDL_GetRenderVSync(renderer, &vsync);
+    log_debug("Render driver: %s", SDL_GetRendererName(renderer));
+    log_debug("Max texture:   %lli px", (long long) SDL_GetNumberProperty(properties, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
+    log_debug("Render VSync:  %i", vsync);
     log_debug("Supported Texture formats:");
-    for (size_t i = 0; formats != NULL && formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++)
+    const SDL_PixelFormat *formats = SDL_GetPointerProperty(properties, SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, NULL);
+    for (int i = 0; formats != NULL && formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++)
         log_debug("  %s", SDL_GetPixelFormatName(formats[i]));
     log_debug("");
 }

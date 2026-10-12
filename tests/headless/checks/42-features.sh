@@ -10,8 +10,8 @@ grep -q 'Frame timing: FPS limit 10, 100 ms a frame' "$out/f42-fps10.log" \
     && ran_clean f42-fps10 && ok=0
 result "FPSLimit=10 with VSync off sets 100 ms frames, and leaves VSync as written (exit $(cat "$out/f42-fps10.code"))" $ok
 
-# A renderer that refuses VSync (a test hook stands in for one: the harness's SDL simulates VSync)
-# is paced by the frame delay instead, and the refusal is logged once
+# A renderer that refuses VSync (a test hook stands in for one: the harness's renderers never refuse
+# it) is paced by the frame delay instead, and the refusal is logged once
 STREAMFLEX_TEST_VSYNC_REFUSED=1 run_quick f42-vsync
 ok=1
 grep -q 'Frame timing: VSync wanted on, the renderer gives off' "$out/f42-vsync.log" \
@@ -33,6 +33,22 @@ grep -q 'Frame timing: VSync wanted off, the renderer gives on' "$out/f42-fpsstu
     && ran_clean f42-fpsstuck && ok=0
 result "a renderer that keeps VSync on is still paced to FPSLimit=10 (${report:-no frame report}; exit $(cat "$out/f42-fpsstuck.code"))" $ok
 
+# A renderer that claims VSync and does not deliver it (the harness's, as f42-all below says) is found
+# again whenever the VSync wish changes. In settings, VSync off, then an FPS limit of 30, turn the wish
+# off (VSync off alone keeps it: frames still keep the display's rate); the limit back to Off turns it
+# on again, and the renderer is watched afresh, so it is found, and said, a second time. Settings then
+# close, putting both back, and the home screen runs a while.
+p42_home_a_while() { sleep 2; }
+CFG=$FX/f55-frame.ini run_keys f42-vsyncagain Menu Return Down Down Down Down Down Left Down Right Left Menu +p42_home_a_while
+log=$out/f42-vsyncagain.log
+undelivered_line='^Frame timing: the renderer claims VSync but does not deliver it'
+again=$(sed -n '/^Frame timing: VSync wanted off, the renderer gives off$/,$p' "$log" | grep -c "$undelivered_line")
+ok=1
+grep -q '^Frame timing: VSync wanted off, the renderer gives off$' "$log" && [ "$(grep -c "$undelivered_line" "$log")" = 2 ] \
+    && [ "$again" = 1 ] && ran_clean f42-vsyncagain && ok=0
+result "VSync wanted off and on again is watched afresh, and found undelivered again (said $(grep -c "$undelivered_line" "$log") times, $again after the wish changed; exit $(cat "$out/f42-vsyncagain.code"))" $ok
+grep -E '^(Settings: \[General\] (VSync|FPSLimit)|Frame timing:)' "$log" | sed 's/^/      /'
+
 # Every feature running at once, the screensaver on and off again, the virtual pad attached, and a
 # clean quit: every feature's stop runs at quit
 wake() { xdotool key Right; sleep 1; }
@@ -41,11 +57,19 @@ STREAMFLEX_TEST_PAD=/tmp/pad-none STREAMFLEX_TEST_FRAME_REPORT_MS=2000 UNTIL='Sc
     run_after_line f42-all 'Screensaver on' +wake
 log=$out/f42-all.log
 
-# VSync wanted and given: present_frame() leaves the pacing to the renderer, as before
+# VSync wanted, and claimed by the harness's renderer, which does not deliver it: SDL3's Vulkan
+# renderer takes VSync, and lavapipe's swapchain under Xvfb ignores it and presents as fast as it can
+# draw. present_frame() finds that out by measurement, says so once, and from then on paces each
+# frame to the display's 16 ms itself, so the frames keep about the display's rate. The frames before
+# it is found are not paced: at least the run of 60 fast presents that finds it (vsyncwatch.h), and
+# no more than 240 here.
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
+read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
+undelivered=$(grep -c '^Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to 16 ms$' "$log")
 ok=1
-[ -n "$report" ] && [ "${report##*ms, }" = "0 of them paced" ] && ok=0
-result "with VSync wanted and given, no frame is paced by the delay (${report:-no frame report})" $ok
+[ -n "$report" ] && [ "$undelivered" = 1 ] && [ "$paced" -gt 0 ] && [ "$paced" -le $((span / 16 + 2)) ] \
+    && [ $((frames - paced)) -le 240 ] && ok=0
+result "with VSync claimed but not delivered, frames are paced to the display's rate, and it is said once (${report:-no frame report}; said $undelivered times)" $ok
 stops=$(sed -n '/Quitting program/,$p' "$log")
 all_stopped=0
 for feature in Clock Screensaver 'Scroll indicators' Highlight Overlay Gamepad; do

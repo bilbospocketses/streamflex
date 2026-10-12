@@ -179,3 +179,16 @@ target_include_directories(test_bindings_fixtures PRIVATE "${PROJECT_SOURCE_DIR}
 target_compile_definitions(test_bindings_fixtures PRIVATE FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/headless/fixtures")
 link_fileio(test_bindings_fixtures)
 add_test(NAME bindings_fixtures COMMAND test_bindings_fixtures)
+
+# Unit test 3: the built SDL has its Vulkan renderer. It links SDL3 as the launcher does (Task 1.1's
+# target name), and needs no GPU, so it runs on Windows too, where a missing sdl3[vulkan] fails it.
+add_executable(test_render_drivers test_render_drivers.c)
+target_include_directories(test_render_drivers PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(test_render_drivers SDL3::SDL3)
+add_test(NAME render_drivers COMMAND test_render_drivers)
+
+# Unit tests for the VSync watch: a renderer that reports VSync but presents faster than the display
+# is found by measurement (spec section 3; pure, linked alone)
+add_executable(test_vsyncwatch test_vsyncwatch.c "${PROJECT_SOURCE_DIR}/src/vsyncwatch.c")
+target_include_directories(test_vsyncwatch PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME vsyncwatch COMMAND test_vsyncwatch)

@@ -101,15 +101,13 @@ def main():
     tree()
     xvfb = subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac"],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # lavapipe's ICD, as run.sh finds it (Debian names it lvp_icd.json, Fedora lvp_icd.<arch>.json),
-    # and run.sh's stand-in for the display's VSync, which lavapipe's swapchain does not honor, so
-    # frames come at the display's pace as in every harness run
+    # lavapipe's ICD, as run.sh finds it (Debian names it lvp_icd.json, Fedora lvp_icd.<arch>.json)
     icd = [path for path in ("/usr/share/vulkan/icd.d/lvp_icd.json", f"/usr/share/vulkan/icd.d/lvp_icd.{platform.machine()}.json")
            if os.path.exists(path)]
     if not icd:
         print("NO LAVAPIPE FOUND")
         sys.exit(2)
-    env = dict(os.environ, DISPLAY=":99", VK_DRIVER_FILES=icd[0], STREAMFLEX_TEST_SIMULATE_VSYNC="1")
+    env = dict(os.environ, DISPLAY=":99", VK_DRIVER_FILES=icd[0])
     for _ in range(100):
         if subprocess.run(["xdotool", "getdisplaygeometry"], env=env, capture_output=True).returncode == 0:
             break
