@@ -282,8 +282,9 @@ static void init_sdl()
 }
 
 // A function to tell whether the renderer really presents with VSync, by SDL's answer
-// (SDL_GetRenderVSync). SDL3 stands in for VSync a driver refuses, pacing each present itself, so a
-// renderer that is asked for VSync reports it; one that cannot turn VSync off keeps reporting it.
+// (SDL_GetRenderVSync). SDL3 stands in for VSync a driver refuses, pacing each present itself, and
+// reports whatever VSync was asked for, so outside the test hook this never reads a refusal. A
+// renderer that claims VSync and does not deliver it is the VSync watch's to find (vsyncwatch.h).
 static bool renderer_vsync()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
