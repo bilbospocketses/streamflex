@@ -192,3 +192,7 @@ add_test(NAME render_drivers COMMAND test_render_drivers)
 add_executable(test_vsyncwatch test_vsyncwatch.c "${PROJECT_SOURCE_DIR}/src/vsyncwatch.c")
 target_include_directories(test_vsyncwatch PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME vsyncwatch COMMAND test_vsyncwatch)
+
+# Unit test 11: the manifest asks for per-monitor v2, read from the source on every platform
+add_test(NAME manifest_dpi COMMAND ${CMAKE_COMMAND} -DMANIFEST=${PROJECT_SOURCE_DIR}/config/${EXECUTABLE_TITLE}.manifest.in
+         -P ${CMAKE_CURRENT_SOURCE_DIR}/check_manifest.cmake)

@@ -325,6 +325,39 @@ static void test_exit_retry_due(void)
     CHECK(derive_exit_retry_due(true, false, 4000, 0xFFFFFC17));  // 5 s across the wrap
 }
 
+// Unit test 9 (spec section 9): the screen's geometry from the window's size in pixels, with the
+// arithmetic and rounding init_sdl() always used: the margin truncated, the title minimum rounded
+static void test_geometry_from_pixels(void)
+{
+    ScreenGeometry hd = geometry_from_pixels(1920, 1080);
+    CHECK_INT(hd.screen_width, 1920);
+    CHECK_INT(hd.screen_height, 1080);
+    CHECK_INT(hd.screen_margin, 54);
+    CHECK_INT(hd.title_min_size, 22);
+    ScreenGeometry uhd = geometry_from_pixels(3840, 2160);
+    CHECK_INT(uhd.screen_width, 3840);
+    CHECK_INT(uhd.screen_height, 2160);
+    CHECK_INT(uhd.screen_margin, 108);
+    CHECK_INT(uhd.title_min_size, 43);
+    ScreenGeometry small = geometry_from_pixels(1280, 720);
+    CHECK_INT(small.screen_width, 1280);
+    CHECK_INT(small.screen_height, 720);
+    CHECK_INT(small.screen_margin, 36);
+    CHECK_INT(small.title_min_size, 14);
+}
+
+// A function to test the refresh rate taken from the display: rounded to whole hertz, and 60 when the
+// display reports none (Xvfb, some VMs and remote desktops report 0), since every timing divides by it
+static void test_refresh_rate(void)
+{
+    CHECK_INT(derive_refresh_rate(0.0f), 60);
+    CHECK_INT(derive_refresh_rate(-1.0f), 60);
+    CHECK_INT(derive_refresh_rate(59.94f), 60);
+    CHECK_INT(derive_refresh_rate(60.0f), 60);
+    CHECK_INT(derive_refresh_rate(143.98f), 144);
+    CHECK_INT(derive_refresh_rate(29.97f), 30);
+}
+
 int main(void)
 {
     test_exit_retry_due();
@@ -337,5 +370,7 @@ int main(void)
     test_conversions();
     test_titles_off();
     test_title_padding_one_of_two();
+    test_geometry_from_pixels();
+    test_refresh_rate();
     return check_report();
 }

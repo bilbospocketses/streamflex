@@ -2,7 +2,7 @@
 #include "derive.h"
 
 // Launcher parameters
-#define DEFAULT_REFRESH_RATE 60
+#define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
 #define MIN_FPS_LIMIT 10
 #define GAMEPAD_DEADZONE 10000
 #define GAMEPAD_REPEAT_DELAY 500

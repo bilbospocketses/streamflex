@@ -135,6 +135,7 @@ for word in "${TESTER[@]}"; do
         *) p58_short+=("$word") ;;
     esac
 done
+echo 3840x480 > "$out/f58-short.display"
 # shellcheck disable=SC2046
 ( export DISPLAY=:98; TESTER=("${p58_short[@]}")
   CFG=$FX/f60-color.ini run_keys f58-short Menu Down Return Down Return $(p58_downs 4) Return )

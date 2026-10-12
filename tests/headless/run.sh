@@ -25,6 +25,9 @@
 # Prints PASS or FAIL per check and exits non-zero when any failed. Every run's output, log and
 # exit code are kept in /out/<label>.
 set -u
+# The display's scale is pinned: no GDK or SDL scale reaches the launcher unless a check sets one
+# (47-screen.sh's Scale leg), and Xvfb has no X resources, so no Xft.dpi
+unset GDK_SCALE GDK_DPI_SCALE SDL_VIDEO_X11_SCALING_FACTOR
 label=${1:-}
 fault=${2:-}
 shard=${3:-}
@@ -459,6 +462,7 @@ run_keys() {
 run_keys_at() {
     local size=$1 xvfb i word at=()
     shift
+    echo "$size" > "$out/$1.display"   # 95-every-run.sh reads the size of the display this run used
     Xvfb :97 -screen 0 "${size}x24" -ac > /dev/null 2>&1 &
     xvfb=$!
     for i in $(seq 100); do DISPLAY=:97 command xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done

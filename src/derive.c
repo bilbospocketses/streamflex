@@ -102,3 +102,22 @@ bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigne
 {
     return refused && (at_once || now - last_try >= DERIVE_EXIT_RETRY_MS);
 }
+
+// A function to work out the screen's geometry from the window's size in pixels, with the arithmetic
+// and rounding the launcher has always used: the margin truncated, the title minimum rounded
+ScreenGeometry geometry_from_pixels(int width, int height)
+{
+    ScreenGeometry screen;
+    screen.screen_width = width;
+    screen.screen_height = height;
+    screen.screen_margin = (int) (DERIVE_SCREEN_MARGIN * (float) height);
+    screen.title_min_size = (int) (DERIVE_TITLE_MIN_SIZE * (float) height + 0.5F);
+    return screen;
+}
+
+// A function to take the display's refresh rate in whole hertz, rounded (SDL3 gives a float: 59.94);
+// a display that reports less than 1 Hz gets the default, since every frame time divides by it
+int derive_refresh_rate(float reported)
+{
+    return reported >= 1.0F ? (int) (reported + 0.5F) : DERIVE_DEFAULT_REFRESH_RATE;
+}
