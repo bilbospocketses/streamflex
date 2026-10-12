@@ -14,10 +14,11 @@ void vsyncwatch_reset(VsyncWatch *watch)
 // off the rate it reports, never is; and only VSYNCWATCH_RUN fast ones in a row find it, so the few
 // a swapchain lets through early after a stall never do. A present that is not fast starts the run
 // again.
-bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, uint64_t period_ns)
+bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, int rate_hz)
 {
     if (watch->undelivered)
         return false;
+    uint64_t period_ns = UINT64_C(1000000000) / (uint64_t) rate_hz;   // The display's frame
     bool fast = watch->started && (now_ns - watch->last_ns) * 2 < period_ns;
     watch->started = true;
     watch->last_ns = now_ns;

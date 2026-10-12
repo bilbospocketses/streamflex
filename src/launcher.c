@@ -1540,7 +1540,7 @@ void present_frame()
         if (elapsed < refresh_period)
             SDL_Delay(refresh_period - elapsed);
     }
-    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), (Uint64) SDL_NS_PER_SECOND / (Uint64) display_refresh_rate()))
+    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), display_refresh_rate()))
         log_error("Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to %u ms",
                   refresh_period);
 #ifdef STREAMFLEX_TEST_HOOKS
