@@ -33,28 +33,50 @@ grep -q 'Frame timing: VSync wanted off, the renderer gives on' "$out/f42-fpsstu
     && ran_clean f42-fpsstuck && ok=0
 result "a renderer that keeps VSync on is still paced to FPSLimit=10 (${report:-no frame report}; exit $(cat "$out/f42-fpsstuck.code"))" $ok
 
+# The VSync watch's checks run on a small second display (P42_SIZE): lavapipe draws a 1920 x 1080 window
+# at about the display's rate, too slowly for the watch to find anything, and a small one fast. A
+# function to say why a run's frames cannot test the watch, or nothing when they can: its frame report
+# must show presents at twice the display's rate or more whenever none of them was paced, so a future
+# slowdown fails as a broken premise rather than as a watch that never fired.
+P42_SIZE=640x360
+p42_premise() {
+    local log=$1 report frames span paced rate
+    report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
+    read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
+    rate=$(sed -n 's/^Refresh rate: *\([0-9]*\) Hz$/\1/p' "$log" | head -1)
+    if [ -z "$report" ] || [ -z "$rate" ]; then
+        echo "premise unknown: no frame report or no refresh rate in the log"
+    elif [ "$paced" = 0 ] && [ $((frames * 1000)) -lt $((2 * rate * span)) ]; then
+        echo "premise broken: presents not fast enough to test the VSync watch ($frames frames in $span ms, none paced, under twice the display's $rate Hz)"
+    fi
+}
+
 # A renderer that claims VSync and does not deliver it (the harness's, as f42-all below says) is found
 # again whenever the VSync wish changes. In settings, VSync off, then an FPS limit of 30, turn the wish
 # off (VSync off alone keeps it: frames still keep the display's rate); the limit back to Off turns it
 # on again, and the renderer is watched afresh, so it is found, and said, a second time. Settings then
 # close, putting both back, and the home screen runs a while.
 p42_home_a_while() { sleep 2; }
-CFG=$FX/f55-frame.ini run_keys f42-vsyncagain Menu Return Down Down Down Down Down Left Down Right Left Menu +p42_home_a_while
+STREAMFLEX_TEST_FRAME_REPORT_MS=2000 CFG=$FX/f55-frame.ini run_keys_at $P42_SIZE f42-vsyncagain \
+    Menu Return Down Down Down Down Down Left Down Right Left Menu +p42_home_a_while
 log=$out/f42-vsyncagain.log
+premise=$(p42_premise "$log")
 undelivered_line='^Frame timing: the renderer claims VSync but does not deliver it'
 again=$(sed -n '/^Frame timing: VSync wanted off, the renderer gives off$/,$p' "$log" | grep -c "$undelivered_line")
 ok=1
-grep -q '^Frame timing: VSync wanted off, the renderer gives off$' "$log" && [ "$(grep -c "$undelivered_line" "$log")" = 2 ] \
+[ -z "$premise" ] && grep -qx "Resolution: *$P42_SIZE" "$log" \
+    && grep -q '^Frame timing: VSync wanted off, the renderer gives off$' "$log" && [ "$(grep -c "$undelivered_line" "$log")" = 2 ] \
     && [ "$again" = 1 ] && ran_clean f42-vsyncagain && ok=0
-result "VSync wanted off and on again is watched afresh, and found undelivered again (said $(grep -c "$undelivered_line" "$log") times, $again after the wish changed; exit $(cat "$out/f42-vsyncagain.code"))" $ok
+result "VSync wanted off and on again is watched afresh, and found undelivered again (said $(grep -c "$undelivered_line" "$log") times, $again after the wish changed; exit $(cat "$out/f42-vsyncagain.code"))${premise:+; $premise}" $ok
+grep -E '^(Resolution:|Test hook: [0-9]* frames)' "$log" | sed 's/^/      /'
 grep -E '^(Settings: \[General\] (VSync|FPSLimit)|Frame timing:)' "$log" | sed 's/^/      /'
 
 # Every feature running at once, the screensaver on and off again, the virtual pad attached, and a
-# clean quit: every feature's stop runs at quit
+# clean quit: every feature's stop runs at quit. On the small display, for the VSync watch below.
 wake() { xdotool key Right; sleep 1; }
 rm -f /tmp/pad-none
 STREAMFLEX_TEST_PAD=/tmp/pad-none STREAMFLEX_TEST_FRAME_REPORT_MS=2000 UNTIL='Screensaver off' \
-    run_after_line f42-all 'Screensaver on' +wake
+    WAIT_FOR='Screensaver on' run_keys_at $P42_SIZE f42-all +wake
 log=$out/f42-all.log
 
 # VSync wanted, and claimed by the harness's renderer, which does not deliver it: SDL3's Vulkan
@@ -66,10 +88,13 @@ log=$out/f42-all.log
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
 read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
 undelivered=$(grep -c '^Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to 16 ms$' "$log")
+premise=$(p42_premise "$log")
 ok=1
-[ -n "$report" ] && [ "$undelivered" = 1 ] && [ "$paced" -gt 0 ] && [ "$paced" -le $((span / 16 + 2)) ] \
+[ -z "$premise" ] && grep -qx "Resolution: *$P42_SIZE" "$log" \
+    && [ -n "$report" ] && [ "$undelivered" = 1 ] && [ "$paced" -gt 0 ] && [ "$paced" -le $((span / 16 + 2)) ] \
     && [ $((frames - paced)) -le 240 ] && ok=0
-result "with VSync claimed but not delivered, frames are paced to the display's rate, and it is said once (${report:-no frame report}; said $undelivered times)" $ok
+result "with VSync claimed but not delivered, frames are paced to the display's rate, and it is said once (${report:-no frame report}; said $undelivered times)${premise:+; $premise}" $ok
+grep '^Resolution:' "$log" | sed 's/^/      /'
 stops=$(sed -n '/Quitting program/,$p' "$log")
 all_stopped=0
 for feature in Clock Screensaver 'Scroll indicators' Highlight Overlay Gamepad; do
