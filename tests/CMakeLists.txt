@@ -142,6 +142,11 @@ if (UNIX)
 endif ()
 add_test(NAME library_svg COMMAND test_library_svg)
 
+# Unit test 14: the window a background needs and the renderers that may draw it (pure, linked alone)
+add_executable(test_winplan test_winplan.c "${PROJECT_SOURCE_DIR}/src/winplan.c")
+target_include_directories(test_winplan PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME winplan COMMAND test_winplan)
+
 # The built SDL_ttf shapes text with HarfBuzz (spec section 9, test 5); it needs no window or GPU
 add_executable(test_harfbuzz test_harfbuzz.c)
 target_link_libraries(test_harfbuzz SDL3_ttf::SDL3_ttf SDL3::SDL3)

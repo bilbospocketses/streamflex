@@ -30,6 +30,8 @@ set(SOURCES
   settings.h
   derive.c
   derive.h
+  winplan.c
+  winplan.h
   config_fields.c
   config_fields.h
   listpick.c
