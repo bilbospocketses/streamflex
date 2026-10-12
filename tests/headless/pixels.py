@@ -13,7 +13,7 @@ exits 0, or 1 when no pixel has the second color. The third compares the two scr
 alone, never their headers or colormaps (each XWDColor entry carries a pad byte that xwd may leave
 unset: Fedora's does), and prints "same pixels: W x H", exiting 0, or "N pixels differ, in the box
 x0,y0 to x1,y1", or that the sizes differ, exiting 1. All exit 2 when a file is not a screenshot
-they can read.
+they can read, and "same" also when the two store their pixels differently.
 """
 import collections
 import struct
