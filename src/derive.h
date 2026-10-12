@@ -14,6 +14,7 @@
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
 #define DERIVE_EXIT_RETRY_MS 5000             // A refused Windows exit hotkey is tried again this often
 #define DERIVE_DEFAULT_REFRESH_RATE 60        // Hz, when the display reports none
+#define DERIVE_MIN_REFRESH_RATE 1.0F          // Hz: a display that reports less reports none
 #define DERIVE_SCREEN_MARGIN 0.05F            // The screen's margin: 5% of its height
 #define DERIVE_TITLE_MIN_SIZE 0.02F           // The readable minimum title size: 2% of the screen height
 

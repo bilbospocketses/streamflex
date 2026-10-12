@@ -352,6 +352,8 @@ static void test_refresh_rate(void)
 {
     CHECK_INT(derive_refresh_rate(0.0f), 60);
     CHECK_INT(derive_refresh_rate(-1.0f), 60);
+    CHECK_INT(derive_refresh_rate(0.99f), 60);
+    CHECK_INT(derive_refresh_rate(1.0f), 1);
     CHECK_INT(derive_refresh_rate(59.94f), 60);
     CHECK_INT(derive_refresh_rate(60.0f), 60);
     CHECK_INT(derive_refresh_rate(143.98f), 144);

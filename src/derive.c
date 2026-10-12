@@ -119,5 +119,5 @@ ScreenGeometry geometry_from_pixels(int width, int height)
 // a display that reports less than 1 Hz gets the default, since every frame time divides by it
 int derive_refresh_rate(float reported)
 {
-    return reported >= 1.0F ? (int) (reported + 0.5F) : DERIVE_DEFAULT_REFRESH_RATE;
+    return reported >= DERIVE_MIN_REFRESH_RATE ? (int) (reported + 0.5F) : DERIVE_DEFAULT_REFRESH_RATE;
 }

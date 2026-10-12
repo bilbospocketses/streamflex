@@ -403,7 +403,7 @@ static void read_refresh_rate(void)
 {
     const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(window));
     display_rate = derive_refresh_rate(mode != NULL ? mode->refresh_rate : 0.0F);
-    if (mode == NULL || mode->refresh_rate < 1.0F)
+    if (mode == NULL || mode->refresh_rate < DERIVE_MIN_REFRESH_RATE)
         log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
 }
 
