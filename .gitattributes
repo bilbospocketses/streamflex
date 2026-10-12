@@ -4,6 +4,7 @@ tests/headless/checks/*.sh text eol=lf
 tests/headless/*.py text eol=lf
 tests/headless/Dockerfile text eol=lf
 tests/headless/Dockerfile.fedora text eol=lf
+tests/headless/*.supp text eol=lf
 # The hands-on QA helpers run in the Ubuntu guest, so the same holds for them
 tests/qa/*.sh text eol=lf
 tests/qa/*.py text eol=lf
