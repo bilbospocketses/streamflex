@@ -87,6 +87,23 @@ static void test_sdl3_only(void)
     }
 }
 
+// A function to test the other codes 0x200 above the renumbered block, which no SDL3-only key is stored
+// as: each is stored and named as itself, never as the key 0x200 below it (#4000030F is not play/pause)
+static void test_above_block(void)
+{
+    int wrong = 0;
+    for (uint32_t code = 0x40000302; code <= 0x4000031E; code++) {
+        bool sdl3_only = false;
+        for (int i = 0; i < COUNT(SDL3_ONLY); i++)
+            sdl3_only = sdl3_only || code == SDL3_ONLY[i] + 0x200;
+        wrong += !sdl3_only && !unmoved(code, false);
+    }
+    CHECK_INT(wrong, 0);
+    CHECK(keycode_from_stored(0x40000302) == 0x40000302);
+    CHECK(keycode_from_stored(0x4000030F) == 0x4000030F);
+    CHECK(keycode_from_stored(0x4000031E) == 0x4000031E);
+}
+
 // A function to test SDL2's keys SDL3 never sends: no SDL3 key names them
 static void test_sdl2_only(void)
 {
@@ -122,6 +139,7 @@ int main(void)
     test_moved();
     test_mute();
     test_sdl3_only();
+    test_above_block();
     test_sdl2_only();
     test_unmoved();
     test_f_keys();

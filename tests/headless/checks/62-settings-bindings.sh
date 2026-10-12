@@ -662,11 +662,13 @@ echo "      refusals: $(grep -c 'Settings: the capture cannot start' "$log")"
 # An SDL2-era config's media keys still mean what they meant (spec section 1, item 2; plan Task 1.4).
 # #40000105 is SDL2's AudioPlay; a remote's play/pause key sends SDL3's MediaPlayPause (#4000010F)
 # now, and a play key MediaPlay (#40000106): either is read as #40000105, runs its hotkey, and the log
-# names it by the code the file holds
-CFG=$FX/f62-media.ini run_keys f62-media XF86AudioPlay
+# names it by the code the file holds. The hotkey quits, so the Down sent after it finds no launcher:
+# the harness's own stop would log "Quitting program" too, and a play key that ran nothing would leave
+# the launcher there to read the Down
+CFG=$FX/f62-media.ini run_keys f62-media XF86AudioPlay Down
 ok=1
 grep -qx 'Key MediaPlayPause (#40000105) detected' "$out/f62-media.log" && grep -q '^Quitting program' "$out/f62-media.log" \
-    && ran_clean f62-media && ok=0
+    && ! grep -q '^Key Down' "$out/f62-media.log" && ran_clean f62-media && ok=0
 result "keys: an SDL2-era config's play key still runs its hotkey (exit $(cat "$out/f62-media.code"))" $ok
 grep -E '^Key ' "$out/f62-media.log" | sed 's/^/      /'
 
