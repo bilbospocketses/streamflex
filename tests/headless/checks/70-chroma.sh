@@ -17,12 +17,11 @@ printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">' 
     > "$TESTER_HOME/keyed/svg.svg"
 chown -R tester:tester "$TESTER_HOME/keyed"
 
-# A function for a +key (see run_keys): give the window the screen, then count the key-colored
-# pixels inside each icon, once all three frames are on show. Writes "<icon> box ...: N pixels of
-# 1,1,1" per icon to NAME.seen, and keeps the last screenshot as NAME.xwd when a frame never showed.
+# A function for a +key (see run_keys): count the key-colored pixels inside each icon, once all
+# three frames are on show. Writes "<icon> box ...: N pixels of 1,1,1" per icon to NAME.seen, and
+# keeps the last screenshot as NAME.xwd when a frame never showed.
 count_keyed() {
     local name=$1 shot=/tmp/keyed.xwd i icon found
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     for i in $(seq 50); do
         : > "$out/$name.seen"
         found=yes

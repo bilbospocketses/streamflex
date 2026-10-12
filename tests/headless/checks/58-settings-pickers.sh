@@ -103,7 +103,6 @@ echo "      previewed: ${previews:-nothing}"
 # is not on left without an outline
 p58_swatches() {
     local name=$1 pid=$2 line c ox oy seen=no
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     if wait_line 'Settings: the color picker draws' "$pid"; then
         line=$(grep -o 'Settings: the color picker draws [0-9]* px cells from [0-9]*,[0-9]*' "$LOG" | tail -1)
         read -r c ox oy <<< "$(sed 's/.* draws \([0-9]*\) px cells from \([0-9]*\),\([0-9]*\)/\1 \2 \3/' <<< "$line")"

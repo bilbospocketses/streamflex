@@ -55,8 +55,6 @@ grep -hE '^(Video|Renderer|Frame timing):' "$out/gl-quit.log" "$out/gl-fps10.log
 r44_home() {
     local name=$1 pid=$2 shot=/tmp/r44.xwd
     wait_line 'Begin program loop' "$pid" || return
-    # Xvfb has no window manager to make the window fullscreen: give it the screen, as look() does
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     screen_shows "$name" corner 10,10=30,45,60 && echo 'corner yes' >> "$out/$name.seen"
     xwd -root -silent -out "$shot" && python3 "$HERE/pixels.py" "$shot" count 255,0,255 inside 255,0,255 > "$out/$name.box" 2>&1
 }

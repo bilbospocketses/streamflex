@@ -374,12 +374,13 @@ void debug_slideshow(Slideshow *slideshow)
         log_debug("  %s", slideshow->images[slideshow->order[i]]);
 }
 
-// A function to debug the video settings
-void debug_video(SDL_Renderer *renderer, SDL_DisplayMode *display_mode)
+// A function to debug the video settings: the screen is the window's size in pixels (spec section 6),
+// in the format four harness checks match with grep -qx
+void debug_video(SDL_Renderer *renderer, int width, int height, int refresh_rate)
 {
     log_debug("================== Video Information ===================\n");
-    log_debug("Resolution:    %ix%i", display_mode->w, display_mode->h);
-    log_debug("Refresh rate:  %i Hz", (int) (display_mode->refresh_rate + 0.5f));
+    log_debug("Resolution:    %ix%i", width, height);
+    log_debug("Refresh rate:  %i Hz", refresh_rate);
     log_debug("Video driver:  %s", SDL_GetCurrentVideoDriver());
     log_debug("");
     // The renderer, from SDL3's renderer properties: its name, its largest texture, its VSync and the

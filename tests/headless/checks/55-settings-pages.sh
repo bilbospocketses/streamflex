@@ -178,7 +178,6 @@ diff "$FX/f55-odd.ini" "$cfg" | sed 's/^/      /'
 # center steps from 50% to 55%, and 55% is saved
 highlight_box() {
     local name=$1 pid=$2 tag=$3 line=$4 shot=/tmp/box.xwd
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     wait_line "$line" "$pid" && sleep 1 && xwd -root -silent -out "$shot" \
         && python3 "$HERE/pixels.py" "$shot" count 255,0,255 inside 255,0,255 | sed "s/^/$tag /" >> "$out/$name.boxes"
 }

@@ -529,3 +529,20 @@ static UINT sdl_to_win32_keycode(SDL_Keycode keycode)
     }
     return 0;
 }
+
+// A function to say how Windows scales this process's windows, as the manifest set it before SDL
+// started: per-monitor v2 (spec section 6), per-monitor v1, system or unaware
+const char *dpi_awareness(void)
+{
+    DPI_AWARENESS_CONTEXT context = GetThreadDpiAwarenessContext();
+    if (AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+        return "per-monitor v2";
+    switch (GetAwarenessFromDpiAwarenessContext(context)) {
+        case DPI_AWARENESS_PER_MONITOR_AWARE:
+            return "per-monitor v1";
+        case DPI_AWARENESS_SYSTEM_AWARE:
+            return "system";
+        default:
+            return "unaware";
+    }
+}

@@ -567,9 +567,6 @@ look() {
         echo "$tag no" >> "$out/$name.seen"
         return
     fi
-    # Xvfb has no window manager to carry out the launcher's fullscreen request, so its window
-    # stays 1 x 1 and nothing it draws reaches the screen: give it the screen, as one would
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     if wait_line "$line" "$pid"; then
         for p in "$@"; do
             rest=${p#*,}

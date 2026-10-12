@@ -20,7 +20,7 @@ typedef struct {
 
 // Watch afresh, as after a new renderer or a new VSync wish
 void vsyncwatch_reset(VsyncWatch *watch);
-// A present that returned at now_ns, on a display of rate_hz (at least 1, as display_refresh_rate()
+// A present that returned at now_ns, on a display of rate_hz (at least 1, as derive_refresh_rate()
 // gives it): true once, at the present that finds VSync not delivered; false before it, and after
 bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, int rate_hz);
 

@@ -24,7 +24,6 @@
 #include "vsyncwatch.h"
 #include "keycodes.h"
 
-static int display_refresh_rate(void);
 static void init_sdl(void);
 static void create_window(void);
 static bool create_renderer(const WindowPlan *plan);
@@ -215,7 +214,8 @@ Clock *clk                            = NULL;
 SDL_Thread *Slideshowhread            = NULL;
 SDL_Thread *clock_thread              = NULL;
 SDL_Event event;
-SDL_DisplayMode display_mode;
+static int display_rate = DEFAULT_REFRESH_RATE;   // The window's display's refresh rate, in whole hertz
+static float display_scale = 1.0F;                // The OS's scale for that display: logged, never applied (spec section 6)
 static char **start_argv              = NULL; // The arguments StreamFlex was started with, as main() had them,
                                               // and --restarted after them for a restart; NULL-terminated
 TextInfo title_info;
@@ -239,12 +239,6 @@ static WindowPlan plan_in_force;  // The plan of the window that exists: its ren
 COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
 
 
-// A function to give the display's refresh rate in whole hertz, as SDL2 gave it: SDL3's is a float (59.94)
-static int display_refresh_rate(void)
-{
-    return (int) (display_mode.refresh_rate + 0.5f);
-}
-
 // A function to initialize SDL
 static void init_sdl()
 {
@@ -259,26 +253,6 @@ static void init_sdl()
     // Initialize SDL
     if (!SDL_Init(sdl_flags))
         log_fatal("Could not initialize SDL\n%s", SDL_GetError());
-
-    // The screen size is the primary display's desktop mode: SDL3 has no display 0. Interim, until
-    // Task 1.6 takes it from the window's pixels (spec section 1, item 9). A mode that cannot be read
-    // leaves display_mode zero, as SDL2's failed call did
-    const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
-    if (mode != NULL)
-        display_mode = *mode;
-    geo.screen_width = display_mode.w;
-    geo.screen_height = display_mode.h;
-
-    // SDL reports 0 when the display does not say (Xvfb, some VMs and remote desktops), and
-    // every timing below divides by the rate: create_window() reads it again from display_mode.
-    // The whole-hertz rate is the one divided by, so a rate under half a hertz counts as none too
-    if (display_refresh_rate() < 1) {
-        log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
-        display_mode.refresh_rate = (float) DEFAULT_REFRESH_RATE;
-    }
-    refresh_period = 1000 / (Uint32) display_refresh_rate();
-    geo.screen_margin = (int) (SCREEN_MARGIN * (float) geo.screen_height);
-    geo.title_min_size = (int) (TITLE_MIN_SIZE * (float) geo.screen_height + 0.5F);
 }
 
 // A function to tell whether the renderer really presents with VSync, by SDL's answer
@@ -320,7 +294,7 @@ static void check_vsync()
 // they are worked out again too.
 void apply_frame_timing()
 {
-    int rate = display_refresh_rate();
+    int rate = display_rate;
     bool wanted = config.vsync || config.fps_limit < MIN_FPS_LIMIT || config.fps_limit > rate;
     bool changed = wanted != vsync_wanted;
     vsync_wanted = wanted;
@@ -396,13 +370,63 @@ static bool create_renderer(const WindowPlan *plan)
     return true;
 }
 
+// A function to read the window's size in pixels, the screen's one source (spec section 6): never the
+// desktop mode, which Wayland gives in scaled units
+static void window_pixel_size(int *width, int *height)
+{
+    *width = 0;
+    *height = 0;
+    SDL_GetWindowSizeInPixels(window, width, height);
+}
+
+// A function to set the screen geometry from the window once the window system has carried out what
+// was asked of it (the fullscreen request, a resize); true when the size changed
+static bool read_screen_geometry(void)
+{
+    SDL_SyncWindow(window);   // At worst it times out, and the size read is the one in force
+    int width, height;
+    window_pixel_size(&width, &height);
+    if (width == geo.screen_width && height == geo.screen_height)
+        return false;
+    ScreenGeometry screen = geometry_from_pixels(width, height);
+    geo.screen_width = screen.screen_width;
+    geo.screen_height = screen.screen_height;
+    geo.screen_margin = screen.screen_margin;
+    geo.title_min_size = screen.title_min_size;
+    title_info.min_size = screen.title_min_size;
+    return true;
+}
+
+// A function to read the refresh rate of the display the window is on, the one thing the desktop mode
+// still gives. No mode, or a rate of 0 (Xvfb, some VMs and remote desktops), keeps 60 Hz.
+static void read_refresh_rate(void)
+{
+    const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(window));
+    display_rate = derive_refresh_rate(mode != NULL ? mode->refresh_rate : 0.0F);
+    if (mode == NULL || mode->refresh_rate < 1.0F)
+        log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
+}
+
 // A function to create the window and renderer
 static void create_window()
 {
-    window = SDL_CreateWindow(PROJECT_NAME, 0, 0, SDL_WINDOW_FULLSCREEN);
+    // The window asks for the primary display's bounds and its native pixels: with no window manager
+    // to carry out the fullscreen request (Xvfb), a window asked for at 0 x 0 stays 1 x 1. A display
+    // whose bounds cannot be read leaves them 0 x 0, as before.
+    SDL_Rect bounds = { 0 };
+    SDL_GetDisplayBounds(SDL_GetPrimaryDisplay(), &bounds);
+    window = SDL_CreateWindow(PROJECT_NAME, bounds.w, bounds.h, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (window == NULL)
         log_fatal("Could not create SDL Window\n%s", SDL_GetError());
     SDL_HideCursor();
+
+    // The screen is the window's pixel size (spec section 6). The OS's scale is logged, never applied:
+    // pixel and point settings keep meaning pixels and points.
+    read_screen_geometry();
+    display_scale = SDL_GetWindowDisplayScale(window);
+    log_debug("Screen: %ix%i px, pixel density %.2f, display scale %.2f", geo.screen_width, geo.screen_height,
+              (double) SDL_GetWindowPixelDensity(window), (double) display_scale);
+    read_refresh_rate();
 
     // The renderer, from the platform's Vulkan-first list (spec section 3). Until Task 1.8 makes the
     // Transparent window, every window here is the opaque fullscreen one, so a Transparent plan
@@ -413,6 +437,14 @@ static void create_window()
         plan_in_force = window_plan(BACKGROUND_COLOR, WINPLAN_WINDOWS, SDL_getenv("SDL_RENDER_DRIVER"));
     if (!create_renderer(&plan_in_force))
         quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
+
+    // One cross-check, once: what the renderer draws to is the window's size. SDL_GetCurrentRenderOutputSize
+    // is never asked: it follows the render target, which is the settings preview while that draws.
+    int output_width = 0, output_height = 0;
+    if (SDL_GetRenderOutputSize(renderer, &output_width, &output_height) &&
+        (output_width != geo.screen_width || output_height != geo.screen_height))
+        log_error("Screen: the renderer draws %ix%i px, not the window's %ix%i",
+                  output_width, output_height, geo.screen_width, geo.screen_height);
 }
 
 // A function to bring a restart's fresh copy to the front, with the keyboard: on Windows the copy
@@ -1540,7 +1572,7 @@ void present_frame()
         if (elapsed < refresh_period)
             SDL_Delay(refresh_period - elapsed);
     }
-    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), display_refresh_rate()))
+    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), display_rate))
         log_error("Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to %u ms",
                   refresh_period);
 #ifdef STREAMFLEX_TEST_HOOKS
@@ -2471,16 +2503,20 @@ int main(int argc, char *argv[])
     if (default_menu == NULL)
         log_fatal("Default menu %s not found in config file", config.default_menu);
 
-    // Initialize SDL, verify all settings are in their allowable range
+    // Initialize SDL and make the window first: the screen's size comes from the window (spec
+    // section 6), and the title font's minimum and the derived values read that size
     init_sdl();
-    init_sdl_ttf();
-    refresh_effective();
-
-    // Initialize Nanosvg, create window and renderer
-    init_svg();
     create_window();
     if (config.restarted)
         raise_restarted_window();
+#ifdef _WIN32
+    log_debug("DPI awareness: %s", dpi_awareness());
+#endif
+    init_sdl_ttf();
+    refresh_effective();
+
+    // Initialize Nanosvg
+    init_svg();
 
     // Initialize timing
     ticks.main = ticks_ms();
@@ -2509,7 +2545,7 @@ int main(int argc, char *argv[])
 
     // Print debug info to log
     if (config.debug) {
-        debug_video(renderer, &display_mode);
+        debug_video(renderer, geo.screen_width, geo.screen_height, display_rate);
         debug_settings();
         debug_gamepad(gamepad_controls);
         debug_hotkeys(hotkeys);    

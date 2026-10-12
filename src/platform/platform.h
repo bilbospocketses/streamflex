@@ -43,4 +43,5 @@ bool take_foreground(void);     // A restart's fresh copy: true when its window 
 void make_window_transparent(void);
 void make_window_opaque(void);
 void hide_cursor(Entry* entry);
+const char *dpi_awareness(void);   // How Windows scales this process's windows, as the manifest set it
 #endif

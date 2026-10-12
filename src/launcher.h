@@ -9,10 +9,8 @@
 #define GAMEPAD_REPEAT_INTERVAL 25
 #define CLOCK_UPDATE_PERIOD 1000
 #define SCROLL_INDICATOR_HEIGHT 0.11F
-#define SCREEN_MARGIN 0.05F
 #define SCREENSAVER_TRANSITION_TIME 1500
 #define APPLICATION_WAIT_PERIOD 100
-#define TITLE_MIN_SIZE 0.02F       // The readable minimum title size: 2% of the screen height
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
 
 // SDL3's SDL_GetTicks() counts milliseconds in 64 bits; StreamFlex keeps SDL2's 32-bit count, which
