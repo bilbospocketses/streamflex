@@ -289,8 +289,8 @@ static void check_vsync()
 // A function to work out the frame timing from VSync and FPSLimit, live: VSync, or the FPS limit's
 // own frame time when it is off and the limit lies between the minimum and the display's rate
 // (otherwise VSync, as always). The settings stay as written; the renderer follows (SDL_SetRenderVSync).
-// The slideshow's fade and the screensaver's dim are timed in frames, so they are worked out again
-// too. (The gamepad's repeat is timed in wall time: poll_gamepad().)
+// Nothing else follows the frame time: the gamepad's repeat (poll_gamepad()), the slideshow's fade and
+// the screensaver's dim (derive_fade_alpha()) are timed in wall time.
 void apply_frame_timing()
 {
     int rate = display_rate;
@@ -300,9 +300,6 @@ void apply_frame_timing()
 
     // With VSync wanted the frame is the display's, which also paces a renderer that refused it
     refresh_period = 1000 / (Uint32) (wanted ? rate : config.fps_limit);
-    update_slideshow_timing();
-    if (screensaver != NULL)
-        screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
     if (wanted && !config.vsync && config.fps_limit < MIN_FPS_LIMIT)
         log_debug("Frame timing: VSync is off, but no FPS limit is set, so frames keep the display's %i Hz, %u ms a frame",
                   rate, refresh_period);
@@ -795,8 +792,7 @@ static void init_slideshow()
         .num_images = 0,
         .transition_surface = NULL,
         .transition_texture = NULL,
-        .transition_alpha = 0.f,
-        .transition_change_rate = 0.f,
+        .transition_start = 0,
         .images = NULL,
         .order = NULL,
         .only_one = false,
@@ -844,7 +840,7 @@ static void start_screensaver()
     SDL_FillSurfaceRect(surface, NULL, SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0xFF));
     screensaver = malloc(sizeof(Screensaver));
     screensaver->alpha_end_value = (float) eff.screensaver_alpha;
-    screensaver->transition_change_rate = screensaver->alpha_end_value / ((float) SCREENSAVER_TRANSITION_TIME / (float) refresh_period);
+    screensaver->transition_start = 0;   // Set as the dim begins (update_screensaver())
     screensaver->texture = load_texture(surface);
     screensaver->alpha = 0.0f;
     SDL_SetTextureAlphaMod(screensaver->texture, 0);
@@ -1040,13 +1036,6 @@ static void resume_slideshow()
     ticks.slideshow_load = ticks.main;
 }
 
-// A function to work out the slideshow's fade speed from its fade time and the frame rate
-void update_slideshow_timing()
-{
-    if (slideshow != NULL && config.slideshow_transition_time > 0)
-        slideshow->transition_change_rate = 255.0f / ((float) config.slideshow_transition_time / (float) refresh_period);
-}
-
 // A function to stop the slideshow, when the background changes and at quit: wait for an image
 // being loaded on its thread, then free it all
 static void stop_slideshow()
@@ -1113,7 +1102,6 @@ void reload_background()
     }
     if (background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW)
         log_luminance();
-    update_slideshow_timing();
 #ifdef _WIN32
     if (background_shown == BACKGROUND_TRANSPARENT)
         make_window_transparent();
@@ -2181,7 +2169,12 @@ static void update_slideshow()
                 slideshow->transition_texture = load_texture(slideshow->transition_surface);
                 SDL_SetTextureAlphaMod(slideshow->transition_texture, 0);
                 state.slideshow_transition = true;
+                slideshow->transition_start = ticks.main;
                 log_debug("Slideshow: fading in the next image");
+#ifdef STREAMFLEX_TEST_HOOKS
+                log_debug("Test hook: the slideshow's fade began at tick %u, to take %u ms",
+                          slideshow->transition_start, config.slideshow_transition_time);
+#endif
             }
             else {
                 SDL_DestroyTexture(background_texture);
@@ -2195,14 +2188,17 @@ static void update_slideshow()
         }
     }
     else if (state.slideshow_transition) {
-        
-        // Increase the transparency
-        slideshow->transition_alpha += slideshow->transition_change_rate;
-        
+
+        // Fade the next image in by the share of its fade time that has passed
+        int alpha = derive_fade_alpha(ticks.main, slideshow->transition_start, config.slideshow_transition_time, 0xFF);
+
         // If transition is done, destroy old background and replace it with the new one
-        if (slideshow->transition_alpha >= 255.0f) {
+        if (alpha >= 0xFF) {
+#ifdef STREAMFLEX_TEST_HOOKS
+            log_debug("Test hook: the slideshow's fade ended at tick %u, %u ms after it began",
+                      ticks.main, ticks.main - slideshow->transition_start);
+#endif
             SDL_SetTextureAlphaMod(slideshow->transition_texture, 0xFF);
-            slideshow->transition_alpha = 0.0f;
             SDL_DestroyTexture(background_texture);
             background_texture = slideshow->transition_texture;
             slideshow->transition_texture = NULL;
@@ -2212,7 +2208,7 @@ static void update_slideshow()
             ticks.slideshow_load = ticks.main;
         }
         else
-            SDL_SetTextureAlphaMod(slideshow->transition_texture, (Uint8) slideshow->transition_alpha);
+            SDL_SetTextureAlphaMod(slideshow->transition_texture, (Uint8) alpha);
     }
 }
 
@@ -2224,20 +2220,31 @@ static void update_screensaver()
         log_debug("Screensaver on");
         state.screensaver_active = true;
         state.screensaver_transition = true;
+        screensaver->transition_start = ticks.main;
+#ifdef STREAMFLEX_TEST_HOOKS
+        log_debug("Test hook: the screensaver's dim began at tick %u, to take %u ms",
+                  screensaver->transition_start, (Uint32) SCREENSAVER_TRANSITION_TIME);
+#endif
         if (background_shown == BACKGROUND_SLIDESHOW && config.screensaver_pause_slideshow)
             state.slideshow_paused = true;
     }
     else {
 
-        // Transition the screen to dark
+        // Transition the screen to dark, by the share of the dim's time that has passed
         if (state.screensaver_transition) {
-            screensaver->alpha += screensaver->transition_change_rate;
-            if (screensaver->alpha >= screensaver->alpha_end_value) {
-                SDL_SetTextureAlphaMod(screensaver->texture, (Uint8) screensaver->alpha_end_value);
+            int end = (int) screensaver->alpha_end_value;
+            int alpha = derive_fade_alpha(ticks.main, screensaver->transition_start, SCREENSAVER_TRANSITION_TIME, end);
+            screensaver->alpha = (float) alpha;
+            if (alpha >= end) {
+                SDL_SetTextureAlphaMod(screensaver->texture, (Uint8) end);
                 state.screensaver_transition = false;
+#ifdef STREAMFLEX_TEST_HOOKS
+                log_debug("Test hook: the screensaver's dim ended at tick %u, %u ms after it began",
+                          ticks.main, ticks.main - screensaver->transition_start);
+#endif
             }
             else
-                SDL_SetTextureAlphaMod(screensaver->texture, (Uint8) screensaver->alpha);
+                SDL_SetTextureAlphaMod(screensaver->texture, (Uint8) alpha);
         }
 
         // User has pressed input, deactivate the screensaver

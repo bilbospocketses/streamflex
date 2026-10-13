@@ -358,8 +358,6 @@ static void apply_slot(const SettingSlot *slot, bool refresh)
     if (slot->def->refresh == SET_REFRESH_CLOCK)
         stop_clock();
     config_store(slot->def->id, slot->menu >= 0 ? menus[slot->menu] : NULL, &slot->value);
-    if (slot->def->id == SET_ID_SLIDESHOW_FADE)
-        update_slideshow_timing();
     refresh_effective();
     if (slot->def->id == SET_ID_INHIBIT_OS_SCREENSAVER)
         apply_os_screensaver();

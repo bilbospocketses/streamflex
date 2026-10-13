@@ -387,6 +387,115 @@ static void test_repeat_wall_time(void)
     CHECK_INT((int) derive_next_repeat(1000 + 600, 1000, 500, 25), 625);
 }
 
+// A fade run frame by frame as update_slideshow() and update_screensaver() run it: begun on frame 0 (SDL's
+// ticks, at next_fade_start), at `fps` frames a second, each frame at its whole millisecond, and run on to
+// twice its duration. When its alpha first reached end_value (ms after its start; -1 for never), its alpha
+// on the first frame at half its duration or later, the highest alpha seen, and whether it ever went down.
+typedef struct {
+    int ended;
+    int at_half;
+    int highest;
+    bool monotonic;
+} FadeRun;
+
+// Each run begins at its own time, from 256 ms before the ticks' wrap down to 95 ms before it, so each run
+// straddles the wrap: its first frame comes before it, and its end after it
+static unsigned int next_fade_start = 0xFFFFFF00u;
+
+static FadeRun fade_at(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = { -1, -1, 0, true };
+    unsigned int start = next_fade_start;
+    next_fade_start += 7;
+    int last = 0;
+    for (int frame = 1;; frame++) {
+        int elapsed = frame * 1000 / fps;
+        if (elapsed > 2 * (int) duration)
+            break;
+        int alpha = derive_fade_alpha(start + (unsigned int) elapsed, start, duration, end_value);
+        if (alpha < last)
+            run.monotonic = false;
+        if (alpha > run.highest)
+            run.highest = alpha;
+        if (run.at_half < 0 && elapsed >= (int) duration / 2)
+            run.at_half = alpha;
+        if (run.ended < 0 && alpha >= end_value)
+            run.ended = elapsed;
+        last = alpha;
+    }
+    return run;
+}
+
+// A function to tell whether a fade at `fps` ends at its duration, within one frame
+static bool fade_ends_at_duration(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = fade_at(fps, duration, end_value);
+    return run.ended >= (int) duration && run.ended <= (int) duration + frame_ms(fps);
+}
+
+// A function to tell whether a fade at `fps` rises steadily: never back down, and half way at half its
+// duration, give or take what one frame adds
+static bool fade_rises_steadily(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = fade_at(fps, duration, end_value);
+    int slack = end_value * frame_ms(fps) / (int) duration + 1;
+    return run.monotonic && run.at_half >= end_value / 2 - 1 && run.at_half <= end_value / 2 + slack;
+}
+
+// A function to tell whether a fade at `fps`, run on past its end, stays at end_value and never passes it
+static bool fade_stops_at_end(int fps, unsigned int duration, int end_value)
+{
+    return fade_at(fps, duration, end_value).highest == end_value;
+}
+
+// A function to test the slideshow's fade and the screensaver's dim: timed in wall time, each ends at its
+// duration at 30, 60, 100 and 144 fps. Counted in frames, as they were, each frame added the share of the
+// fade a 16 ms display frame holds, so a 30 fps machine took twice as long and a 100 fps one 0.6 times as
+// long. The fade is the default 1.5 s to full; the dim is DERIVE_SCREENSAVER_DIM_MS to the default
+// intensity's alpha, 70%.
+static void test_fade_wall_time(void)
+{
+    unsigned int fade = 1500;
+    unsigned int dim = DERIVE_SCREENSAVER_DIM_MS;
+    int dark = derive_alpha(7000);
+    CHECK(fade_ends_at_duration(30, fade, 255));
+    CHECK(fade_ends_at_duration(60, fade, 255));
+    CHECK(fade_ends_at_duration(100, fade, 255));
+    CHECK(fade_ends_at_duration(144, fade, 255));
+    CHECK(fade_rises_steadily(30, fade, 255));
+    CHECK(fade_rises_steadily(60, fade, 255));
+    CHECK(fade_rises_steadily(100, fade, 255));
+    CHECK(fade_rises_steadily(144, fade, 255));
+    CHECK(fade_stops_at_end(30, fade, 255));
+    CHECK(fade_stops_at_end(60, fade, 255));
+    CHECK(fade_stops_at_end(100, fade, 255));
+    CHECK(fade_stops_at_end(144, fade, 255));
+    CHECK(fade_ends_at_duration(30, dim, dark));
+    CHECK(fade_ends_at_duration(60, dim, dark));
+    CHECK(fade_ends_at_duration(100, dim, dark));
+    CHECK(fade_ends_at_duration(144, dim, dark));
+    CHECK(fade_rises_steadily(30, dim, dark));
+    CHECK(fade_rises_steadily(60, dim, dark));
+    CHECK(fade_rises_steadily(100, dim, dark));
+    CHECK(fade_rises_steadily(144, dim, dark));
+    CHECK(fade_stops_at_end(30, dim, dark));
+    CHECK(fade_stops_at_end(60, dim, dark));
+    CHECK(fade_stops_at_end(100, dim, dark));
+    CHECK(fade_stops_at_end(144, dim, dark));
+    // The function alone: none at the start, the share of end_value the time passed is of the duration
+    // (truncated), all of it from the duration on, and all of it at once for a fade of no time. Across the
+    // ticks' wrap, a fade begun 256 ms before it is 16 ms in at 16 ms after its start (and not done, as
+    // `now >= start + duration` would say), and done 1500 ms after it
+    CHECK_INT(derive_fade_alpha(1000, 1000, 1500, 255), 0);
+    CHECK_INT(derive_fade_alpha(1000 + 750, 1000, 1500, 255), 127);
+    CHECK_INT(derive_fade_alpha(1000 + 1499, 1000, 1500, 255), 254);
+    CHECK_INT(derive_fade_alpha(1000 + 1500, 1000, 1500, 255), 255);
+    CHECK_INT(derive_fade_alpha(1000 + 9000, 1000, 1500, 255), 255);
+    CHECK_INT(derive_fade_alpha(1000, 1000, 0, dark), dark);
+    CHECK_INT(derive_fade_alpha(0xFFFFFF00u + 16, 0xFFFFFF00u, 1500, 255), 2);
+    CHECK_INT(derive_fade_alpha(0xFFFFFF00u + 1500, 0xFFFFFF00u, 1500, 255), 255);
+}
+
 // A function to test when a refused Windows exit hotkey is tried again: only while refused, every
 // DERIVE_EXIT_RETRY_MS of the clock, or at once (focus gained, settings closed); SDL's ticks wrap
 static void test_exit_retry_due(void)
@@ -441,6 +550,7 @@ int main(void)
 {
     test_exit_retry_due();
     test_repeat_wall_time();
+    test_fade_wall_time();
     test_defaults();
     test_twice();
     test_clamps_restore();

@@ -9,7 +9,7 @@
 #define GAMEPAD_REPEAT_INTERVAL DERIVE_REPEAT_INTERVAL_MS
 #define CLOCK_UPDATE_PERIOD 1000
 #define SCROLL_INDICATOR_HEIGHT 0.11F
-#define SCREENSAVER_TRANSITION_TIME 1500
+#define SCREENSAVER_TRANSITION_TIME DERIVE_SCREENSAVER_DIM_MS
 #define APPLICATION_WAIT_PERIOD 100
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
 
@@ -213,8 +213,7 @@ typedef struct {
     int *order;
     int i;
     int num_images;
-    float transition_alpha;
-    float transition_change_rate;
+    Uint32 transition_start;   // When the fade in progress began (SDL's ticks); its alpha is derive_fade_alpha()'s
     SDL_Surface *transition_surface;
     SDL_Texture *transition_texture;
     bool only_one;   // Set by the loader: the only image that loads is the one already on show
@@ -223,9 +222,9 @@ typedef struct {
 
 // Screensaver
 typedef struct {
-    float alpha;
+    float alpha;               // The dim as last set
     float alpha_end_value;
-    float transition_change_rate;
+    Uint32 transition_start;   // When the dim began (SDL's ticks); its alpha is derive_fade_alpha()'s
     SDL_Texture *texture;
 } Screensaver;
 
@@ -329,7 +328,6 @@ extern double background_luminance;              // The image on show's mean lum
 void draw_scene(bool preview);
 void present_frame(void);
 void reload_background(void);
-void update_slideshow_timing(void);
 void reload_titles(void);
 void trim_title_fonts(void);
 void refresh_layout(void);

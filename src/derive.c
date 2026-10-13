@@ -103,6 +103,19 @@ unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned
     return due + interval > held ? due + interval : held + interval;
 }
 
+// A function to work out a fade's alpha now (the slideshow's fade, the screensaver's dim): begun at
+// `start`, it rises to end_value over `duration` ms in step with the time passed, and is end_value from
+// then on, or at once for a fade of no time. Timed in wall time, never in frames, so the frame rate cannot
+// stretch or shorten it. The times are SDL's ticks, so the subtraction is unsigned and holds across their
+// wrap.
+int derive_fade_alpha(unsigned int now, unsigned int start, unsigned int duration, int end_value)
+{
+    unsigned int elapsed = now - start;
+    if (elapsed >= duration)
+        return end_value;
+    return (int) ((unsigned long long) end_value * elapsed / duration);
+}
+
 // A function to decide if the Windows exit hotkey is tried again now: only while Windows refuses it,
 // and then at once (the window came to the front, settings closed) or DERIVE_EXIT_RETRY_MS after the
 // last try. The times are SDL's ticks, so the subtraction is unsigned and holds across their wrap.
