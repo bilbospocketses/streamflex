@@ -8,13 +8,13 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | Measure | Count |
 |---|---|
 | Rows | 470 |
-| Row halves | 708 |
+| Row halves | 890 |
 | Verdicts per release (row x desktop) | 2123 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
 | `streamflex-headless` halves | 255 (1020 verdicts) |
-| `qa-harness` halves | 0 (0 verdicts) |
-| `manual` halves | 453 (1103 verdicts) |
-| **Automated today** | 255 of 708 halves; 1020 of 2123 verdicts (48 %) |
+| `qa-harness` halves | 161 (161 verdicts) |
+| `manual` halves | 474 (942 verdicts) |
+| **Automated today** | 416 of 890 halves; 1181 of 2123 verdicts (55 %) |
 
 <!-- summary:end -->
 
@@ -33,99 +33,262 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Row | Platforms | Owner | Where it runs, or why not |
 |---|---|---|---|
-| 1.1 | `[Win]` | manual | qa-harness item 75, planned |
-| 1.2 | `[Win]` | manual | qa-harness item 75, planned |
-| 1.3 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.4 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.5 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.6 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.7 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.8 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.9 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.10 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.11 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.12 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.13 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.14 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.15 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.16 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.17 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.18 | `[Ubuntu]` | manual | qa-harness item 75, planned |
-| 1.19 | `[Kubuntu]` | manual | qa-harness item 75, planned |
-| 1.20 | `[All]` | manual | qa-harness item 75, planned |
-| 1.21 | `[All]` | manual | qa-harness item 75, planned |
-| 1.22 | `[Win]` | manual | qa-harness item 75, planned |
-| 1.23 | `[Linux]` | manual | qa-harness item 75, planned |
-| 1.24 | `[All]` | manual | qa-harness item 75, planned |
-| 1.25 | `[All]` | manual | qa-harness item 75, planned |
-| 1.26 | `[All]` | manual | qa-harness item 75, planned |
-| 1.27 | `[All]` | manual | qa-harness item 75, planned |
-| 1.28 | `[All]` | manual | qa-harness item 75, planned |
+| 1.1 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.2 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.3 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.4 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.5 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.6 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.8 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.9 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.10 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.11 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.12 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.13 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.14 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.15 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.16 | `[Ubuntu]` | manual | not automatable: the control with the icon files hidden still showed the same icon (GNOME Shell keeps the texture it loaded; distance 6.96 for both), so a frame cannot tell the shipped icon from another (spike S4 2026-10-11) |
+| 1.17 | `[Kubuntu]` | manual | not automatable: the control with the icon files hidden still showed the same icon (Plasma keeps the icon it loaded; distance 24.54 for both), so a frame cannot tell the shipped icon from another (spike S4 2026-10-11) |
+| 1.18 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.19 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.20 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.20 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.20 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.20 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.20 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.21 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.21 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.21 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.21 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.21 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.22 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.23 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.23 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.23 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.23 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.24 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.24 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.24 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.24 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.24 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.25 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.25 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.25 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.25 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.25 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.26 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.26 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.26 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.26 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.26 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.27 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.27 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.27 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.27 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.27 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.28 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.28 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.28 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.28 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.28 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 1.29 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
-| 1.29 | `[Win]` | manual | qa-harness item 75, planned |
-| 1.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.29 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.30 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.31 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
 | 2.1 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
-| 2.1 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.2 | `[All]` | manual | qa-harness item 75, planned |
-| 2.3 | `[All]` | manual | qa-harness item 75, planned |
+| 2.1 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.2 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.2 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.2 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.2 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.2 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.3 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.3 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.3 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.3 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.3 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.4 | `[Linux]` | streamflex-headless | `41-parse.sh` run `f41-area` |
-| 2.4 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.5 | `[All]` | manual | qa-harness item 75, planned |
-| 2.6 | `[All]` | manual | qa-harness item 75, planned |
-| 2.7 | `[All]` | manual | qa-harness item 75, planned |
+| 2.4 | `[Win]` | manual | not automatable: no glyph reference for '5' in the value '5' (the spike frames showed only 1, 4, 6, x) |
+| 2.5 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.5 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.5 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.5 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.5 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.6 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.6 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.6 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.6 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.6 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.7 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.7 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.7 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.7 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.8 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
-| 2.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.8 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.9 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
-| 2.9 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.10 | `[All]` | manual | qa-harness item 75, planned |
-| 2.11 | `[All]` | manual | qa-harness item 75, planned |
-| 2.12 | `[All]` | manual | qa-harness item 75, planned |
-| 2.13 | `[All]` | manual | qa-harness item 75, planned |
-| 2.14 | `[All]` | manual | qa-harness item 75, planned |
-| 2.15 | `[All]` | manual | qa-harness item 75, planned |
-| 2.16 | `[All]` | manual | qa-harness item 75, planned |
-| 2.17 | `[All]` | manual | qa-harness item 75, planned |
-| 2.18 | `[All]` | manual | qa-harness item 75, planned |
+| 2.9 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.10 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.10 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.10 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.10 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.10 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.11 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.11 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.11 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.11 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.11 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.12 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.12 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.12 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.12 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.12 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.13 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.13 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.13 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.13 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.13 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.14 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.14 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.14 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.14 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.14 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.15 | `[Win]` | manual | not automatable: no glyph reference for '2' in the value '2' (the spike frames showed only 1, 4, 6, x) |
+| 2.15 | `[Ubuntu]` | manual | not automatable: no glyph reference for '2' in the value '2' (the spike frames showed only 1, 4, 6, x) |
+| 2.15 | `[Kubuntu]` | manual | not automatable: no glyph reference for '2' in the value '2' (the spike frames showed only 1, 4, 6, x) |
+| 2.15 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.15 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.16 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.16 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.16 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.16 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.16 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.17 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.17 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.17 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.17 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.17 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.18 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.18 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.18 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.18 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.18 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-titlefonts` |
-| 2.19 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.20 | `[All]` | manual | qa-harness item 75, planned |
-| 2.21 | `[All]` | manual | qa-harness item 75, planned |
-| 2.22 | `[All]` | manual | qa-harness item 75, planned |
-| 2.23 | `[All]` | manual | qa-harness item 75, planned |
+| 2.19 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.20 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.20 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.20 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.20 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.20 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.21 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.21 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.21 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.21 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.21 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.22 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.22 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.22 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.22 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.22 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.23 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.23 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.23 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.23 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.23 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.24 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
-| 2.24 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.25 | `[All]` | manual | qa-harness item 75, planned |
+| 2.24 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.25 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.25 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.25 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.25 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.25 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.26 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-large` |
-| 2.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.26 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.27 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-dense` |
-| 2.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.27 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.28 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-fixed` |
-| 2.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.28 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.29 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-notitles` |
-| 2.29 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.30 | `[All]` | manual | qa-harness item 75, planned |
+| 2.29 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.30 | `[Win]` | manual | not automatable: whether the long title is drawn smaller than Plex's: at 51 pt, the 3-column long-title layout, OCR reads the title Plex as plex, the logo's word, on all three desktops (spike S1 2026-10-11) |
+| 2.30 | `[Ubuntu]` | manual | not automatable: whether the long title is drawn smaller than Plex's: at 51 pt, the 3-column long-title layout, OCR reads the title Plex as plex, the logo's word, on all three desktops (spike S1 2026-10-11) |
+| 2.30 | `[Kubuntu]` | manual | not automatable: whether the long title is drawn smaller than Plex's: at 51 pt, the 3-column long-title layout, OCR reads the title Plex as plex, the logo's word, on all three desktops (spike S1 2026-10-11) |
+| 2.30 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.30 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.31 | `[Linux]` | streamflex-headless | `40-titles.sh` run `f40-shrink-large` |
-| 2.31 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.31 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.32 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-noshadow`, `45-shadows.sh` run `f45-shadow` |
-| 2.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.32 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.33 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-shadowlong` |
-| 2.33 | `[Win]` | manual | qa-harness item 75, planned |
-| 2.34 | `[All]` | manual | qa-harness item 75, planned |
-| 2.35 | `[All]` | manual | qa-harness item 75, planned |
-| 3.1 | `[All]` | manual | qa-harness item 75, planned |
-| 3.2 | `[All]` | manual | qa-harness item 75, planned |
-| 3.3 | `[All]` | manual | qa-harness item 75, planned |
-| 3.4 | `[All]` | manual | qa-harness item 75, planned |
-| 3.5 | `[All]` | manual | qa-harness item 75, planned |
+| 2.33 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.34 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.34 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.34 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.34 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.34 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.35 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.35 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.35 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
+| 2.35 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 2.35 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.1 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.1 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.1 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.1 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.1 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.2 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.2 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.2 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.2 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.2 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.3 | `[Win]` | manual | not automatable: OCR misreads the text line in Notepad (3 of 3 captures, spike S1 2026-10-11) |
+| 3.3 | `[Ubuntu]` | manual | not automatable: OCR misreads the text line in GNOME Text Editor, StreamFlex as StreamFIex (3 of 3 captures, spike S1 2026-10-11) |
+| 3.3 | `[Kubuntu]` | manual | not automatable: OCR does not read the text line in Kate at all (3 of 3 captures, spike S1 2026-10-11) |
+| 3.3 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.3 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.4 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.4 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.4 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.4 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.4 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.5 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.5 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.5 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.5 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.5 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 3.6 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-launch` |
-| 3.6 | `[Win]` | manual | qa-harness item 75, planned |
-| 3.7 | `[All]` | manual | qa-harness item 75, planned |
-| 3.8 | `[All]` | manual | qa-harness item 75, planned |
-| 3.9 | `[All]` | manual | qa-harness item 75, planned |
-| 3.10 | `[All]` | manual | qa-harness item 75, planned |
-| 3.11 | `[All]` | manual | qa-harness item 75, planned |
-| 3.12 | `[All]` | manual | qa-harness item 75, planned |
+| 3.6 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.7 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.7 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.7 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.7 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.8 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.8 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.8 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.8 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.8 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.9 | `[Win]` | manual | not automatable: OCR misreads the text line in Notepad (3 of 3 captures, spike S1 2026-10-11) |
+| 3.9 | `[Ubuntu]` | manual | not automatable: OCR misreads the text line in GNOME Text Editor, StreamFlex as StreamFIex (3 of 3 captures, spike S1 2026-10-11) |
+| 3.9 | `[Kubuntu]` | manual | not automatable: OCR does not read the text line in Kate at all (3 of 3 captures, spike S1 2026-10-11) |
+| 3.9 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.9 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.10 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.10 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.10 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.10 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.10 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.11 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.11 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.11 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.11 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.11 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 3.12 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.12 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.12 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
+| 3.12 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 3.12 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 4.1 | `[All]` | manual | qa-harness item 75, planned |
 | 4.2 | `[All]` | manual | qa-harness item 75, planned |
 | 4.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -684,18 +847,37 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 11.19 | `[Win]` | manual | qa-harness item 75, planned |
 | 11.20 | `[Win]` | manual | qa-harness item 75, planned |
 | 12.1 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
-| 12.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.1 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
 | 12.2 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-hotkey` |
-| 12.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.2 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
 | 12.3 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-quitcmd` |
-| 12.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 12.3 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
 | 12.4 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
-| 12.4 | `[Win]` | manual | qa-harness item 75, planned |
-| 12.5 | `[All]` | manual | qa-harness item 75, planned |
-| 12.6 | `[All]` | manual | qa-harness item 75, planned |
-| 12.7 | `[Linux]` | manual | qa-harness item 75, planned |
-| 12.8 | `[All]` | manual | qa-harness item 75, planned |
-| 12.9 | `[All]` | manual | qa-harness item 75, planned |
+| 12.4 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.5 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.5 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.5 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.5 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 12.5 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 12.6 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.6 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.6 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.6 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 12.6 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 12.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.7 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.7 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 12.7 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 12.8 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.8 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.8 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.8 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 12.8 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 12.9 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.9 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.9 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m12-quit |
+| 12.9 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 12.9 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 13.1 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.3 | `[Linux]` | manual | qa-harness item 75, planned |
