@@ -9,7 +9,9 @@
 #   run.sh <label> scrollfail   item 11 only: the scroll arrow's texture is forced to fail,
 #                               a path no config or input can reach
 #   run.sh <label> leaks        every check again, with LeakSanitizer on: a run that leaks fails
-#                               its check, and each leak is listed at the end as a failure too
+#                               its check, and each leak is listed at the end as a failure too.
+#                               A run whose leak check never ran, because LeakSanitizer's tracer
+#                               could not attach, is run once more (with_tracer_retry)
 #   run.sh <label> [leaks] K/N  shard K of N of either pass, a run of its own in its own
 #                               container: the build, Xvfb, the fixtures and each check file
 #                               marked "Every shard runs this file" (00-harness.sh,
@@ -404,11 +406,85 @@ stop_run() {
     wait "$pid" 2> /dev/null
 }
 
+# The leak pass's one retry. LeakSanitizer sometimes cannot attach its tracer as a run exits: the
+# run's stderr then says "ptrace appears to be blocked" and "Child exited with signal N", and lists
+# no leak, because no leak check ran at all (CONTRIBUTING.md). A busy host brings it on. Such a run
+# is run once more, from the state it started in; nothing else is ever retried. Where the state is
+# kept (retry_save), and the folder whose top-level files it keeps:
+retry_dir=/var/tmp/sf-retry retry_tmp=/tmp
+
+# A function to tell whether the run NAME met that and nothing else: its stderr has the tracer's two
+# lines and no sanitizer's report (so no leak was listed, and none could be), and the harness found
+# the run whole (NAME.code is the exit code alone: no line missing, no frame missed, no hang)
+tracer_flake() {
+    local err=$out/$1.err
+    grep -q 'WARNING: ptrace appears to be blocked' "$err" 2> /dev/null \
+        && grep -q 'Child exited with signal' "$err" \
+        && ! grep -qE 'ERROR: LeakSanitizer|AddressSanitizer|runtime error' "$err" \
+        && [[ $(cat "$out/$1.code" 2> /dev/null) =~ ^[0-9]+$ ]]
+}
+
+# A function to keep, before the run NAME, what a run or its +keys can change: the test user's home
+# (configs, fonts and folders), the files at the top of retry_tmp (the pads', the loader's) and
+# NAME's own files in the output folder (a .display written before it, say). Fails when it could
+# not keep them.
+retry_save() {
+    local name=$1
+    rm -rf "$retry_dir"; mkdir -p "$retry_dir/out" || return 1
+    tar -C "$TESTER_HOME" -cf "$retry_dir/home.tar" . || return 1
+    find "$TESTER_HOME" -mindepth 1 -type d -printf '%P\n' > "$retry_dir/home.dirs" || return 1
+    find "$retry_tmp" -mindepth 1 -maxdepth 1 ! -name '.*' ! -type d -printf '%P\0' \
+        | tar -C "$retry_tmp" --null -T - -cf "$retry_dir/tmp.tar" || return 1
+    cp -a "$out/$name".* "$retry_dir/out/" 2> /dev/null
+    return 0
+}
+
+# A function to put back what retry_save kept, once the run NAME's first try is over. That try's
+# files go to flake/NAME/, and its stderr also to NAME.flake.err, where list_leaks still finds any
+# leak it lists. The home's folders are kept, not made anew, so a run started from inside one finds
+# the same folder.
+retry_restore() {
+    local name=$1 dir
+    rm -rf "$out/flake/$name"; mkdir -p "$out/flake/$name"
+    mv "$out/$name".* "$out/flake/$name/"
+    cp "$out/flake/$name/$name.err" "$out/$name.flake.err"
+    cp -a "$retry_dir/out/." "$out/"
+    find "$TESTER_HOME" -mindepth 1 ! -type d -delete
+    find "$TESTER_HOME" -mindepth 1 -depth -type d -printf '%P\n' | while read -r dir; do
+        grep -qxF -- "$dir" "$retry_dir/home.dirs" || rmdir -- "$TESTER_HOME/$dir"
+    done
+    tar -C "$TESTER_HOME" -xpf "$retry_dir/home.tar"
+    find "$retry_tmp" -mindepth 1 -maxdepth 1 ! -name '.*' ! -type d -delete
+    tar -C "$retry_tmp" -xpf "$retry_dir/tmp.tar"
+}
+
+# A function to run the launcher run NAME (the command after it, which writes NAME's files) and, in
+# the leak pass, once more when tracer_flake says its leak check never ran. Each says so on the
+# console. A retry that meets the flake again says so in NAME.code too, so its check fails, and
+# list_leaks lists it. A run whose state could not be kept is not retried: its flake stands.
+with_tracer_retry() {
+    local name=$1 saved=yes; shift
+    [ "$fault" = leaks ] || { "$@"; return 0; }
+    retry_save "$name" || saved=
+    "$@"
+    tracer_flake "$name" || return 0
+    [ -n "$saved" ] || { echo "LSan tracer flake in $name: not retried, as its state could not be kept"; return 0; }
+    echo "LSan tracer flake in $name: retried"
+    retry_restore "$name"
+    "$@"
+    tracer_flake "$name" || return 0
+    echo "$(cat "$out/$name.code"), and LeakSanitizer's tracer could not attach, here or on its retry" > "$out/$name.code"
+    echo "LSan tracer flake in $name again on its retry: it fails (CONTRIBUTING.md)"
+}
+
+# A function to run a config whose StartupCmd quits by itself (run_quick_once), retried as above
+run_quick() { with_tracer_retry "$1" run_quick_once "$@"; }
+
 # A function to run a config whose StartupCmd quits by itself. One still running after 30 s
 # (QUICK_LIMIT, which only the harness's own checks shorten) is ended by stop_run, and "did not
 # quit by itself" goes into NAME.code beside the exit code, so its check fails even when TERM
 # made it exit 0.
-run_quick() {
+run_quick_once() {
     local name=$1 limit=${QUICK_LIMIT:-30} pid code hung="" i
     local args; mapfile -t args < <(config_args "$name")
     rm -f "$LOG"
@@ -495,8 +571,11 @@ frame_settle() {
 # the run's name and PID instead: that is how a check does something at a moment the log chooses.
 # Every wait is bounded; a line that never came, or a key whose frame never did (the run then sends
 # no more keys), is written into NAME.code beside the exit code, so the check's exit code test
-# fails. run_after_line and run_slideshow use this too.
-run_keys() {
+# fails. run_after_line and run_slideshow use this too. The leak pass retries a run as
+# with_tracer_retry says, its +keys and all, so a +key must do the same when called again from the
+# same state.
+run_keys() { with_tracer_retry "$1" run_keys_once "$@"; }
+run_keys_once() {
     local name=$1; shift
     local args; mapfile -t args < <(config_args "$name")
     local start=${WAIT_FOR:-Loading menu} missing="" pid code k frame_pid="" frame_missed="" frame_owed="" frame_owed_by=""
@@ -650,17 +729,24 @@ look() {
     echo "$tag $seen" >> "$out/$name.seen"
 }
 
-# A function to list each run in the output folder whose LeakSanitizer found a leak. Each one
-# counts as a failure, so the list cannot disagree with the verdict, even for a run whose check
-# never looked at its sanitizers. nullglob is on only while the .err files are collected.
+# A function to list each run in the output folder whose LeakSanitizer found a leak, its first
+# try's stderr (NAME.flake.err) included, and each run whose tracer could not attach even on its
+# retry, so that no leak check ran. Each one counts as a failure, so the list cannot disagree with
+# the verdict, even for a run whose check never looked at its sanitizers. nullglob is on only while
+# the .err files are collected.
 list_leaks() {
     local err errs restore
     restore=$(shopt -p nullglob); shopt -s nullglob
     errs=("$out"/*.err)
     eval "$restore"
     for err in "${errs[@]}"; do
-        grep -q 'ERROR: LeakSanitizer' "$err" || continue
-        echo "LEAK  $(basename "$err" .err): $(grep -m1 '^SUMMARY' "$err")"
+        if grep -q 'ERROR: LeakSanitizer' "$err"; then
+            echo "LEAK  $(basename "$err" .err): $(grep -m1 '^SUMMARY' "$err")"
+        elif [[ $err != *.flake.err ]] && grep -q 'WARNING: ptrace appears to be blocked' "$err"; then
+            echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach, here or on its retry, so no leak check ran"
+        else
+            continue
+        fi
         failures=$((failures + 1))
     done
 }
