@@ -1544,7 +1544,8 @@ static void test_frame_after_key()
 void present_frame()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: a slow machine, each frame held up this long as it is shown
+    // Only the headless harness builds this: each frame held up this long as it is shown, as on a slow
+    // machine, or to set how far apart presents come (check 42's full-size run), so it stays before the present
     const char *frame_sleep = getenv("STREAMFLEX_TEST_FRAME_SLEEP_MS");
     if (frame_sleep != NULL)
         SDL_Delay((Uint32) atoi(frame_sleep));

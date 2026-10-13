@@ -131,14 +131,16 @@ static void test_jitter_and_stalls(void)
 
 // The run that finds VSync undelivered is measured: when the present before its first returned, and its
 // shortest and longest gap, so the harness can say how far apart its presents came. Early presents before
-// a late one do not count in it: at 9 and 11 ms in turn after one, its gaps are 9 to 11 ms, 10 on average.
+// a late one do not count in it, neither their 1.5 ms gaps nor a 12 ms one, shorter and longer than any of
+// its own: at 9 and 11 ms in turn after the late one, its gaps are 9 to 11 ms, 10 on average.
 static void test_run_measured(void)
 {
     VsyncWatch watch;
     uint64_t now = START;
     int found = 0;
     vsyncwatch_reset(&watch);
-    CHECK_INT(presents(&watch, &now, 5, FAST), 0);
+    CHECK_INT(presents(&watch, &now, 4, FAST), 0);
+    CHECK_INT(presents(&watch, &now, 1, 12000000), 0);
     CHECK_INT(presents(&watch, &now, 1, FRAME), 0);
     uint64_t before = now;
     for (int i = 0; i < VSYNCWATCH_RUN / 2; i++) {
