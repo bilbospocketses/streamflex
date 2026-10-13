@@ -17,7 +17,7 @@
 typedef struct {
     bool started;       // A present has been seen since the reset, at last_ns
     uint64_t last_ns;   // When the last present returned
-    int fast_run;       // The presents in a row that came early
+    int early_run;      // The presents in a row that came early
     bool undelivered;   // Found: the renderer does not deliver the VSync it reports
 } VsyncWatch;
 

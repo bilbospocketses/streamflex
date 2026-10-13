@@ -33,11 +33,11 @@ bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, int rate_hz)
     if (watch->undelivered)
         return false;
     uint64_t period_ns = UINT64_C(1000000000) / (uint64_t) rate_hz;   // The display's frame
-    bool fast = watch->started && (now_ns - watch->last_ns) * VSYNCWATCH_EARLY_DEN < period_ns * VSYNCWATCH_EARLY_NUM;
+    bool early = watch->started && (now_ns - watch->last_ns) * VSYNCWATCH_EARLY_DEN < period_ns * VSYNCWATCH_EARLY_NUM;
     watch->started = true;
     watch->last_ns = now_ns;
-    watch->fast_run = fast ? watch->fast_run + 1 : 0;
-    if (watch->fast_run < VSYNCWATCH_RUN)
+    watch->early_run = early ? watch->early_run + 1 : 0;
+    if (watch->early_run < VSYNCWATCH_RUN)
         return false;
     watch->undelivered = true;
     return true;

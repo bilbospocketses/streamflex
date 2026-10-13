@@ -106,7 +106,7 @@ log=$out/f42-all.log
 # renderer takes VSync, and lavapipe's swapchain under Xvfb ignores it and presents as fast as it can
 # draw. present_frame() finds that out by measurement, says so once, and from then on paces each
 # frame to the display's 16 ms itself, so the frames keep about the display's rate. The frames before
-# it is found are not paced: at least the run of 60 fast presents that finds it (vsyncwatch.h), and
+# it is found are not paced: at least the run of 60 early presents that finds it (vsyncwatch.h), and
 # no more than 240 here.
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
 read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
