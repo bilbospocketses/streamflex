@@ -35,12 +35,12 @@ grep -h 'Test hook: [0-9]* frames in' "$out/f48-slowhold.log" "$out/f48-slowtap.
 # A control held through a gap in polling does not repeat the moment polling resumes: A selects the
 # first button, which launches `sleep 1`; the launcher does not poll the pad until the launch's 3 s
 # timeout, and A is held on through it. Its hold is timed again from the resume, which the test hook
-# logs, and A is let go 0.2 s after that line (wait_line sees it up to 0.2 s late, so 0.2-0.4 s after
+# logs, and A is let go 0.1 s after that line (wait_line sees it up to 0.2 s late, so 0.1-0.3 s after
 # the resume), short of the next repeat, 500 ms after the resume. Timed from the press, as it was, it
 # would have repeated at once, launching again.
 p48_launch() {
     : > /tmp/pad-a
-    wait_line 'Test hook: pad ButtonA held through a gap in polling' "$2" && sleep 0.2
+    wait_line 'Test hook: pad ButtonA held through a gap in polling' "$2" && sleep 0.1
     rm -f /tmp/pad-a; sleep 1
 }
 rm -f /tmp/pad-a
