@@ -1527,6 +1527,7 @@ static void test_frame_report(bool paced)
 }
 
 static bool test_key_undrawn = false;   // A key was handled since the last frame was shown
+static Uint64 test_last_present_ns = 0; // When the last present returned, for STREAMFLEX_TEST_FRAME_PERIOD_US
 
 // A function only the headless harness builds: it logs the first frame shown after a key was
 // handled, once that frame is on screen, so the harness can wait for each key's frame before it
@@ -1544,13 +1545,27 @@ static void test_frame_after_key()
 void present_frame()
 {
 #ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: each frame held up this long as it is shown, as on a slow
-    // machine, or to set how far apart presents come (check 42's full-size run), so it stays before the present
+    // Only the headless harness builds this: each frame held up this long as it is shown, as on a slow machine
     const char *frame_sleep = getenv("STREAMFLEX_TEST_FRAME_SLEEP_MS");
     if (frame_sleep != NULL)
         SDL_Delay((Uint32) atoi(frame_sleep));
+
+    // Only the headless harness builds this too: each present held until this long after the last one
+    // returned, so presents come that far apart (plus the present's own time) however long the frame took
+    // to draw, as long as it took less. Check 42 sets how far apart its full-size run's presents come with
+    // it, so it stays before the present.
+    const char *frame_period = getenv("STREAMFLEX_TEST_FRAME_PERIOD_US");
+    if (frame_period != NULL && test_last_present_ns != 0) {
+        Uint64 due = test_last_present_ns + (Uint64) atoi(frame_period) * 1000;
+        Uint64 now = SDL_GetTicksNS();
+        if (now < due)
+            SDL_DelayPrecise(due - now);
+    }
 #endif
     SDL_RenderPresent(renderer);
+#ifdef STREAMFLEX_TEST_HOOKS
+    test_last_present_ns = SDL_GetTicksNS();
+#endif
 
     // Paced unless the renderer gives the VSync wanted. A renderer that keeps VSync on when it is not
     // wanted still gets the delay, which holds the FPS limit: the present waits at most one refresh more.

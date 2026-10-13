@@ -3,10 +3,22 @@
 # tap and a slow one repeated late; the fast side is check 62's taps on the harness's own unpaced frames.
 # Here each frame is held up 40 ms (STREAMFLEX_TEST_FRAME_SLEEP_MS), a slow machine at about 25 fps:
 # D-pad Right (bound in f48-pad.ini) held 0.8 s repeats, where the old frame count's 31st frame came at
-# least 1.2 s after the press, and tapped for 0.3 s it presses once. Each run waits for its frame report
-# (2 s of frames), which says the frames really were that slow.
-p48_hold() { : > /tmp/pad-right; sleep 0.8; rm -f /tmp/pad-right; sleep 1; }
-p48_tap() { : > /tmp/pad-right; sleep 0.3; rm -f /tmp/pad-right; sleep 1; }
+# least 1.2 s after the press, and tapped it presses once. Each run waits for its frame report (2 s of
+# frames), which says the frames really were that slow. Each hold is timed from the launcher's press
+# line, not from the file: the runs start at 'Gamepad connected', before the menu is drawn and the loop
+# polls the pad, so a slow start (Fedora's leak pass on GitHub) took the press late and the 0.8 s
+# timed from the file ended before the repeat. wait_line sees the line up to 0.2 s late, so the hold
+# lasts 0.8-1.0 s from the press, still short of the old 1.2 s, and the tap 0.1-0.3 s, short of 0.5 s.
+p48_hold() {
+    : > /tmp/pad-right
+    wait_line 'Gamepad ButtonDPadRight detected' "$2" && sleep 0.8
+    rm -f /tmp/pad-right; sleep 1
+}
+p48_tap() {
+    : > /tmp/pad-right
+    wait_line 'Gamepad ButtonDPadRight detected' "$2" && sleep 0.1
+    rm -f /tmp/pad-right; sleep 1
+}
 # A function to tell whether a run's frame report shows 26 frames a second or fewer
 p48_slow() {
     local report frames span
@@ -29,7 +41,7 @@ result "pad: at 25 fps a D-pad held 0.8 s repeats, 500 ms after its press (press
 ok=1
 p48_slow f48-slowtap && [ "$(p48_count f48-slowtap 'Gamepad ButtonDPadRight detected')" = 1 ] \
     && [ "$(p48_count f48-slowtap 'Test hook: pad ButtonDPadRight repeated')" = 0 ] && ran_clean f48-slowtap && ok=0
-result "pad: at 25 fps a D-pad tapped for 0.3 s presses once (pressed $(p48_count f48-slowtap 'Gamepad ButtonDPadRight detected') times, repeated $(p48_count f48-slowtap 'Test hook: pad ButtonDPadRight repeated') times; exit $(cat "$out/f48-slowtap.code"))" $ok
+result "pad: at 25 fps a D-pad tapped, let go 0.1-0.3 s after its press, presses once (pressed $(p48_count f48-slowtap 'Gamepad ButtonDPadRight detected') times, repeated $(p48_count f48-slowtap 'Test hook: pad ButtonDPadRight repeated') times; exit $(cat "$out/f48-slowtap.code"))" $ok
 grep -h 'Test hook: [0-9]* frames in' "$out/f48-slowhold.log" "$out/f48-slowtap.log" | sed 's/^/      /'
 
 # A control held through a gap in polling does not repeat the moment polling resumes: A selects the
