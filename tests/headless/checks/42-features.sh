@@ -80,16 +80,19 @@ grep -E '^(Settings: \[General\] (VSync|FPSLimit)|Frame timing:)' "$log" | sed '
 # default 1920 x 1080 display). Only a present under half a frame counted as early, so none of them did;
 # a present now counts as early under three quarters of a frame (vsyncwatch.c), so the band's upper part,
 # above 4/3 of the display's rate, is found, said once, and paced. lavapipe draws f55-frame.ini's one
-# button far faster than the band (200 fps and more, measured), so each present is held until 9 ms after
-# the last one returned (STREAMFLEX_TEST_FRAME_PERIOD_US): its presents then come 9 ms plus the present's
-# own time apart, about 9.5-10.5 ms at 60 Hz, inside 8.33-12.5 ms, which three quarters of a frame finds
-# and half a frame never does. Never under 9 ms, however fast the host draws, and the draw's time and
-# jitter fall inside the 9 ms. A fixed sleep before the present did not hold: its gaps carried the draw,
-# 8 ms put three of four passes at the 12.5 ms edge, and 6 ms came within 0.2 ms of it on GitHub.
+# button far faster than the band (200 fps and more, measured), so each present is held until 10.4 ms
+# after the last one started (STREAMFLEX_TEST_FRAME_PERIOD_US), the middle of 8.33-12.5 ms at 60 Hz: the
+# band three quarters of a frame finds and half a frame never does. Timed from the start, the gap between
+# two presents' returns is 10.4 ms plus the change in the present's own time from one to the next, about
+# 2 ms either way at most, so the run's mean stays at 10.4 ms however long a present takes, and the draw's
+# time and jitter fall inside the period. Earlier spacings carried something on top: a fixed sleep carried
+# the draw (8 ms put three of four passes at the 12.5 ms edge, 6 ms came within 0.2 ms of it on GitHub),
+# and a 9 ms period timed from the last return carried the whole present, about 3 ms in a loaded full set,
+# which put every pass at 12.2 ms and broke the run of 60.
 # The premise is a check of its own, read from the test hook's measure of the run that found it: its
 # mean gap between half and three quarters of the display's frame (80-120 fps at 60 Hz). A run outside
 # the band fails it, with the gaps.
-STREAMFLEX_TEST_FRAME_PERIOD_US=9000 STREAMFLEX_TEST_FRAME_REPORT_MS=4000 CFG=$FX/f55-frame.ini UNTIL=' of them paced' \
+STREAMFLEX_TEST_FRAME_PERIOD_US=10400 STREAMFLEX_TEST_FRAME_REPORT_MS=4000 CFG=$FX/f55-frame.ini UNTIL=' of them paced' \
     run_keys f42-fullsize
 log=$out/f42-fullsize.log
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
