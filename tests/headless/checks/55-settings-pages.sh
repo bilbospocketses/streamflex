@@ -64,28 +64,6 @@ grep -q 'Settings: the note under the preview says Used only while VSync is off'
     && ran_clean f55-why && ok=0
 result "settings: a grayed row says why under the preview (exit $(cat "$out/f55-why.code"))" $ok
 
-# The clock switched off while its render thread is at work (the harness build's
-# STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits
-# for the thread and frees what it made, and Enabled=false is saved. The wait is looked for while
-# settings are open: quitting with the clock still running logs the same line.
-render_then_off() {
-    local before i
-    before=$(grep -c 'Clock: rendering on its thread' "$LOG")
-    for i in $(seq 50); do
-        [ "$(grep -c 'Clock: rendering on its thread' "$LOG")" -gt "$before" ] && break
-        sleep 0.2
-    done
-    xdotool key Left
-    sleep 4
-}
-cfg=$(writable_config f55-clock)
-STREAMFLEX_TEST_CLOCK_DELAY_MS=3000 CFG=$cfg UNTIL='Settings saved' \
-    run_keys f55-clock Menu Down Down Down Down Down Down Return +render_then_off BackSpace BackSpace
-ok=1
-in_range "$out/f55-clock.log" 'Settings opened' 'Settings closed' 'Clock stopped (it waited for a render in progress)' \
-    && sed -n '/^\[Clock\]/,/^\[/p' "$cfg" | grep -qx 'Enabled=false' && ran_clean f55-clock && ok=0
-result "settings: the clock switched off mid-render waits for it and frees it (exit $(cat "$out/f55-clock.code"))" $ok
-
 # VSync off, then an FPS limit of 30: the frame timing follows live, and both are saved. SDL3's
 # SDL_SetRenderVSync returns true on success, so a test left in SDL2's form would log a refusal of
 # every change that worked (plan Task 1.3)

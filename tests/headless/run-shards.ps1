@@ -20,6 +20,10 @@
     5. prints one line per pass and one for the set, and exits 0 only when every pass is
        complete with 0 failed.
     The labels are <Prefix> (Debian), <Prefix>-fedora, <Prefix>-leaks and <Prefix>-fedora-leaks.
+    With -Select timing or -Select rest, each shard runs only that selection of the check files
+    (run.sh <label> [leaks] K/N timing|rest), so the set is the timing set or the rest set: each pass
+    is good only when its merge says it ran that selection. merge.py --cover then proves that a
+    timing set and a rest set of one tree run every check file once between them.
     Needs Python 3 on PATH for merge.py. Stopping the script stops the containers it started.
 
 .EXAMPLE
@@ -29,6 +33,10 @@
 .EXAMPLE
     pwsh tests/headless/run-shards.ps1 -Prefix try -Legs plain -Shards 2 -OutDir C:/scratch/out
     The Debian pass alone, in 2 shards.
+
+.EXAMPLE
+    pwsh tests/headless/run-shards.ps1 -Prefix quiet -Select timing
+    The timing-sensitive check files only, all four passes in 2 shards each: run it on a quiet box.
 #>
 param(
     # The label every pass's label starts with
@@ -44,7 +52,9 @@ param(
     [string] $OutDir,
     # Host RAM that must be free before each container starts
     [int] $MinFreeGB = 8,
-    [int] $MemoryWaitMinutes = 15
+    [int] $MemoryWaitMinutes = 15,
+    # Only the timing-sensitive check files, or only the rest (by default every check file)
+    [ValidateSet('timing', 'rest')] [string] $Select
 )
 $ErrorActionPreference = 'Stop'
 # A native command's exit code is read where it is run, never thrown: merge.py's exit 1 for one
@@ -151,7 +161,9 @@ function Merge-Pass($pass) {
     $summary = $lines | Where-Object { $_ -like "$($pass.Label): * PASS, *" } | Select-Object -Last 1
     $failed = $lines | Where-Object { $_ -match '^\d+ failed$' } | Select-Object -Last 1
     $exits = @($pass.Shards | Where-Object { $_.Rc -isnot [int] -or $_.Rc -ne 0 })
-    $pass.Ok = $code -eq 0 -and $summary -like '*, complete' -and $failed -eq '0 failed' -and -not $exits
+    # A selection the shards never got would run every check file, and still end complete
+    $ending = if ($Select) { "*, selection $Select, complete" } else { '*, complete' }
+    $pass.Ok = $code -eq 0 -and $summary -like $ending -and $failed -eq '0 failed' -and -not $exits
     $started = @($pass.Shards | Where-Object Start)
     $times = ($pass.Shards | ForEach-Object {
         if ($_.Start) { "s$($_.K) $(Span ($_.End - $_.Start))" } else { "s$($_.K) not started" }
@@ -201,6 +213,7 @@ try {
                                               'bash', '/src/tests/headless/run.sh', $s.Label))
             if ($s.Pass.Mode) { $dockerArgs.Add($s.Pass.Mode) }
             $dockerArgs.Add("$($s.K)/$Shards")
+            if ($Select) { $dockerArgs.Add($Select) }
             $s.Start = Get-Date
             $s.Job = Start-ThreadJob -ThrottleLimit 16 -ScriptBlock $runShard -ArgumentList $s.Log, $dockerArgs.ToArray()
             $running.Add($s)
@@ -232,9 +245,10 @@ try {
 ''
 foreach ($pass in $passes) { $pass.Line }
 $bad = @($passes | Where-Object { -not $_.Ok })
+$which = if ($Select) { " of the $Select set" } else { '' }
 if ($bad) {
-    "SET FAILED: $($bad.Label -join ', ') (wall $(Span ((Get-Date) - $setStart)))"
+    "SET FAILED$($which): $($bad.Label -join ', ') (wall $(Span ((Get-Date) - $setStart)))"
     exit 1
 }
-"SET PASSED: $($passes.Count) passes in $Shards shards each, every one complete with 0 failed (wall $(Span ((Get-Date) - $setStart)))"
+"SET PASSED: $($passes.Count) passes$which in $Shards shards each, every one complete with 0 failed (wall $(Span ((Get-Date) - $setStart)))"
 exit 0

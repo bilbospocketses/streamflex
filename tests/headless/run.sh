@@ -13,13 +13,25 @@
 #   run.sh <label> [leaks] K/N  shard K of N of either pass, a run of its own in its own
 #                               container: the build, Xvfb, the fixtures and each check file
 #                               marked "Every shard runs this file" (00-harness.sh,
-#                               90-titles-fit.sh) run in every shard, and each other check file
-#                               in exactly one, planned from its measured time so the shards take
-#                               about as long. Its console says which check file each result
-#                               belongs to (SHARD lines). merge.py adds the N consoles up into the
-#                               pass's one result, and fails when they are not one complete run;
-#                               run-shards.ps1 (Windows) runs a set of passes in shards and merges
-#                               each. A shard alone is not the pass: only the merge is.
+#                               90-titles-fit.sh, 95-every-run.sh) run in every shard, and each
+#                               other check file in exactly one, planned from its measured time so
+#                               the shards take about as long. Its console says which check file
+#                               each result belongs to (SHARD lines). merge.py adds the N consoles
+#                               up into the pass's one result, and fails when they are not one
+#                               complete run; run-shards.ps1 (Windows) runs a set of passes in
+#                               shards and merges each. A shard alone is not the pass: only the
+#                               merge is.
+#   run.sh <label> [leaks] [K/N] timing|rest
+#                               only the check files with a line "# Timing-sensitive" (timing), or
+#                               only those without one (rest), and in both the files every shard
+#                               runs. A file is timing-sensitive when a loaded box could change its
+#                               results: they read wall time, frame rates, frame gaps or durations,
+#                               or a hold or a wait that scheduling latency can cut short or
+#                               stretch. The timing set needs a quiet box; the rest can run beside
+#                               other work. Run in shards, the two sets of one tree run every check
+#                               file once between them, which merge.py --cover proves. The marked
+#                               files are pinned in timing_pinned below, so a mark cannot be lost
+#                               or added without a word.
 # The build defines STREAMFLEX_TEST_HOOKS, which only this harness does: each hook it enables sits
 # under #ifdef STREAMFLEX_TEST_HOOKS in src/, and a STREAMFLEX_TEST_* environment variable drives it.
 # Prints PASS or FAIL per check and exits non-zero when any failed. Every run's output, log and
@@ -29,20 +41,26 @@ set -u
 # (47-screen.sh's Scale leg), and Xvfb has no X resources, so no Xft.dpi
 unset GDK_SCALE GDK_DPI_SCALE SDL_VIDEO_X11_SCALING_FACTOR
 label=${1:-}
-fault=${2:-}
-shard=${3:-}
+fault= shard= selection=
 case $label in
-    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks] [K/N], where <label> names a folder in /out"; exit 2 ;;
+    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks] [K/N] [timing|rest], where <label> names a folder in /out"; exit 2 ;;
 esac
-# The shard is an argument, never the environment: a variable left set could quietly turn a
-# whole pass into part of one, which would still end "0 failed". It comes second when there is
-# no mode.
-case $fault in
-    '' | scrollfail | leaks) ;;
-    */*) [ -z "$shard" ] || { echo "a shard comes after the mode, once"; exit 2; }
-         shard=$fault; fault= ;;
-    *) echo "unknown mode '$fault'"; exit 2 ;;
-esac
+# The shard and the selection are arguments, never the environment: a variable left set could
+# quietly turn a whole pass into part of one, which would still end "0 failed". Each comes once,
+# in this order: the mode, the shard, the selection.
+for arg in "${@:2}"; do
+    case $arg in
+        '') ;;
+        scrollfail | leaks) [ -z "$fault$shard$selection" ] || { echo "the mode comes first, once"; exit 2; }
+                            fault=$arg ;;
+        */*) [ -z "$shard$selection" ] || { echo "a shard comes after the mode and before the selection, once"; exit 2; }
+             shard=$arg ;;
+        timing | rest) [ -z "$selection" ] || { echo "a selection comes last, once"; exit 2; }
+                       selection=$arg ;;
+        *) echo "unknown mode '$arg'"; exit 2 ;;
+    esac
+done
+[ "$fault" != scrollfail ] || [ -z "$selection" ] || { echo "scrollfail runs one check, so it has no selection"; exit 2; }
 shard_k= shard_n=
 if [ -n "$shard" ]; then
     [[ $shard =~ ^([1-9][0-9]{0,2})/([1-9][0-9]{0,2})$ ]] && [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] \
@@ -67,32 +85,79 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
 # passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
 # at 9550682; 49-fade-wall-time.sh's is an estimate (its two runs wait about 9 s and 5 s, plus
-# start-up). They only balance the shards: a check file missing here counts as 60 s, and a stale
-# time makes the shards uneven, never a check lost or run twice.
+# start-up). The six *-timing.sh files took their cases from the file of the same name without
+# "-timing" on 2026-10-13: each half's time is that file's, times the share its runs took of the
+# file in a full set at 7bcdbd7 (by the time each run's files were written). They only balance the
+# shards: a check file missing here counts as 60 s, and a stale time makes the shards uneven, never
+# a check lost or run twice.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
     [49-fade-wall-time.sh]=25
-    [50-settings.sh]=203 [55-settings-pages.sh]=231 [58-settings-pickers.sh]=506
-    [59-settings-fonts.sh]=416 [60-settings-background.sh]=180 [62-settings-bindings.sh]=1069
+    [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
+    [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
+    [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
+    [60-settings-background.sh]=124 [60-settings-background-timing.sh]=56
+    [62-settings-bindings.sh]=678 [62-settings-bindings-timing.sh]=391
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [70-chroma.sh]=2
 )
 
+# The check files with a line "# Timing-sensitive", in name order. A mark lost would move its file
+# into the rest set, which may run beside other work, and no check would fail for it; so the marks
+# must match this list, or nothing runs. A file added or renamed, or a mark changed, changes it.
+timing_pinned=(42-features.sh 48-pad-repeat.sh 49-fade-wall-time.sh 50-settings-timing.sh
+               55-settings-pages-timing.sh 58-settings-pickers-timing.sh 59-settings-fonts-timing.sh
+               60-settings-background-timing.sh 62-settings-bindings-timing.sh)
+
+# A function to find the check files and choose the ones this run runs (checks, in name order):
+# with no selection all of them; with timing those marked "# Timing-sensitive", with rest the
+# others, and with either those marked "Every shard runs this file". The others are kept in
+# left_out. Stops the run when the marks do not match timing_pinned, or a file has both marks.
+select_checks() {
+    local check base restore marked=() both=() every
+    restore=$(shopt -p nullglob); shopt -s nullglob
+    checks=("$HERE"/checks/*.sh)
+    eval "$restore"
+    [ "${#checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    local -a all=("${checks[@]}")
+    checks=() left_out=()
+    for check in "${all[@]}"; do
+        base=${check##*/} every=
+        grep -q '^# Every shard runs this file' "$check" && every=yes
+        if grep -q '^# Timing-sensitive' "$check"; then
+            marked+=("$base")
+            [ -z "$every" ] || both+=("$base")
+            [ "$selection" != rest ] || [ -n "$every" ] || { left_out+=("$base"); continue; }
+        else
+            [ "$selection" != timing ] || [ -n "$every" ] || { left_out+=("$base"); continue; }
+        fi
+        checks+=("$check")
+    done
+    [ "${#both[@]}" = 0 ] || { echo "MARKED BOTH TIMING-SENSITIVE AND EVERY SHARD: ${both[*]}"; exit 2; }
+    [ "${marked[*]}" = "${timing_pinned[*]}" ] \
+        || { echo "THE TIMING-SENSITIVE MARKS DO NOT MATCH timing_pinned in run.sh"
+             echo "  marked: ${marked[*]:-none}"
+             echo "  pinned: ${timing_pinned[*]}"
+             exit 2; }
+}
+[ "$fault" = scrollfail ] || select_checks
+# An unsharded run with a selection says what it left out (a shard's plan does, in its own words)
+[ -n "$shard_k" ] || [ -z "$selection" ] \
+    || echo "Selection: $selection, ${#checks[@]} check files; left out: ${left_out[*]:-none}"
+
 # A function to plan the shards and print the plan. A check file with a line "# Every shard runs
 # this file" runs in every shard; each other one goes, longest first, to the shard with the least
 # time so far (the lowest-numbered on a tie), so every shard works out the same plan. Prints the
-# shard's header (with a digest of the source it copied, so shards of different trees cannot be
-# merged), then a DECLARED line for each check file the harness has and the shard that runs it:
-# (build) first, and (leaks) last in the leak pass, are the build's result and the LEAK lines.
+# shard's header (with the selection, and a digest of the source it copied, so shards of different
+# trees cannot be merged), then a DECLARED line for each check file the selection runs and the
+# shard that runs it: (build) first, and (leaks) last in the leak pass, are the build's result and
+# the LEAK lines. Each check file the selection leaves out has a LEFT OUT line of its own.
 shard_plan() {
     local check base seconds k best tree
     local -a load
     declare -gA shard_of=()
-    restore=$(shopt -p nullglob); shopt -s nullglob
-    shard_checks=("$HERE"/checks/*.sh)
-    eval "$restore"
-    [ "${#shard_checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    shard_checks=("${checks[@]}")
     for check in "${shard_checks[@]}"; do
         grep -q '^# Every shard runs this file' "$check" && shard_of[${check##*/}]=every
     done
@@ -107,10 +172,11 @@ shard_plan() {
                  [ "${shard_of[$base]:-}" = every ] || echo "${shard_seconds[$base]:-60} $base"
              done | LC_ALL=C sort -k1,1nr -k2,2)
     tree=$(find /work -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16)
-    echo "SHARD $shard_k of $shard_n: label $label, mode ${fault:-plain}, tree $tree, planned ${load[shard_k]} s"
+    echo "SHARD $shard_k of $shard_n: label $label, mode ${fault:-plain}, selection ${selection:-all}, tree $tree, planned ${load[shard_k]} s"
     echo "SHARD DECLARED (build) every"
     for check in "${shard_checks[@]}"; do echo "SHARD DECLARED ${check##*/} ${shard_of[${check##*/}]}"; done
     [ "$fault" != leaks ] || echo "SHARD DECLARED (leaks) every"
+    for base in "${left_out[@]}"; do echo "SHARD LEFT OUT $base"; done
 }
 [ -z "$shard_k" ] || shard_plan
 
@@ -609,14 +675,8 @@ if [ "$fault" = scrollfail ]; then
     grep -m3 -E 'AddressSanitizer|double-free|runtime error' "$out/f11-scroll.err" | sed 's/^/      /'
 else
     # A check file that does not parse would stop part-way through when sourced, and the checks
-    # after the error would be missing without a word, so each is parsed first. nullglob is on
-    # only while they are collected: the checks run with bash's own glob rules.
-    restore=$(shopt -p nullglob); shopt -s nullglob
-    checks=("$HERE"/checks/*.sh)
-    eval "$restore"
-    # A shard runs from the list its plan printed, which merge.py holds it to
-    [ -z "$shard_k" ] || checks=("${shard_checks[@]}")
-    [ "${#checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    # after the error would be missing without a word, so each is parsed first. The checks run
+    # from the list select_checks made, which a shard's plan printed and merge.py holds it to.
     for check in "${checks[@]}"; do
         # A shard runs its own check files and those every shard runs, and skips the others
         shard_file=${check##*/}

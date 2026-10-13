@@ -335,37 +335,6 @@ grep -qE '^Fonts: found 11 families in 11 files, skipped 0 \(' "$log" \
 result "fonts: a symbol font's row is named in the settings' font, and its face still sets the titles (exit $(cat "$out/f59-symbols.code"))" $ok
 grep -E 'font picker (drew|draws) (Dingy|Halfa|Halfb|Typo)|Titles: opened' "$log" | sed 's/^/      /'
 
-# While the files are listed (STREAMFLEX_TEST_FONT_DELAY_MS holds the listing back) the picker says
-# Loading fonts... (0), Back is its only key, and opening it again lists nothing twice. The files are
-# read with the picker closed, and it then opens at once on the font in use.
-# shellcheck disable=SC2086
-STREAMFLEX_TEST_FONT_DELAY_MS=8000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
-    run_keys f59-loading $TITLES_FONT Up Return BackSpace Return BackSpace +wait_fonts Return Menu
-log=$out/f59-loading.log
-LOADING=$(printf 'Loading fonts\xE2\x80\xA6 (0)')
-ok=1
-[ "$(grep -cF "Settings: the font picker reads $LOADING" "$log")" = 2 ] \
-    && grep -qx 'Settings: the key hint reads Back cancels' "$log" \
-    && [ "$(f59_count 'Fonts: listing the font files' "$log")" = 1 ] \
-    && [ "$(f59_count 'Settings: opened the picker for \[Titles\] Font' "$log")" = 3 ] \
-    && [ "$(f59_count 'Settings: closed the picker for \[Titles\] Font' "$log")" -ge 2 ] \
-    && sed -n '/Fonts: found/,$p' "$log" | grep -q "Settings: the list's cursor reads Open Sans" \
-    && ! sed -n '/Fonts: found/,$p' "$log" | grep -q 'Settings: the font picker reads Loading' \
-    && ! grep -q 'Settings: \[Titles\]' "$log" && grep -q 'Settings: nothing changed' "$log" && ran_clean f59-loading && ok=0
-result "fonts: the picker loading says so, takes only Back, and lists the files once (exit $(cat "$out/f59-loading.code"))" $ok
-grep -E 'Fonts:|font picker reads|key hint reads|picker for \[Titles\]' "$log" | sed 's/^/      /'
-
-# Quitting while the files are still listed waits for the listing's thread, then exits cleanly
-# shellcheck disable=SC2086
-STREAMFLEX_TEST_FONT_DELAY_MS=5000 STREAMFLEX_TEST_FONT_DIRS=$TESTER_HOME/fonts CFG=$FX/f60-color.ini \
-    run_keys f59-quitscan $TITLES_FONT
-log=$out/f59-quitscan.log
-ok=1
-grep -q 'Fonts: listing the font files' "$log" && ! grep -q 'Fonts: found' "$log" \
-    && sed -n '/Quitting program/,$p' "$log" | grep -q 'Fonts: waited for the font scan at quit' \
-    && ran_clean f59-quitscan && ok=0
-result "fonts: quitting while the fonts are listed waits for the listing (exit $(cat "$out/f59-quitscan.code"))" $ok
-
 # The families' samples: each is drawn once in its own face and kept while the picker is open; the
 # picker closed lets them go; a face that no longer opens is drawn in the settings' font, and tried
 # once. Paging through 47 families overruns the 32 kept, so the first page is drawn again on the

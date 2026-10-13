@@ -6,6 +6,8 @@
 # Each must end no sooner than its time, and no later than one frame (from the run's frame report)
 # and a 200 ms margin for a frame the runner stalls. Each run's frame report must show 26 frames a
 # second or fewer, so the low rate is real.
+# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the fade's and the dim's durations, and the
+# frame rate, are what it reads, and a loaded box stretches them.
 # A function to give a run's frame time in whole ms, rounded up, from its frame report; nothing when
 # there is no report, or it shows more than 26 frames a second
 p49_frame() {

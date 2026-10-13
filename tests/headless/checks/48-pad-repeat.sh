@@ -9,6 +9,8 @@
 # polls the pad, so a slow start (Fedora's leak pass on GitHub) took the press late and the 0.8 s
 # timed from the file ended before the repeat. wait_line sees the line up to 0.2 s late, so the hold
 # lasts 0.8-1.0 s from the press, still short of the old 1.2 s, and the tap 0.1-0.3 s, short of 0.5 s.
+# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the holds and the tap are timed against the
+# 500 ms repeat, and the frame reports read a frame rate, so a loaded box could change either.
 p48_hold() {
     : > /tmp/pad-right
     wait_line 'Gamepad ButtonDPadRight detected' "$2" && sleep 0.8

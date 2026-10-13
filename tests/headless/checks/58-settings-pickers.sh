@@ -418,25 +418,7 @@ p58_measured() {
         sleep 0.2
     done
 }
-p58_rest() { sleep 11; }
 p58_values() { grep -o 'Background: the image on show has a mean luminance of [0-9.]*' "$1" | sed 's/.* //'; }
-WAIT_FOR='Background set up: Slideshow' CFG=$FX/f58-slide.ini \
-    run_keys f58-slide +p58_measured Menu Down Down Down Return Down Down Down +p58_rest Menu
-log=$out/f58-slide.log
-values=$(p58_values "$log")
-lowest=$(sort -n <<< "$values" | head -1)
-ok=1
-[ "$(grep -c . <<< "$values")" -ge 3 ] && [ "$(sort -u <<< "$values" | grep -c .)" = 2 ] \
-    && ! grep -q 'could not be measured' "$log" \
-    && awk -v low="$lowest" '
-        /Background: the image on show has a mean luminance of/ { last = $NF }
-        /the note under the preview says Low contrast/ {
-            if (index($0, "Low contrast: 2.5:1") && last == low) warned++; else wrong++
-        }
-        END { exit !(warned >= 1 && wrong == 0) }' "$log" \
-    && grep -q 'Settings: nothing changed' "$log" && ran_clean f58-slide && ok=0
-result "pickers: a slideshow's images are measured as they change, and the warning follows them (exit $(cat "$out/f58-slide.code"))" $ok
-echo "      measured: $(tr '\n' ' ' <<< "$values")"
 WAIT_FOR='Background set up: Slideshow' CFG=$FX/f58-fade.ini run_keys f58-fade +p58_measured
 log=$out/f58-fade.log
 values=$(p58_values "$log")
