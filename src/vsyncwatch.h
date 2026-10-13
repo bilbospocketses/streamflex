@@ -6,15 +6,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// The presents in a row, each under half the display's frame after the one before, that show VSync is
-// not delivered: a second's worth at 60 Hz. With VSync delivered, only the few frames a swapchain
-// queues can come early, after a stall; never this many.
+// The presents in a row, each early (under three quarters of the display's frame after the one before:
+// vsyncwatch.c says why that fraction), that show VSync is not delivered: a second's worth at 60 Hz.
+// With VSync delivered, only the few frames a swapchain queues can come early, after a stall; never
+// this many.
 #define VSYNCWATCH_RUN 60
+#define VSYNCWATCH_EARLY_NUM 3
+#define VSYNCWATCH_EARLY_DEN 4
 
 typedef struct {
     bool started;       // A present has been seen since the reset, at last_ns
     uint64_t last_ns;   // When the last present returned
-    int fast_run;       // The presents in a row that came under half the display's frame
+    int fast_run;       // The presents in a row that came early
     bool undelivered;   // Found: the renderer does not deliver the VSync it reports
 } VsyncWatch;
 

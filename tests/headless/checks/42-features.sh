@@ -33,24 +33,25 @@ grep -q 'Frame timing: VSync wanted off, the renderer gives on' "$out/f42-fpsstu
     && ran_clean f42-fpsstuck && ok=0
 result "a renderer that keeps VSync on is still paced to FPSLimit=10 (${report:-no frame report}; exit $(cat "$out/f42-fpsstuck.code"))" $ok
 
-# The VSync watch's checks run on a small second display (P42_SIZE): lavapipe draws a 1920 x 1080 window
-# at about the display's rate, too slowly for the watch to find anything, and a small one fast. A
-# function to say why a run's frames could not test the watch, or nothing when they could: with none
-# of them paced, its frame report must show presents at twice the display's rate or more. A check asks
-# it only once its own assertions failed, and adds what it says to the FAIL line, so a future slowdown
-# reads as a broken premise rather than as a watch that never fired. It never fails a check by itself:
-# the report counts from the first frame, so a stall as the launcher starts (LeakSanitizer's, say) can
-# make it read slow in a run whose watch did all that was asked.
+# Most of the VSync watch's checks run on a small second display (P42_SIZE), where lavapipe draws fast,
+# far above the display's rate; one runs at full size, below. A function to say why a run's frames
+# could not test the watch, or nothing when they could: with none of them paced, its frame report must
+# show presents at NUM/DEN times the display's rate or more (twice, unless given). A check asks it only
+# once its own assertions failed, and adds what it says to the FAIL line, so a future slowdown reads as
+# a broken premise rather than as a watch that never fired. It never fails a check by itself: the
+# report counts from the first frame, so a stall as the launcher starts (LeakSanitizer's, say) can make
+# it read slow in a run whose watch did all that was asked.
 P42_SIZE=640x360
 p42_premise() {
-    local log=$1 report frames span paced rate
+    local log=$1 num=${2:-2} den=${3:-1} report frames span paced rate times
     report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
     read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
     rate=$(sed -n 's/^Refresh rate: *\([0-9]*\) Hz$/\1/p' "$log" | head -1)
+    times=twice; [ "$num/$den" = 2/1 ] || times="$num/$den times"
     if [ -z "$report" ] || [ -z "$rate" ]; then
         echo "premise unknown: no frame report or no refresh rate in the log"
-    elif [ "$paced" = 0 ] && [ $((frames * 1000)) -lt $((2 * rate * span)) ]; then
-        echo "premise broken: presents not fast enough to test the VSync watch ($frames frames in $span ms, none paced, under twice the display's $rate Hz)"
+    elif [ "$paced" = 0 ] && [ $((frames * 1000 * den)) -lt $((num * rate * span)) ]; then
+        echo "premise broken: presents not fast enough to test the VSync watch ($frames frames in $span ms, none paced, under $times the display's $rate Hz)"
     fi
 }
 
@@ -74,6 +75,24 @@ premise=
 result "VSync wanted off and on again is watched afresh, and found undelivered again (said $(grep -c "$undelivered_line" "$log") times, $again after the wish changed; exit $(cat "$out/f42-vsyncagain.code"))${premise:+; $premise}" $ok
 grep -E '^(Resolution:|Test hook: [0-9]* frames)' "$log" | sed 's/^/      /'
 grep -E '^(Settings: \[General\] (VSync|FPSLimit)|Frame timing:)' "$log" | sed 's/^/      /'
+
+# The case the watch once missed: at full size (the default 1920 x 1080 display) lavapipe presents at
+# about 60-120 fps, one to two times the display's rate, where only a present under half a frame counted
+# as early and none came. A present now counts as early under three quarters of a frame (vsyncwatch.c),
+# so presents above 4/3 of the display's rate are found, said once, and paced. f55-frame.ini draws one
+# button and nothing else, the least a full-size frame holds; the report covers 4 s.
+STREAMFLEX_TEST_FRAME_REPORT_MS=4000 CFG=$FX/f55-frame.ini UNTIL=' of them paced' run_keys f42-fullsize
+log=$out/f42-fullsize.log
+report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
+read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
+undelivered=$(grep -c '^Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to 16 ms$' "$log")
+ok=1
+grep -qx 'Resolution: *1920x1080' "$log" \
+    && [ -n "$report" ] && [ "$undelivered" = 1 ] && [ "$paced" -gt 0 ] && ran_clean f42-fullsize && ok=0
+premise=
+[ $ok = 0 ] || premise=$(p42_premise "$log" 4 3)
+result "at full size, VSync claimed but not delivered is found, said once and paced (${report:-no frame report}; said $undelivered times)${premise:+; $premise}" $ok
+grep -E '^(Resolution:|Frame timing:)' "$log" | sed 's/^/      /'
 
 # Every feature running at once, the screensaver on and off again, the virtual pad attached, and a
 # clean quit: every feature's stop runs at quit. On the small display, for the VSync watch below.

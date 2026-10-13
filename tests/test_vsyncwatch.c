@@ -73,26 +73,64 @@ static void test_late_present_restarts(void)
     CHECK_INT(presents(&watch, &now, 1, FAST), 1);
 }
 
-// Half a frame exactly is not under half a frame, and the frame is the rate's: at 60 Hz (a frame of
-// 16,666,666 ns) presents 8,333,333 ns apart are never found and 8,333,332 ns apart are; at 240 Hz
-// (4,166,666 ns) the same holds at 2,083,333 and 2,083,332 ns. A frame worked out any other way
-// moves one of these edges.
-static void test_half_frame(void)
+// Three quarters of a frame exactly is not under three quarters of a frame, and the frame is the rate's:
+// at 60 Hz (a frame of 16,666,666 ns, three quarters of it 12,499,999.5) presents 12,500,000 ns apart are
+// never found and 12,499,999 ns apart are; at 240 Hz (4,166,666 ns, 3,124,999.5) the same holds at
+// 3,125,000 and 3,124,999 ns. A frame or a fraction worked out any other way moves one of these edges.
+static void test_early_fraction(void)
 {
     VsyncWatch watch;
     uint64_t now = START;
     vsyncwatch_reset(&watch);
-    CHECK_INT(presents_at(&watch, &now, 4 * VSYNCWATCH_RUN, 8333333, 60), 0);
+    CHECK_INT(presents_at(&watch, &now, 4 * VSYNCWATCH_RUN, 12500000, 60), 0);
     vsyncwatch_reset(&watch);
-    CHECK_INT(presents_at(&watch, &now, VSYNCWATCH_RUN + 1, 8333332, 60), 1);
+    CHECK_INT(presents_at(&watch, &now, VSYNCWATCH_RUN + 1, 12499999, 60), 1);
     vsyncwatch_reset(&watch);
-    CHECK_INT(presents_at(&watch, &now, 4 * VSYNCWATCH_RUN, 2083333, 240), 0);
+    CHECK_INT(presents_at(&watch, &now, 4 * VSYNCWATCH_RUN, 3125000, 240), 0);
     vsyncwatch_reset(&watch);
-    CHECK_INT(presents_at(&watch, &now, VSYNCWATCH_RUN + 1, 2083332, 240), 1);
+    CHECK_INT(presents_at(&watch, &now, VSYNCWATCH_RUN + 1, 3124999, 240), 1);
 }
 
-// The first present after a reset has nothing before it, even when SDL's clock reads less than half
-// a frame: it starts the run without counting in it
+// The band the watch once missed: presents between one and two times the display's rate, as lavapipe
+// gives them at 1920 x 1080. At 90 and 120 presents a second on a 60 Hz display, both found at the run's
+// last; under half a frame, the old rule, neither ever was.
+static void test_blind_band(void)
+{
+    VsyncWatch watch;
+    uint64_t now = START;
+    vsyncwatch_reset(&watch);
+    CHECK_INT(presents(&watch, &now, VSYNCWATCH_RUN, 11111111), 0);
+    CHECK_INT(presents(&watch, &now, 1, 11111111), 1);
+    vsyncwatch_reset(&watch);
+    CHECK_INT(presents(&watch, &now, VSYNCWATCH_RUN, 8333333), 0);
+    CHECK_INT(presents(&watch, &now, 1, 8333333), 1);
+}
+
+// Delivered VSync that looks early now and then is never found: a present that returns late makes the
+// next one look early, but the one after is a frame on, which starts the run again; and after a stall the
+// few frames a swapchain queues come back at once, then the frames are a frame apart again
+static void test_jitter_and_stalls(void)
+{
+    VsyncWatch watch;
+    uint64_t now = START;
+    int found = 0;
+    vsyncwatch_reset(&watch);
+    for (int i = 0; i < 500; i++) {
+        found += presents(&watch, &now, 1, 22000000);
+        found += presents(&watch, &now, 1, 11333333);
+    }
+    CHECK_INT(found, 0);
+    vsyncwatch_reset(&watch);
+    for (int i = 0; i < 20; i++) {
+        found += presents(&watch, &now, 1, 100000000);
+        found += presents(&watch, &now, 3, 500000);
+        found += presents(&watch, &now, VSYNCWATCH_RUN - 4, FRAME);
+    }
+    CHECK_INT(found, 0);
+}
+
+// The first present after a reset has nothing before it, even when SDL's clock reads less than three
+// quarters of a frame: it starts the run without counting in it
 static void test_first_present(void)
 {
     VsyncWatch watch;
@@ -121,7 +159,9 @@ int main(void)
     test_delivered();
     test_undelivered();
     test_late_present_restarts();
-    test_half_frame();
+    test_early_fraction();
+    test_blind_band();
+    test_jitter_and_stalls();
     test_first_present();
     test_reset();
     return check_report();
