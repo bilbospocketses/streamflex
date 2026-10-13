@@ -91,11 +91,13 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # "-timing" (62's, two files: -timing and -pad-timing) on 2026-10-13: each part's time is that
 # file's, times the share its runs took of the file in a full set at 7bcdbd7 (by the time each run's
 # files were written). They only balance the shards: a check file missing here counts as 60 s, and a
-# stale time makes the shards uneven, never a check lost or run twice.
+# stale time makes the shards uneven, never a check lost or run twice. 48-pad-repeat.sh's is its
+# 11 s in that full set, times check 62's ratio of its time here to its time there (1069 to 1282
+# s), so that the timing set's two shards plan even.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
-    [49-fade-wall-time.sh]=25
+    [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
     [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
