@@ -79,12 +79,14 @@ grep -E '^(Settings: \[General\] (VSync|FPSLimit)|Frame timing:)' "$log" | sed '
 # default 1920 x 1080 display). Only a present under half a frame counted as early, so none of them did;
 # a present now counts as early under three quarters of a frame (vsyncwatch.c), so the band's upper part,
 # above 4/3 of the display's rate, is found, said once, and paced. lavapipe draws f55-frame.ini's one
-# button far faster than the band (200 fps and more, measured), so each frame is held up 8 ms as it is
-# shown (STREAMFLEX_TEST_FRAME_SLEEP_MS): with the draw, its presents come 8.33-12.5 ms apart at 60 Hz,
-# which three quarters of a frame finds and half a frame never does. The premise is a check of its own,
-# read from the test hook's measure of the run that found it: its mean gap between half and three
-# quarters of the display's frame (80-120 fps at 60 Hz). A run outside the band fails it, with the gaps.
-STREAMFLEX_TEST_FRAME_SLEEP_MS=8 STREAMFLEX_TEST_FRAME_REPORT_MS=4000 CFG=$FX/f55-frame.ini UNTIL=' of them paced' \
+# button far faster than the band (200 fps and more, measured), so each frame is held up 6 ms as it is
+# shown (STREAMFLEX_TEST_FRAME_SLEEP_MS): with the draw (3-4.5 ms, measured), its presents come about
+# 9-10.5 ms apart at 60 Hz, inside 8.33-12.5 ms, which three quarters of a frame finds and half a frame
+# never does. 8 ms put them at the 12.5 ms edge, where the draw's jitter kept breaking the run of 60.
+# The premise is a check of its own, read from the test hook's measure of the run that found it: its
+# mean gap between half and three quarters of the display's frame (80-120 fps at 60 Hz). A run outside
+# the band fails it, with the gaps.
+STREAMFLEX_TEST_FRAME_SLEEP_MS=6 STREAMFLEX_TEST_FRAME_REPORT_MS=4000 CFG=$FX/f55-frame.ini UNTIL=' of them paced' \
     run_keys f42-fullsize
 log=$out/f42-fullsize.log
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$log" | head -1)
