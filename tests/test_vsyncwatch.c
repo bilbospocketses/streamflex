@@ -129,6 +129,29 @@ static void test_jitter_and_stalls(void)
     CHECK_INT(found, 0);
 }
 
+// The run that finds VSync undelivered is measured: when the present before its first returned, and its
+// shortest and longest gap, so the harness can say how far apart its presents came. Early presents before
+// a late one do not count in it: at 9 and 11 ms in turn after one, its gaps are 9 to 11 ms, 10 on average.
+static void test_run_measured(void)
+{
+    VsyncWatch watch;
+    uint64_t now = START;
+    int found = 0;
+    vsyncwatch_reset(&watch);
+    CHECK_INT(presents(&watch, &now, 5, FAST), 0);
+    CHECK_INT(presents(&watch, &now, 1, FRAME), 0);
+    uint64_t before = now;
+    for (int i = 0; i < VSYNCWATCH_RUN / 2; i++) {
+        found += presents(&watch, &now, 1, 9000000);
+        found += presents(&watch, &now, 1, 11000000);
+    }
+    CHECK_INT(found, 1);
+    CHECK(watch.run_first_ns == before);
+    CHECK(watch.run_min_ns == 9000000);
+    CHECK(watch.run_max_ns == 11000000);
+    CHECK((watch.last_ns - watch.run_first_ns) / VSYNCWATCH_RUN == 10000000);
+}
+
 // The first present after a reset has nothing before it, even when SDL's clock reads less than three
 // quarters of a frame: it starts the run without counting in it
 static void test_first_present(void)
@@ -162,6 +185,7 @@ int main(void)
     test_early_fraction();
     test_blind_band();
     test_jitter_and_stalls();
+    test_run_measured();
     test_first_present();
     test_reset();
     return check_report();

@@ -1561,9 +1561,17 @@ void present_frame()
         if (elapsed < refresh_period)
             SDL_Delay(refresh_period - elapsed);
     }
-    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), display_rate))
+    else if (vsyncwatch_present(&vsync_watch, SDL_GetTicksNS(), display_rate)) {
         log_error("Frame timing: the renderer claims VSync but does not deliver it, so each frame is paced to %u ms",
                   refresh_period);
+#ifdef STREAMFLEX_TEST_HOOKS
+        // Only the headless harness builds this: how far apart the run of early presents that found it came
+        log_debug("Test hook: the VSync watch's run of %i early presents came %llu to %llu us apart, %llu us on average",
+                  vsync_watch.early_run, (unsigned long long) (vsync_watch.run_min_ns / 1000),
+                  (unsigned long long) (vsync_watch.run_max_ns / 1000),
+                  (unsigned long long) ((vsync_watch.last_ns - vsync_watch.run_first_ns) / (uint64_t) vsync_watch.early_run / 1000));
+#endif
+    }
 #ifdef STREAMFLEX_TEST_HOOKS
     test_frame_report(paced);
     test_frame_after_key();
