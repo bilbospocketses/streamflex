@@ -1,8 +1,7 @@
 # The font picker's timing-sensitive cases, from 59-settings-fonts.sh: keys and a quit that must land
 # while the harness build holds the font listing back. The fixture folder and the helpers they use
 # are made here as there.
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the listing is held for a fixed 8 s or 5 s,
-# and a loaded box could move the keys or the quit past it.
+# Timing-sensitive: keys and a quit must land inside a font listing held 8 s or 5 s
 
 rm -rf "$TESTER_HOME/fonts"
 mkdir -p "$TESTER_HOME/fonts/deeper"

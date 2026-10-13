@@ -714,11 +714,11 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.31 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.32 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padholdkey` |
 | 9.32 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.33 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-keyholdpad` |
+| 9.33 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-keyholdpad` |
 | 9.33 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.34 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capture` |
 | 9.34 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.35 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-padheld` |
+| 9.35 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padheld` |
 | 9.35 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.36 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-hotkeyok` |
 | 9.36 | `[Win]` | manual | qa-harness item 75, planned |
@@ -748,15 +748,15 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.48 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.49 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padlive` |
 | 9.49 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.50 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-padok` |
+| 9.50 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padok` |
 | 9.50 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.51 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-gpon` |
 | 9.51 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.52 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-padstart` |
+| 9.52 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padstart` |
 | 9.52 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.53 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-padstart` |
+| 9.53 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padstart` |
 | 9.53 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.54 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-padkey` |
+| 9.54 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padkey` |
 | 9.54 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.55 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padaxis` |
 | 9.55 | `[Win]` | manual | qa-harness item 75, planned |

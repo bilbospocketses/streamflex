@@ -1,7 +1,6 @@
 # Each feature starts, stops and frees what it holds; the frame timing is worked out from VSync and
 # FPSLimit without changing either. The leak pass (run.sh leaks) proves the stops free everything.
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the VSync watch's runs, the FPS limit's
-# pacing and the full-size premise read frame rates and frame gaps, which a loaded box changes.
+# Timing-sensitive: reads frame rates and frame gaps (the VSync watch, the FPS limit's pacing)
 
 # FPSLimit=10 is the documented minimum: with VSync off it sets the frame time, and VSync stays off
 run_quick f42-fps10

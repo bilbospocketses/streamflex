@@ -1,8 +1,7 @@
 # The settings screen's timing-sensitive cases, from 50-settings.sh: keys held against the X server's
 # repeat delay, keys sent faster than the Menus preview's rest, and a key that must land inside an
 # application's launch
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): a loaded box could stretch the holds and
-# the gaps these cases time, or move a key past the window it must land in.
+# Timing-sensitive: 2 s key holds against X's repeat, 50 ms key gaps, and a key inside a 3 s launch
 
 # A held Menu key opens settings once, and they stay open: the keyboard's repeats of it do nothing.
 # The same for a remote's Menu button, SDLK_MENU (X's XF86MenuKB, where Menu is SDLK_APPLICATION).

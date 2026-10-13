@@ -1,8 +1,7 @@
 # The Background page's timing-sensitive cases, from 60-settings-background.sh: OK during a decode the
 # harness build holds for 4 s, and a mode stepped inside a slideshow's 3 s fade. f60-slideshow's run is
 # not timing-sensitive; it is here because the Folder row's result reads its log beside f60-running's.
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): a loaded box could move a key past the
-# decode or the fade it must land in.
+# Timing-sensitive: a key must land inside a 4 s decode or a 3 s fade
 
 # OK while the highlighted image is still decoding: the test hook (STREAMFLEX_TEST_DECODE_DELAY_MS,
 # in the harness's build only) makes each decode take 4 s, so OK lands while blue.png, the image

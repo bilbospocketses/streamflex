@@ -1,7 +1,6 @@
 # The settings pages' timing-sensitive case, from 55-settings-pages.sh: the clock switched off while
 # a render is in flight
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the key must land inside a render the
-# harness build holds for 3 s, which a loaded box could move it past.
+# Timing-sensitive: a key must land inside a clock render the harness build holds for 3 s
 
 # The clock switched off while its render thread is at work (the harness build's
 # STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits

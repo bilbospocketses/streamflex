@@ -87,11 +87,11 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
 # passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
 # at 9550682; 49-fade-wall-time.sh's is an estimate (its two runs wait about 9 s and 5 s, plus
-# start-up). The six *-timing.sh files took their cases from the file of the same name without
-# "-timing" on 2026-10-13: each half's time is that file's, times the share its runs took of the
-# file in a full set at 7bcdbd7 (by the time each run's files were written). They only balance the
-# shards: a check file missing here counts as 60 s, and a stale time makes the shards uneven, never
-# a check lost or run twice.
+# start-up). The *-timing.sh files took their cases from the file of the same name without
+# "-timing" (62's, two files: -timing and -pad-timing) on 2026-10-13: each part's time is that
+# file's, times the share its runs took of the file in a full set at 7bcdbd7 (by the time each run's
+# files were written). They only balance the shards: a check file missing here counts as 60 s, and a
+# stale time makes the shards uneven, never a check lost or run twice.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -100,17 +100,18 @@ declare -A shard_seconds=(
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
     [60-settings-background.sh]=124 [60-settings-background-timing.sh]=56
-    [62-settings-bindings.sh]=678 [62-settings-bindings-timing.sh]=391
+    [62-settings-bindings.sh]=678 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=189
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [70-chroma.sh]=2
 )
 
-# The check files with a line "# Timing-sensitive", in name order. A mark lost would move its file
-# into the rest set, which may run beside other work, and no check would fail for it; so the marks
-# must match this list, or nothing runs. A file added or renamed, or a mark changed, changes it.
+# The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
+# set, which may run beside other work, and no check would fail for it; so the marks must match
+# this list, or nothing runs. A file added or renamed, or a mark changed, changes it.
 timing_pinned=(42-features.sh 48-pad-repeat.sh 49-fade-wall-time.sh 50-settings-timing.sh
                55-settings-pages-timing.sh 58-settings-pickers-timing.sh 59-settings-fonts-timing.sh
-               60-settings-background-timing.sh 62-settings-bindings-timing.sh)
+               60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
+               62-settings-bindings-timing.sh)
 
 # A function to find the check files and choose the ones this run runs (checks, in name order):
 # with no selection all of them; with timing those marked "# Timing-sensitive", with rest the
@@ -137,7 +138,8 @@ select_checks() {
         checks+=("$check")
     done
     [ "${#both[@]}" = 0 ] || { echo "MARKED BOTH TIMING-SENSITIVE AND EVERY SHARD: ${both[*]}"; exit 2; }
-    [ "${marked[*]}" = "${timing_pinned[*]}" ] \
+    # Compared as sets, in one order whatever the locale sorts the files by
+    [ "$(printf '%s\n' "${marked[@]}" | LC_ALL=C sort)" = "$(printf '%s\n' "${timing_pinned[@]}" | LC_ALL=C sort)" ] \
         || { echo "THE TIMING-SENSITIVE MARKS DO NOT MATCH timing_pinned in run.sh"
              echo "  marked: ${marked[*]:-none}"
              echo "  pinned: ${timing_pinned[*]}"

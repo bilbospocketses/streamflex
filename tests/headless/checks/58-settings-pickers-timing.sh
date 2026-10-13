@@ -1,7 +1,6 @@
 # The pickers' timing-sensitive case, from 58-settings-pickers.sh: a slideshow's measures followed
 # through a fixed rest. ~/duo, p58_measured and p58_values are made here as there.
-# Timing-sensitive (run.sh <label> [leaks] [K/N] timing): the rest is a fixed 11 s on 5 s image
-# changes, so a loaded box could change how many images it sees.
+# Timing-sensitive: counts the images a fixed 11 s rest sees, on 5 s image changes
 
 # A slideshow measures each image on its loader thread, and the main thread takes the measure with
 # the image, whether it cuts to it or fades it in. ~/duo holds blue.png and green.png, which take
