@@ -102,7 +102,7 @@ declare -A shard_seconds=(
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
     [60-settings-background.sh]=124 [60-settings-background-timing.sh]=56
-    [62-settings-bindings.sh]=678 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=189
+    [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [70-chroma.sh]=2
 )
@@ -477,7 +477,7 @@ with_tracer_retry() {
     retry_restore "$name"
     "$@"
     tracer_flake "$name" || return 0
-    echo "$(cat "$out/$name.code"), and LeakSanitizer's tracer could not attach, here or on its retry" > "$out/$name.code"
+    echo "$(cat "$out/$name.code"), and LeakSanitizer's tracer could not attach on its first try or its retry" > "$out/$name.code"
     echo "LSan tracer flake in $name again on its retry: it fails (CONTRIBUTING.md)"
 }
 
@@ -734,10 +734,10 @@ look() {
 }
 
 # A function to list each run in the output folder whose LeakSanitizer found a leak, its first
-# try's stderr (NAME.flake.err) included, and each run whose tracer could not attach even on its
-# retry, so that no leak check ran. Each one counts as a failure, so the list cannot disagree with
-# the verdict, even for a run whose check never looked at its sanitizers. nullglob is on only while
-# the .err files are collected.
+# try's stderr (NAME.flake.err) included, and each run whose tracer could not attach, on its first
+# try and its retry or on a run that was not retried, so that no leak check ran; it says which. Each
+# one counts as a failure, so the list cannot disagree with the verdict, even for a run whose check
+# never looked at its sanitizers. nullglob is on only while the .err files are collected.
 list_leaks() {
     local err errs restore
     restore=$(shopt -p nullglob); shopt -s nullglob
@@ -747,7 +747,12 @@ list_leaks() {
         if grep -q 'ERROR: LeakSanitizer' "$err"; then
             echo "LEAK  $(basename "$err" .err): $(grep -m1 '^SUMMARY' "$err")"
         elif [[ $err != *.flake.err ]] && grep -q 'WARNING: ptrace appears to be blocked' "$err"; then
-            echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach, here or on its retry, so no leak check ran"
+            # A run retried kept its first try's stderr beside it (with_tracer_retry)
+            if [ -e "${err%.err}.flake.err" ]; then
+                echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach on its first try or its retry, so no leak check ran"
+            else
+                echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach, and the run was not retried, so no leak check ran"
+            fi
         else
             continue
         fi

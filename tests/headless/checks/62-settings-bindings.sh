@@ -265,21 +265,6 @@ sed -n '/Settings: the bindings now hold 1 hotkey and 1 controls/,$p' "$log" | g
     && grep -qx 'Hotkey1=#4000003E;:quit' "$cfg" && ran_clean f62-gpoffapply && ok=0
 result "bindings: with the gamepad off, the rebuilt controls leave its defaults out (exit $(cat "$out/f62-gpoffapply.code"))" $ok
 
-# A pad's OK tapped for one frame starts a pad capture and is let go on the next: the capture sees it
-# let go, so the same button tapped again is the one caught
-b62_tap_frame() { : > /tmp/pad-a; sleep 0.5; rm -f /tmp/pad-a; sleep 0.7; }
-rm -f /tmp/pad-a
-cfg=$(writable_config f62-padok)
-STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=1 WAIT_FOR='Gamepad connected' CFG=$cfg \
-    run_keys f62-padtap $TO_GAMEPAD Down Down Down Return +b62_tap_frame +b62_tap_frame BackSpace BackSpace Menu
-log=$out/f62-padtap.log
-ok=1
-grep -q 'Settings: capturing a button' "$log" && grep -q 'Settings: capture got ButtonA' "$log" \
-    && ! grep -q 'Settings: the capture caught nothing' "$log" && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
-    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-padtap && ok=0
-result "bindings: a pad's OK tapped for one frame is caught when tapped again (exit $(cat "$out/f62-padtap.code"))" $ok
-rm -f /tmp/pad-a
-
 # The Menu key captured is named Menu (SDL calls this code of it Application), on the confirm page too
 CFG=$FX/f62-keys.ini run_keys f62-menu $TO_KEYBOARD Return Return Menu BackSpace BackSpace Menu
 ok=1

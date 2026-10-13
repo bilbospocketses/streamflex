@@ -760,7 +760,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.54 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.55 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padaxis` |
 | 9.55 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.56 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padtap` |
+| 9.56 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padtap` |
 | 9.56 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.57 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capheld` |
 | 9.57 | `[Win]` | manual | qa-harness item 75, planned |

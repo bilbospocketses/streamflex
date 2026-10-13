@@ -173,7 +173,8 @@ sed 's/^/      /' "$out/h-leaks.txt" "$out/h-no-errs.txt"
 # (h-tracer-leak). As the leak pass would (fault=leaks, in either pass), into a folder of their own:
 # the first is retried from the state it started in and passes, its first try's files kept; the
 # second is retried, fails, and says so; the third is never retried and fails. list_leaks lists the
-# second and the third, and neither the first nor its first try.
+# second and the third, and neither the first nor its first try; and, saying it was not retried, the
+# stderr of a run that met the flake with no retry (h-tracer-unretried, written here).
 cat > /tmp/harness/tracer << 'EOF'
 #!/bin/sh
 [ -z "${LD_PRELOAD:-}" ] || exec env -u LD_PRELOAD "$0" "$@"
@@ -199,6 +200,8 @@ for h in once always leak; do
         run_quick "h-tracer-$h" > "/tmp/harness/traced/said-$h.txt"
 done
 rm -f "$TESTER_HOME/h-tracer-made"
+printf '==9==WARNING: ptrace appears to be blocked (is seccomp enabled?). LeakSanitizer may hang.\n==9==Child exited with signal 64.\n' \
+    > /tmp/harness/traced/h-tracer-unretried.err
 saved=$failures
 failures=0
 out=/tmp/harness/traced list_leaks > /tmp/harness/traced/listed.txt 2>&1
@@ -210,10 +213,12 @@ ok=1
     && out=$t ran_clean h-tracer-once && ! grep -q 'not put back' $t/h-tracer-once.err && grep -q 'ptrace appears to be blocked' $t/h-tracer-once.flake.err \
     && [ -f $t/flake/h-tracer-once/h-tracer-once.code ] \
     && [ "$(sed -n 2p $t/said-always.txt)" = 'LSan tracer flake in h-tracer-always again on its retry: it fails (CONTRIBUTING.md)' ] \
-    && [ "$(cat $t/h-tracer-always.code)" = "0, and LeakSanitizer's tracer could not attach, here or on its retry" ] \
+    && [ "$(cat $t/h-tracer-always.code)" = "0, and LeakSanitizer's tracer could not attach on its first try or its retry" ] \
     && ! out=$t ran_clean h-tracer-always \
     && [ ! -s $t/said-leak.txt ] && [ ! -e $t/flake/h-tracer-leak ] && ! out=$t ran_clean h-tracer-leak \
-    && [ "$counted" = 2 ] && grep -qx "LEAK  h-tracer-always: LeakSanitizer's tracer could not attach, here or on its retry, so no leak check ran" $t/listed.txt \
-    && grep -qx 'LEAK  h-tracer-leak: SUMMARY: AddressSanitizer: 8 byte(s) leaked in 1 allocation(s).' $t/listed.txt && ok=0
+    && [ "$counted" = 3 ] && grep -qx "LEAK  h-tracer-always: LeakSanitizer's tracer could not attach on its first try or its retry, so no leak check ran" $t/listed.txt \
+    && grep -qx 'LEAK  h-tracer-leak: SUMMARY: AddressSanitizer: 8 byte(s) leaked in 1 allocation(s).' $t/listed.txt \
+    && grep -qx "LEAK  h-tracer-unretried: LeakSanitizer's tracer could not attach, and the run was not retried, so no leak check ran" $t/listed.txt \
+    && ok=0
 result "harness: a run whose leak check LeakSanitizer's tracer never made is run once more; a second miss, or a leak, fails (listed $counted)" $ok
 sed 's/^/      /' $t/said-*.txt $t/listed.txt

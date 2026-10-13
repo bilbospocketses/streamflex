@@ -1,8 +1,8 @@
 # Key and gamepad bindings (3b), the second half of the timing-sensitive cases from
-# 62-settings-bindings.sh: pad taps that must end before the pad's 500 ms repeat, and the launcher
-# stopped past the 10 s confirmation. The first half is 62-settings-bindings-timing.sh; the cases are
-# in two files so the timing set's two shards can share them.
-# Timing-sensitive: pad taps against the 500 ms repeat, and the launcher stopped past the 10 s
+# 62-settings-bindings.sh: pad taps that must end before the pad's 500 ms repeat or be seen in a frame,
+# and the launcher stopped past the 10 s confirmation. The first half is 62-settings-bindings-timing.sh;
+# the cases are in two files so the timing set's two shards can share them.
+# Timing-sensitive: pad taps against the 500 ms repeat or one frame, and the launcher stopped past the 10 s
 
 TO_KEYBOARD="Menu Down Down Down Down Down Down Down Down Return Return"   # Controls, then Keyboard
 QUIT="Down Down Down Down Down Down Down Down Down Return"                 # Quit StreamFlex in the command picker
@@ -103,6 +103,21 @@ grep -q 'Settings: the binding went back: Up was not pressed again within 10 s' 
     && sed -n '/Settings: press Up again within 10 s/,$p' "$log" | grep -q 'Key Up (#40000052) detected' \
     && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f62-up.ini" "$cfg" && ran_clean f62-stop && ok=0
 result "bindings: a key read after the 10 s ended does not keep the change (exit $(cat "$out/f62-stop.code"))" $ok
+
+# A pad's OK tapped for one frame starts a pad capture and is let go on the next: the capture sees it
+# let go, so the same button tapped again is the one caught
+b62_tap_frame() { : > /tmp/pad-a; sleep 0.5; rm -f /tmp/pad-a; sleep 0.7; }
+rm -f /tmp/pad-a
+cfg=$(writable_config f62-padok)
+STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=1 WAIT_FOR='Gamepad connected' CFG=$cfg \
+    run_keys f62-padtap $TO_GAMEPAD Down Down Down Return +b62_tap_frame +b62_tap_frame BackSpace BackSpace Menu
+log=$out/f62-padtap.log
+ok=1
+grep -q 'Settings: capturing a button' "$log" && grep -q 'Settings: capture got ButtonA' "$log" \
+    && ! grep -q 'Settings: the capture caught nothing' "$log" && [ "$(grep -c 'Gamepad ButtonA detected' "$log")" = 1 ] \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f62-padtap && ok=0
+result "bindings: a pad's OK tapped for one frame is caught when tapped again (exit $(cat "$out/f62-padtap.code"))" $ok
+rm -f /tmp/pad-a
 
 # --- Fix round 1 ---
 
