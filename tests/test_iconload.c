@@ -35,17 +35,38 @@ static SDL_AtomicInt started;      // Worker states made
 static SDL_AtomicInt ended;        // Worker states ended
 static SDL_AtomicInt wrong_state;  // Jobs that were handed another state than their worker's own
 
+#define MAX_JOBS 5000
+static IconJob jobs[MAX_JOBS];
+static SDL_AtomicInt claimed[MAX_JOBS];   // Each job's claims, counted atomically: two workers on one
+                                          // job could lose one of job->claims' increments
+
 static void *fake_start(void) { SDL_AddAtomicInt(&started, 1); return &started; }
 static void fake_end(void *state) { (void) state; SDL_AddAtomicInt(&ended, 1); }
 
-// A job that takes a little time, so the workers overlap and a double claim would show. It runs on
-// the workers, so what it finds wrong is counted atomically, and checked once the batch is back.
-static void fake_work(IconJob *job, void *state)
+// A function for what every fake job does first: count its claim, and whether its worker's own
+// state reached it. It runs on the workers, so what it finds wrong is counted atomically, and
+// checked once the batch is back.
+static void claim(IconJob *job, void *state)
 {
     if (state != &started)
         SDL_AddAtomicInt(&wrong_state, 1);
+    SDL_AddAtomicInt(&claimed[job->size], 1);
     job->claims++;
+}
+
+// A job that takes a little time, so the workers overlap
+static void fake_work(IconJob *job, void *state)
+{
+    claim(job, state);
     SDL_Delay((Uint32) (1 + job->size % 3));
+    job->done = true;
+}
+
+// A job that takes no time, so the workers spend theirs claiming, side by side: where a claim that
+// is not atomic gives one job to two of them
+static void quick_work(IconJob *job, void *state)
+{
+    claim(job, state);
     job->done = true;
 }
 
@@ -74,28 +95,31 @@ static void test_workers_logged_once(void)
     CHECK_STR(last_debug, wanted);
 }
 
-// A function to run a batch of COUNT fake jobs on THREADS workers, and check that each was claimed
-// exactly once and had posted when the batch returned, that every worker state made was ended, and
-// that the batch logged ERRORS errors
-static void test_batch(int count, int threads, int errors)
+// A function to run a batch of COUNT fake jobs (WORK) on THREADS workers, and check that each was
+// claimed exactly once and had posted when the batch returned, that every worker state made was
+// ended, and that the batch logged ERRORS errors
+static void test_batch(int count, int threads, int errors, IconWork work)
 {
-    static IconJob jobs[200];
     memset(jobs, 0, sizeof(jobs));
+    for (int i = 0; i < MAX_JOBS; i++)
+        SDL_SetAtomicInt(&claimed[i], 0);
     for (int i = 0; i < count; i++)
         jobs[i].size = i;
     SDL_SetAtomicInt(&started, 0);
     SDL_SetAtomicInt(&ended, 0);
     SDL_SetAtomicInt(&wrong_state, 0);
     int errors_before = error_lines;
-    iconload_batch(jobs, count, threads, fake_work, fake_start, fake_end);
-    int once = 0, posted = 0;
+    iconload_batch(jobs, count, threads, work, fake_start, fake_end);
+    int once = 0, noted = 0, posted = 0;
     for (int i = 0; i < count; i++) {
-        once += jobs[i].claims == 1;
+        once += SDL_GetAtomicInt(&claimed[i]) == 1;
+        noted += jobs[i].claims == 1;
         posted += jobs[i].done;
     }
     printf("%i jobs on %i threads: %i claimed exactly once, %i posted, %i worker states made, %i ended\n",
            count, threads, once, posted, SDL_GetAtomicInt(&started), SDL_GetAtomicInt(&ended));
     CHECK_INT(once, count);
+    CHECK_INT(noted, count);
     CHECK_INT(posted, count);
     CHECK_INT(SDL_GetAtomicInt(&ended), SDL_GetAtomicInt(&started));
     CHECK_INT(SDL_GetAtomicInt(&wrong_state), 0);
@@ -110,13 +134,14 @@ int main(void)
     }
     test_worker_count();
     test_workers_logged_once();
-    test_batch(200, 4, 0);
-    test_batch(3, 4, 0);     // Fewer jobs than threads
-    test_batch(1, 1, 0);
-    test_batch(0, 2, 0);     // An empty batch returns at once
+    test_batch(200, 4, 0, fake_work);
+    test_batch(MAX_JOBS, 4, 0, quick_work);   // The workers side by side at the claim
+    test_batch(3, 4, 0, fake_work);           // Fewer jobs than threads
+    test_batch(1, 1, 0, fake_work);
+    test_batch(0, 2, 0, fake_work);           // An empty batch returns at once
     // No thread starts: the main thread runs the whole batch, and says so once
     SDL_SetHint("STREAMFLEX_TEST_ICONLOAD_NO_THREADS", "1");
-    test_batch(50, 4, 1);
+    test_batch(50, 4, 1, fake_work);
     CHECK_STR(last_error, "Icons: no decode thread started, decoding on the main thread\nTest hook: no thread starts" endline);
     SDL_ResetHint("STREAMFLEX_TEST_ICONLOAD_NO_THREADS");
     SDL_Quit();
