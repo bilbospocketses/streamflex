@@ -14,6 +14,7 @@
 #include "config_fields.h"
 #include "settings_screen.h"
 #include "settings_pickers.h"
+#include "settings_fonts.h"
 #include "config_save.h"
 #include "browser.h"
 #include "fileio.h"
@@ -1766,4 +1767,34 @@ void settings_reflow(void)
     begin_pickers();
     make_preview();
     log_debug("Settings: re-measured for %ix%i px", geo.screen_width, geo.screen_height);
+}
+
+// A function to let go of every texture the screen holds, before the renderer that made them goes (a
+// lost device, Task 1.7b): the text cache, the preview, the font picker's samples and the browsed
+// image. What the screen shows is kept: settings_remake_textures() makes them again.
+void settings_drop_textures(void)
+{
+    if (model == NULL)
+        return;
+    clear_text_cache();
+    fonts_clear_samples();
+    if (preview != NULL)
+        SDL_DestroyTexture(preview);
+    preview = NULL;
+    if (background_override != NULL)
+        SDL_DestroyTexture(background_override);
+    background_override = NULL;
+    shown_path[0] = '\0';   // The browsed image is decoded again, if it is still wanted
+}
+
+// A function to make the screen's textures again on a reset or new renderer at the same size,
+// keeping the page, its cursor, an open picker or the browser, and every unsaved edit: the preview is
+// made anew and the browsed image decoded again; the cache and the font samples fill as they are drawn
+void settings_remake_textures(void)
+{
+    if (model == NULL)
+        return;
+    settings_drop_textures();
+    make_preview();
+    start_decode();
 }

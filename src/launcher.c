@@ -60,6 +60,7 @@ static void test_pad_stop(void);
 static void test_app_update(void);
 static void test_pixel_size_update(void);
 static void test_display_event_update(void);
+static void test_render_event_update(void);
 static bool test_pixel_size(int *width, int *height);
 #endif
 static SDL_Thread *start_clock_thread(void);
@@ -2112,6 +2113,46 @@ static void test_display_event_update()
     if (!SDL_PushEvent(&moved))
         log_error("Test hook: the display event was not pushed\n%s", SDL_GetError());
 }
+
+// A function only the headless harness builds: with STREAMFLEX_TEST_RENDER_EVENT set, each time what
+// the file it names holds changes, the render events it names are pushed in one batch, in its order:
+// "targets" (SDL_EVENT_RENDER_TARGETS_RESET), "reset" (SDL_EVENT_RENDER_DEVICE_RESET) and "lost"
+// (SDL_EVENT_RENDER_DEVICE_LOST), so the real handlers run on events no software renderer sends. A
+// size STREAMFLEX_TEST_PIXEL_SIZE's file took since test_pixel_size_update() read it this pass is
+// pushed first, so a size and a reset that a check writes together always arrive in one batch.
+static void test_render_event_update()
+{
+    static char last[64] = "";
+    const char *path = getenv("STREAMFLEX_TEST_RENDER_EVENT");
+    if (path == NULL)
+        return;
+    size_t length = 0;
+    char *text = fileio_read_all(path, &length);
+    char now[64] = "";
+    if (text != NULL)
+        copy_string(now, text, sizeof(now));
+    alloc_free(text);
+    if (strcmp(now, last) == 0)
+        return;
+    copy_string(last, now, sizeof(last));
+    test_pixel_size_update();
+    char *rest = NULL;
+    for (char *word = strtok_r(now, " \n", &rest); word != NULL; word = strtok_r(NULL, " \n", &rest)) {
+        SDL_Event render;
+        SDL_zero(render);
+        render.type = strcmp(word, "targets") == 0 ? SDL_EVENT_RENDER_TARGETS_RESET
+                    : strcmp(word, "reset") == 0 ? SDL_EVENT_RENDER_DEVICE_RESET
+                    : strcmp(word, "lost") == 0 ? SDL_EVENT_RENDER_DEVICE_LOST : 0;
+        if (render.type == 0) {
+            log_error("Test hook: '%s' names no render event", word);
+            continue;
+        }
+        render.render.windowID = SDL_GetWindowID(window);
+        log_debug("Test hook: pushed the render event '%s'", word);
+        if (!SDL_PushEvent(&render))
+            log_error("Test hook: the render event was not pushed\n%s", SDL_GetError());
+    }
+}
 #endif
 
 // A function to tell whether the gamepad subsystem is running
@@ -2551,6 +2592,8 @@ void reload_run_pending(void)
     settings_refresh_for_reload();   // REFRESH_ORDER, the gamepad kept running and the screensaver's dim kept
     if (settings_is_open() && resized)
         settings_reflow();
+    else if (settings_is_open())
+        settings_remake_textures();   // A reset or a new renderer at the same size: the page as it is
     else if (resized)
         trim_title_fonts();
     char reasons[128];
@@ -2618,6 +2661,16 @@ static void display_scale_changed(void)
     if (scale != display_scale && width == geo.screen_width && height == geo.screen_height)
         log_debug("Screen: display scale %.2f, was %.2f; nothing to redo", (double) scale, (double) display_scale);
     display_scale = scale;
+}
+
+// A function to mark the reload a render target or device reset needs (SDL_EVENT_RENDER_TARGETS_RESET,
+// SDL_EVENT_RENDER_DEVICE_RESET): every texture made again once the events are drained, the menu and
+// the screen kept. The log says so once for each reload, however many resets the batch held.
+static void render_reset(ReloadReason why)
+{
+    if (!(reload_pending & (RELOAD_TARGETS | RELOAD_DEVICE)))
+        log_debug("Renderer: device lost; reloading");
+    reload_mark(why);
 }
 
 static inline void pre_launch()
@@ -2872,6 +2925,7 @@ int main(int argc, char *argv[])
         test_app_update();
         test_pixel_size_update();
         test_display_event_update();
+        test_render_event_update();
 #endif
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -2958,6 +3012,14 @@ int main(int argc, char *argv[])
 
                 case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
                     display_scale_changed();
+                    break;
+
+                case SDL_EVENT_RENDER_TARGETS_RESET:
+                    render_reset(RELOAD_TARGETS);
+                    break;
+
+                case SDL_EVENT_RENDER_DEVICE_RESET:
+                    render_reset(RELOAD_DEVICE);
                     break;
 
                 case SDL_EVENT_WINDOW_MOUSE_LEAVE:

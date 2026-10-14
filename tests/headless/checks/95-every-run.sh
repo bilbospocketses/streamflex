@@ -30,11 +30,13 @@ for e95_line in "${e95_bad[@]}"; do echo "      $e95_line"; done
 # Every run that opened a window: its first Screen: line is its display's size (1920x1080, or what
 # NAME.display says for a run on another X display) at pixel density 1.00 and display scale 1.00, but
 # the Scale leg's run at 2 (f47-scale2); no run reloads unless it changed its window's size on purpose
-# (check 47's resizes: a NAME.path file, or the size hook's "Test hook: the window's size reads" line),
-# so the event SDL sends as it makes the window, which the loop handles after "Begin program loop",
-# changes nothing; and no run's renderer draws at a size other than its window's (spec section 6). The
+# (check 47's and 48's resizes: a NAME.path file, or the size hook's "Test hook: the window's size
+# reads" line), so the event SDL sends as it makes the window, which the loop handles after "Begin
+# program loop", changes nothing; and no run's renderer draws at a size other than its window's (spec
+# section 6). A run that posts a render reset on purpose (check 48's: the render hook's "Test hook:
+# pushed the render event" line) reloads for it, so only its size-change lines count there. The
 # runs pin GDK_SCALE, Xft.dpi and SDL_VIDEO_X11_SCALING_FACTOR unset (run.sh) except where a check sets
-# one. A later task's reset or new window that reloads at the same size names its runs here too.
+# one. A later task's new window that reloads at the same size names its runs here too.
 e95_bad=() e95_runs=0
 for e95_log in "$out"/*.log; do
     [ -f "$e95_log" ] || continue
@@ -48,7 +50,9 @@ for e95_log in "$out"/*.log; do
     [ "$e95_first" = "Screen: $e95_size px, pixel density 1.00, display scale $e95_scale" ] \
         || e95_bad+=("$e95_name: first Screen line '${e95_first:-none}', wanted $e95_size at scale $e95_scale")
     if [ ! -f "$out/$e95_name.path" ] && ! grep -q "^Test hook: the window's size reads " "$e95_log"; then
-        e95_reload=$(grep -m1 -E '^(Screen: .*; reloading|Reload: done at )' "$e95_log")
+        e95_stray='^(Screen: .*; reloading|Reload: done at )'
+        grep -q "^Test hook: pushed the render event '" "$e95_log" && e95_stray='^Screen: .*; reloading'
+        e95_reload=$(grep -m1 -E "$e95_stray" "$e95_log")
         [ -z "$e95_reload" ] || e95_bad+=("$e95_name: a reload with no size change asked for: '$e95_reload'")
     fi
     grep -q '^Screen: the renderer draws ' "$e95_log" && e95_bad+=("$e95_name: $(grep -m1 '^Screen: the renderer draws ' "$e95_log")")
