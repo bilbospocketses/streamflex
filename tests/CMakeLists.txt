@@ -13,6 +13,11 @@ add_executable(test_chroma test_chroma.c "${PROJECT_SOURCE_DIR}/src/chroma.c")
 target_include_directories(test_chroma PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME chroma COMMAND test_chroma)
 
+# Unit tests for the note the launcher logs after SDL chooses its video driver (a pure module)
+add_executable(test_videodriver test_videodriver.c "${PROJECT_SOURCE_DIR}/src/videodriver.c")
+target_include_directories(test_videodriver PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME videodriver COMMAND test_videodriver)
+
 # fileio.c finds the Windows places (Pictures, drives) through the shell
 function(link_fileio target)
   if (WIN32)

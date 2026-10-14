@@ -16,6 +16,8 @@ set(SOURCES
   utf8.h
   chroma.c
   chroma.h
+  videodriver.c
+  videodriver.h
   library.c
   library.h
   alloc.c
