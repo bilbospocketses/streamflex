@@ -69,7 +69,8 @@ grep "Test hook: the Mode row's cursor rested on " "$out/f60-transparent.log" | 
 # Under the Windows plan forced on Linux (Task 1.8b's STREAMFLEX_TEST_WINDOWS_PLAN) the same slow walk
 # recreates the window: the rest on Transparent makes it one row short, the rest on Slideshow after it
 # makes it fullscreen again, the rests on Image and Color change nothing, and the page stays open
-# through both recreations
+# through both recreations. Each recreation drops the old renderer's textures before it goes, and says
+# how many: the menu's and the page's own, so more than none.
 f60_win_short() { wait_line 'Reload: done at 1920x1079 px, for ' "$2"; }
 f60_win_full() { wait_line 'Reload: done at 1920x1080 px, for ' "$2"; }
 CFG=$FX/f60-color.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 \
@@ -82,9 +83,11 @@ ok=1
     && precedes "$log" 'Video: recreating the window for an opaque background' 'Reload: done at 1920x1080 px, for ' \
     && grep -qE '^Reload: done at 1920x1079 px, for .*a new window$' "$log" \
     && grep -qE '^Reload: done at 1920x1080 px, for .*a new window$' "$log" \
+    && [ "$(grep -c '^Renderer: dropped ' "$log")" = 2 ] \
+    && [ "$(grep -cE '^Renderer: dropped [1-9][0-9]* textures before the renderer went$' "$log")" = 2 ] \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f60-winrest && ok=0
 result "settings: under the Windows plan, a rest on Transparent recreates the window one row short, and a rest back on Slideshow fullscreen (exit $(cat "$out/f60-winrest.code"))" $ok
-grep -E "^(Video: recreating|Reload: done|Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
+grep -E "^(Video: recreating|Renderer: dropped |Reload: done|Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
 
 # A config whose own Mode names an image or folder it never gives is a config problem: at startup
 # that still says so as an error, on stderr. The slideshow's case runs f30-nodir's config here,

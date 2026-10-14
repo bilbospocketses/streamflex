@@ -632,7 +632,8 @@ static bool recreate_window(const WindowPlan *plan)
     }
 
     // Every texture belongs to the old renderer and goes before it; the reload makes them again
-    drop_textures();
+    int dropped = drop_textures();
+    log_debug("Renderer: dropped %i textures before the renderer went", dropped);
     if (old_renderer != NULL)
         SDL_DestroyRenderer(old_renderer);
     window_id = SDL_GetWindowID(window);
@@ -1902,7 +1903,9 @@ void present_frame()
     static int present_failures = 0;   // Presents in a row that failed on a Transparent window
     // SDL_RenderPresent() returns true whatever its renderer did (SDL_render.c, 3.2 to 3.4), so a
     // Transparent window's draws are flushed first: a Vulkan swapchain that cannot be rebuilt fails the
-    // flush (VULKAN_RunCommandQueue) in every frame. Every other window presents as before.
+    // flush (VULKAN_RunCommandQueue) in every frame. On Vulkan from SDL 3.4.18 the flush also submits the
+    // frame and waits for the GPU (VULKAN_InvalidateCachedState), every frame on a Transparent window.
+    // Every other window presents as before.
     bool transparent = window_kind == WINDOW_TRANSPARENT_SHORT;
     bool presented = !transparent || SDL_FlushRenderer(renderer);
     presented = SDL_RenderPresent(renderer) && presented;
