@@ -29,6 +29,9 @@ typedef struct {
     int title_min_size;   // In points
 } ScreenGeometry;
 
+// What a change of the window's pixel size does (spec section 6)
+typedef enum { SIZE_NOTHING, SIZE_RELOAD, SIZE_WAIT } SizeDecision;
+
 typedef struct {
     unsigned char r;
     unsigned char g;
@@ -103,5 +106,6 @@ int derive_fade_alpha(unsigned int now, unsigned int start, unsigned int duratio
 bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try);
 ScreenGeometry geometry_from_pixels(int width, int height);
 int derive_refresh_rate(float reported);
+SizeDecision derive_size_decision(int laid_out_width, int laid_out_height, int width, int height, bool app_in_front, bool recreated);
 
 #endif

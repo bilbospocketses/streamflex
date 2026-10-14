@@ -873,6 +873,16 @@ void pickers_command(const char *command)
         color_command(command);
 }
 
+// A function to close the picker on show as Back closes it at its top, the color picker putting its
+// color back first; settings stay open on the page it opened from. A new screen size does this: the
+// picker was measured when it opened.
+void pickers_cancel(void)
+{
+    if (kind == PICKER_COLOR)
+        put_color_back();
+    close_picker();
+}
+
 // A function to draw a list row: in the font picker, a family's name in its own face over an empty
 // row's highlight (the Custom row, and a face that would not draw, in the settings' font); returns
 // the height it took

@@ -387,6 +387,29 @@ static void apply_all(void)
     }
 }
 
+// A function to refresh every group, in REFRESH_ORDER, as Discard would if every setting had changed
+void settings_refresh_all(void)
+{
+    for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++)
+        run_refresh(REFRESH_ORDER[i]);
+}
+
+// A function to refresh what a reload of the whole launcher must make again (a new screen size, a reset
+// or new renderer), in REFRESH_ORDER, keeping the screen's state (spec section 3): the gamepad keeps
+// running, its pads open, and the screensaver keeps its dim and its transition, only its screen-sized
+// layer made again at the new size. Whether settings are open or not.
+void settings_refresh_for_reload(void)
+{
+    for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++) {
+        if (REFRESH_ORDER[i] == SET_REFRESH_GAMEPAD)
+            continue;
+        if (REFRESH_ORDER[i] == SET_REFRESH_SCREENSAVER)
+            remake_screensaver_texture();
+        else
+            run_refresh(REFRESH_ORDER[i]);
+    }
+}
+
 // A function to log a change for -d: "[Section] Key old -> new"
 static void log_change(const SettingSlot *slot, const SettingValue *before)
 {
@@ -746,6 +769,20 @@ static void describe_folder_row(SettingsRow *row)
         log_debug("Settings: the Folder row shows %s", row->value);
 }
 
+// A function to close the screen's own fonts
+static void close_fonts(void)
+{
+    if (font_header != NULL)
+        TTF_CloseFont(font_header);
+    if (font_row != NULL)
+        TTF_CloseFont(font_row);
+    if (font_small != NULL)
+        TTF_CloseFont(font_small);
+    font_header = NULL;
+    font_row = NULL;
+    font_small = NULL;
+}
+
 // A function to free what the screen holds while open
 static void free_screen(void)
 {
@@ -763,15 +800,7 @@ static void free_screen(void)
         SDL_DestroyTexture(preview);
     preview = NULL;
     clear_text_cache();
-    if (font_header != NULL)
-        TTF_CloseFont(font_header);
-    if (font_row != NULL)
-        TTF_CloseFont(font_row);
-    if (font_small != NULL)
-        TTF_CloseFont(font_small);
-    font_header = NULL;
-    font_row = NULL;
-    font_small = NULL;
+    close_fonts();
     settings_free(model);
     model = NULL;
     bindings_free(bindings);
@@ -1604,6 +1633,45 @@ static void load_bindings(void)
     settings_set_bindings(model, bindings, pickers_key_name);
 }
 
+// A function to hand the pickers what they draw with: the model, the menus, the fonts, and the sizes
+// measure_layout() worked out
+static void begin_pickers(void)
+{
+    PickerHost host = {
+        .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
+        .quiet = handle_quiet, .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
+        .row_height = row_height, .column_width = column_width, .margin = margin
+    };
+    pickers_begin(&host);
+}
+
+// A function to make the preview's texture at the screen's size, or none when the renderer has no render targets (the scene is then drawn behind the column)
+static void make_preview(void)
+{
+    if (preview != NULL)
+        SDL_DestroyTexture(preview);
+    preview = NULL;
+    bool targets = true;   // Every SDL3 renderer has render targets (README-migration, SDL_render.h)
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: it draws as a renderer without render targets would
+    if (getenv("STREAMFLEX_TEST_NO_RENDER_TARGETS") != NULL)
+        targets = false;
+#endif
+    if (!targets)
+        log_debug("Settings: the renderer has no render targets, so the menu is drawn behind them");
+    else {
+        preview = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, geo.screen_width, geo.screen_height);
+        if (preview == NULL)
+            log_error("Settings: no preview texture, the menu is drawn behind the settings instead\n%s", SDL_GetError());
+        else {
+            SDL_SetTextureBlendMode(preview, SDL_BLENDMODE_NONE);
+            SDL_SetTextureScaleMode(preview, SDL_SCALEMODE_LINEAR);
+            log_debug("Settings: the preview is at %i,%i, %i x %i", preview_rect.x, preview_rect.y,
+                preview_rect.w, preview_rect.h);
+        }
+    }
+}
+
 // A function to open settings over the menu on show
 void settings_open(void)
 {
@@ -1655,31 +1723,8 @@ void settings_open(void)
     logged_path[0] = '\0';
     logged_hint[0] = '\0';
     measure_layout();
-    PickerHost host = {
-        .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
-        .quiet = handle_quiet, .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
-        .row_height = row_height, .column_width = column_width, .margin = margin
-    };
-    pickers_begin(&host);
-    bool targets = true;   // Every SDL3 renderer has render targets (README-migration, SDL_render.h)
-#ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: it draws as a renderer without render targets would
-    if (getenv("STREAMFLEX_TEST_NO_RENDER_TARGETS") != NULL)
-        targets = false;
-#endif
-    if (!targets)
-        log_debug("Settings: the renderer has no render targets, so the menu is drawn behind them");
-    else {
-        preview = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, geo.screen_width, geo.screen_height);
-        if (preview == NULL)
-            log_error("Settings: no preview texture, the menu is drawn behind the settings instead\n%s", SDL_GetError());
-        else {
-            SDL_SetTextureBlendMode(preview, SDL_BLENDMODE_NONE);
-            SDL_SetTextureScaleMode(preview, SDL_SCALEMODE_LINEAR);
-            log_debug("Settings: the preview is at %i,%i, %i x %i", preview_rect.x, preview_rect.y,
-                preview_rect.w, preview_rect.h);
-        }
-    }
+    begin_pickers();
+    make_preview();
     log_debug("Settings opened over menu '%s'", origin->name);
 }
 
@@ -1688,4 +1733,37 @@ void settings_close_now(void)
 {
     if (model != NULL)
         free_screen();
+}
+
+// A function to measure the screen again for a new size (spec section 6), keeping the page, its
+// cursor and every unsaved edit: the fonts open again at the new height, the text cache empties, the
+// column and the preview are measured again, and the preview is made anew. An open picker or the
+// folder browser, measured when it opened, closes as Back closes it. What was logged as last drawn is
+// forgotten, so the next frame logs the page and the cursor's row again.
+void settings_reflow(void)
+{
+    if (model == NULL)
+        return;
+    if (pickers_active())
+        pickers_cancel();
+    if (browser != NULL)
+        close_browser();
+    clear_text_cache();
+    close_fonts();
+    if (!open_fonts()) {
+        close_settings();   // open_fonts() said why; the fonts opened when settings did
+        return;
+    }
+    fitted_width = -1;
+    shown_first = -1;
+    shown_last = -1;
+    shown_count = -1;
+    drawn_note[0] = '\0';
+    drawn_cursor[0] = '\0';
+    logged_path[0] = '\0';
+    logged_hint[0] = '\0';
+    measure_layout();
+    begin_pickers();
+    make_preview();
+    log_debug("Settings: re-measured for %ix%i px", geo.screen_width, geo.screen_height);
 }

@@ -340,7 +340,8 @@ void reload_scroll(void);
 void reload_clock(void);        // Also lays the menu out again: the clock's size moves the buttons
 void stop_clock(void);          // Waits for a render in flight; the settings screen stops it before writing a clock setting
 void reload_screensaver(void);
-void reload_gamepad(void);      // Also the Device setting: closes the pads and opens the chosen one
+void remake_screensaver_texture(void);   // A reload's: the layer made again, the dim and its transition kept
+void reload_gamepad(void);     // Also the Device setting: closes the pads and opens the chosen one
 void reload_title_font(void);   // Closes the size cache and the fixed font, opens the font again, then reload_titles()
 void apply_frame_timing(void);  // VSync and FPSLimit, live
 void apply_os_screensaver(void);
@@ -348,3 +349,9 @@ void apply_default_menu(void);  // Points :home at config.default_menu
 bool gamepad_running(void);
 bool gamepad_connected(void);                  // A pad is open to read
 int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none
+
+// One reload, geometry first (spec section 3): what asked for it, marked by the event handlers
+typedef enum { RELOAD_NONE = 0, RELOAD_TARGETS = 1, RELOAD_DEVICE = 2, RELOAD_SIZE = 4, RELOAD_RECREATE = 8 } ReloadReason;
+void reload_mark(ReloadReason why);   // Event handlers only mark; nothing reloads inside the drain
+void reload_run_pending(void);        // After the drain, before drawing: geometry first, then the textures
+bool app_in_front(void);              // state.application_launching || state.application_running

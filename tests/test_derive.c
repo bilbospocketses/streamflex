@@ -546,6 +546,22 @@ static void test_refresh_rate(void)
     CHECK_INT(derive_refresh_rate(29.97f), 30);
 }
 
+// Unit test 10 (spec section 9): what a change of the window's pixel size does. The size laid out
+// already does nothing; a new size reloads, or waits while an app is in front; a size that came back
+// by the time the app is done reloads nothing; a recreated window always reloads, whatever its size.
+static void test_size_decision(void)
+{
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, false, false), SIZE_NOTHING);   // As the window is made
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, true, false), SIZE_NOTHING);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 720, false, false), SIZE_RELOAD);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 720, true, false), SIZE_WAIT);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 1080, false, false), SIZE_RELOAD);    // Only the width
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 720, false, false), SIZE_RELOAD);     // Only the height
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, false, false), SIZE_NOTHING);   // Came back: post_launch() asks again
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, false, true), SIZE_RELOAD);     // Recreated, the same size
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1079, true, true), SIZE_RELOAD);      // Recreated: never waits
+}
+
 int main(void)
 {
     test_exit_retry_due();
@@ -561,5 +577,6 @@ int main(void)
     test_title_padding_one_of_two();
     test_geometry_from_pixels();
     test_refresh_rate();
+    test_size_decision();
     return check_report();
 }

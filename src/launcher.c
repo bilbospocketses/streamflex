@@ -19,6 +19,7 @@
 #include "settings_pickers.h"
 #include "platform/platform.h"
 #include "alloc.h"
+#include "fileio.h"
 #include "test_hooks.h"
 #include "winplan.h"
 #include "vsyncwatch.h"
@@ -56,6 +57,10 @@ static void test_pad_attach(void);
 static void test_pad_swap(void);
 static void test_pad_update(void);
 static void test_pad_stop(void);
+static void test_app_update(void);
+static void test_pixel_size_update(void);
+static void test_display_event_update(void);
+static bool test_pixel_size(int *width, int *height);
 #endif
 static SDL_Thread *start_clock_thread(void);
 static inline void pre_launch(void);
@@ -369,6 +374,9 @@ static void window_pixel_size(int *width, int *height)
     *width = 0;
     *height = 0;
     SDL_GetWindowSizeInPixels(window, width, height);
+#ifdef STREAMFLEX_TEST_HOOKS
+    test_pixel_size(width, height);   // Only the headless harness builds this: a forced size wins
+#endif
 }
 
 // A function to set the screen geometry from the window once the window system has carried out what
@@ -823,6 +831,16 @@ static void init_slideshow()
     }
 }
 
+// A function to make the screensaver's dimming layer's pixels: a screen-sized black surface; NULL when
+// it cannot be made (SDL says why)
+static SDL_Surface *screensaver_surface(void)
+{
+    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width, geo.screen_height, SDL_PIXELFORMAT_ARGB8888);
+    if (surface != NULL)
+        SDL_FillSurfaceRect(surface, NULL, SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0xFF));
+    return surface;
+}
+
 // A function to start the screensaver, when it is on and not already running
 static void start_screensaver()
 {
@@ -832,12 +850,11 @@ static void start_screensaver()
         log_error("Invalid screensaver intensity value, so the screensaver was not started");
         return;
     }
-    SDL_Surface *surface = SDL_CreateSurface(geo.screen_width, geo.screen_height, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = screensaver_surface();
     if (surface == NULL) {
         log_error("Could not start the screensaver\n%s", SDL_GetError());
         return;
     }
-    SDL_FillSurfaceRect(surface, NULL, SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0xFF));
     screensaver = malloc(sizeof(Screensaver));
     screensaver->alpha_end_value = (float) eff.screensaver_alpha;
     screensaver->transition_start = 0;   // Set as the dim begins (update_screensaver())
@@ -870,6 +887,28 @@ void reload_screensaver()
 {
     stop_screensaver();
     start_screensaver();
+}
+
+// A function to make the screensaver's layer again for a reload of the whole launcher (a new screen
+// size, a reset or new renderer), keeping whether it dims, how far, and its transition (spec section 3:
+// the screen's state is kept): reload_screensaver() would stop it, lifting the dim
+void remake_screensaver_texture(void)
+{
+    if (screensaver == NULL)
+        return;
+    if (screensaver->texture != NULL)
+        SDL_DestroyTexture(screensaver->texture);
+    SDL_Surface *surface = screensaver_surface();
+    if (surface == NULL)
+        log_error("Screensaver: its layer could not be made again\n%s", SDL_GetError());
+    screensaver->texture = load_texture(surface);   // NULL for no surface
+    // The dim as update_screensaver() last set it: the full dim once its transition is done, else
+    // where the transition is, which is none while the screensaver is not dimming
+    float dim = state.screensaver_active && !state.screensaver_transition ? screensaver->alpha_end_value : screensaver->alpha;
+    if (screensaver->texture != NULL)
+        SDL_SetTextureAlphaMod(screensaver->texture, (Uint8) dim);
+    log_debug("Screensaver: its layer was made again at %ix%i px, %s", geo.screen_width, geo.screen_height,
+              state.screensaver_active ? "still dimming" : "not dimming");
 }
 
 // A function to stop the overlay, freeing its texture
@@ -1986,6 +2025,93 @@ static void test_pad_stop()
         test_swap[i] = 0;
     }
 }
+
+// A function only the headless harness builds: with STREAMFLEX_TEST_APP set, an app takes the screen
+// while the file it names exists, as a launched one does (launching, then the window loses the
+// keyboard), and gives it back when the file goes. The focus events are pushed, so the real handlers
+// run: Xvfb has no window manager to move the keyboard.
+static void test_app_update()
+{
+    static bool in_front = false;
+    const char *path = getenv("STREAMFLEX_TEST_APP");
+    if (path == NULL || file_exists(path) == in_front)
+        return;
+    in_front = !in_front;
+    if (in_front) {
+        log_debug("Test hook: an app takes the screen");
+        state.application_launching = true;
+        ticks.application_launched = ticks.main;
+    }
+    else
+        log_debug("Test hook: the app is done");
+    SDL_Event focus;
+    SDL_zero(focus);
+    focus.type = in_front ? SDL_EVENT_WINDOW_FOCUS_LOST : SDL_EVENT_WINDOW_FOCUS_GAINED;
+    focus.window.windowID = SDL_GetWindowID(window);
+    if (!SDL_PushEvent(&focus))
+        log_error("Test hook: the focus event was not pushed\n%s", SDL_GetError());
+}
+
+// A function only the headless harness builds: with STREAMFLEX_TEST_PIXEL_SIZE set, the file it names
+// holds the window's size in pixels as "WxH", which stands in for SDL's while the file exists: SDL's
+// X11 driver may not report a resize of a fullscreen window with no window manager. True when it did.
+static bool test_pixel_size(int *width, int *height)
+{
+    const char *path = getenv("STREAMFLEX_TEST_PIXEL_SIZE");
+    if (path == NULL)
+        return false;
+    size_t length = 0;
+    char *text = fileio_read_all(path, &length);
+    int w = 0, h = 0;
+    bool forced = text != NULL && sscanf(text, "%ix%i", &w, &h) == 2;
+    alloc_free(text);
+    if (forced) {
+        *width = w;
+        *height = h;
+    }
+    return forced;
+}
+
+// A function only the headless harness builds: when what STREAMFLEX_TEST_PIXEL_SIZE's file holds
+// changes, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED is pushed with it, so the real handler runs
+static void test_pixel_size_update()
+{
+    static int last_width = 0, last_height = 0;
+    int width = 0, height = 0;
+    if (!test_pixel_size(&width, &height) || (width == last_width && height == last_height))
+        return;
+    last_width = width;
+    last_height = height;
+    log_debug("Test hook: the window's size reads %ix%i px", width, height);
+    SDL_Event resized;
+    SDL_zero(resized);
+    resized.type = SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+    resized.window.windowID = SDL_GetWindowID(window);
+    resized.window.data1 = width;
+    resized.window.data2 = height;
+    if (!SDL_PushEvent(&resized))
+        log_error("Test hook: the size event was not pushed\n%s", SDL_GetError());
+}
+
+// A function only the headless harness builds: with STREAMFLEX_TEST_DISPLAY_EVENT set, once the file it
+// names exists, SDL_EVENT_WINDOW_DISPLAY_CHANGED is pushed once for the window's own display, as a move
+// to another display would send: Xvfb has one display
+static void test_display_event_update()
+{
+    static bool pushed = false;
+    const char *path = getenv("STREAMFLEX_TEST_DISPLAY_EVENT");
+    if (path == NULL || pushed || !file_exists(path))
+        return;
+    pushed = true;
+    log_debug("Test hook: the window moved to a display");
+    SDL_Event moved;
+    SDL_zero(moved);
+    moved.type = SDL_EVENT_WINDOW_DISPLAY_CHANGED;
+    moved.window.windowID = SDL_GetWindowID(window);
+    moved.window.data1 = (Sint32) SDL_GetDisplayForWindow(window);
+    if (!SDL_PushEvent(&moved))
+        log_error("Test hook: the display event was not pushed\n%s", SDL_GetError());
+}
 #endif
 
 // A function to tell whether the gamepad subsystem is running
@@ -2363,6 +2489,137 @@ static void update_clock(bool block)
     }
 }
 
+static int reload_pending = RELOAD_NONE;   // The ReloadReasons marked since the last reload
+static bool size_deferred = false;         // A size change came while an app was in front: post_launch() reads it again
+
+// A function to tell whether an app is launching or running: nothing is laid out for a new size then
+bool app_in_front(void)
+{
+    return state.application_launching || state.application_running;
+}
+
+// A function to mark a reload, with its reason. The handlers only mark: one reload runs after the
+// events are drained (reload_run_pending()), whatever came in the batch.
+void reload_mark(ReloadReason why)
+{
+    reload_pending |= (int) why;
+}
+
+// A function to name a reload's reasons for the log, in a fixed order
+static void describe_reload(int why, char *out, size_t size)
+{
+    static const struct { int reason; const char *name; } names[] = {
+        { RELOAD_SIZE, "the window's size" }, { RELOAD_TARGETS, "a render target reset" },
+        { RELOAD_DEVICE, "a device reset or loss" }, { RELOAD_RECREATE, "a new window" }
+    };
+    out[0] = '\0';
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (!(why & names[i].reason))
+            continue;
+        size_t used = strlen(out);
+        snprintf(out + used, size - used, "%s%s", used > 0 ? " and " : "", names[i].name);
+    }
+}
+
+// A function to run the one reload the marks ask for, after the events are drained and before
+// anything is drawn: the screen geometry first, then every texture in the order Discard uses
+// (REFRESH_ORDER), the gamepad left running and the screensaver's dim kept. While an app is launching
+// or running, geo stays as it is and a size change waits for post_launch(), so a game's temporary
+// resolution never becomes the layout; a reset in the same batch still rebuilds, at the size laid out.
+// A reload with no renderer waits for the new one.
+void reload_run_pending(void)
+{
+    if (reload_pending == RELOAD_NONE || renderer == NULL)
+        return;
+    int why = reload_pending;
+    reload_pending = RELOAD_NONE;
+    if (app_in_front() && (why & RELOAD_SIZE)) {
+        size_deferred = true;   // The size is read again when the app is done, and reloads then if still new
+        why &= ~RELOAD_SIZE;
+        if (why == RELOAD_NONE)
+            return;
+    }
+    bool resized = !app_in_front() && read_screen_geometry();
+    if (why == RELOAD_SIZE && !resized) {
+        log_debug("Screen: %ix%i px again; nothing to reload", geo.screen_width, geo.screen_height);
+        return;
+    }
+    if (resized) {
+        refresh_effective();      // The percentages of the screen, worked out again
+        calculate_layout_area();
+    }
+    settings_refresh_for_reload();   // REFRESH_ORDER, the gamepad kept running and the screensaver's dim kept
+    if (settings_is_open() && resized)
+        settings_reflow();
+    else if (resized)
+        trim_title_fonts();
+    char reasons[128];
+    describe_reload(why, reasons, sizeof(reasons));
+    log_debug("Reload: done at %ix%i px, for %s", geo.screen_width, geo.screen_height, reasons);
+}
+
+// A function to act on a change of the window's pixel size (SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED): the
+// size laid out already does nothing (the event SDL sends as it makes the window, a Wayland scale
+// change that keeps the native size); a new one marks the reload, or waits while an app is in front
+static void pixel_size_changed(void)
+{
+    int width, height;
+    window_pixel_size(&width, &height);
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: every size event, so a check can wait for one that changes nothing
+    log_debug("Test hook: a size event found the window %ix%i px", width, height);
+#endif
+    SizeDecision decision = derive_size_decision(geo.screen_width, geo.screen_height, width, height, app_in_front(), false);
+    if (decision == SIZE_RELOAD) {
+        log_debug("Screen: %ix%i px, was %ix%i; reloading", width, height, geo.screen_width, geo.screen_height);
+        reload_mark(RELOAD_SIZE);
+    }
+    else if (decision == SIZE_WAIT) {
+        log_debug("Screen: %ix%i px, was %ix%i; reloading when the app is done", width, height, geo.screen_width, geo.screen_height);
+        size_deferred = true;
+    }
+}
+
+// A function to read the size again once an app is done (post_launch(), or a launch given up on),
+// when a size change came while it was in front: the reload runs only if the size is still new, so a
+// game that changes the resolution and puts it back costs nothing
+static void recheck_deferred_size(void)
+{
+    if (!size_deferred)
+        return;
+    size_deferred = false;
+    int width, height;
+    window_pixel_size(&width, &height);
+    if (derive_size_decision(geo.screen_width, geo.screen_height, width, height, false, false) == SIZE_RELOAD) {
+        log_debug("Screen: %ix%i px, was %ix%i; reloading", width, height, geo.screen_width, geo.screen_height);
+        reload_mark(RELOAD_SIZE);
+    }
+    else
+        log_debug("Screen: %ix%i px again; nothing to reload", width, height);
+}
+
+// A function to follow the window to another display (SDL_EVENT_WINDOW_DISPLAY_CHANGED): its refresh
+// rate, and the frame timing worked out from it again (whose Frame timing: line follows this one's).
+// A new size comes as its own event.
+static void display_changed(SDL_DisplayID display)
+{
+    read_refresh_rate();
+    log_debug("Screen: now on display %u, %i Hz", (unsigned int) display, display_rate);
+    apply_frame_timing();
+}
+
+// A function to log a change of the OS's scale (SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED), which is
+// never applied; one that changed the pixel size too is the size event's to report
+static void display_scale_changed(void)
+{
+    float scale = SDL_GetWindowDisplayScale(window);
+    int width, height;
+    window_pixel_size(&width, &height);
+    if (scale != display_scale && width == geo.screen_width && height == geo.screen_height)
+        log_debug("Screen: display scale %.2f, was %.2f; nothing to redo", (double) scale, (double) display_scale);
+    display_scale = scale;
+}
+
 static inline void pre_launch()
 {
     if (gamepads != NULL)
@@ -2391,6 +2648,7 @@ static inline void post_launch()
         resume_slideshow();
     if (config.on_launch == ON_LAUNCH_BLANK)
         set_draw_color();
+    recheck_deferred_size();
 
 #ifdef _WIN32
     listen_exit_hotkey(false);
@@ -2611,6 +2869,9 @@ int main(int argc, char *argv[])
         ticks.main = ticks_ms();
 #ifdef STREAMFLEX_TEST_HOOKS
         test_pad_update();
+        test_app_update();
+        test_pixel_size_update();
+        test_display_event_update();
 #endif
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -2687,6 +2948,18 @@ int main(int argc, char *argv[])
 #endif
                     break;
 
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    pixel_size_changed();
+                    break;
+
+                case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+                    display_changed((SDL_DisplayID) event.window.data1);
+                    break;
+
+                case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+                    display_scale_changed();
+                    break;
+
                 case SDL_EVENT_WINDOW_MOUSE_LEAVE:
                     log_debug("Lost mouse focus");
                     break;
@@ -2705,6 +2978,19 @@ int main(int argc, char *argv[])
             log_debug("Application finished");
         }
 
+        // A launch that never took the screen is given up on; a size change it held back is read again
+        if (state.application_launching &&
+        ticks.main - ticks.application_launched > config.application_timeout) {
+            state.application_launching = false;
+            rebase_held_controls();   // The pad was not polled while the application launched
+            recheck_deferred_size();
+            if (config.on_launch == ON_LAUNCH_BLANK)
+                set_draw_color();
+        }
+
+        // One reload for every reason the events above marked, geometry first, before anything is drawn
+        reload_run_pending();
+
         // Post-event loop updates
         if (!(state.application_running || state.application_launching)) {
             // A capture or the 10 s take the pad before its controls run
@@ -2717,13 +3003,6 @@ int main(int argc, char *argv[])
                 update_screensaver();
             if (clk != NULL)
                 update_clock(false);
-        }
-        if (state.application_launching &&
-        ticks.main - ticks.application_launched > config.application_timeout) {
-            state.application_launching = false;
-            rebase_held_controls();   // The pad was not polled while the application launched
-            if (config.on_launch == ON_LAUNCH_BLANK)
-                set_draw_color();
         }
         if (settings_is_open())
             settings_draw();

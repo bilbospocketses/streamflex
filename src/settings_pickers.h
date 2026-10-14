@@ -33,6 +33,7 @@ void pickers_end(void);
 bool pickers_active(void);
 void pickers_open(SettingSlot *slot);
 void pickers_command(const char *command);
+void pickers_cancel(void);    // Close the picker on show as Back would; settings stay open
 void pickers_pads_changed(void);   // The pads present changed: an open Device list is made again
 void pickers_draw(int x, int top, int bottom);
 void pickers_path(char *out, size_t size);
