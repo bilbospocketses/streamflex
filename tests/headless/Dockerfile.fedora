@@ -17,3 +17,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
       google-noto-sans-cjk-vf-fonts google-noto-color-emoji-fonts weston xkeyboard-config python3 util-linux shadow-utils \
  && dnf clean all \
  && useradd --create-home tester
+# The leak pass's suppressions for this image's own libraries (lsan-fedora.supp, which gives each entry's
+# stack and reason): one function in libdecor's GTK plugin, which the Wayland runs load
+ENV LEAK_SUPPRESSIONS=lsan-fedora.supp

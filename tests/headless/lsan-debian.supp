@@ -1,7 +1,7 @@
 # LeakSanitizer suppressions for the Debian image's leak pass only (its Dockerfile names this file in
-# LEAK_SUPPRESSIONS; Fedora's names none, so its leak pass stays strict). Each entry names one function
-# in a library's own code, never a whole library; the image installs those libraries' debug symbols so
-# the function has a name. Spec section 9 and CONTRIBUTING.md list both, with these reasons.
+# LEAK_SUPPRESSIONS; Fedora's names lsan-fedora.supp). Each entry names one function in a library's
+# own code, never a whole library; the image installs those libraries' debug symbols so the function
+# has a name. Spec section 9 and CONTRIBUTING.md list both, with these reasons.
 
 # SDL 3.2.10 (libsdl3-0 3.2.10+ds-1), the OpenGL fallback runs (gl-*): 10,600 bytes in 1 object.
 #   SDL_calloc <- VULKAN_CreateRenderer (SDL_render_vulkan.c:4252)

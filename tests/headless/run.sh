@@ -372,7 +372,7 @@ if [ "$fault" = leaks ]; then
     preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver${libx11:+ $libx11}")
     # The image names the suppressions its own libraries need, if any (LEAK_SUPPRESSIONS, a file
     # beside this one): each names one function in a library's code, and says why. Debian's image
-    # names lsan-debian.supp; Fedora's names none, so its leak pass suppresses nothing.
+    # names lsan-debian.supp, Fedora's lsan-fedora.supp.
     if [ -n "${LEAK_SUPPRESSIONS:-}" ]; then
         [ -f "$HERE/$LEAK_SUPPRESSIONS" ] || { echo "NO SUPPRESSIONS FILE $HERE/$LEAK_SUPPRESSIONS"; exit 2; }
         preload+=("LSAN_OPTIONS=suppressions=$HERE/$LEAK_SUPPRESSIONS")
