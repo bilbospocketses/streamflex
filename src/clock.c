@@ -225,13 +225,13 @@ int init_clock(Clock *clk)
     clk->screen_width = geo.screen_width;
 
     // Load the font
-    int error = load_font(&clk->text_info, config.clock_font_path, config.clock_font_face, FILENAME_DEFAULT_CLOCK_FONT);
+    int error = load_font(&clk->text_info, config.clock_font_path, config.clock_font_face, FILENAME_DEFAULT_CLOCK_FONT, NULL);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_RELOAD_FONTS opens the font again, as a
     // reload will, so the leak pass shows whether the one it replaces is closed
     if (!error && getenv("STREAMFLEX_TEST_RELOAD_FONTS") != NULL) {
         log_debug("Test hook: the clock font opens again");
-        error = load_font(&clk->text_info, config.clock_font_path, config.clock_font_face, FILENAME_DEFAULT_CLOCK_FONT);
+        error = load_font(&clk->text_info, config.clock_font_path, config.clock_font_face, FILENAME_DEFAULT_CLOCK_FONT, NULL);
     }
 #endif
     if (error)

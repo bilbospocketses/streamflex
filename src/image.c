@@ -286,55 +286,56 @@ void draw_line(SDL_Renderer *r, int x1, int y1, int x2, int y2)
 
 #define MAX_TITLE_FONTS 16
 
-// Title fonts by point size, for menus whose titles scale with their buttons
+// Title font sets by point size, for menus whose titles scale with their buttons
 static struct {
     int size;
-    TTF_Font *font;
+    FontSet *set;
 } title_fonts[MAX_TITLE_FONTS];
 static int title_font_count = 0;
 
-// A function to get the title font at a point size, opening it the first time. Each size is its own
-// font; the cache keeps MAX_TITLE_FONTS of them and closes the oldest to make room.
-TTF_Font *title_font(int size)
+// A function to get the title font's set at a point size, opening it the first time. Each size is a
+// set of its own, its fallbacks attached at that size as its titles need them; the cache keeps
+// MAX_TITLE_FONTS of them and closes the oldest to make room.
+FontSet *title_font(int size)
 {
     for (int i = 0; i < title_font_count; i++) {
         if (title_fonts[i].size == size)
-            return title_fonts[i].font;
+            return title_fonts[i].set;
     }
-    TTF_Font *font = open_font_face(title_info.font_path, size, title_info.font_face);
+    FontSet *set = fontset_open(title_info.font_path, (float) size, title_info.font_face, "titles");
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_FAIL_TITLE_SIZE names a size that fails
     const char *fail = getenv("STREAMFLEX_TEST_FAIL_TITLE_SIZE");
-    if (fail != NULL && atoi(fail) == size && font != NULL) {
-        TTF_CloseFont(font);
-        font = NULL;
+    if (fail != NULL && atoi(fail) == size && set != NULL) {
+        fontset_close(set);
+        set = NULL;
         SDL_SetError("the test hook failed it");
     }
 #endif
-    if (font == NULL) {
+    if (set == NULL) {
         log_error("Could not open the title font at %i pt\n%s", size, SDL_GetError());
         return NULL;
     }
     if (title_font_count == MAX_TITLE_FONTS) {
-        TTF_CloseFont(title_fonts[0].font);
+        fontset_close(title_fonts[0].set);
         memmove(&title_fonts[0], &title_fonts[1], (MAX_TITLE_FONTS - 1) * sizeof(title_fonts[0]));
         title_font_count--;
     }
     title_fonts[title_font_count].size = size;
-    title_fonts[title_font_count].font = font;
+    title_fonts[title_font_count].set = set;
     title_font_count++;
-    return font;
+    return set;
 }
 
-// A function to close every cached title font
+// A function to close every cached title set
 void title_fonts_free(void)
 {
     for (int i = 0; i < title_font_count; i++)
-        TTF_CloseFont(title_fonts[i].font);
+        fontset_close(title_fonts[i].set);
     title_font_count = 0;
 }
 
-// A function to close the cached title fonts at sizes not in a list: when settings close, the
+// A function to close the cached title sets at sizes not in a list: when settings close, the
 // sizes no menu uses any more
 void title_fonts_keep(const int *sizes, int count)
 {
@@ -347,7 +348,7 @@ void title_fonts_keep(const int *sizes, int count)
             title_fonts[kept++] = title_fonts[i];
         else {
             log_debug("Titles: closed the %i pt title font, which no menu uses now", title_fonts[i].size);
-            TTF_CloseFont(title_fonts[i].font);
+            fontset_close(title_fonts[i].set);
         }
     }
     title_font_count = kept;
@@ -787,17 +788,19 @@ static void truncate_to_fit(TTF_Font *font, char *text, int max_width, int *w, i
         TTF_GetStringSize(font, text, 0, w, h);
 }
 
-// A function to render text
+// A function to render text. A title's set gets the fallbacks of every character its font lacks
+// before the text is first measured; the clock's TextInfo has no set, and draws in its one font.
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height)
 {
     TTF_Font *output_font = NULL;
-    TTF_Font *reduced_font = NULL; // Font for Shrink text oversize mode
+    FontSet *reduced = NULL; // Shrink mode's scratch set: opened once, then resized a step at a time
     int w, h;
 
     // Copy text into new buffer in case we need to manipulate it
     char *text_buffer = strdup(text);
 
-    // Calculate size of the rendered title
+    // Calculate size of the rendered title, through its fallbacks
+    fontset_prepare(info->set, text_buffer);
     TTF_GetStringSize(info->font, text_buffer, 0, &w, &h);
 
     // If title is too large to fit
@@ -807,40 +810,44 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
         if (info->oversize_mode == OVERSIZE_TRUNCATE)
             truncate_to_fit(info->font, text_buffer, info->max_width, &w, &h);
 
-        // Shrink mode: work out the size that fits from the measured width, never going below
-        // the readable minimum, then cut whatever still does not fit
+        // Shrink mode: work out the size that fits from the measured width, never going below the
+        // readable minimum, then cut whatever still does not fit. The text keeps one scratch set, so
+        // every size it measures carries the same fallbacks as the size it draws.
         else if (info->oversize_mode == OVERSIZE_SHRINK) {
             int size = info->font_size * info->max_width / w;
             if (size < info->min_size)
                 size = info->min_size;
             if (size > 0 && size < info->font_size) {
-                reduced_font = open_font_face(info->font_path, size, info->font_face);
+                reduced = fontset_open(info->font_path, (float) size, info->font_face, "titles");
+                fontset_prepare(reduced, text_buffer);
 
                 // The font's own rounding can leave it a pixel or two too wide: step down to the minimum
-                while (reduced_font != NULL) {
-                    TTF_GetStringSize(reduced_font, text_buffer, 0, &w, &h);
+                while (reduced != NULL) {
+                    TTF_GetStringSize(fontset_font(reduced), text_buffer, 0, &w, &h);
                     if (w <= info->max_width || size <= info->min_size)
                         break;
-                    TTF_CloseFont(reduced_font);
-                    reduced_font = open_font_face(info->font_path, --size, info->font_face);
+                    bool resized = fontset_resize(reduced, (float) --size);
 #ifdef STREAMFLEX_TEST_HOOKS
-                    // Only the headless harness builds this: every step down fails to open
-                    if (getenv("STREAMFLEX_TEST_FAIL_SHRINK_STEP") != NULL && reduced_font != NULL) {
+                    // Only the headless harness builds this: every step down fails
+                    if (getenv("STREAMFLEX_TEST_FAIL_SHRINK_STEP") != NULL && resized) {
                         log_debug("Test hook: the step down to %i pt fails", size);
-                        TTF_CloseFont(reduced_font);
-                        reduced_font = NULL;
+                        resized = false;
                     }
 #endif
+                    if (!resized) {
+                        fontset_close(reduced);
+                        reduced = NULL;
+                    }
                 }
             }
 
-            // A smaller font that failed to open leaves the title at the menu's size, and w from
-            // the font just closed; truncate_to_fit() measures it again in the font it is drawn in
+            // A step down that failed leaves the title at the menu's size, and w from the size the
+            // scratch set had; truncate_to_fit() measures it again in the font it is drawn in
             if (w > info->max_width)
-                truncate_to_fit(reduced_font != NULL ? reduced_font : info->font, text_buffer, info->max_width, &w, &h);
+                truncate_to_fit(reduced != NULL ? fontset_font(reduced) : info->font, text_buffer, info->max_width, &w, &h);
         }
     }
-    output_font = reduced_font != NULL ? reduced_font : info->font;
+    output_font = reduced != NULL ? fontset_font(reduced) : info->font;
 
     // Render surface
     SDL_Surface *surface = NULL;
@@ -879,9 +886,8 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     if (info->oversize_mode == OVERSIZE_SHRINK && text_height != NULL)
         *text_height = h;
 
-    // Clean up
-    if (reduced_font != NULL)
-        TTF_CloseFont(reduced_font);
+    // Clean up: the scratch set's font first, then its fallbacks (fontset_close())
+    fontset_close(reduced);
     free(text_buffer);
     
     return surface;
@@ -934,21 +940,37 @@ TTF_Font *open_font_file(const char *path, int size, int face)
     return open_font_face(path, size, face);
 }
 
+// A function to open load_font()'s font at info->font_size: a set for a role, one font without
+static void open_text_font(TextInfo *info, const char *path, int face, const char *role)
+{
+    if (role != NULL) {
+        info->set = fontset_open(path, (float) info->font_size, face, role);
+        info->font = fontset_font(info->set);
+    }
+    else
+        info->font = open_font_file(path, info->font_size, face);
+}
+
 // A function to open a text's font: the configured file and face (a relative path is also tried
 // beside the executable), else the bundled font. The configured path is never changed: what was
-// opened is kept in info->font_path, and a failure says so in the log. A font the TextInfo still
-// holds is closed first, so a reload leaks nothing: the caller must drop any other pointer to it
-// (launcher.c's fixed_title_font), and info->font must not be one of title_font()'s cached fonts.
-int load_font(TextInfo *info, const char *configured, int face, const char *default_font)
+// opened is kept in info->font_path, and a failure says so in the log. A role ("titles") opens it as
+// a font set, whose fallbacks fontset_prepare() attaches; NULL (the clock) opens one font. A font the
+// TextInfo still holds is closed first, so a reload leaks nothing: the caller must drop any other
+// pointer to it (launcher.c's fixed_title_font), and info->set must not be one of title_font()'s
+// cached sets.
+int load_font(TextInfo *info, const char *configured, int face, const char *default_font, const char *role)
 {
-    if (info->font != NULL)
+    if (info->set != NULL)
+        fontset_close(info->set);   // Its font is info->font
+    else if (info->font != NULL)
         TTF_CloseFont(info->font);
+    info->set = NULL;
     free(info->font_path);
     info->font_path = NULL;
     info->font = NULL;
     info->font_face = 0;
     if (configured != NULL) {
-        info->font = open_font_file(configured, info->font_size, face);
+        open_text_font(info, configured, face, role);
         if (info->font != NULL)
             info->font_path = strdup(configured);
 
@@ -957,7 +979,7 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
         else if (config.exe_path != NULL && is_relative_path(configured)) {
             char exe_font_path[MAX_PATH_CHARS + 1];
             join_paths(exe_font_path, sizeof(exe_font_path), 2, config.exe_path, configured);
-            info->font = open_font_file(exe_font_path, info->font_size, face);
+            open_text_font(info, exe_font_path, face, role);
             if (info->font != NULL)
                 info->font_path = strdup(exe_font_path);
         }
@@ -969,7 +991,7 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
     if (info->font == NULL) {
         char *default_font_path = find_default_font(default_font);
         if (default_font_path != NULL) {
-            info->font = open_font_file(default_font_path, info->font_size, 0);
+            open_text_font(info, default_font_path, 0, role);
             if (info->font == NULL)
                 log_error("Could not open the default font %s\n%s", default_font_path, SDL_GetError());
         }

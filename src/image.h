@@ -1,3 +1,4 @@
+#include "fontset.h"
 #include "iconload.h"
 
 // Dynamic SVG generation for highlight
@@ -12,6 +13,7 @@
 
 typedef struct {
     TTF_Font *font;
+    FontSet *set;          // Titles: the set font belongs to, its fallbacks attached; NULL for the clock's one font
     int font_size;
     char *font_path;       // The file the font was opened from (owned): the configured one, or the bundled fallback
     int font_face;         // The face within it
@@ -26,7 +28,7 @@ typedef struct {
 int init_svg(void);
 char *find_default_font(const char *font);
 TTF_Font *open_font_file(const char *path, int size, int face);   // open_font_face(), refusing what is not a regular file
-int load_font(TextInfo *info, const char *configured, int face, const char *default_font);
+int load_font(TextInfo *info, const char *configured, int face, const char *default_font, const char *role);   // role: a set ("titles"); NULL: one font
 bool font_file_found(const char *configured);   // There, as given or beside the executable, as load_font() looks
 void quit_svg(void);
 int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo);
@@ -48,7 +50,7 @@ SDL_Surface *load_image_file(const char *path);              // Any thread: read
 SDL_Texture *render_highlight(int width, int height, SDL_Rect *rect);
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
 SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
-TTF_Font *title_font(int size);
+FontSet *title_font(int size);
 void title_fonts_free(void);
 void title_fonts_keep(const int *sizes, int count);
 SDL_Texture *surface_texture(SDL_Surface *surface);   // Linear scaling set on every texture (no SDL3 hint does it)

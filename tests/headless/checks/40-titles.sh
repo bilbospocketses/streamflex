@@ -50,7 +50,7 @@ result "item 19: Shrink mode on long titles in a dense grid (exit $(cat "$out/f4
 
 # Shrink mode under large buttons: at 78 pt every title here is wider than its 556 px button, so
 # render_text opens smaller fonts. One title fits at its first smaller size, one needs a step down
-# (a font closed and another opened), and one stops at the 22 pt minimum and is cut. This finds a
+# (the scratch set resized), and one stops at the 22 pt minimum and is cut. This finds a
 # use-after-free or a double close; the leak pass (run.sh leaks) finds a font left open. The cut
 # title fits its button: the debug log names any title wider than its button.
 run_quick f40-shrink-large
@@ -75,8 +75,8 @@ ok=1
 ran_clean f40-clock && grep -A2 'Clock ===' "$out/f40-clock.log" | grep -qE 'Enabled:\s+true$' && ok=0
 result "the title and clock fonts are closed at quit (exit $(cat "$out/f40-clock.code"))" $ok
 
-# Shrink mode when a smaller font fails to open part-way down (the harness build's
-# STREAMFLEX_TEST_FAIL_SHRINK_STEP fails every step down): the title is cut at the menu's size,
+# Shrink mode when a step down fails part-way (the harness build's
+# STREAMFLEX_TEST_FAIL_SHRINK_STEP fails every one): the title is cut at the menu's size,
 # measured in that font rather than in the one just closed. The debug log names each title wider
 # than its button: none may be, least of all Emulation Station Retro, the title whose step down
 # fails (822 px in its 556 px button when it was measured in the font just closed).

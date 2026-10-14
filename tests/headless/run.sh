@@ -115,7 +115,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # of 48 icons decoded under ASan with a key between them, about 10 s, and a slideshow start that quits,
 # about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s, the
 # two menus again with no decode thread, about 10 s, and two menus of 48 XPM icons, about 4 s each),
-# until a set measures it.
+# until a set measures it. 72-fallback-fonts.sh's is an estimate from its five runs (Task 1.16a: about 3 s
+# each to start and stop, and the run with no fallback font reading the screen for the full 10 s, about 25
+# readings of a second each, for a filled glyph that never comes), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -128,7 +130,7 @@ declare -A shard_seconds=(
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
-    [70-chroma.sh]=3
+    [70-chroma.sh]=3 [72-fallback-fonts.sh]=50
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
@@ -346,6 +348,15 @@ printf 'not a picture\n' > "$TESTER_HOME/broken/a.png"
 printf 'not a picture\n' > "$TESTER_HOME/broken/b.png"
 cp "$TESTER_HOME/Pictures/red.png" "$TESTER_HOME/mixed/"
 printf 'not a picture\n' > "$TESTER_HOME/mixed/broken.png"
+# Fallback fonts (72-fallback-fonts.sh): two fontconfig files a run names with FONTCONFIG_FILE, each
+# reading one folder of its own and keeping its cache beside it. fcbox's folder holds sf-box.ttf, whose
+# glyphs for 中, 游 and 戏 (U+4E2D, U+6E38, U+620F) are filled squares; fcempty's holds nothing.
+for fc in fcbox fcempty; do
+    mkdir -p "$TESTER_HOME/$fc/fonts" "$TESTER_HOME/$fc/cache"
+    printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n<fontconfig>\n  <dir>%s</dir>\n  <cachedir>%s</cachedir>\n</fontconfig>\n' \
+        "$TESTER_HOME/$fc/fonts" "$TESTER_HOME/$fc/cache" > "$TESTER_HOME/$fc/fonts.conf"
+done
+python3 "$HERE/make_fonts.py" box "$TESTER_HOME/fcbox/fonts/sf-box.ttf" "SF Box" "$(printf '\xe4\xb8\xad\xe6\xb8\xb8\xe6\x88\x8f')"
 chown -R tester:tester "$TESTER_HOME"
 
 # Mesa's software driver, found from Mesa's GL library for X, libGLX_mesa: before Mesa 24.2 it is

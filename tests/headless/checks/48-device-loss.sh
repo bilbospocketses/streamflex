@@ -313,27 +313,20 @@ grep -qx 'Renderer: creating a new renderer, attempt 5 of 5' "$log" && ! grep -q
     && [ "$(grep -cx 'Could not initialize renderer' "$log")" = 5 ] && ran_clean f48-giveup 1 && ok=0
 result "device: five failed attempts take the startup error path, exit 1 (exit $(cat "$out/f48-giveup.code"))" $ok
 
-# A fallback title is lit again after a lost device's reload (spec section 9). It needs Task 1.16's
-# fallback-font fixture, the fontconfig file run.sh makes whose only font is sf-box.ttf (filled
-# squares for U+4E2D and others); until that task lands this check does not run, and says so on the
-# console with no result line. Task 1.16 deletes the guard. The title is U+4E2D, which only the box
-# font has; its glyph is a filled box in the title's magenta, so the box it spans is nearly all
-# magenta, before the loss and after.
-D48_FONTS=$TESTER_HOME/fcbox/fonts.conf
-if [ -f "$D48_FONTS" ]; then
-    d48_reset_runs f48-fallback
-    FONTCONFIG_FILE=$D48_FONTS CFG=$FX/f48-fallback.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
-        run_keys f48-fallback +d48_before +d48_lost +d48_after
-    read -r d48_x0 d48_y0 d48_x1 d48_y1 d48_n <<< "$(d48_boxline f48-fallback after | sed 's/box \([0-9]*\),\([0-9]*\) to \([0-9]*\),\([0-9]*\): \([0-9]*\) .*/\1 \2 \3 \4 \5/')"
-    ok=1
-    d48_same f48-fallback && [ -n "${d48_n:-}" ] \
-        && [ "$((2 * d48_n))" -ge "$(((d48_x1 - d48_x0 + 1) * (d48_y1 - d48_y0 + 1)))" ] \
-        && ran_clean f48-fallback && ok=0
-    result "device: a fallback title is lit again after a lost device's reload (exit $(cat "$out/f48-fallback.code"))" $ok
-    sed 's/^/      /' "$out/f48-fallback.boxes" 2> /dev/null
-else
-    echo "      device: the fallback title's redraw waits for Task 1.16's $D48_FONTS"
-fi
+# A fallback title is lit again after a lost device's reload (spec section 9), with run.sh's
+# fallback-font fixture, the fontconfig file whose only font is sf-box.ttf (filled squares for U+4E2D
+# and others). The title is U+4E2D, which only the box font has; its glyph is a filled box in the
+# title's magenta, so the box it spans is nearly all magenta, before the loss and after.
+d48_reset_runs f48-fallback
+FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf CFG=$FX/f48-fallback.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
+    run_keys f48-fallback +d48_before +d48_lost +d48_after
+read -r d48_x0 d48_y0 d48_x1 d48_y1 d48_n <<< "$(d48_boxline f48-fallback after | sed 's/box \([0-9]*\),\([0-9]*\) to \([0-9]*\),\([0-9]*\): \([0-9]*\) .*/\1 \2 \3 \4 \5/')"
+ok=1
+d48_same f48-fallback && [ -n "${d48_n:-}" ] \
+    && [ "$((2 * d48_n))" -ge "$(((d48_x1 - d48_x0 + 1) * (d48_y1 - d48_y0 + 1)))" ] \
+    && ran_clean f48-fallback && ok=0
+result "device: a fallback title is lit again after a lost device's reload (exit $(cat "$out/f48-fallback.code"))" $ok
+sed 's/^/      /' "$out/f48-fallback.boxes" 2> /dev/null
 
 # A Transparent window whose new renderer never comes (Task 1.8b), under the Windows plan forced on Linux
 # (STREAMFLEX_TEST_WINDOWS_PLAN): after the fifth failed attempt it falls back to an opaque window, whose

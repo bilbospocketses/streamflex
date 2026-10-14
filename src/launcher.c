@@ -241,7 +241,7 @@ static float display_scale = 1.0F;                // The OS's scale for that dis
 static char **start_argv              = NULL; // The arguments StreamFlex was started with, as main() had them,
                                               // and --restarted after them for a restart; NULL-terminated
 TextInfo title_info;
-static TTF_Font *fixed_title_font = NULL; // The title font at the fixed FontSize
+static FontSet *fixed_title_font = NULL; // The title font's set at the fixed FontSize
 Ticks ticks;
 Geometry geo;
 LayoutGeometry layout;                     // The current menu's layout
@@ -838,19 +838,19 @@ static void init_sdl_ttf()
         .color = &title_color,
         .shadow_color = config.title_shadows ? &title_shadow_color : NULL
     };
-    if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT))
+    if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT, "titles"))
         log_fatal("Could not load title font");
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_RELOAD_FONTS opens the font again, as a
     // reload will, so the leak pass shows whether the one it replaces is closed
     if (getenv("STREAMFLEX_TEST_RELOAD_FONTS") != NULL) {
         log_debug("Test hook: the title font opens again");
-        if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT))
+        if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT, "titles"))
             log_fatal("Could not load title font");
     }
 #endif
     log_debug("Title font: %s (face %i)", title_info.font_path, title_info.font_face);
-    fixed_title_font = title_info.font;
+    fixed_title_font = title_info.set;
     geo.font_height = config.titles_enabled ? TTF_GetFontHeight(title_info.font) : 0;
 
     // A percentage FontSize sizes each menu's titles from its buttons, so measure the font's line
@@ -898,14 +898,17 @@ static void cleanup()
     // Quit subsystems
     SDL_Quit();
 
-    // Close every title font while SDL_ttf is still open (stop_clock() closed the clock's)
+    // Close every title set while SDL_ttf is still open (stop_clock() closed the clock's font), then
+    // what the font sets keep for the session: their probes, the candidate list and fontconfig's sort
+    // (fontconfig itself is left to process exit)
     title_fonts_free();
-    if (fixed_title_font != NULL)
-        TTF_CloseFont(fixed_title_font);
+    fontset_close(fixed_title_font);
     fixed_title_font = NULL;
+    title_info.set = NULL;
     title_info.font = NULL;
     free(title_info.font_path);
     title_info.font_path = NULL;
+    fontset_quit();
     TTF_Quit();
     quit_svg();
     quit_image_formats();   // Every thread that decodes has ended: the slideshow's above, the preview's with settings
@@ -1638,12 +1641,14 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
     int icons = 0, titles = 0;
     timing_read = timing_decode = timing_texture = 0;
     int size = geometry->button;
-    title_info.font = fixed_title_font;
+    title_info.set = fixed_title_font;
+    title_info.font = fontset_font(fixed_title_font);
     title_info.font_size = (int) config.title_font_size;
     if (geometry->title_size > 0) {
-        TTF_Font *font = title_font(geometry->title_size);
-        if (font != NULL) {
-            title_info.font = font;
+        FontSet *set = title_font(geometry->title_size);
+        if (set != NULL) {
+            title_info.set = set;
+            title_info.font = fontset_font(set);
             title_info.font_size = geometry->title_size;
         }
     }
@@ -1746,8 +1751,9 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
 
     free(jobs);
 
-    // Keep no pointer to a cached font: another menu's title size may close it
-    title_info.font = fixed_title_font;
+    // Keep no pointer to a cached set: another menu's title size may close it
+    title_info.set = fixed_title_font;
+    title_info.font = fontset_font(fixed_title_font);
     title_info.font_size = (int) config.title_font_size;
     log_debug("Menu '%s': rendered its buttons at %i px", menu->name, size);
     Uint64 icons_time = SDL_GetPerformanceCounter() - timing_start - titles_time;
@@ -1805,7 +1811,7 @@ void reload_titles()
     title_info.shadow = config.title_shadows;
     title_info.shadow_color = config.title_shadows ? &title_shadow_color : NULL;
     title_info.oversize_mode = config.title_oversize_mode;
-    geo.font_height = config.titles_enabled ? TTF_GetFontHeight(fixed_title_font) : 0;
+    geo.font_height = config.titles_enabled ? TTF_GetFontHeight(fontset_font(fixed_title_font)) : 0;
 
     // A new size may open where the last one failed
     for (Menu *menu = config.first_menu; menu != NULL; menu = menu->next) {
@@ -1820,14 +1826,14 @@ void reload_titles()
 void reload_title_font()
 {
     title_fonts_free();
-    if (fixed_title_font != NULL)
-        TTF_CloseFont(fixed_title_font);
+    fontset_close(fixed_title_font);
     fixed_title_font = NULL;
+    title_info.set = NULL;
     title_info.font = NULL;
     title_info.font_size = (int) config.title_font_size;
-    if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT))
+    if (load_font(&title_info, config.title_font_path, config.title_font_face, FILENAME_DEFAULT_FONT, "titles"))
         return;   // log_fatal has quit: not even the bundled font opens
-    fixed_title_font = title_info.font;
+    fixed_title_font = title_info.set;
     TTF_Font *probe = open_font_face(title_info.font_path, TITLE_MEASURE_SIZE, title_info.font_face);
     geo.title_line_pm = probe != NULL ? TTF_GetFontHeight(probe) * 1000 / TITLE_MEASURE_SIZE : 1500;
     if (probe != NULL)
