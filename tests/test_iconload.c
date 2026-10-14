@@ -135,7 +135,10 @@ int main(void)
     test_worker_count();
     test_workers_logged_once();
     test_batch(200, 4, 0, fake_work);
-    test_batch(MAX_JOBS, 4, 0, quick_work);   // The workers side by side at the claim
+    // The workers side by side at the claim, ten times over: a batch this quick can end on the first
+    // worker before the others start, so one batch alone sometimes meets no second claimer
+    for (int i = 0; i < 10; i++)
+        test_batch(MAX_JOBS, 4, 0, quick_work);
     test_batch(3, 4, 0, fake_work);           // Fewer jobs than threads
     test_batch(1, 1, 0, fake_work);
     test_batch(0, 2, 0, fake_work);           // An empty batch returns at once
