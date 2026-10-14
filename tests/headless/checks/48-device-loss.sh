@@ -4,8 +4,12 @@
 # texture made again, the menu and the screen kept, and the screen redrawn to the pixel. With
 # settings open, their textures are made again and the page stays, an open folder browser with it,
 # its image decoded again. While an app holds a size change back, a reset rebuilds the textures at
-# the geometry in force; the size waits for the app.
-# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped, and no case races a deadline
+# the geometry in force; the size waits for the app. A lost device drops every texture and then the
+# renderer, and a new renderer is made from the window's plan, at once or once a launched app is
+# done, then the one reload; a failed attempt is tried again 2 s later, and the fifth failure ends
+# StreamFlex as a failed start does. The cases that race the attempts' 2 s are in
+# 48-device-loss-timing.sh.
+# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup waits for are paced 2 s apart in wall time and end inside the 20 s line wait, and no case races a deadline
 D48_EVENT=/tmp/d48-event D48_SIZE=/tmp/d48-size D48_APP=/tmp/d48-app
 # A function to put the render events WORDS in the hook's file in one step (a rename), so the hook
 # never reads half of them
@@ -203,3 +207,109 @@ ok=1
     && [ "$(grep -c '^Reload: done at ' "$out/f48-appreset.log")" = 2 ] && ran_clean f48-appreset && ok=0
 result "device: a reset while an app holds a size back keeps the size laid out ($(cat "$out/f48-appreset.path" 2> /dev/null); exit $(cat "$out/f48-appreset.code"))" $ok
 grep -E '^(Screen|Reload|Renderer|Application)' "$out/f48-appreset.log" | sed 's/^/      /'
+
+# A lost device (SDL_EVENT_RENDER_DEVICE_LOST): every texture dropped (the fixture holds 7: three icons,
+# three titles, the highlight), the renderer destroyed, a new one made from the platform's list, then
+# the one reload, and the screen redrawn to the pixel. A second loss in the same batch does nothing.
+d48_lost() { d48_send 'lost lost'; }
+d48_reset_runs f48-lost
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-lost +d48_before +d48_lost +d48_after
+log=$out/f48-lost.log
+ok=1
+[ "$(grep -cx 'Renderer: device lost and not recovered; creating a new renderer' "$log")" = 1 ] \
+    && grep -qx 'Renderer: dropped 7 textures before the renderer went' "$log" \
+    && grep -qx 'Renderer: creating a new renderer, attempt 1 of 5' "$log" \
+    && ! grep -q 'attempt 2 of 5' "$log" \
+    && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 2 ] \
+    && [ "$(grep -cx "Video: SDL's x11 driver, the vulkan renderer" "$log")" = 2 ] \
+    && grep -qx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log" \
+    && d48_same f48-lost && ran_clean f48-lost && ok=0
+result "device: a lost device gets a new Vulkan renderer and redraws to the pixel (exit $(cat "$out/f48-lost.code"))" $ok
+grep -E '^(Renderer|Reload|Video):' "$log" | sed 's/^/      /'
+
+# With settings open, a lost device's new renderer makes their textures again, and the page stays
+d48_lost_settings_after() {
+    wait_line 'Reload: done at 1920x1080 px' "$2" && look "$1" "$2" after 'Reload: done at 1920x1080 px' 30,30=30,45,60 @5,1074=11,22,32
+}
+d48_reset_runs f48-settings-lost
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-settings-lost Menu Down Return +d48_lost +d48_lost_settings_after Down Menu
+log=$out/f48-settings-lost.log
+ok=1
+[ "$(grep -c '^Settings: the preview is at ' "$log")" = 2 ] && grep -qx 'after yes' "$out/f48-settings-lost.seen" \
+    && sed -n '/^Reload: done at /,$p' "$log" | grep -q "^Settings: the cursor's row reads Color: " \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f48-settings-lost && ok=0
+result "device: a lost device with settings open makes their textures again and keeps the page (exit $(cat "$out/f48-settings-lost.code"))" $ok
+
+# An edit made in settings before the device is lost survives the new renderer and its reload, and is
+# saved (the keys of 47-screen.sh's f47-settings: Color steps from #000000 to #1E1E1E)
+d48_lost_reloaded() { d48_send lost; wait_line 'Reload: done at 1920x1080 px' "$2"; }
+d48_reset_runs f48-editlost
+cfg=$(writable_config f60-color)
+CFG=$cfg STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-editlost Menu Down Return Down Right +d48_lost_reloaded BackSpace BackSpace
+log=$out/f48-editlost.log
+ok=1
+precedes "$log" 'Settings: [Background] Color #000000 -> #1E1E1E' 'Renderer: device lost and not recovered' \
+    && grep -qx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log" \
+    && grep -qx 'Color=#1E1E1E' "$cfg" && ran_clean f48-editlost && ok=0
+result "device: an edit made before a lost device is kept through the new renderer and saved (exit $(cat "$out/f48-editlost.code"))" $ok
+grep -E '^(Settings: \[Background\]|Renderer: device|Reload:)' "$log" | sed 's/^/      /'
+
+# A GPU that no longer offers Vulkan (the test hook leaves it out of the new renderer's list): the new
+# renderer falls down the list to OpenGL, the screen keeps its size (OpenGL replaces the native window:
+# no size change, no second Screen: line), and the redraw is pixel-correct
+d48_reset_runs f48-skip
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT STREAMFLEX_TEST_RENDERER_SKIP=vulkan \
+    run_keys f48-skip +d48_before +d48_lost +d48_after
+log=$out/f48-skip.log
+ok=1
+[ "$(grep -E '^Renderer: [a-z0-9]+( \([^)]*\))?$' "$log" | tr '\n' '|')" = 'Renderer: vulkan|Renderer: opengl (vulkan was unavailable)|' ] \
+    && [ "$(grep -c '^Screen: ' "$log")" = 1 ] && d48_same f48-skip && ran_clean f48-skip && ok=0
+result "device: a new renderer falls back to OpenGL when Vulkan is gone, at the same size (exit $(cat "$out/f48-skip.code"))" $ok
+grep -E '^(Renderer|Screen):' "$log" | sed 's/^/      /'
+
+# A device lost while an app runs: nothing more until the app is done, then the new renderer
+d48_lost_seen() { d48_send lost; wait_line 'Renderer: device lost and not recovered' "$2"; sleep 3; }
+d48_reset_runs f48-applost
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_APP=$D48_APP STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
+    UNTIL='Reload: done at 1920x1080 px' run_keys f48-applost +d48_app_in +d48_lost_seen +d48_app_out
+log=$out/f48-applost.log
+d48_finished=$(d48_at f48-applost 'Application finished')
+d48_attempt=$(d48_at f48-applost 'Renderer: creating a new renderer, attempt 1 of 5')
+ok=1
+[ -n "$d48_finished" ] && [ -n "$d48_attempt" ] && [ "$d48_finished" -lt "$d48_attempt" ] \
+    && ! in_range "$log" 'Renderer: device lost and not recovered' 'Application finished' 'creating a new renderer, attempt' \
+    && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 2 ] && ran_clean f48-applost && ok=0
+result "device: a device lost while an app runs gets its new renderer once the app is done (exit $(cat "$out/f48-applost.code"))" $ok
+grep -E '^(Renderer|Application|Reload):' "$log" | sed 's/^/      /'
+
+# Every attempt fails: after the fifth, the startup error path: SDL's reason, then exit 1
+d48_reset_runs f48-giveup
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT STREAMFLEX_TEST_RENDERER_FAIL=5 STREAMFLEX_TEST_NO_MESSAGE_BOX=1 \
+    UNTIL='Quitting program' run_keys f48-giveup +d48_lost
+log=$out/f48-giveup.log
+ok=1
+grep -qx 'Renderer: creating a new renderer, attempt 5 of 5' "$log" && ! grep -q 'attempt 6 of 5' "$log" \
+    && [ "$(grep -cx 'Could not initialize renderer' "$log")" = 5 ] && ran_clean f48-giveup 1 && ok=0
+result "device: five failed attempts take the startup error path, exit 1 (exit $(cat "$out/f48-giveup.code"))" $ok
+
+# A fallback title is lit again after a lost device's reload (spec section 9). It needs Task 1.16's
+# fallback-font fixture, the fontconfig file run.sh makes whose only font is sf-box.ttf (filled
+# squares for U+4E2D and others); until that task lands this check does not run, and says so on the
+# console with no result line. Task 1.16 deletes the guard. The title is U+4E2D, which only the box
+# font has; its glyph is a filled box in the title's magenta, so the box it spans is nearly all
+# magenta, before the loss and after.
+D48_FONTS=$TESTER_HOME/fcbox/fonts.conf
+if [ -f "$D48_FONTS" ]; then
+    d48_reset_runs f48-fallback
+    FONTCONFIG_FILE=$D48_FONTS CFG=$FX/f48-fallback.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
+        run_keys f48-fallback +d48_before +d48_lost +d48_after
+    read -r d48_x0 d48_y0 d48_x1 d48_y1 d48_n <<< "$(d48_boxline f48-fallback after | sed 's/box \([0-9]*\),\([0-9]*\) to \([0-9]*\),\([0-9]*\): \([0-9]*\) .*/\1 \2 \3 \4 \5/')"
+    ok=1
+    d48_same f48-fallback && [ -n "${d48_n:-}" ] \
+        && [ "$((2 * d48_n))" -ge "$(((d48_x1 - d48_x0 + 1) * (d48_y1 - d48_y0 + 1)))" ] \
+        && ran_clean f48-fallback && ok=0
+    result "device: a fallback title is lit again after a lost device's reload (exit $(cat "$out/f48-fallback.code"))" $ok
+    sed 's/^/      /' "$out/f48-fallback.boxes" 2> /dev/null
+else
+    echo "      device: the fallback title's redraw waits for Task 1.16's $D48_FONTS"
+fi

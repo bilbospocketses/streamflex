@@ -61,6 +61,7 @@ static void test_app_update(void);
 static void test_pixel_size_update(void);
 static void test_display_event_update(void);
 static void test_render_event_update(void);
+static void test_list_without(const char *list, const char *name, char *out, size_t size);
 static bool test_pixel_size(int *width, int *height);
 #endif
 static SDL_Thread *start_clock_thread(void);
@@ -240,6 +241,11 @@ static bool vsync_wanted = true; // VSync and FPSLimit ask the renderer for VSyn
 static bool vsync_on = false;    // The renderer really gives it; unless both are true present_frame() paces each frame
 static VsyncWatch vsync_watch;   // Whether a renderer that reports VSync presents at the display's pace (vsyncwatch.h)
 static WindowPlan plan_in_force;  // The plan of the window that exists: its renderer list, or none under SDL_RENDER_DRIVER
+#define RENDERER_RETRIES 5        // Attempts at a new renderer after a lost device...
+#define RENDERER_RETRY_MS 2000    // ...this far apart, the main loop pumping events between them
+static bool renderer_owed = false;       // The device was lost: a new renderer is owed
+static int renderer_attempt = 0;         // The attempts made at it so far; 0 at startup
+static Uint64 renderer_next_try = 0;     // When the next one is due (SDL_GetTicks)
 
 COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
 
@@ -347,7 +353,25 @@ void apply_default_menu()
 // decides what that means.
 static bool create_renderer(const WindowPlan *plan)
 {
-    renderer = SDL_CreateRenderer(window, plan->render_list);
+    const char *list = plan->render_list;
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this, for a new renderer after a lost device: the renderer
+    // STREAMFLEX_TEST_RENDERER_SKIP names is left out of the list, as a GPU that no longer offers it
+    // would leave it, and the first STREAMFLEX_TEST_RENDERER_FAIL attempts fail
+    char without[128];
+    const char *skip = getenv("STREAMFLEX_TEST_RENDERER_SKIP");
+    if (renderer_attempt > 0 && list != NULL && skip != NULL) {
+        test_list_without(list, skip, without, sizeof(without));
+        list = without;
+    }
+    const char *fail = getenv("STREAMFLEX_TEST_RENDERER_FAIL");
+    if (renderer_attempt > 0 && fail != NULL && renderer_attempt <= atoi(fail)) {
+        SDL_SetError("Test hook: attempt %i fails", renderer_attempt);
+        log_error("Could not initialize renderer\n%s", SDL_GetError());
+        return false;
+    }
+#endif
+    renderer = SDL_CreateRenderer(window, list);
     if (renderer == NULL) {
         log_error("Could not initialize renderer\n%s", SDL_GetError());
         return false;
@@ -446,6 +470,9 @@ static void create_window()
         (output_width != geo.screen_width || output_height != geo.screen_height))
         log_error("Screen: the renderer draws %ix%i px, not the window's %ix%i",
                   output_width, output_height, geo.screen_width, geo.screen_height);
+#ifdef _WIN32
+    platform_window_changed(NULL, window);   // Read after the renderer exists: OpenGL's replaces the native window
+#endif
 }
 
 // A function to bring a restart's fresh copy to the front, with the keyboard: on Windows the copy
@@ -2153,6 +2180,27 @@ static void test_render_event_update()
             log_error("Test hook: the render event was not pushed\n%s", SDL_GetError());
     }
 }
+
+// A function only the headless harness builds: copy a renderer list without one of its names
+static void test_list_without(const char *list, const char *name, char *out, size_t size)
+{
+    size_t used = 0;
+    out[0] = '\0';
+    for (const char *at = list; *at != '\0'; ) {
+        size_t length = strcspn(at, ",");
+        bool skipped = length == strlen(name) && strncmp(at, name, length) == 0;
+        if (!skipped && used + length + 2 <= size) {
+            if (used > 0)
+                out[used++] = ',';
+            memcpy(out + used, at, length);
+            used += length;
+            out[used] = '\0';
+        }
+        at += length;
+        if (*at == ',')
+            at++;
+    }
+}
 #endif
 
 // A function to tell whether the gamepad subsystem is running
@@ -2673,6 +2721,95 @@ static void render_reset(ReloadReason why)
     reload_mark(why);
 }
 
+// A function to destroy a texture and forget it
+static void destroy_texture(SDL_Texture **texture, int *count)
+{
+    if (*texture == NULL)
+        return;
+    SDL_DestroyTexture(*texture);
+    *texture = NULL;
+    (*count)++;
+}
+
+// A function to destroy every texture StreamFlex holds and forget it, while the renderer that made
+// them still exists: what holds each (the highlight, the clock, a menu's entries) stays, so the
+// reload's stops and starts find nothing to destroy and make every texture again. Returns how many.
+static int drop_textures(void)
+{
+    int count = 0;
+    destroy_texture(&background_texture, &count);
+    destroy_texture(&background_overlay, &count);
+    if (slideshow != NULL)
+        destroy_texture(&slideshow->transition_texture, &count);
+    if (highlight != NULL) {
+        destroy_texture(&highlight->texture, &count);
+        highlight->button = 0;   // So the next layout renders it again
+    }
+    if (scroll != NULL)
+        destroy_texture(&scroll->texture, &count);
+    if (clk != NULL) {
+        destroy_texture(&clk->time_texture, &count);
+        destroy_texture(&clk->date_texture, &count);
+    }
+    if (screensaver != NULL)
+        destroy_texture(&screensaver->texture, &count);
+    for (Menu *menu = config.first_menu; menu != NULL; menu = menu->next) {
+        for (unsigned int i = 0; i < menu->num_entries; i++) {
+            destroy_texture(&menu->items[i]->icon, &count);
+            destroy_texture(&menu->items[i]->icon_selected, &count);
+            destroy_texture(&menu->items[i]->title_texture, &count);
+        }
+        menu->rendered_size = 0;
+    }
+    settings_drop_textures();   // The settings screen's own, and the browsed image
+    return count;
+}
+
+// A function to let go of a renderer SDL could not recover (SDL_EVENT_RENDER_DEVICE_LOST: SDL has
+// already tried once, and the renderer is unusable): every texture first, then the renderer. A new
+// one is owed, at once, or once a launched app is done: a GPU reset is often the launched game's own,
+// a renderer made under it would likely fail the same way, and nothing is drawn while it runs.
+// A second loss in the same batch finds no renderer, and does nothing.
+static void renderer_lost(void)
+{
+    if (renderer == NULL)
+        return;
+    int dropped = drop_textures();
+    SDL_DestroyRenderer(renderer);
+    renderer = NULL;
+    log_debug("Renderer: dropped %i textures before the renderer went", dropped);
+    log_debug("Renderer: device lost and not recovered; creating a new renderer");
+    renderer_owed = true;
+    renderer_attempt = 0;
+    renderer_next_try = SDL_GetTicks();
+}
+
+// A function to make the renderer a lost device owes, when it is due: at once after the loss, or
+// once a launched app is done, then RENDERER_RETRY_MS apart, up to RENDERER_RETRIES attempts (spec
+// section 3). It is called once a pass of the main loop, so events are pumped between the attempts:
+// the window never stops answering, and every quit path stays live. The new renderer is made as at
+// startup, for the window in force; on Windows its handle is read again. The last attempt's failure
+// takes the startup error path.
+static void renderer_retry(void)
+{
+    if (!renderer_owed || app_in_front() || SDL_GetTicks() < renderer_next_try)
+        return;
+    renderer_attempt++;
+    log_debug("Renderer: creating a new renderer, attempt %i of %i", renderer_attempt, RENDERER_RETRIES);
+    if (create_renderer(&plan_in_force)) {
+        renderer_owed = false;
+        renderer_attempt = 0;
+#ifdef _WIN32
+        platform_window_changed(window, window);
+#endif
+        reload_mark(RELOAD_DEVICE);
+        return;
+    }
+    if (renderer_attempt >= RENDERER_RETRIES)
+        quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as at startup
+    renderer_next_try = SDL_GetTicks() + RENDERER_RETRY_MS;
+}
+
 static inline void pre_launch()
 {
     if (gamepads != NULL)
@@ -2695,7 +2832,13 @@ static inline void post_launch()
     // Post-application updates
     if (gamepad_on)
         connect_gamepad(-1, true, false);
-    if (clk != NULL)
+    // A device lost while the app ran: its new renderer is due now, and is made in this pass of the
+    // main loop, after the app is said to be finished; the reload then makes the clock again too
+    if (renderer_owed) {
+        renderer_next_try = SDL_GetTicks();
+        log_debug("Renderer: the app is done, so the new renderer is made now");
+    }
+    else if (clk != NULL)
         update_clock(true);
     if (background_shown == BACKGROUND_SLIDESHOW)
         resume_slideshow();
@@ -2935,6 +3078,14 @@ int main(int argc, char *argv[])
 
                 case SDL_EVENT_KEY_DOWN:
                     ticks.last_input = ticks.main;
+                    // Nothing is on screen to act on until a lost device's new renderer exists
+                    if (renderer == NULL) {
+                        log_debug("Key ignored: there is no renderer yet");
+#ifdef STREAMFLEX_TEST_HOOKS
+                        test_key_undrawn = true;   // The first frame drawn once there is one is the key's
+#endif
+                        break;
+                    }
                     // Every key code StreamFlex holds is SDL2's, as config.ini stores it (keycodes.h)
                     handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat);
 #ifdef STREAMFLEX_TEST_HOOKS
@@ -2948,7 +3099,7 @@ int main(int argc, char *argv[])
                     break;
 
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                    if (config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
+                    if (renderer != NULL && config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
                         ticks.last_input = ticks.main;
                         execute_command(current_entry->cmd);
                     }
@@ -3022,6 +3173,10 @@ int main(int argc, char *argv[])
                     render_reset(RELOAD_DEVICE);
                     break;
 
+                case SDL_EVENT_RENDER_DEVICE_LOST:
+                    renderer_lost();
+                    break;
+
                 case SDL_EVENT_WINDOW_MOUSE_LEAVE:
                     log_debug("Lost mouse focus");
                     break;
@@ -3050,8 +3205,16 @@ int main(int argc, char *argv[])
                 set_draw_color();
         }
 
-        // One reload for every reason the events above marked, geometry first, before anything is drawn
+        // A lost device's new renderer when it is due, then one reload for every reason the events
+        // above marked, geometry first, before anything is drawn
+        renderer_retry();
         reload_run_pending();
+
+        // While a new renderer is owed, nothing is drawn or updated; the events above still run
+        if (renderer == NULL) {
+            SDL_Delay(APPLICATION_WAIT_PERIOD);
+            continue;
+        }
 
         // Post-event loop updates
         if (!(state.application_running || state.application_launching)) {

@@ -23,7 +23,6 @@ static UINT sdl_to_win32_keycode(SDL_Keycode keycode);
 static bool get_shutdown_privilege(void);
 
 extern Config config;
-extern SDL_Window *window;
 bool has_shutdown_privilege     = false;
 UINT exit_hotkey                = 0;
 static SDL_Keycode exit_hotkey_code = 0;   // The exit hotkey's key as SDL names it, while exit_hotkey is set
@@ -36,6 +35,8 @@ static int unused_exit_count = 0;                     // ...and how many, past t
 static wchar_t self_path[32768];   // The program a restart starts, found before anything is torn down
 static wchar_t self_line[32768];   // Its command line, which CreateProcessW may write to
 static PROCESS_INFORMATION fresh;  // The fresh copy a restart made, waiting until this one is torn down
+static HWND window_hwnd = NULL;    // The window's native handle: read when the window is made, and again after a
+                                   // new renderer (OpenGL's replaces the native window) or a recreation
 
 
 // A function to determine if a file exists on the filesystem
@@ -51,7 +52,8 @@ bool directory_exists(const char *path)
 }
 
 // A function to get a window's HWND, from its SDL3 property (SDL3 has no SDL_SysWMinfo). It is read
-// each time: the OpenGL renderer replaces the native window when it starts (spec section 3)
+// again for each new renderer: the OpenGL renderer replaces the native window when it starts (spec
+// section 3), so platform_window_changed() keeps the one in force in window_hwnd
 static HWND hwnd_of(SDL_Window *w)
 {
     return (HWND) SDL_GetPointerProperty(SDL_GetWindowProperties(w), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
@@ -123,12 +125,12 @@ static void parse_command(char *cmd, char *file, size_t file_size, char **params
 
 void set_foreground_window()
 {
-    SetForegroundWindow(hwnd_of(window));
+    SetForegroundWindow(window_hwnd);
 }
 
 void make_window_transparent()
 {
-    HWND hwnd = hwnd_of(window);
+    HWND hwnd = window_hwnd;
     SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hwnd,
         RGB(config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b),
@@ -140,7 +142,7 @@ void make_window_transparent()
 // A function to make the window solid again after a transparent background
 void make_window_opaque()
 {
-    HWND hwnd = hwnd_of(window);
+    HWND hwnd = window_hwnd;
     SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
 }
 
@@ -193,7 +195,7 @@ bool start_process(char *cmd, bool application)
     else {
         // Go down in the window stack so the launched application can take focus
         if (successful) {
-            HWND hwnd = hwnd_of(window);
+            HWND hwnd = window_hwnd;
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOREDRAW | SWP_NOSIZE | SWP_NOMOVE);
             ret = true;
         }
@@ -360,7 +362,7 @@ bool start_self(char **argv)
 // it allowed (make_self()); true when Windows put it in front
 bool take_foreground(void)
 {
-    HWND hwnd = hwnd_of(window);
+    HWND hwnd = window_hwnd;
     return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
 }
 
@@ -442,17 +444,48 @@ SDL_Keycode refused_exit_hotkey(const char **why)
     return refused_exit_code;
 }
 
-// A function to register the exit hotkey with Windows. A refusal is kept, with its reason, so the
-// debug log's list still names the hotkey the bindings count.
-void register_exit_hotkey()
+// A function to register the exit hotkey with Windows on a window. A refusal is kept, with its reason,
+// so the debug log's list still names the hotkey the bindings count.
+static void register_exit_hotkey_on(HWND hwnd)
 {
-    BOOL ret = RegisterHotKey(hwnd_of(window), 1, 0, exit_hotkey);
+    BOOL ret = RegisterHotKey(hwnd, 1, 0, exit_hotkey);
     if (!ret) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         refused_exit_code = exit_hotkey_code;
         refused_exit_ticks = ticks_ms();
         exit_hotkey = 0;
         log_error("Failed to register exit hotkey with Windows: %s", refused_exit_why);
+    }
+}
+
+// A function to register the exit hotkey with Windows, on the window
+void register_exit_hotkey()
+{
+    register_exit_hotkey_on(window_hwnd);
+}
+
+// A function to move what Windows holds for the window to the one in force: at startup (old_window
+// NULL), after a new renderer (the OpenGL renderer replaces the native window, so the same SDL window
+// can hold a new handle) and after a recreation. The exit hotkey, the one hotkey StreamFlex registers,
+// goes from the old handle to the new one; a refusal on the new one is kept as at startup. The old
+// handle is the one kept here: the old window may hold the new one now. Nothing happens when the
+// handle is the same; at startup there is no old handle, and register_exit_hotkey() registers on the
+// new one itself. Whatever else follows a new handle goes after the block below, so it runs for every
+// new handle, startup's included.
+void platform_window_changed(SDL_Window *old_window, SDL_Window *new_window)
+{
+    UNUSED(old_window);
+    HWND now = hwnd_of(new_window);
+    if (now == window_hwnd)
+        return;
+    HWND was = window_hwnd;
+    window_hwnd = now;
+    if (was != NULL) {
+        if (exit_hotkey) {
+            UnregisterHotKey(was, 1);
+            register_exit_hotkey_on(now);
+        }
+        log_debug("Video: the window has a new handle%s", exit_hotkey ? "; the exit hotkey moved to it" : "");
     }
 }
 
@@ -467,7 +500,7 @@ bool retry_exit_hotkey(bool at_once)
         return false;
     refused_exit_ticks = now;
     UINT key = sdl_to_win32_keycode(refused_exit_code);
-    if (!RegisterHotKey(hwnd_of(window), 1, 0, key)) {
+    if (!RegisterHotKey(window_hwnd, 1, 0, key)) {
         windows_error_text(GetLastError(), refused_exit_why, sizeof(refused_exit_why));
         return false;
     }
@@ -483,7 +516,7 @@ bool retry_exit_hotkey(bool at_once)
 void clear_exit_hotkey()
 {
     if (exit_hotkey)
-        UnregisterHotKey(hwnd_of(window), 1);
+        UnregisterHotKey(window_hwnd, 1);
     exit_hotkey = 0;
     refused_exit_code = 0;
     unused_exit_count = 0;

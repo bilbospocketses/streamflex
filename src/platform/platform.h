@@ -34,6 +34,7 @@ SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey
 int unused_exit_hotkeys(SDL_Keycode *out, int max);   // The later :exit bindings, which nothing runs; how many
 SDL_Keycode refused_exit_hotkey(const char **why);    // The exit hotkey Windows would not register, and why; 0 when none
 void register_exit_hotkey(void);
+void platform_window_changed(SDL_Window *old_window, SDL_Window *new_window);   // UnregisterHotKey on the old HWND, every hotkey on the new one, and the taskbar mark when the new window is Transparent
 bool retry_exit_hotkey(bool at_once);   // The exit hotkey Windows refused, tried again when due; true when taken now
 void clear_exit_hotkey(void);
 void listen_exit_hotkey(bool on);   // While an app runs, the exit hotkey's WM_HOTKEY closes it

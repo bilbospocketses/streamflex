@@ -94,13 +94,13 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # stale time makes the shards uneven, never a check lost or run twice. 48-pad-repeat.sh's is its
 # 11 s in that full set, times check 62's ratio of its time here to its time there (1069 to 1282
 # s), so that the timing set's two shards plan even. 47-screen.sh's and 47-screen-timing.sh's are
-# estimates from their runs' waits (Task 1.6b), and 48-device-loss.sh's from its seven runs' (Task
-# 1.7a), until a set measures them.
+# estimates from their runs' waits (Task 1.6b), and 48-device-loss.sh's from its thirteen runs' and
+# 48-device-loss-timing.sh's from its two runs' (Tasks 1.7a and 1.7b), until a set measures them.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
     [47-screen.sh]=100 [47-screen-timing.sh]=12
-    [48-device-loss.sh]=60 [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
+    [48-device-loss.sh]=125 [48-device-loss-timing.sh]=20 [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
     [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
@@ -113,9 +113,9 @@ declare -A shard_seconds=(
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
 # set, which may run beside other work, and no check would fail for it; so the marks must match
 # this list, or nothing runs. A file added or renamed, or a mark changed, changes it.
-timing_pinned=(42-features.sh 47-screen-timing.sh 48-pad-repeat.sh 49-fade-wall-time.sh 50-settings-timing.sh
-               55-settings-pages-timing.sh 58-settings-pickers-timing.sh 59-settings-fonts-timing.sh
-               60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
+timing_pinned=(42-features.sh 47-screen-timing.sh 48-device-loss-timing.sh 48-pad-repeat.sh 49-fade-wall-time.sh
+               50-settings-timing.sh 55-settings-pages-timing.sh 58-settings-pickers-timing.sh
+               59-settings-fonts-timing.sh 60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
                62-settings-bindings-timing.sh)
 
 # A function to find the check files and choose the ones this run runs (checks, in name order):
