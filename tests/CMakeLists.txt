@@ -207,3 +207,11 @@ add_test(NAME vsyncwatch COMMAND test_vsyncwatch)
 # Unit test 11: the manifest asks for per-monitor v2, read from the source on every platform
 add_test(NAME manifest_dpi COMMAND ${CMAKE_COMMAND} -DMANIFEST=${PROJECT_SOURCE_DIR}/config/${EXECUTABLE_TITLE}.manifest.in
          -P ${CMAKE_CURRENT_SOURCE_DIR}/check_manifest.cmake)
+
+# The job table behind parallel icon decode (spec section 8): SDL's threads and atomics, no image code.
+# The test hook that keeps every thread from starting is built into this target alone.
+add_executable(test_iconload test_iconload.c "${PROJECT_SOURCE_DIR}/src/iconload.c")
+target_include_directories(test_iconload PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_iconload PRIVATE STREAMFLEX_TEST_HOOKS)
+target_link_libraries(test_iconload SDL3::SDL3)
+add_test(NAME iconload COMMAND test_iconload)

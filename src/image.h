@@ -1,3 +1,5 @@
+#include "iconload.h"
+
 // Dynamic SVG generation for highlight
 #define HIGHLIGHT_OUTLINE_FORMAT " stroke-width=\"%i\" stroke=\"#%02X%02X%02X\" stroke-opacity=\"%.2f\""
 #define HIGHLIGHT_FORMAT "<svg viewBox=\"0 0 %i %i\"><rect x=\"0\" width=\"%i\" height=\"%i\" rx=\"%i\" fill=\"#%02X%02X%02X\" fill-opacity=\"%.2f\"%s/></svg>"
@@ -35,8 +37,9 @@ SDL_Texture *load_texture_from_file(const char *path);
 SDL_Texture *load_texture_measured(const char *path, double *luminance);
 double surface_luminance(SDL_Surface *surface);   // -1 when it cannot be read
 SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect);
-SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect);
-SDL_Texture *load_icon(const char *path, int size);
+void decode_icon_job(IconJob *job, void *rasterizer);   // The IconWork for icons: read, decode or rasterize, chroma pass
+void *icon_worker_start(void);                          // nsvgCreateRasterizer()
+void icon_worker_end(void *rasterizer);                 // nsvgDeleteRasterizer()
 extern Uint64 timing_read, timing_decode, timing_texture;   // render_buttons' icons, in counter counts; main thread only
 unsigned timing_ms(Uint64 counts);                           // Whole milliseconds, rounded
 void prime_image_formats(void);                              // Main thread, before any thread that decodes

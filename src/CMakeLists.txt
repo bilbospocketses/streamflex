@@ -6,6 +6,8 @@ set(SOURCES
   util.h
   image.c
   image.h
+  iconload.c
+  iconload.h
   debug.c
   debug.h
   clock.c

@@ -104,9 +104,10 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # Weston 15 only), until a set measures them. 66-pad-power.sh's is an estimate from its runs (Task
 # 1.11b: four runs, about 3 s each to start and stop, and sixteen steps of about 1.5 s each, a 1 s
 # floor and a screen read), until a set measures it. 60-timing.sh checks the Timing: lines and reads no
-# duration, so it is in the rest set; its time is an estimate from its two runs (Task 1.12: two menus
+# duration, so it is in the rest set; its time is an estimate from its three runs (Task 1.12: two menus
 # of 48 icons decoded under ASan with a key between them, about 10 s, and a slideshow start that quits,
-# about 3 s, with a little more for the leak pass), until a set measures it.
+# about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s), until
+# a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -115,7 +116,7 @@ declare -A shard_seconds=(
     [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
-    [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66 [60-timing.sh]=15
+    [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66 [60-timing.sh]=20
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6

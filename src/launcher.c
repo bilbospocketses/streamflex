@@ -1649,14 +1649,83 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
     int line_height = TTF_GetFontHeight(title_info.font);
     title_info.max_width = layout_title_width(config.title_shadows, size, line_height);   // Room for the shadow
     titles_time += SDL_GetPerformanceCounter() - timing_start;   // Opening the title font counts as titles
-    for (unsigned int i = 0; i < menu->num_entries; i++) {
+
+    // The icons are read and decoded on the decode threads first, two jobs an entry (the icon and its
+    // selected icon); the textures are made below, on this thread, in the entries' order
+    int job_count = (int) menu->num_entries * 2;
+    IconJob *jobs = calloc((size_t) (job_count > 0 ? job_count : 1), sizeof(IconJob));
+    if (jobs == NULL)
+        log_fatal("Could not allocate the icon jobs for menu '%s'", menu->name);
+    for (int i = 0; i < (int) menu->num_entries; i++) {
+        const char *paths[2] = { menu->items[i]->icon_path, menu->items[i]->icon_selected_path };
+        for (int k = 0; k < 2; k++) {
+            IconJob *job = &jobs[i * 2 + k];
+            job->path = paths[k];
+            job->size = size;
+            if (paths[k] == NULL)
+                job->done = true;   // No icon: nothing to do
+            else if (fileio_not_a_file(paths[k])) {
+                SDL_snprintf(job->error, sizeof(job->error), "%s", fileio_last_error());
+                job->done = true;
+            }
+            else {
+                size_t length = strlen(paths[k]);
+                job->svg = length > 4 && SDL_strcasecmp(paths[k] + length - 4, ".svg") == 0;
+            }
+        }
+    }
+    // The jobs with work left go to the pool as one packed array (iconload_batch() takes a
+    // contiguous one), each remembering where it came from, and come back to their entries after
+    IconJob *work = calloc((size_t) (job_count > 0 ? job_count : 1), sizeof(IconJob));
+    int *origin = calloc((size_t) (job_count > 0 ? job_count : 1), sizeof(int));
+    if (work == NULL || origin == NULL)
+        log_fatal("Could not allocate the icon jobs for menu '%s'", menu->name);
+    int work_count = 0;
+    for (int j = 0; j < job_count; j++) {
+        if (!jobs[j].done) {
+            work[work_count] = jobs[j];
+            origin[work_count++] = j;
+        }
+    }
+    iconload_batch(work, work_count, iconload_workers(), decode_icon_job, icon_worker_start, icon_worker_end);
+    for (int j = 0; j < work_count; j++)
+        jobs[origin[j]] = work[j];
+    free(work);
+    free(origin);
+
+    for (int i = 0; i < (int) menu->num_entries; i++) {
         Entry *entry = menu->items[i];
         if (entry->icon != NULL)
             SDL_DestroyTexture(entry->icon);
         if (entry->icon_selected != NULL)
             SDL_DestroyTexture(entry->icon_selected);
-        entry->icon = load_icon(entry->icon_path, size);
-        entry->icon_selected = entry->icon_selected_path != NULL ? load_icon(entry->icon_selected_path, size) : NULL;
+        for (int k = 0; k < 2; k++) {
+            IconJob *job = &jobs[i * 2 + k];
+            SDL_Texture **slot = k == 0 ? &entry->icon : &entry->icon_selected;
+            *slot = NULL;
+            if (job->path == NULL)
+                continue;
+            if (job->surface == NULL) {
+                log_error("Could not load image %s\n%s", job->path, job->error);
+                continue;
+            }
+#ifndef _WIN32
+            // What the chroma pass would have logged on this thread, here
+            if (job->kept_off == ICON_NOT_CONVERTED)
+                log_error("Could not convert %s to keep it off the chroma key\n%s", job->path, job->error);
+            else if (job->kept_off == ICON_NOT_LOCKED)
+                log_debug("%s: could not be kept off the chroma key, so it is drawn as it is: %s", job->path, job->error);
+            else if (job->moved > 0)
+                log_debug("%s: moved %i pixel(s) off the chroma key #%02X%02X%02X", job->path, job->moved,
+                    config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
+#endif
+            timing_read += job->read;
+            timing_decode += job->decode;
+            Uint64 made = SDL_GetPerformanceCounter();
+            *slot = load_texture(job->surface);   // Frees the surface
+            job->surface = NULL;
+            timing_texture += SDL_GetPerformanceCounter() - made;
+        }
         icons += (entry->icon_path != NULL) + (entry->icon_selected_path != NULL);
         if (config.titles_enabled) {
             Uint64 title_start = SDL_GetPerformanceCounter();
@@ -1673,6 +1742,8 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
             titles++;
         }
     }
+
+    free(jobs);
 
     // Keep no pointer to a cached font: another menu's title size may close it
     title_info.font = fixed_title_font;

@@ -36,9 +36,10 @@ extern TextInfo title_info;
 extern Effective eff;
 NSVGrasterizer *rasterizer = NULL;
 
-// What render_buttons' icons cost in its current render, in performance-counter counts: their reads,
-// their decodes (with the chroma pass, which a decode worker would run too) and their textures. Main
-// thread only: render_buttons zeroes them, and the slideshow's thread never touches them.
+// What render_buttons' icons cost in its current render, in performance-counter counts: their reads
+// and their decodes (with the chroma pass), which the decode threads post in each job and
+// render_buttons adds up once every job has posted, and their textures. Main thread only:
+// render_buttons zeroes them, and neither the decode threads nor the slideshow's thread touches them.
 Uint64 timing_read = 0, timing_decode = 0, timing_texture = 0;
 
 // A function to turn performance-counter counts into whole milliseconds, rounded
@@ -52,7 +53,7 @@ unsigned timing_ms(Uint64 counts)
 // and the decode (IMG_LoadTyped_IO from memory, with the file's extension as the type, as IMG_Load
 // passes it; IMG_Load_IO would pass none), adding each part's counts to *read and *decode. NULL,
 // with SDL's reason in SDL_GetError(), when either fails. It touches nothing else, so the
-// slideshow's thread can use it.
+// slideshow's thread and the icons' decode threads can use it.
 static SDL_Surface *load_surface_timed(const char *path, Uint64 *read, Uint64 *decode)
 {
     Uint64 start = SDL_GetPerformanceCounter();
@@ -436,40 +437,11 @@ static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int 
 #endif
 }
 
-// A function to keep a loaded image's opaque pixels off the chroma key. The pixels are read as
-// RGBA bytes, so another format is converted first. Returns the surface to use: this one, or the
-// converted copy, which replaces it.
-static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char *what)
-{
-#ifdef _WIN32
-    UNUSED(what);
-    return surface;   // No key on Windows (keep_off_chroma_key())
-#else
-    if (surface->format != SDL_PIXELFORMAT_RGBA32) {
-        SDL_Surface *converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-        if (converted == NULL) {
-            log_error("Could not convert %s to keep it off the chroma key\n%s", what, SDL_GetError());
-            return surface;
-        }
-        SDL_DestroySurface(surface);
-        surface = converted;
-    }
-    if (SDL_LockSurface(surface)) {
-        keep_off_chroma_key(surface->pixels, surface->w, surface->h, surface->pitch, what);
-        SDL_UnlockSurface(surface);
-    }
-    else {
-        // The pixels cannot be read, but the texture can still be made from the surface: the icon
-        // is drawn as it is, and only a Transparent window may show through its near-key pixels
-        log_debug("%s: could not be kept off the chroma key, so it is drawn as it is: %s", what, SDL_GetError());
-    }
-    return surface;
-#endif
-}
-
-// A function to rasterize an SVG from a text buffer, keeping its pixels off the chroma key on Linux;
-// `what` names it for the log
-static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const char *what)
+// A function to parse and rasterize an SVG text buffer with the rasterizer given (each decode thread
+// has its own: nanosvg's keeps scratch buffers inside it), into a new RGBA buffer the caller frees;
+// w or h -1 keeps the aspect ratio. NULL when it cannot, with why in `error`.
+static unsigned char *rasterize_pixels(NSVGrasterizer *with, char *buffer, int w, int h,
+                                       int *width_out, int *height_out, char *error, size_t error_size)
 {
     NSVGimage *image = NULL;
     unsigned char *pixel_buffer = NULL;
@@ -477,10 +449,9 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     float scale;
 
     // Parse SVG to NSVGimage struct
-    Uint64 start = SDL_GetPerformanceCounter();
     image = nsvgParse(buffer, "px", 96.0f);
     if (image == NULL) {
-        log_error("could not open SVG image.");
+        SDL_snprintf(error, error_size, "could not open SVG image.");
         return NULL;
     }
 
@@ -510,12 +481,33 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     pitch = 4*width;
     pixel_buffer = malloc((size_t) (4*width*height));
     if (pixel_buffer == NULL) {
-        log_error("Could not alloc SVG pixel buffer.");
+        SDL_snprintf(error, error_size, "Could not alloc SVG pixel buffer.");
+        nsvgDelete(image);
         return NULL;
     }
 
     // Rasterize image
-    nsvgRasterize(rasterizer, image, 0, 0, scale, pixel_buffer, width, height, pitch);
+    nsvgRasterize(with, image, 0, 0, scale, pixel_buffer, width, height, pitch);
+    nsvgDelete(image);
+    *width_out = width;
+    *height_out = height;
+    return pixel_buffer;
+}
+
+// A function to rasterize an SVG from a text buffer, keeping its pixels off the chroma key on Linux;
+// `what` names it for the log
+static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const char *what)
+{
+    int width = 0, height = 0;
+    char error[256];
+
+    Uint64 start = SDL_GetPerformanceCounter();
+    unsigned char *pixel_buffer = rasterize_pixels(rasterizer, buffer, w, h, &width, &height, error, sizeof(error));
+    if (pixel_buffer == NULL) {
+        log_error("%s", error);
+        return NULL;
+    }
+    int pitch = 4*width;
     keep_off_chroma_key(pixel_buffer, width, height, pitch, what);
     Uint64 rasterized = SDL_GetPerformanceCounter();
     timing_decode += rasterized - start;
@@ -528,7 +520,6 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     }
     free(pixel_buffer);
     SDL_DestroySurface(surface);
-    nsvgDelete(image);
     return texture;
 }
 
@@ -538,54 +529,98 @@ SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect)
     return rasterize(buffer, w, h, rect, "An SVG image");
 }
 
-// A function to rasterize an SVG file; pass -1 for w or h to keep the aspect ratio. A path to
-// something that is not a regular file is never opened.
-SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect)
+// The decode thread's own SVG rasterizer, made when it starts and deleted when it ends
+void *icon_worker_start(void)
 {
-    if (fileio_not_a_file(path)) {
-        log_error("Could not load image %s\n%s", path, fileio_last_error());
-        return NULL;
-    }
-    Uint64 start = SDL_GetPerformanceCounter();
-    char *buffer = SDL_LoadFile(path, NULL);
-    timing_read += SDL_GetPerformanceCounter() - start;
-    if (buffer == NULL) {
-        log_error("Could not load image %s\n%s", path, SDL_GetError());
-        return NULL;
-    }
-    SDL_Texture *texture = rasterize(buffer, w, h, rect, path);
-    SDL_free(buffer);
-    return texture;
+    return nsvgCreateRasterizer();
 }
 
-// A function to load a menu icon. SVGs are rasterized at the button size so they stay sharp
-// at any size; other formats load at their own size and the renderer scales them. Either way, on
-// Linux, its pixels are kept off the chroma key. A path to something that is not a regular file is
-// never opened.
-SDL_Texture *load_icon(const char *path, int size)
+void icon_worker_end(void *with)
 {
-    if (path == NULL)
-        return NULL;
-    size_t length = strlen(path);
-    if (length > 4 && SDL_strcasecmp(path + length - 4, ".svg") == 0)
-        return rasterize_svg_from_file(path, size, -1, NULL);
-    if (fileio_not_a_file(path)) {
-        log_error("Could not load image %s\n%s", path, fileio_last_error());
-        return NULL;
+    if (with != NULL)
+        nsvgDeleteRasterizer((NSVGrasterizer *) with);
+}
+
+// A function to do a menu icon's work off the main thread (iconload's IconWork): read and decode it,
+// or rasterize an SVG at the button size so it stays sharp at any size (other formats load at their
+// own size and the renderer scales them), then move its pixels off the chroma key on Linux. It logs
+// nothing and makes no texture; the main thread does both from what it posts. The fileio guard ran
+// on the main thread before the job was made.
+void decode_icon_job(IconJob *job, void *with)
+{
+    if (job->svg) {
+        Uint64 start = SDL_GetPerformanceCounter();
+        size_t size = 0;
+        char *buffer = SDL_LoadFile(job->path, &size);
+        Uint64 loaded = SDL_GetPerformanceCounter();
+        job->read += loaded - start;
+        if (buffer == NULL) {
+            SDL_snprintf(job->error, sizeof(job->error), "%s", SDL_GetError());
+            return;
+        }
+        int width = 0, height = 0;
+        unsigned char *pixels = with != NULL
+            ? rasterize_pixels((NSVGrasterizer *) with, buffer, job->size, -1, &width, &height, job->error, sizeof(job->error))
+            : NULL;
+        if (with == NULL)
+            SDL_snprintf(job->error, sizeof(job->error), "Could not initialize SVG rasterizer.");
+        SDL_free(buffer);
+        if (pixels == NULL) {
+            job->decode += SDL_GetPerformanceCounter() - loaded;
+            return;
+        }
+#ifndef _WIN32
+        job->moved = chroma_keep_off(pixels, width, height, 4 * width,
+                         config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
+#endif
+        // nanosvg writes R, G, B, A bytes in memory order: SDL_PIXELFORMAT_RGBA32. The surface owns
+        // its own copy, so the buffer is freed here.
+        job->surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+        if (job->surface != NULL) {
+            for (int y = 0; y < height; y++)
+                SDL_memcpy((Uint8 *) job->surface->pixels + y * job->surface->pitch, pixels + y * 4 * width, (size_t) (4 * width));
+        }
+        else
+            SDL_snprintf(job->error, sizeof(job->error), "%s", SDL_GetError());
+        free(pixels);
+        job->decode += SDL_GetPerformanceCounter() - loaded;
+        return;
     }
-    SDL_Surface *surface = load_surface_timed(path, &timing_read, &timing_decode);
-    if (surface == NULL) {
-        log_error("Could not load image %s\n%s", path, SDL_GetError());
-        return NULL;
+    job->surface = load_surface_timed(job->path, &job->read, &job->decode);
+    if (job->surface == NULL) {
+        SDL_snprintf(job->error, sizeof(job->error), "%s", SDL_GetError());
+        return;
     }
-    // The chroma pass counts as decode: a decode worker would run it too (spec section 8)
+#ifndef _WIN32
+    // The chroma pass reads RGBA bytes, so another format is converted first. What it would log is
+    // left in the job for the main thread: a surface that cannot be converted is drawn as it decoded,
+    // and one that cannot be locked is drawn as it is (only a Transparent window may then show
+    // through its near-key pixels). Windows' Transparent mode is per-pixel alpha, with no key.
     Uint64 decoded = SDL_GetPerformanceCounter();
-    surface = keep_surface_off_chroma_key(surface, path);
-    Uint64 kept = SDL_GetPerformanceCounter();
-    timing_decode += kept - decoded;
-    SDL_Texture *texture = load_texture(surface);
-    timing_texture += SDL_GetPerformanceCounter() - kept;
-    return texture;
+    if (job->surface->format != SDL_PIXELFORMAT_RGBA32) {
+        SDL_Surface *converted = SDL_ConvertSurface(job->surface, SDL_PIXELFORMAT_RGBA32);
+        if (converted == NULL) {
+            job->kept_off = ICON_NOT_CONVERTED;
+            SDL_snprintf(job->error, sizeof(job->error), "%s", SDL_GetError());
+        }
+        else {
+            SDL_DestroySurface(job->surface);
+            job->surface = converted;
+        }
+    }
+    if (job->kept_off == ICON_KEPT_OFF) {
+        if (SDL_LockSurface(job->surface)) {
+            job->moved = chroma_keep_off(job->surface->pixels, job->surface->w, job->surface->h, job->surface->pitch,
+                             config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
+            SDL_UnlockSurface(job->surface);
+        }
+        else {
+            job->kept_off = ICON_NOT_LOCKED;
+            SDL_snprintf(job->error, sizeof(job->error), "%s", SDL_GetError());
+        }
+    }
+    job->decode += SDL_GetPerformanceCounter() - decoded;   // The chroma pass counts as decode (spec section 8)
+#endif
 }
 
 // A function to render the highlight for the buttons

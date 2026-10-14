@@ -40,9 +40,9 @@
 
   {"name": "control-lock", "find": null, "fixture": "/src/tests/mutants/png.ini", "wait": "Menu 'Main': rendered its buttons at",
    "expect": ["^Menu 'Main': rendered its buttons at"], "absent": ["^Could not load image", "could not be kept off the chroma key"], "verdict": "holds"},
-  {"name": "lock-sdl2-form", "file": "src/image.c", "find": "    if (SDL_LockSurface(surface)) {", "replace": "    if (SDL_LockSurface(surface) == 0) {",
+  {"name": "lock-sdl2-form", "file": "src/image.c", "find": "        if (SDL_LockSurface(job->surface)) {", "replace": "        if (SDL_LockSurface(job->surface) == 0) {",
    "fixture": "/src/tests/mutants/png.ini", "wait": "Menu 'Main': rendered its buttons at", "expect": ["^Menu 'Main': rendered its buttons at"], "absent": ["^Could not load image", "could not be kept off the chroma key"], "verdict": "caught"},
-  {"name": "lock-fault", "file": "src/image.c", "find": "    if (SDL_LockSurface(surface)) {", "replace": "    if ((SDL_SetError(\"mutant: no lock\"), false)) {",
+  {"name": "lock-fault", "file": "src/image.c", "find": "        if (SDL_LockSurface(job->surface)) {", "replace": "        if ((SDL_SetError(\"mutant: no lock\"), false)) {",
    "fixture": "/src/tests/mutants/png.ini", "expect": ["could not be kept off the chroma key, so it is drawn as it is: mutant: no lock$"], "verdict": "fires"},
 
   {"name": "control-basepath", "find": null, "fixture": "f05-basepath", "wait": "Gamepad started", "env": {"STREAMFLEX_TEST_NO_BASE_PATH": "1", "STREAMFLEX_TEST_NO_MESSAGE_BOX": "1"},
