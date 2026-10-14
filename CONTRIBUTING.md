@@ -15,7 +15,7 @@ The headless checks run in Docker, as the `headless` jobs in `build.yml` do (eac
     docker build -t streamflex-test tests/headless
     docker run --rm --security-opt seccomp=unconfined -v "$PWD:/src:ro" -v "$PWD/headless-out:/out" streamflex-test bash /src/tests/headless/run.sh local
 
-There are two images and one `run.sh`. `Dockerfile` is Debian trixie with SDL3 at the port's floor; `Dockerfile.fedora` is Fedora 44 with its own newer SDL3, whose Mesa has llvmpipe but no softpipe. The launcher draws with Vulkan on Mesa's lavapipe in both. What differs between them is detected, never branched on by name, and `run.sh` prints the Mesa driver it found (`Mesa: <driver>, from <path>`). For the Fedora pass, build its image and give its tag to the same `docker run`:
+There are two images and one `run.sh`. `Dockerfile` is Debian trixie with SDL3 at the port's floor; `Dockerfile.fedora` is Fedora 44 with its own newer SDL3, whose Mesa has llvmpipe but no softpipe. The launcher draws with Vulkan on Mesa's lavapipe in both. What differs between them is detected, never branched on by name, and `run.sh` prints the Mesa driver it found (`Mesa: <driver>, from <path>`). Both images also hold Weston, which check 67 starts headless beside Xvfb so that SDL's choice of video driver is a real one: Debian's Weston 14 has no fifo-v1 and Fedora's Weston 15 has it, so each image runs one branch of SDL's rule, and the check reads Weston's version, never the distribution. For the Fedora pass, build its image and give its tag to the same `docker run`:
 
     docker build -t streamflex-test-fedora -f tests/headless/Dockerfile.fedora tests/headless
 
@@ -80,9 +80,9 @@ The harness builds with `-DSTREAMFLEX_TEST_HOOKS`, which nothing else defines. I
 - `STREAMFLEX_TEST_NO_LUMINANCE`: an image's brightness cannot be measured, as when its conversion fails, so the contrast warning has no reading for it. Check 58 sets it.
 - `STREAMFLEX_TEST_NO_MESSAGE_BOX`: a fatal error quits without its message box, which some SDLs show and wait on. Checks 05, 25, 44, 48 and 59 set it.
 - `STREAMFLEX_TEST_NO_RENDER_TARGETS`: settings draw as they would on a renderer without render targets. Checks 55 and 60 set it.
-- `STREAMFLEX_TEST_PAD=<file>`: attaches a virtual gamepad, since Xvfb has none, and holds its Start button while `<file>` exists. It does nothing when the gamepad is turned off. Checks 42, 48, 50, 55, 58 and 62 set it.
-- `STREAMFLEX_TEST_PAD_BUTTON=<name>`: the virtual gamepad holds this button, by SDL's name for it (`b`), instead of Start; an axis's name (`rightx`) pushes that axis to its positive end. Checks 48, 55 and 62 set it.
-- `STREAMFLEX_TEST_PAD_FRAMES=<n>`: each time the virtual gamepad's file appears, its button is held for `n` frames however long the file stays: a tap shorter than a script can time. Check 62 sets it.
+- `STREAMFLEX_TEST_PAD=<file>`: attaches a virtual gamepad, since Xvfb has none, and holds its Start button while `<file>` exists. It does nothing when the gamepad is turned off. Checks 42, 48, 50, 55, 58, 62 and 67 set it.
+- `STREAMFLEX_TEST_PAD_BUTTON=<name>`: the virtual gamepad holds this button, by SDL's name for it (`b`), instead of Start; an axis's name (`rightx`) pushes that axis to its positive end. Checks 48, 55, 62 and 67 set it.
+- `STREAMFLEX_TEST_PAD_FRAMES=<n>`: each time the virtual gamepad's file appears, its button is held for `n` frames however long the file stays: a tap shorter than a script can time. Checks 62 and 67 set it.
 - `STREAMFLEX_TEST_PAD_PLUG=<file>`: another virtual gamepad is plugged in while `<file>` exists and pulled out when it goes, as a pad is plugged in or out by hand at any moment. Checks 55, 58 and 62 set it.
 - `STREAMFLEX_TEST_PAD_SWAP`: virtual gamepads are attached and detached, one step a frame, so one arrives at another's old device index with an instance id of its own; then a launch and a return close every pad and open each again. Check 42 sets it.
 - `STREAMFLEX_TEST_PIXEL_SIZE=<file>`: while `<file>` exists, the `WxH` it holds is the window's size in pixels in place of SDL's, and each change of it pushes `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`: SDL's X11 driver may not report a resize of a fullscreen window with no window manager. Checks 47 and 48 set it.
@@ -113,7 +113,7 @@ branding/logo/       The full-resolution logo original; the docs banner is a dow
 branding/library/    Tools for the icon library: generator, brand importer, checks, gallery (see its README)
 design/              Design specs and implementation plans (not published; docs/ is the site)
 tests/               Unit tests (CTest); run them with ctest after building
-tests/headless/      Headless checks: the launcher under Xvfb, driven by key presses (see run.sh); CI runs them on Debian and Fedora
+tests/headless/      Headless checks: the launcher under Xvfb, driven by key presses, and on a headless Weston (check 67) (see run.sh); CI runs them on Debian and Fedora
 docs/                Documentation site (GitHub Pages / Jekyll)
 ```
 

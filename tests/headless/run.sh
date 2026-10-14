@@ -99,7 +99,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # 60-settings-background.sh's and 70-chroma.sh's add Task 1.8b's two quick runs and its background count
 # to their measured times, by estimate too, and 60-settings-background.sh's and
 # 60-settings-background-timing.sh's add Task 1.9a's runs (f60-winrest, about 15 s; f60-moderest, about
-# 10 s) the same way.
+# 10 s) the same way. 67-wayland.sh's and 67-wayland-timing.sh's are estimates from their runs (Task
+# 1.10: on Weston 15 six runs and three Weston starts, on Weston 14 three runs; the launch case on
+# Weston 15 only), until a set measures them.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -111,6 +113,7 @@ declare -A shard_seconds=(
     [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
+    [67-wayland.sh]=20 [67-wayland-timing.sh]=6
     [70-chroma.sh]=3
 )
 
@@ -120,7 +123,7 @@ declare -A shard_seconds=(
 timing_pinned=(42-features.sh 47-screen-timing.sh 48-device-loss-timing.sh 48-pad-repeat.sh 49-fade-wall-time.sh
                50-settings-timing.sh 55-settings-pages-timing.sh 58-settings-pickers-timing.sh
                59-settings-fonts-timing.sh 60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
-               62-settings-bindings-timing.sh)
+               62-settings-bindings-timing.sh 67-wayland-timing.sh)
 
 # A function to find the check files and choose the ones this run runs (checks, in name order):
 # with no selection all of them; with timing those marked "# Timing-sensitive", with rest the
