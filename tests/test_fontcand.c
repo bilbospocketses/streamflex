@@ -44,10 +44,16 @@ char *find_default_font(const char *font)
 }
 
 #ifdef _WIN32
-// A function to check a registry walk: every family found once and in fontrules' order for the
-// preferred locale, each with no charset, so a probe learns its coverage, then the bundled DejaVu Sans
+// A function to check a registry walk: Segoe UI Emoji and Symbol after Segoe UI whatever the locale,
+// every family found once and in fontrules' order for the preferred locale, each with no charset, so
+// a probe learns its coverage, then the bundled DejaVu Sans
 static void check_walk(const FontCandidate *list, int count)
 {
+    CHECK(count >= 4);   // Segoe UI, Emoji and Symbol, which every Windows 10 and 11 has, then DejaVu Sans
+    if (count >= 4) {
+        CHECK_STR(list[1].family, "Segoe UI Emoji");   // Before Symbol, so emoji draw in color
+        CHECK_STR(list[2].family, "Segoe UI Symbol");
+    }
     int locales = 0;
     SDL_Locale **preferred = SDL_GetPreferredLocales(&locales);
     const char *families[FONTRULES_WINDOWS_FAMILIES];
@@ -127,7 +133,7 @@ static void test_fontconfig(void)
             open_sans = i;
     }
     CHECK(dejavu >= 0 && open_sans >= 0);
-    if (dejavu >= 0 && open_sans >= 0) {
+    if (dejavu >= 0 && open_sans >= 0 && list[dejavu].covers != NULL && list[open_sans].covers != NULL) {
         CHECK(list[dejavu].covers(&list[dejavu], 0x2605));          // DejaVu Sans has the star...
         CHECK(!list[open_sans].covers(&list[open_sans], 0x2605));   // ...and Open Sans does not
     }
