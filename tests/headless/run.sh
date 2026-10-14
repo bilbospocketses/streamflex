@@ -101,7 +101,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # 60-settings-background-timing.sh's add Task 1.9a's runs (f60-winrest, about 15 s; f60-moderest, about
 # 10 s) the same way. 67-wayland.sh's and 67-wayland-timing.sh's are estimates from their runs (Task
 # 1.10: on Weston 15 six runs and three Weston starts, on Weston 14 three runs; the launch case on
-# Weston 15 only), until a set measures them.
+# Weston 15 only), until a set measures them. 66-pad-power.sh's is an estimate from its runs (Task
+# 1.11b: four runs, about 3 s each to start and stop, and sixteen steps of about 1.5 s each, a 1 s
+# floor and a screen read), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -113,7 +115,7 @@ declare -A shard_seconds=(
     [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
-    [67-wayland.sh]=20 [67-wayland-timing.sh]=6
+    [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
     [70-chroma.sh]=3
 )
 

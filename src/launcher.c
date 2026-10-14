@@ -66,6 +66,7 @@ static void rebase_held_controls(void);
 static void test_pad_attach(void);
 static void test_pad_swap(void);
 static void test_pad_update(void);
+static void test_pad_power(void);
 static void test_pad_stop(void);
 static void test_app_update(void);
 static void test_pixel_size_update(void);
@@ -100,6 +101,9 @@ static void connect_gamepad(int device_index, bool open, bool raise_error);
 static void disconnect_gamepad(int id, bool disconnect, bool remove);
 static int gamepad_device_index(const Gamepad *gamepad);
 static void open_controller(Gamepad *gamepad, bool raise_error);
+static void log_pad_power(const char *what, const Gamepad *gamepad);
+static void gamepad_power_changed(SDL_JoystickID id, SDL_PowerState power_state, int percent);
+static void draw_pad_battery(void);
 static void cleanup(void);
 static void close_log(void);
 static void release_last(void);
@@ -261,6 +265,21 @@ static bool transparent_failed = false;             // No renderer could draw a 
 static bool recreate_wanted = false;                // window_follow_background() asked for a window of another kind
 
 COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
+
+// StreamFlex's power and connection values are SDL's own, so a pad's report is stored as it comes
+COMPILE_CHECK(padpower_error_is_sdls, (int) PADPOWER_ERROR == (int) SDL_POWERSTATE_ERROR);
+COMPILE_CHECK(padpower_unknown_is_sdls, (int) PADPOWER_UNKNOWN == (int) SDL_POWERSTATE_UNKNOWN);
+COMPILE_CHECK(padpower_on_battery_is_sdls, (int) PADPOWER_ON_BATTERY == (int) SDL_POWERSTATE_ON_BATTERY);
+COMPILE_CHECK(padpower_no_battery_is_sdls, (int) PADPOWER_NO_BATTERY == (int) SDL_POWERSTATE_NO_BATTERY);
+COMPILE_CHECK(padpower_charging_is_sdls, (int) PADPOWER_CHARGING == (int) SDL_POWERSTATE_CHARGING);
+COMPILE_CHECK(padpower_charged_is_sdls, (int) PADPOWER_CHARGED == (int) SDL_POWERSTATE_CHARGED);
+COMPILE_CHECK(padconn_invalid_is_sdls, (int) PADCONN_INVALID == (int) SDL_JOYSTICK_CONNECTION_INVALID);
+COMPILE_CHECK(padconn_unknown_is_sdls, (int) PADCONN_UNKNOWN == (int) SDL_JOYSTICK_CONNECTION_UNKNOWN);
+COMPILE_CHECK(padconn_wired_is_sdls, (int) PADCONN_WIRED == (int) SDL_JOYSTICK_CONNECTION_WIRED);
+COMPILE_CHECK(padconn_wireless_is_sdls, (int) PADCONN_WIRELESS == (int) SDL_JOYSTICK_CONNECTION_WIRELESS);
+
+static PadPowerLevel battery_shown = PADPOWER_HIDDEN;   // The glyph as last drawn, for the log
+static SDL_Rect battery_rect = { 0, 0, 0, 0 };
 
 
 // A function to initialize SDL
@@ -1779,6 +1798,69 @@ static void draw_checkerboard()
     }
 }
 
+// A function to draw the low-battery glyph for the lowest pad on its battery, from filled
+// rectangles (no texture: nothing to rebuild after a device loss): in the top corner opposite the
+// clock's alignment, at the clock's margin whether or not the clock is on, amber when low and red
+// when critical, nudged off a chroma key on Linux. The log says when it shows, changes level or
+// place, or hides.
+static void draw_pad_battery()
+{
+    PadPower powers[MAX_BATTERY_PADS];
+    int count = 0;
+    for (Gamepad *pad = gamepads; pad != NULL && count < MAX_BATTERY_PADS; pad = pad->next) {
+        if (pad->controller != NULL)
+            powers[count++] = pad->power;
+    }
+    int lowest = padpower_pick(powers, count);
+    PadPowerLevel level = lowest >= 0 ? powers[lowest].level : PADPOWER_HIDDEN;
+    if (level == PADPOWER_HIDDEN) {
+        if (battery_shown != PADPOWER_HIDDEN)
+            log_debug("Battery indicator: hidden");
+        battery_shown = PADPOWER_HIDDEN;
+        return;
+    }
+    int h = geo.screen_height / BATTERY_GLYPH_DIVISOR > BATTERY_GLYPH_MIN ? geo.screen_height / BATTERY_GLYPH_DIVISOR : BATTERY_GLYPH_MIN;
+    int w = 2 * h;
+    SDL_Rect rect = {
+        config.clock_alignment == ALIGNMENT_RIGHT ? eff.clock_margin : geo.screen_width - eff.clock_margin - w,
+        eff.clock_margin, w, h
+    };
+    if (level != battery_shown || rect.x != battery_rect.x || rect.y != battery_rect.y || rect.h != battery_rect.h)
+        log_debug("Battery indicator: shown, %s, %i%% at %i,%i %ix%i", level == PADPOWER_CRITICAL ? "critical" : "low",
+            powers[lowest].percent, rect.x, rect.y, rect.w, rect.h);
+    battery_shown = level;
+    battery_rect = rect;
+
+    unsigned char rgb[3];
+#ifdef _WIN32
+    padpower_color(level, NULL, rgb);   // Windows has no chroma key
+#else
+    const unsigned char key[3] = { config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b };
+    padpower_color(level, key, rgb);
+#endif
+    int t = h / 9 > 1 ? h / 9 : 1;
+    int nub = h / 6 > 2 ? h / 6 : 2;
+    int body = w - nub;
+    int inside = body - 4 * t;
+    int charge = level == PADPOWER_LOW ? inside / 2 : inside / 4;
+    SDL_Rect parts[6] = {
+        { rect.x, rect.y, body, t },                         // The edges
+        { rect.x, rect.y + h - t, body, t },
+        { rect.x, rect.y, t, h },
+        { rect.x + body - t, rect.y, t, h },
+        { rect.x + body, rect.y + h / 4, nub, h - 2 * (h / 4) },   // The terminal
+        { rect.x + 2 * t, rect.y + 2 * t, charge, h - 4 * t }      // The charge left
+    };
+    SDL_FRect drawn[6];
+    for (int i = 0; i < 6; i++)
+        drawn[i] = (SDL_FRect) { (float) parts[i].x, (float) parts[i].y, (float) parts[i].w, (float) parts[i].h };
+    Uint8 r, g, b, a;
+    SDL_GetRenderDrawColor(renderer, &r, &g, &b, &a);
+    SDL_SetRenderDrawColor(renderer, rgb[0], rgb[1], rgb[2], 0xFF);
+    SDL_RenderFillRects(renderer, drawn, 6);
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+}
+
 // A function to draw the launcher's scene: the background, its overlay, the scroll indicators,
 // the clock, the highlight and the visible buttons. The settings screen draws it into its preview
 // (preview true), where a transparent background shows as a checkerboard and an image being
@@ -1827,6 +1909,10 @@ void draw_scene(bool preview)
         if (clk->show_date)
             draw_texture(renderer, clk->date_texture, NULL, &clk->date_rect);
     }
+
+    // The low-battery glyph, in the top corner the clock leaves; never in the settings preview
+    if (!preview)
+        draw_pad_battery();
 
     // Draw highlight
     if (highlight != NULL)
@@ -2100,6 +2186,7 @@ static void init_gamepad(Gamepad **gamepad, int device_index)
     **gamepad = (Gamepad) {
         .id = (int) joystick_at(device_index),
         .controller = NULL,
+        .power = padpower_unknown(),
         .next = NULL,
         .previous = NULL,
     };
@@ -2127,10 +2214,50 @@ static void open_controller(Gamepad *gamepad, bool raise_error)
     }
     log_debug("Gamepad opened at device index %i, instance id %i", device_index,
         (int) SDL_GetJoystickID(SDL_GetGamepadJoystick(gamepad->controller)));
+    int percent = -1;
+    SDL_PowerState power_state = SDL_GetGamepadPowerInfo(gamepad->controller, &percent);
+    gamepad->power = (PadPower) {
+        .state = (PadPowerState) power_state,
+        .percent = percent,
+        .connection = (PadConnection) SDL_GetGamepadConnectionState(gamepad->controller),
+        .level = padpower_level((PadPowerState) power_state, percent, PADPOWER_HIDDEN)
+    };
+    log_pad_power("Gamepad power", gamepad);
     if (config.debug && raise_error) {
         char *mapping = SDL_GetGamepadMapping(gamepad->controller);
         log_debug("Gamepad Mapping:\n%s", mapping);
         SDL_free(mapping);
+    }
+}
+
+// A function to log a pad's power as StreamFlex holds it: WHAT is "Gamepad power" as it opens and
+// "Gamepad power changed" when a battery event changes it
+static void log_pad_power(const char *what, const Gamepad *gamepad)
+{
+    char percent[16];
+    if (gamepad->power.percent < 0)
+        snprintf(percent, sizeof(percent), "no percent");
+    else
+        snprintf(percent, sizeof(percent), "%i%%", gamepad->power.percent);
+    log_debug("%s: instance id %i, %s, %s, %s", what, (int) gamepad->id,
+        padpower_connection_name(gamepad->power.connection), padpower_state_name(gamepad->power.state), percent);
+}
+
+// A function to take a battery event for the pad its instance id names, with the state and percent
+// the event itself carries, never asked of SDL again (the harness's pushed event would prove nothing
+// otherwise, since its virtual pad reads unknown). A report that changes nothing is not logged.
+static void gamepad_power_changed(SDL_JoystickID id, SDL_PowerState power_state, int percent)
+{
+    for (Gamepad *pad = gamepads; pad != NULL; pad = pad->next) {
+        if ((SDL_JoystickID) pad->id != id)
+            continue;
+        if (pad->power.state == (PadPowerState) power_state && pad->power.percent == percent)
+            return;
+        pad->power.state = (PadPowerState) power_state;
+        pad->power.percent = percent;
+        pad->power.level = padpower_level(pad->power.state, percent, pad->power.level);
+        log_pad_power("Gamepad power changed", pad);
+        return;
     }
 }
 
@@ -2194,6 +2321,7 @@ static void disconnect_gamepad(int id, bool disconnect, bool remove)
             }
             else {
                 i->controller = NULL;
+                i->power = padpower_unknown();
                 i = i->next;
             }
         }
@@ -2300,6 +2428,67 @@ static void test_pad_plug()
     }
 }
 
+// A function only the headless harness builds: with STREAMFLEX_TEST_PAD_POWER set, it reads the file
+// that names once a frame and, each time its line changes, pushes the battery event a real pad sends,
+// with the line's state and percent: "<state> <percent>" (battery 40, charging 80, unknown -1), the
+// state one of unknown, battery, none, charging, charged or error, for the first pad StreamFlex holds,
+// or with A or B in front for the first or the second. The handler reads the event as it reads SDL's.
+static void test_pad_power()
+{
+    static char last[64] = "";
+    static const struct { const char *name; SDL_PowerState state; } states[] = {
+        { "unknown", SDL_POWERSTATE_UNKNOWN }, { "battery", SDL_POWERSTATE_ON_BATTERY },
+        { "none", SDL_POWERSTATE_NO_BATTERY }, { "charging", SDL_POWERSTATE_CHARGING },
+        { "charged", SDL_POWERSTATE_CHARGED }, { "error", SDL_POWERSTATE_ERROR }
+    };
+    const char *path = getenv("STREAMFLEX_TEST_PAD_POWER");
+    if (path == NULL || !gamepad_on)
+        return;
+    char *text = fileio_read_all(path, NULL);
+    char line[64];
+    snprintf(line, sizeof(line), "%s", text != NULL ? text : "");
+    alloc_free(text);
+    line[strcspn(line, "\r\n")] = '\0';
+    if (strcmp(line, last) == 0)
+        return;
+    snprintf(last, sizeof(last), "%s", line);
+    if (line[0] == '\0')
+        return;
+    char letter = 'A';
+    const char *rest = line;
+    if ((line[0] == 'A' || line[0] == 'B') && line[1] == ' ') {
+        letter = line[0];
+        rest = line + 2;
+    }
+    const char *space = strchr(rest, ' ');
+    size_t length = space != NULL ? (size_t) (space - rest) : 0;
+    char *end = NULL;
+    long percent = space != NULL ? strtol(space + 1, &end, 10) : 0;
+    size_t s = 0;
+    while (s < SDL_arraysize(states) && !(strlen(states[s].name) == length && strncmp(states[s].name, rest, length) == 0))
+        s++;
+    if (space == NULL || end == space + 1 || *end != '\0' || s == SDL_arraysize(states)) {
+        log_error("Test hook: the power file's line '%s' is not '[A|B] <state> <percent>'", line);
+        return;
+    }
+    Gamepad *pad = gamepads;
+    if (letter == 'B' && pad != NULL)
+        pad = pad->next;
+    if (pad == NULL) {
+        log_error("Test hook: no pad %c for the power file's line '%s'", letter, line);
+        return;
+    }
+    SDL_Event battery;
+    SDL_zero(battery);
+    battery.type = SDL_EVENT_JOYSTICK_BATTERY_UPDATED;
+    battery.jbattery.which = (SDL_JoystickID) pad->id;
+    battery.jbattery.state = states[s].state;
+    battery.jbattery.percent = (int) percent;
+    log_debug("Test hook: pad %c's power is %s %i", letter, states[s].name, (int) percent);
+    if (!SDL_PushEvent(&battery))
+        log_error("Test hook: the battery event was not pushed\n%s", SDL_GetError());
+}
+
 // A function only the headless harness builds, since it has no gamepad: with STREAMFLEX_TEST_PAD
 // set, it attaches a virtual one while the gamepad runs, and holds a button while the file that
 // names exists: the one STREAMFLEX_TEST_PAD_BUTTON names (SDL's name for it, "b"), else Start. A name
@@ -2310,6 +2499,7 @@ static void test_pad_update()
 {
     test_pad_swap();
     test_pad_plug();
+    test_pad_power();
     const char *held = getenv("STREAMFLEX_TEST_PAD");
     if (held == NULL || !gamepad_on)
         return;
@@ -3443,6 +3633,10 @@ int main(int argc, char *argv[])
                     log_debug("Gamepad disconnected");
                     disconnect_gamepad((int) event.jdevice.which, true, true);
                     settings_pads_changed();
+                    break;
+
+                case SDL_EVENT_JOYSTICK_BATTERY_UPDATED:
+                    gamepad_power_changed(event.jbattery.which, event.jbattery.state, event.jbattery.percent);
                     break;
 
                 case SDL_EVENT_WINDOW_FOCUS_LOST:

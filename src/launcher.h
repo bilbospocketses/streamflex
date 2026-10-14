@@ -1,5 +1,6 @@
 #include "layout.h"
 #include "derive.h"
+#include "padpower.h"
 
 // Launcher parameters
 #define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
@@ -12,6 +13,9 @@
 #define SCREENSAVER_TRANSITION_TIME DERIVE_SCREENSAVER_DIM_MS
 #define APPLICATION_WAIT_PERIOD 100
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
+#define BATTERY_GLYPH_DIVISOR 60   // The battery glyph is 1/60 of the screen tall (18 px at 1080), twice that wide
+#define BATTERY_GLYPH_MIN 9        // ...and never under 9 px tall
+#define MAX_BATTERY_PADS 16        // The pads the glyph looks at, in the order they connected
 
 // SDL3's SDL_GetTicks() counts milliseconds in 64 bits; StreamFlex keeps SDL2's 32-bit count, which
 // every tick field and every "now - then" below is written for (each difference survives the wrap at
@@ -148,6 +152,7 @@ typedef struct menu {
 typedef struct gamepad {
     SDL_Gamepad *controller;
     int id;                          // The instance id; its device index is looked up when it opens
+    PadPower power;                  // Its battery, read as it opens, then from each battery event
     struct gamepad *previous;
     struct gamepad *next;
 } Gamepad;
