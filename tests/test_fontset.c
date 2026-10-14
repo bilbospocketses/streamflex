@@ -502,6 +502,21 @@ static void test_log_levels(void)
     CHECK_INT(lines_at(LOGLEVEL_ERROR, ""), 1);
 }
 
+#ifdef _WIN32
+// A function to test that Windows' SDL, built from vcpkg-overlays/sdl3, carries upstream's 57f22e6e43:
+// SDL_StepUTF8() reads a four-byte sequence whole, U+20000 and VS17 (U+E0100), four bytes each. An SDL
+// without it reads U+FFFD a byte at a time, and U+C0100.
+static void test_step_utf8(void)
+{
+    const char *text = "\xF0\xA0\x80\x80" "\xF3\xA0\x84\x80";
+    size_t left = 8;
+    CHECK_INT((int) SDL_StepUTF8(&text, &left), 0x20000);
+    CHECK_INT((int) left, 4);
+    CHECK_INT((int) SDL_StepUTF8(&text, &left), 0xE0100);
+    CHECK_INT((int) left, 0);
+}
+#endif
+
 int main(void)
 {
     if (!TTF_Init()) {
@@ -525,6 +540,9 @@ int main(void)
     test_not_a_file();
     test_four_bytes();
     test_log_levels();
+#ifdef _WIN32
+    test_step_utf8();
+#endif
     TTF_Quit();
     SDL_Quit();
     return check_report();

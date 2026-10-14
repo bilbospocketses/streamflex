@@ -6,6 +6,11 @@ vcpkg_from_github(
     HEAD_REF main
     PATCHES
         fix-freebsd.patch
+        # StreamFlex: SDL_StepUTF8() reads a four-byte sequence's second byte whole, so U+20000 and VS17
+        # (U+E0100) read right. Upstream's 57f22e6e43 (libsdl-org/SDL#16464, 2026-10-08), its one hunk
+        # in src/stdlib/SDL_string.c; tests/test_fontset.c checks it on Windows. Dropped when an SDL
+        # release carries it
+        fix-step-utf8.patch
 )
 
 # StreamFlex: a transparent window's Vulkan swapchain asks for premultiplied alpha when the surface
