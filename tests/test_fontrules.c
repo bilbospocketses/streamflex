@@ -59,9 +59,9 @@ static void test_skip_ranges(void)
     CHECK(fontrules_skip(0xFFF8));
     CHECK(fontrules_skip(0x1BCA0));   // The shorthand format controls
     CHECK(fontrules_skip(0x1BCA3));
-    CHECK(fontrules_skip(0x1D173));   // The musical symbols' beams and phrases
+    CHECK(fontrules_skip(0x1D173));   // The musical symbols' beams, ties, slurs and phrases
     CHECK(fontrules_skip(0x1D17A));
-    CHECK(fontrules_skip(0xE0000));   // The tags, through the end of the supplement's block
+    CHECK(fontrules_skip(0xE0000));   // The tags, the selectors supplement, and the reserved code points after it
     CHECK(fontrules_skip(0xE0FFF));
     CHECK(!fontrules_skip(0x200A));   // The hair space, before ZWSP
     CHECK(!fontrules_skip(0x2010));   // The hyphen, after the right-to-left mark
@@ -93,6 +93,18 @@ static void test_blank_edges(void)
     CHECK(fontrules_blank(0x205F));   // The medium mathematical space
     CHECK(!fontrules_blank(0x1680));  // The Ogham space mark, a stroke
     CHECK(!fontrules_blank(0x3001));  // The ideographic comma
+}
+
+// A function to test that no code point is both skipped and blank: a skipped space is never looked up,
+// so the blank rule never reaches it and a primary that lacks it draws a box
+static void test_skip_blank_apart(void)
+{
+    int overlaps = 0;
+    for (uint32_t code_point = 0; code_point <= 0x10FFFF; code_point++) {
+        if (fontrules_skip(code_point) && fontrules_blank(code_point))
+            overlaps++;
+    }
+    CHECK_INT(overlaps, 0);
 }
 
 // A function to test where a provider goes among a set's fallbacks, kept in candidate order
@@ -130,6 +142,7 @@ int main(void)
     test_skip_ranges();
     test_blank();
     test_blank_edges();
+    test_skip_blank_apart();
     test_insert_order();
     test_face_text();
     return check_report();
