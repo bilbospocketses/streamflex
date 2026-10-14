@@ -105,6 +105,38 @@ static void test_renderer_line(void)
     CHECK_STR(line, "Renderer: vulk (vulkan was unavailable)");
 }
 
+// A function to test the Transparent window's place: the display's own top-left corner, its full
+// width, and one pixel row short of its height, on the first display and on one left of it and lower
+static void test_window_short_rect(void)
+{
+    WindowRect rect = window_short_rect((WindowRect) { 0, 0, 3840, 2160 });
+    CHECK_INT(rect.x, 0);
+    CHECK_INT(rect.y, 0);
+    CHECK_INT(rect.w, 3840);
+    CHECK_INT(rect.h, 2159);
+    rect = window_short_rect((WindowRect) { -1920, 120, 1920, 1080 });
+    CHECK_INT(rect.x, -1920);
+    CHECK_INT(rect.y, 120);
+    CHECK_INT(rect.w, 1920);
+    CHECK_INT(rect.h, 1079);
+}
+
+// A function to test when a window gives way to one of another kind: only when the kinds differ, and
+// never to a Transparent window again once no renderer could draw one, while leaving Transparent
+// always goes ahead. On Linux every background plans a fullscreen window, so nothing ever changes.
+static void test_window_must_change(void)
+{
+    CHECK(!window_must_change(WINDOW_FULLSCREEN, WINDOW_FULLSCREEN, false));
+    CHECK(!window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_TRANSPARENT_SHORT, false));
+    CHECK(window_must_change(WINDOW_FULLSCREEN, WINDOW_TRANSPARENT_SHORT, false));
+    CHECK(window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_FULLSCREEN, false));
+    CHECK(!window_must_change(WINDOW_FULLSCREEN, WINDOW_TRANSPARENT_SHORT, true));
+    CHECK(window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_FULLSCREEN, true));
+    for (int background = BG_COLOR; background <= BG_TRANSPARENT; background++)
+        CHECK(!window_must_change(WINDOW_FULLSCREEN, window_plan(background, false, NULL).kind, false));
+    CHECK(window_must_change(WINDOW_FULLSCREEN, window_plan(BG_TRANSPARENT, true, NULL).kind, false));
+}
+
 int main(void)
 {
     test_transparent_on_windows();
@@ -113,5 +145,7 @@ int main(void)
     test_override_takes_only_the_list();
     test_override_outside_the_transparent_list();
     test_renderer_line();
+    test_window_short_rect();
+    test_window_must_change();
     return check_report();
 }

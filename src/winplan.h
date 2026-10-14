@@ -28,6 +28,19 @@ typedef struct {
 
 // background: the ModeBackground wanted; windows: built for Windows; render_driver_env: SDL_getenv("SDL_RENDER_DRIVER"), NULL or "" for unset
 WindowPlan window_plan(int background, bool windows, const char *render_driver_env);
+
+// A rectangle in a display's coordinates (pixels on Windows, where StreamFlex is per-monitor v2 aware)
+typedef struct { int x, y, w, h; } WindowRect;
+
+// The Transparent window's place: the display's top-left corner and one pixel row short of its bounds.
+// A window that exactly covers the display is promoted to independent flip, which skips the
+// compositor and with it the window's alpha (spec section 3, the spike).
+WindowRect window_short_rect(WindowRect display);
+
+// Whether the window in force (`now`) must give way to one of the kind a background wants: only when
+// the kinds differ, and never to a Transparent window again once no renderer could draw one
+// (`transparent_failed`, cleared when another Mode is chosen)
+bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_failed);
 // The log's Renderer: line for the renderer SDL chose from render_list (NULL: SDL_RENDER_DRIVER chose);
 // chosen must not be NULL: it is SDL_GetRendererName's result for a valid renderer
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size);

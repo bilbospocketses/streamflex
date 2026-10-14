@@ -70,6 +70,20 @@ WindowPlan window_plan(int background, bool windows, const char *render_driver_e
     return plan;
 }
 
+// A function to place the Transparent window on its display: the top-left corner, one row short
+WindowRect window_short_rect(WindowRect display)
+{
+    return (WindowRect) { display.x, display.y, display.w, display.h - 1 };
+}
+
+// A function to tell whether the window in force must give way to one of another kind
+bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_failed)
+{
+    if (wanted == WINDOW_TRANSPARENT_SHORT && transparent_failed)
+        wanted = WINDOW_FULLSCREEN;
+    return wanted != now;
+}
+
 // A function to word the log's Renderer: line: the renderer SDL chose, and the list's first entry
 // named as unavailable when it was not that one, or SDL_RENDER_DRIVER named when it chose (no list)
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size)

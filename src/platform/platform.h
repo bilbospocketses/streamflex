@@ -44,5 +44,7 @@ bool take_foreground(void);     // A restart's fresh copy: true when its window 
 void make_window_transparent(void);
 void make_window_opaque(void);
 void hide_cursor(Entry* entry);
+void taskbar_mark_fullscreen(SDL_Window *window, bool mark);   // ITaskbarList2::MarkFullscreenWindow on the window's HWND
+void taskbar_release(void);                                    // At quit: the taskbar's list, and COM if it was started for it
 const char *dpi_awareness(void);   // How Windows scales this process's windows, as the manifest set it
 #endif

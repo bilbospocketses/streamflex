@@ -1,3 +1,4 @@
+#define COBJMACROS   // ITaskbarList2_HrInit() and the rest, in C
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +6,7 @@
 #include <windows.h>
 #include <psapi.h>
 #include <powrprof.h>
+#include <shobjidl.h>
 #include <SDL3/SDL.h>
 #include "../launcher.h"
 #include <launcher_config.h>
@@ -37,6 +39,8 @@ static wchar_t self_line[32768];   // Its command line, which CreateProcessW may
 static PROCESS_INFORMATION fresh;  // The fresh copy a restart made, waiting until this one is torn down
 static HWND window_hwnd = NULL;    // The window's native handle: read when the window is made, and again after a
                                    // new renderer (OpenGL's replaces the native window) or a recreation
+static ITaskbarList2 *taskbar = NULL;   // The taskbar's list, made at the first mark and kept for the window's life
+static bool com_started = false;        // CoInitializeEx() succeeded here, so taskbar_release() ends COM
 
 
 // A function to determine if a file exists on the filesystem
@@ -152,6 +156,59 @@ void hide_cursor(Entry *entry)
     SetCursorPos(entry->icon_rect.x + entry->icon_rect.w / 2,
         entry->icon_rect.y + entry->icon_rect.h / 2
     );
+}
+
+// A function to tell the taskbar whether a window covers the screen. A Transparent window is one row
+// short of its display, which keeps it out of independent flip, so Windows does not count it as
+// fullscreen and would draw the taskbar over icons and titles; marked, the taskbar stays behind it.
+// The taskbar's list is made at the first mark, on the main thread with COM started there, and kept
+// for the window's life; the HWND comes from the window itself, since OpenGL may have replaced it.
+// An opaque window is never marked, so a session that never goes Transparent never starts COM. A
+// failure is logged, and the window stays unmarked.
+void taskbar_mark_fullscreen(SDL_Window *window, bool mark)
+{
+    if (taskbar == NULL && !mark)
+        return;
+    HRESULT hr = S_OK;
+    if (taskbar == NULL) {
+        // S_OK or S_FALSE: started here, to be ended at quit. RPC_E_CHANGED_MODE: SDL started COM in
+        // another mode, which serves as well and is SDL's to end.
+        com_started = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
+        ITaskbarList2 *made = NULL;
+        hr = CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, &IID_ITaskbarList2, (void **) &made);
+        if (SUCCEEDED(hr)) {
+            hr = ITaskbarList2_HrInit(made);
+            if (FAILED(hr))
+                ITaskbarList2_Release(made);
+        }
+        if (FAILED(hr)) {
+            log_error("Video: the taskbar cannot be told the window covers the screen (error 0x%08lX)", (unsigned long) hr);
+            if (com_started)
+                CoUninitialize();
+            com_started = false;
+            return;
+        }
+        taskbar = made;
+    }
+    HWND hwnd = hwnd_of(window);   // Task 1.2a's property read
+    hr = hwnd != NULL ? ITaskbarList2_MarkFullscreenWindow(taskbar, hwnd, mark ? TRUE : FALSE) : E_HANDLE;
+    if (FAILED(hr))
+        log_error("Video: the taskbar cannot be told the window covers the screen (error 0x%08lX)", (unsigned long) hr);
+    else if (mark)
+        log_debug("Video: the taskbar knows the window covers the screen");
+    else
+        log_debug("Video: the taskbar knows the window no longer covers the screen");
+}
+
+// A function to let go of the taskbar's list at quit, and of COM when it was started for it
+void taskbar_release(void)
+{
+    if (taskbar != NULL)
+        ITaskbarList2_Release(taskbar);
+    taskbar = NULL;
+    if (com_started)
+        CoUninitialize();
+    com_started = false;
 }
 
 // A function to launch an application. The command is UTF-8, as every string from the config is,
@@ -470,8 +527,8 @@ void register_exit_hotkey()
 // goes from the old handle to the new one; a refusal on the new one is kept as at startup. The old
 // handle is the one kept here: the old window may hold the new one now. Nothing happens when the
 // handle is the same; at startup there is no old handle, and register_exit_hotkey() registers on the
-// new one itself. Whatever else follows a new handle goes after the block below, so it runs for every
-// new handle, startup's included.
+// new one itself. The taskbar mark follows the block below, so it runs for every new handle, startup's
+// included; a handle that is the same keeps the mark it has.
 void platform_window_changed(SDL_Window *old_window, SDL_Window *new_window)
 {
     UNUSED(old_window);
@@ -487,6 +544,8 @@ void platform_window_changed(SDL_Window *old_window, SDL_Window *new_window)
         }
         log_debug("Video: the window has a new handle%s", exit_hotkey ? "; the exit hotkey moved to it" : "");
     }
+    // Every new HWND of a Transparent window is marked, at startup too; an opaque one never is
+    taskbar_mark_fullscreen(new_window, (SDL_GetWindowFlags(new_window) & SDL_WINDOW_TRANSPARENT) != 0);
 }
 
 // A function to try the exit hotkey Windows refused again, every DERIVE_EXIT_RETRY_MS or `at_once`
