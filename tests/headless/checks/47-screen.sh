@@ -19,11 +19,11 @@ sed 's/^/      /' "$out/f47-same.txt"
 # A change of the window's pixel size runs the one reload, geometry first (spec section 6). Whether
 # SDL3's X11 driver reports a resize of a fullscreen window with no window manager is unverified, so
 # s47_resize tries SDL's own event first; when its line does not come within wait_line's bound it puts
-# the window back and has the test hook (STREAMFLEX_TEST_PIXEL_SIZE's file, S47_SIZE) force the size, which
-# proves the reload but not SDL's event. The first run decides, and s47.path keeps which path every
-# later run takes; each run's own NAME.path says which it took. The 3 s launch timeout's case, the one
-# timing-sensitive case, is in 47-screen-timing.sh. Every wait here ends on a log line or on the screen
-# showing what it waits for, within a bound.
+# the window back and has the test hook (STREAMFLEX_TEST_PIXEL_SIZE's file, S47_SIZE) force the size,
+# which proves the reload but not SDL's event. The first run decides, and s47.path keeps which path
+# every later run takes; each run's own NAME.path says which it took. The case of the 3 s launch
+# timeout, which a loaded box could change, is in 47-screen-timing.sh. Every wait here ends on a log
+# line or on the screen showing what it waits for, within a bound.
 S47_SIZE=/tmp/s47-size S47_APP=/tmp/s47-app
 S47_ARROW=$(printf ' \xE2\x80\xBA ')
 rm -f "$out/s47.path"
