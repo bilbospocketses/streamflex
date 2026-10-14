@@ -30,10 +30,10 @@ void fontset_prepare(FontSet *set, const char *text);   // Attach a provider for
 TTF_Font *fontset_font(FontSet *set);                    // The primary, fallbacks attached; NULL for no set
 bool fontset_resize(FontSet *set, float size);          // Fallbacks first, then the primary; a set that fails is closed by its caller
 void fontset_close(FontSet *set);                       // The font first, then the fallbacks (#549)
-void fontset_quit(void);                                // Before TTF_Quit: the probes, the candidate list, FcFini()
+void fontset_quit(void);                                // Before TTF_Quit: the probes, the candidate list
 
 const FontCandidate *fontset_candidates(int *count);   // fontcand.c: built once, logged once
-void fontset_candidates_free(void);                    // fontcand.c: the list, and FcFini() on Linux
+void fontset_candidates_free(void);                    // fontcand.c: the list, and fontconfig's sort on Linux
 
 // The close every font of a set goes through: TTF_CloseFont, unless tests/test_fontset.c records the order
 extern void (SDLCALL *fontset_close_font)(TTF_Font *font);

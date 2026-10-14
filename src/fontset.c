@@ -454,8 +454,8 @@ void fontset_close(FontSet *set)
 }
 
 // A function to let go, before TTF_Quit and once every set is closed, of what the session kept: the
-// probes, what was learned of each candidate, and the list itself, whose free calls FcFini() on Linux.
-// The log says what went, as LeakSanitizer cannot see what a static still points to.
+// probes, what was learned of each candidate, and the list itself. The log says what went, as
+// LeakSanitizer cannot see what a static still points to.
 void fontset_quit(void)
 {
     int probes = 0;

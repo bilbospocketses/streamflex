@@ -30,7 +30,6 @@ static int capacity = 0;
 static bool built = false;
 #ifndef _WIN32
 static FcFontSet *sorted = NULL;       // Holds the character sets the candidates point to, until they are let go
-static bool fontconfig_used = false;
 #endif
 
 // A function to add a candidate; false when out of memory (it is then left out)
@@ -149,7 +148,6 @@ static bool charset_covers(const FontCandidate *candidate, Uint32 ch)
 // and its named instances follow it in the sort, the Regular one first. Returns how many it added.
 static int add_fontconfig(void)
 {
-    fontconfig_used = true;
     FcPattern *pattern = FcNameParse((const FcChar8 *) "sans-serif:style=Regular");
     if (pattern == NULL)
         return 0;
@@ -202,8 +200,7 @@ const FontCandidate *fontset_candidates(int *found)
     return list;
 }
 
-// A function to let go of the candidates (fontset_quit()), and on Linux of fontconfig's caches, so the
-// LeakSanitizer leg sees none: only once fontconfig was used, as nothing else in StreamFlex starts it
+// A function to let go of the candidates (fontset_quit()), and on Linux of fontconfig's sort
 void fontset_candidates_free(void)
 {
     for (int i = 0; i < count; i++)
@@ -217,8 +214,6 @@ void fontset_candidates_free(void)
     if (sorted != NULL)
         FcFontSetDestroy(sorted);
     sorted = NULL;
-    if (fontconfig_used)
-        FcFini();
-    fontconfig_used = false;
+    // fontconfig is left to process exit: FcFini() is process-wide, and GNOME Wayland's libdecor-gtk (pango) may hold it
 #endif
 }

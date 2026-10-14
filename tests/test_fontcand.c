@@ -112,8 +112,7 @@ static void test_registry_locale(void)
 }
 #else
 // A function to test fontconfig's sort over the bundled fonts: all seven, each with fontconfig's
-// character set and face 0, then the bundled DejaVu Sans again with none; FcFini() at the end leaves
-// LeakSanitizer no fontconfig cache
+// character set and face 0, then the bundled DejaVu Sans again with none
 static void test_fontconfig(void)
 {
     int count = 0;
