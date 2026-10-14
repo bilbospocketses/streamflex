@@ -80,8 +80,13 @@ f66_none_between() {
     ' "$1"
 }
 
-# The steps, as +keys (see run_keys)
-f66_none()     { f66_look "$1" none "$f66_at" "$F66_BLACK"; }
+# The steps, as +keys (see run_keys). The first reads the screen a second after the loop begins, so
+# a window not yet drawn, black too, cannot pass for one drawn with no glyph.
+f66_none() {
+    wait_line 'Begin program loop' "$2" || { echo "none no" >> "$out/$1.seen"; return; }
+    sleep 1
+    f66_look "$1" none "$f66_at" "$F66_BLACK"
+}
 f66_low()      { f66_step "$1" "$2" low 'battery 40' "$F66_AMBER"; }
 f66_critical() { f66_step "$1" "$2" critical 'battery 10' "$F66_RED"; }
 f66_full()     { f66_step "$1" "$2" full 'battery 100' "$F66_BLACK"; }
@@ -177,8 +182,13 @@ grep -qx 'Battery indicator: shown, low, 40% at 54,54 36x18' "$out/f66-right.log
 result "battery: with the clock on the right the glyph takes the top left corner (exit $(cat "$out/f66-right.code"))" $ok
 
 # Settings open over a shown glyph: with no render targets the scene fills the screen behind the
-# settings (a test hook), drawn as the preview is, and the glyph's place there stays black
-f66_preview() { wait_line 'Settings opened over menu' "$2"; sleep 1; f66_look "$1" preview "$f66_at" "$F66_BLACK"; }
+# settings (a test hook), drawn as the preview is, and the glyph's place there stays black. Settings
+# that never opened read "no": a Menu key that quit would leave a black screen too.
+f66_preview() {
+    wait_line 'Settings opened over menu' "$2" || { echo "preview no" >> "$out/$1.seen"; return; }
+    sleep 1
+    f66_look "$1" preview "$f66_at" "$F66_BLACK"
+}
 rm -f /tmp/f66-power
 f66_at=1830
 STREAMFLEX_TEST_PAD=/tmp/pad-none STREAMFLEX_TEST_PAD_POWER=/tmp/f66-power STREAMFLEX_TEST_NO_RENDER_TARGETS=1 \
