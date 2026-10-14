@@ -134,9 +134,14 @@ grep -E '^Fonts:|^Settings (opened|closed)' "$log" | sed 's/^/      /'
 
 # A save that fails names a CJK folder: its message is the one wrapped paragraph on show (measured to
 # fit, then drawn), and nothing else in the note font has a CJK character, so the note font's fallback
-# comes from the paragraph alone. The keys go to All menus, step Columns up and back out, saving.
-f72_dir=$TESTER_HOME/cfg/游戏
-rm -rf "$f72_dir"
+# comes from the paragraph alone. The keys go to All menus, step Columns up and back out, saving. The
+# folder is as deep as 50-settings.sh's f50-longpath's, so the message is cut in the middle to fit, and
+# the cut is logged after the paragraph's first measure and before it is drawn: its fallback must come
+# first, from the measure itself, or the height reserved for it was measured on the font's boxes. The
+# cut keeps the message's start, 游戏 with it, and the log's line buffer cuts the long failure line.
+f72_w=$(printf '%230s' '' | tr ' ' W)
+f72_dir=$TESTER_HOME/cfg/游戏/$f72_w/$f72_w/$f72_w/$f72_w
+rm -rf "$TESTER_HOME/cfg/游戏"
 mkdir -p "$f72_dir"
 cp "$FX/f72-settings.ini" "$f72_dir/f72-settings.ini"
 chown -R tester:tester "$TESTER_HOME/cfg"
@@ -146,8 +151,9 @@ FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf CFG=$f72_dir/f72-settings.ini \
 log=$out/f72-savefail.log
 ok=1
 cmp -s "$FX/f72-settings.ini" "$f72_dir/f72-settings.ini" \
-    && grep -qF "Couldn't save to $f72_dir/f72-settings.ini: permission denied" "$log" \
+    && grep -qF "Couldn't save to $TESTER_HOME/cfg/游戏/WWW" "$log" \
     && [ "$(grep -cxF "Fonts: the 21 pt settings notes fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+6E38" "$log")" = 1 ] \
+    && precedes "$log" 'Fonts: the 21 pt settings notes fall back to ' 'Settings: the note was cut in the middle to fit the column' \
     && grep -q 'Settings: leaving without saving' "$log" && ran_clean f72-savefail && ok=0
 result "fallback fonts: a failed save's wrapped message falls back for its CJK folder name (exit $(cat "$out/f72-savefail.code"))" $ok
 grep -E "^Fonts:|Couldn't save" "$log" | sed 's/^/      /'
