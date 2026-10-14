@@ -42,9 +42,9 @@ WindowRect window_short_rect(WindowRect display);
 // (`transparent_failed`, cleared when another Mode is chosen)
 bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_failed);
 
-// SDL_RenderPresent's failures in a row on a Transparent window that make a lost device: the Vulkan
-// fix fails a swapchain the surface cannot give alpha whenever it is rebuilt (a resize, a VSync
-// toggle, another display), and then every present fails with no render event (spec section 3)
+// Failed presents in a row on a Transparent window that make a lost device: the Vulkan fix fails a
+// swapchain the surface cannot give alpha whenever it is rebuilt (a resize, a VSync toggle, another
+// display), and then every frame fails with no render event (spec section 3)
 #define PRESENT_FAILURES_LOST 3
 
 // Counts one present into *failures; true once PRESENT_FAILURES_LOST in a row have failed on a

@@ -1899,12 +1899,17 @@ void present_frame()
     }
     test_present_start_ns = SDL_GetTicksNS();
 #endif
-    static int present_failures = 0;   // SDL_RenderPresent's failures in a row on a Transparent window
-    bool presented = SDL_RenderPresent(renderer);
+    static int present_failures = 0;   // Presents in a row that failed on a Transparent window
+    // SDL_RenderPresent() returns true whatever its renderer did (SDL_render.c, 3.2 to 3.4), so a
+    // Transparent window's draws are flushed first: a Vulkan swapchain that cannot be rebuilt fails the
+    // flush (VULKAN_RunCommandQueue) in every frame. Every other window presents as before.
+    bool transparent = window_kind == WINDOW_TRANSPARENT_SHORT;
+    bool presented = !transparent || SDL_FlushRenderer(renderer);
+    presented = SDL_RenderPresent(renderer) && presented;
 
     // Three in a row on a Transparent window are handled as SDL_EVENT_RENDER_DEVICE_LOST, which SDL
     // never sends for them: the next drain makes a new renderer from the Transparent list
-    if (present_failed_lost(&present_failures, presented, window_kind == WINDOW_TRANSPARENT_SHORT)) {
+    if (present_failed_lost(&present_failures, presented, transparent)) {
         log_error("Renderer: %i presents in a row failed on the transparent window\n%s", PRESENT_FAILURES_LOST, SDL_GetError());
         SDL_Event lost;
         SDL_zero(lost);
