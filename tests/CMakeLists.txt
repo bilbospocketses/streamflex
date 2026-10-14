@@ -220,3 +220,13 @@ add_test(NAME iconload COMMAND test_iconload)
 add_executable(test_fontrules test_fontrules.c "${PROJECT_SOURCE_DIR}/src/fontrules.c")
 target_include_directories(test_fontrules PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME fontrules COMMAND test_fontrules)
+
+# Unit test 7's real half: font sets over SDL_ttf and the bundled fonts. The test stands in for
+# fontcand.c's candidates and for the launcher's log, so no system font is read
+add_executable(test_fontset test_fontset.c "${PROJECT_SOURCE_DIR}/src/fontset.c" "${PROJECT_SOURCE_DIR}/src/fontrules.c"
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_fontset PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_fontset PRIVATE FONTSET_TEST_FONTS="${PROJECT_SOURCE_DIR}/assets/fonts")
+target_link_libraries(test_fontset SDL3_ttf::SDL3_ttf SDL3::SDL3)
+link_fileio(test_fontset)
+add_test(NAME fontset COMMAND test_fontset)
