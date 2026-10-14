@@ -98,3 +98,49 @@ grep -q 'Test hook: the step down to [0-9]* pt fails' "$log" && ! grep -q 'px wi
     && ran_clean f72-shrinkfail && ok=0
 result "fallback fonts: a failed step down closes the scratch set and still cuts the title to fit (exit $(cat "$out/f72-shrinkfail.code"))" $ok
 grep -E 'Test hook|px wide, over its' "$log" | sed 's/^/      /'
+
+# The settings screen: its fonts are sets too. The Menus list's widths are measured when settings
+# open, so the CJK menu name gives the 30 pt row font (2.8 % of 1080) its fallback there
+FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf UNTIL='Settings opened over menu' run_keys f72-settings Menu
+log=$out/f72-settings.log
+ok=1
+[ "$(grep -cxF "Fonts: the 30 pt settings rows fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+6E38" "$log")" = 1 ] \
+    && ran_clean f72-settings && ok=0
+result "fallback fonts: a CJK menu name falls back on the settings screen (exit $(cat "$out/f72-settings.code"))" $ok
+grep '^Fonts:' "$log" | sed 's/^/      /'
+
+# Settings opened over the CJK menu itself, closed, and opened again: the caption under the preview
+# names the menu in the 21 pt note font (2 % of 1080), so that set falls back too. Each opening opens
+# its sets afresh, their fallbacks attached again, and closing closes them: in the leak pass a set
+# the first opening left open fails this run.
+FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf CFG=$FX/f72-settings.ini UNTIL="Settings opened over menu '游戏'" \
+    run_keys f72-reopen Return Menu Menu Menu
+log=$out/f72-reopen.log
+ok=1
+[ "$(grep -cxF "Settings opened over menu '游戏'" "$log")" = 2 ] \
+    && [ "$(grep -cxF "Fonts: the 30 pt settings rows fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+6E38" "$log")" = 2 ] \
+    && [ "$(grep -cxF "Fonts: the 21 pt settings notes fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+6E38" "$log")" = 2 ] \
+    && in_range "$log" 'Settings closed' "Settings opened over menu '游戏'" 'Fonts: the 30 pt settings rows fall back to ' \
+    && ran_clean f72-reopen && ok=0
+result "fallback fonts: settings over a CJK menu fall back in the rows and the notes, again when opened again (exit $(cat "$out/f72-reopen.code"))" $ok
+grep -E '^Fonts:|^Settings (opened|closed)' "$log" | sed 's/^/      /'
+
+# A save that fails names a CJK folder: its message is the one wrapped paragraph on show (measured to
+# fit, then drawn), and nothing else in the note font has a CJK character, so the note font's fallback
+# comes from the paragraph alone. The keys go to All menus, step Columns up and back out, saving.
+f72_dir=$TESTER_HOME/cfg/游戏
+rm -rf "$f72_dir"
+mkdir -p "$f72_dir"
+cp "$FX/f72-settings.ini" "$f72_dir/f72-settings.ini"
+chown -R tester:tester "$TESTER_HOME/cfg"
+chmod 444 "$f72_dir/f72-settings.ini"
+FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf CFG=$f72_dir/f72-settings.ini \
+    run_keys f72-savefail Menu Down Down Return Return Down Right BackSpace BackSpace BackSpace Down Return
+log=$out/f72-savefail.log
+ok=1
+cmp -s "$FX/f72-settings.ini" "$f72_dir/f72-settings.ini" \
+    && grep -qF "Couldn't save to $f72_dir/f72-settings.ini: permission denied" "$log" \
+    && [ "$(grep -cxF "Fonts: the 21 pt settings notes fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+6E38" "$log")" = 1 ] \
+    && grep -q 'Settings: leaving without saving' "$log" && ran_clean f72-savefail && ok=0
+result "fallback fonts: a failed save's wrapped message falls back for its CJK folder name (exit $(cat "$out/f72-savefail.code"))" $ok
+grep -E "^Fonts:|Couldn't save" "$log" | sed 's/^/      /'

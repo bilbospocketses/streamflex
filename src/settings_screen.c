@@ -20,6 +20,7 @@
 #include "alloc.h"
 #include "inidoc.h"
 #include "image.h"
+#include "fontset.h"
 #include "util.h"
 #include "debug.h"
 #include "test_hooks.h"
@@ -77,6 +78,9 @@ static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the r
 static TTF_Font *font_header = NULL;
 static TTF_Font *font_row = NULL;
 static TTF_Font *font_small = NULL;
+static FontSet *set_header = NULL;    // The three fonts' sets: each font above is its set's, fallbacks attached
+static FontSet *set_row = NULL;
+static FontSet *set_small = NULL;
 static CachedText text_cache[TEXT_CACHE_SIZE];
 static Uint32 text_clock = 0;
 static int margin = 0;
@@ -142,17 +146,30 @@ bool settings_is_open(void)
     return model != NULL;
 }
 
-// A function to measure a line of text
+// A function to get the set a settings font belongs to; NULL for any other font
+static FontSet *set_of(TTF_Font *font)
+{
+    if (font == NULL)
+        return NULL;
+    if (font == font_row)
+        return set_row;
+    if (font == font_small)
+        return set_small;
+    return font == font_header ? set_header : NULL;
+}
+
+// A function to measure a line of text, the fallbacks of the characters its font lacks attached first
 static int text_width(TTF_Font *font, const char *text)
 {
     int w = 0;
     int h = 0;
+    fontset_prepare(set_of(font), text);
     if (text[0] != '\0')
         TTF_GetStringSize(font, text, 0, &w, &h);
     return w;
 }
 
-// A function to get a line of text as a texture, from the cache when it was drawn recently
+// A function to get a line of text as a texture, from the cache when it was drawn recently; its text is prepared, as draw_text() measures it first
 static CachedText *cached_text(TTF_Font *font, const char *text)
 {
     text_clock++;
@@ -230,6 +247,7 @@ static int draw_wrapped(TTF_Font *font, const char *text, int x, int y, int widt
 {
     if (text == NULL || text[0] == '\0' || width <= 0)
         return 0;
+    fontset_prepare(set_of(font), text);
     SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
@@ -450,13 +468,31 @@ static bool open_fonts(void)
         log_error("Settings: the font %s is missing, so they use %s", FILENAME_DEFAULT_FONT, path);
     }
     float height = (float) geo.screen_height;
-    font_header = open_font_file(path, max_int(8, (int) (HEADER_FONT_RATIO * height)), 0);
-    font_row = open_font_file(path, max_int(8, (int) (ROW_FONT_RATIO * height)), 0);
-    font_small = open_font_file(path, max_int(8, (int) (SMALL_FONT_RATIO * height)), 0);
+    set_header = fontset_open(path, (float) max_int(8, (int) (HEADER_FONT_RATIO * height)), 0, "settings headers");
+    set_row = fontset_open(path, (float) max_int(8, (int) (ROW_FONT_RATIO * height)), 0, "settings rows");
+    set_small = fontset_open(path, (float) max_int(8, (int) (SMALL_FONT_RATIO * height)), 0, "settings notes");
+    font_header = fontset_font(set_header);
+    font_row = fontset_font(set_row);
+    font_small = fontset_font(set_small);
     if (font_header == NULL || font_row == NULL || font_small == NULL)
         log_error("Settings cannot open: could not open the font %s\n%s", path, SDL_GetError());
     free(bundled);
     return font_header != NULL && font_row != NULL && font_small != NULL;
+}
+
+// A function to close the screen's three font sets, each font before its fallbacks (fontset_close()).
+// A set that never opened is NULL, which fontset_close() passes over.
+static void close_fonts(void)
+{
+    fontset_close(set_header);
+    fontset_close(set_row);
+    fontset_close(set_small);
+    set_header = NULL;
+    set_row = NULL;
+    set_small = NULL;
+    font_header = NULL;
+    font_row = NULL;
+    font_small = NULL;
 }
 
 // A function to size the column and the preview for this screen. The column is as wide as its
@@ -773,20 +809,6 @@ static void describe_folder_row(SettingsRow *row)
     }
     if (recounted)
         log_debug("Settings: the Folder row shows %s", row->value);
-}
-
-// A function to close the screen's own fonts
-static void close_fonts(void)
-{
-    if (font_header != NULL)
-        TTF_CloseFont(font_header);
-    if (font_row != NULL)
-        TTF_CloseFont(font_row);
-    if (font_small != NULL)
-        TTF_CloseFont(font_small);
-    font_header = NULL;
-    font_row = NULL;
-    font_small = NULL;
 }
 
 // A function to free what the screen holds while open
@@ -1218,6 +1240,7 @@ static int wrapped_height(TTF_Font *font, const char *text, int width)
 #ifdef STREAMFLEX_TEST_HOOKS
     measures++;   // Only the headless harness builds this: free_screen() logs the count
 #endif
+    fontset_prepare(set_of(font), text);
     SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
