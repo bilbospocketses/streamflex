@@ -3525,6 +3525,7 @@ int main(int argc, char *argv[])
     create_window();
     if (config.restarted)
         raise_restarted_window();
+    ticks.program_start = ticks_ms();   // The window is open: Timing: startup and the focus re-grab count from here
 #ifdef _WIN32
     log_debug("DPI awareness: %s", dpi_awareness());
 #endif
@@ -3538,7 +3539,6 @@ int main(int argc, char *argv[])
     // Initialize timing
     ticks.main = ticks_ms();
     ticks.last_input = ticks.main;
-    ticks.program_start = ticks.main;
 
     // Set the background up
     reload_background();

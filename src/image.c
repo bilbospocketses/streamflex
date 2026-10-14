@@ -63,7 +63,10 @@ static SDL_Surface *load_surface_timed(const char *path, Uint64 *read, Uint64 *d
     if (data == NULL)
         return NULL;
     const char *dot = SDL_strrchr(path, '.');
-    SDL_Surface *surface = IMG_LoadTyped_IO(SDL_IOFromConstMem(data, size), true, dot != NULL ? dot + 1 : NULL);
+    // SDL 3.2 makes no stream from an empty buffer, so an empty file is read from the file, as IMG_Load
+    // read it, and SDL_image gives the reason it always gave
+    SDL_IOStream *io = size > 0 ? SDL_IOFromConstMem(data, size) : SDL_IOFromFile(path, "rb");
+    SDL_Surface *surface = IMG_LoadTyped_IO(io, true, dot != NULL ? dot + 1 : NULL);
     SDL_free(data);
     *decode += SDL_GetPerformanceCounter() - loaded;
     return surface;

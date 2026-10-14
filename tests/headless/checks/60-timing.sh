@@ -2,7 +2,9 @@
 # - each menu render logs one Timing: line beside its "rendered its buttons" line, which stays as it
 #   was;
 # - a background image, or the slideshow's first image, logs one;
-# - the program loop's start logs how long after the window opened the first menu was shown.
+# - the program loop's start logs how long after the window opened the first menu was shown, a span
+#   holding the background's load and the first menu's render, so it is no less than their two totals
+#   less 2 ms of rounding.
 # Every figure is a whole number of milliseconds. A line's parts add up to no more than its total
 # plus 2 ms, the rounding of up to four parts and the total. No absolute time is asserted: ASan and
 # lavapipe distort it. The icons are one 512 px PNG drawn 48 times in each of two menus, so decoding
@@ -52,8 +54,13 @@ background=$(grep -E '^Timing: background: ' "$log")
     && t60_adds_up "$background" && ok=0
 result "timing: a background image logs its read, decode, luminance and texture" $ok
 ok=1
-[ "$(grep -cE '^Timing: startup: first menu shown [0-9]+ ms after the window opened$' "$log")" = 1 ] && ok=0
-result "timing: the program loop's start logs when the first menu was shown" $ok
+startup=$(sed -nE 's/^Timing: startup: first menu shown ([0-9]+) ms after the window opened$/\1/p' "$log")
+main_total=$(sed -nE "s/^Timing: menu 'Main': [0-9]+ icons at [0-9]+ px in ([0-9]+) ms .*/\\1/p" "$log")
+background_total=$(sed -nE 's/^Timing: background: image in ([0-9]+) ms .*/\1/p' "$log")
+[ "$(grep -cE '^Timing: startup: first menu shown [0-9]+ ms after the window opened$' "$log")" = 1 ] \
+    && [[ $main_total =~ ^[0-9]+$ ]] && [[ $background_total =~ ^[0-9]+$ ]] \
+    && [ $((startup + 2)) -ge $((main_total + background_total)) ] && ok=0
+result "timing: the program loop's start logs when the first menu was shown, counting the background and the first menu" $ok
 ok=1
 [ "$(grep -cx 'Images: primed the PNG, JPEG and WebP loaders' "$log")" = 1 ] \
     && precedes "$log" 'Images: primed the PNG, JPEG and WebP loaders' 'Timing: background: ' \
