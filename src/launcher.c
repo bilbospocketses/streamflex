@@ -11,6 +11,7 @@
 #include <launcher_config.h>
 #include "image.h"
 #include "util.h"
+#include "videodriver.h"
 #include "library.h"
 #include "debug.h"
 #include "clock.h"
@@ -273,9 +274,22 @@ static void init_sdl()
 #endif
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, config.inhibit_os_screensaver ? "0" : "1");
 
+    // The app id Wayland compositors (and X11's WM_CLASS) match to streamflex.desktop, however
+    // StreamFlex was started: without it SDL falls back to the program file's name. No video driver
+    // is set: SDL's own choice (Wayland when the compositor offers fifo-v1, else X11) stands, and
+    // SDL_VIDEO_DRIVER overrides it (spec section 5).
+    SDL_SetAppMetadata(PROJECT_NAME, PROJECT_VERSION, "streamflex");
+
     // Initialize SDL
     if (!SDL_Init(sdl_flags))
         log_fatal("Could not initialize SDL\n%s", SDL_GetError());
+
+    // Say where the driver list came from when the environment set it, or why SDL kept to X11
+    // while a Wayland compositor runs
+    char note[160];
+    if (video_driver_note(SDL_GetCurrentVideoDriver(), SDL_getenv("SDL_VIDEO_DRIVER"), SDL_getenv("SDL_VIDEODRIVER"),
+                          SDL_getenv("WAYLAND_DISPLAY"), note, sizeof(note)))
+        log_debug("%s", note);
 }
 
 // A function to tell whether the renderer really presents with VSync, by SDL's answer
