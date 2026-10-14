@@ -107,7 +107,7 @@ Each run prints one `PASS` or `FAIL` line per check, then `N failed`, and keeps 
 ## Project Structure
 
 ```
-src/                 Launcher core (launcher.c, layout.c, library.c, image.c, clock.c, chroma.c, util.c, utf8.c, debug.c, alloc.c, config_fields.c, derive.c, keycodes.c, winplan.c, vsyncwatch.c, videodriver.c, padpower.c, iconload.c) and the settings screen (settings_screen.c, settings.c, settings_pickers.c, settings_fonts.c, listpick.c, colorpick.c, fontlist.c, fontscan.c, bindings.c, browser.c, inidoc.c, config_save.c, fileio.c)
+src/                 Launcher core (launcher.c, layout.c, library.c, image.c, clock.c, chroma.c, util.c, utf8.c, debug.c, alloc.c, config_fields.c, derive.c, keycodes.c, winplan.c, vsyncwatch.c, videodriver.c, padpower.c, iconload.c, fontrules.c) and the settings screen (settings_screen.c, settings.c, settings_pickers.c, settings_fonts.c, listpick.c, colorpick.c, fontlist.c, fontscan.c, bindings.c, browser.c, inidoc.c, config_save.c, fileio.c)
                      test_hooks.c: the harness's STREAMFLEX_TEST_FAIL hook, built into every build but compiled to no code unless STREAMFLEX_TEST_HOOKS is defined; the other hooks sit inline in clock.c, fontscan.c, iconload.c, image.c, launcher.c, settings_screen.c and platform/unix.c
 src/platform/        Windows and Linux platform layers
 src/external/        Vendored third-party sources (nanosvg): where each came from, and every local change, in its README

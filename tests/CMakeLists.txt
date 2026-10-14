@@ -215,3 +215,8 @@ target_include_directories(test_iconload PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_definitions(test_iconload PRIVATE STREAMFLEX_TEST_HOOKS)
 target_link_libraries(test_iconload SDL3::SDL3)
 add_test(NAME iconload COMMAND test_iconload)
+
+# Unit tests 6 and 7's pure half (spec section 9): the fallback fonts' rules, linked alone
+add_executable(test_fontrules test_fontrules.c "${PROJECT_SOURCE_DIR}/src/fontrules.c")
+target_include_directories(test_fontrules PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME fontrules COMMAND test_fontrules)
