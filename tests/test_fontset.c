@@ -458,7 +458,9 @@ static void test_not_a_file(void)
 // U+30000, which SDL 3.2.10's and 3.4.18's SDL_StepUTF8() read as U+FFFD and U+10000, are each looked
 // up and found nowhere. An overlong star, a surrogate, a code point past U+10FFFF and the start of a
 // cloud (U+2601) with an A where its last byte should be are no UTF-8: each reads as U+FFFD, which Open
-// Sans has, so nothing is logged for them.
+// Sans has, so nothing is logged for them. A lead byte at a text's very end, in a buffer that ends with
+// the text, is read no further than the end. And a NUL written overlong, in two bytes and in three, is
+// no end of the text: the star after it is still looked up.
 static void test_four_bytes(void)
 {
     begin(DEJAVU, NULL);
@@ -468,6 +470,13 @@ static void test_four_bytes(void)
     CHECK_INT(lines_with("Fonts: no installed font draws U+30000; it shows as a box"), 1);
     fontset_prepare(set, "\xF0\x82\x98\x85 \xED\xA0\x80 \xF4\x90\x80\x80 \xE2\x98" "A");
     CHECK_INT(logged_count, 2);
+    char *cut = SDL_strdup("A\xF0");
+    fontset_prepare(set, cut);
+    SDL_free(cut);
+    CHECK_INT(logged_count, 2);
+    fontset_prepare(set, "\xC0\x80" "\xE0\x80\x80" STAR);
+    CHECK_INT(lines_with("Fonts: the 36 pt titles fall back to " DEJAVU " (face 0), first for U+2605"), 1);
+    CHECK_INT(logged_count, 3);
     fontset_close(set);
     fontset_quit();
 }
