@@ -446,8 +446,9 @@ static void test_not_a_file(void)
 
 // A function to test that a text is read as UTF-8 with its four-byte sequences whole: U+20000 and
 // U+30000, which SDL 3.2.10's and 3.4.18's SDL_StepUTF8() read as U+FFFD and U+10000, are each looked
-// up and found nowhere. An overlong star, a surrogate and a code point past U+10FFFF are no UTF-8:
-// each reads as U+FFFD, which Open Sans has, so nothing is logged for them.
+// up and found nowhere. An overlong star, a surrogate, a code point past U+10FFFF and the start of a
+// cloud (U+2601) with an A where its last byte should be are no UTF-8: each reads as U+FFFD, which Open
+// Sans has, so nothing is logged for them.
 static void test_four_bytes(void)
 {
     begin(DEJAVU, NULL);
@@ -455,7 +456,7 @@ static void test_four_bytes(void)
     fontset_prepare(set, "\xF0\xA0\x80\x80 \xF0\xB0\x80\x80");
     CHECK_INT(lines_with("Fonts: no installed font draws U+20000; it shows as a box"), 1);
     CHECK_INT(lines_with("Fonts: no installed font draws U+30000; it shows as a box"), 1);
-    fontset_prepare(set, "\xF0\x82\x98\x85 \xED\xA0\x80 \xF4\x90\x80\x80");
+    fontset_prepare(set, "\xF0\x82\x98\x85 \xED\xA0\x80 \xF4\x90\x80\x80 \xE2\x98" "A");
     CHECK_INT(logged_count, 2);
     fontset_close(set);
     fontset_quit();
