@@ -140,6 +140,56 @@ static void test_face_text(void)
     CHECK_STR(text, "face 1, named instance 4");
 }
 
+// A function to test unit test 6: the locale chooses the first CJK family, and the rest of Windows'
+// list keeps its order
+static void test_windows_order(void)
+{
+    CHECK_STR(fontrules_cjk_first("ja", "JP"), "Yu Gothic");
+    CHECK_STR(fontrules_cjk_first("ko", "KR"), "Malgun Gothic");
+    CHECK_STR(fontrules_cjk_first("zh", "TW"), "Microsoft JhengHei");
+    CHECK_STR(fontrules_cjk_first("zh", "HK"), "Microsoft JhengHei");
+    CHECK_STR(fontrules_cjk_first("zh", "MO"), "Microsoft JhengHei");
+    CHECK_STR(fontrules_cjk_first("zh", "CN"), "Microsoft YaHei");
+    CHECK_STR(fontrules_cjk_first("en", "US"), "Microsoft YaHei");
+    CHECK_STR(fontrules_cjk_first("ZH", "tw"), "Microsoft JhengHei");   // Either case
+    CHECK_STR(fontrules_cjk_first("zh", NULL), "Microsoft YaHei");
+    CHECK_STR(fontrules_cjk_first(NULL, NULL), "Microsoft YaHei");
+    CHECK_STR(fontrules_cjk_first("kok", "IN"), "Microsoft YaHei");   // Konkani: a whole language, not its first letters
+    CHECK_STR(fontrules_cjk_first("en", "TW"), "Microsoft YaHei");    // Taiwan's country alone is not Chinese
+
+    const char *families[FONTRULES_WINDOWS_FAMILIES];
+    CHECK_INT(fontrules_windows_families("ko", "KR", families), FONTRULES_WINDOWS_FAMILIES);
+    static const char *const korean[FONTRULES_WINDOWS_FAMILIES] = {
+        "Segoe UI", "Segoe UI Emoji", "Segoe UI Symbol", "Malgun Gothic", "Yu Gothic", "Microsoft YaHei",
+        "Microsoft JhengHei", "Nirmala UI", "Leelawadee UI", "Ebrima", "Gadugi", "Myanmar Text", "Javanese Text",
+        "Microsoft Himalaya", "Mongolian Baiti", "Sylfaen", "Segoe UI Historic"
+    };
+    for (int i = 0; i < FONTRULES_WINDOWS_FAMILIES; i++)
+        CHECK_STR(families[i], korean[i]);
+    CHECK_INT(fontrules_windows_families("ja", "JP", families), FONTRULES_WINDOWS_FAMILIES);
+    CHECK_STR(families[3], "Yu Gothic");
+    CHECK_STR(families[4], "Microsoft YaHei");   // Behind Yu Gothic, which lacks simplified Han
+    CHECK_STR(families[5], "Microsoft JhengHei");
+    CHECK_STR(families[6], "Malgun Gothic");
+}
+
+// A function to test how a family's face is found in a Fonts registry value name
+static void test_registry_face(void)
+{
+    CHECK_INT(fontrules_registry_face("Segoe UI (TrueType)", "Segoe UI"), 0);
+    CHECK_INT(fontrules_registry_face("Segoe UI Bold (TrueType)", "Segoe UI"), -1);
+    CHECK_INT(fontrules_registry_face("Segoe UI Emoji (TrueType)", "Segoe UI"), -1);
+    CHECK_INT(fontrules_registry_face("Segoe UI Emoji (TrueType)", "Segoe UI Emoji"), 0);
+    CHECK_INT(fontrules_registry_face("Yu Gothic Regular & Yu Gothic UI Semilight (TrueType)", "Yu Gothic"), 0);
+    CHECK_INT(fontrules_registry_face("Yu Gothic Medium & Yu Gothic UI Regular (TrueType)", "Yu Gothic"), -1);
+    CHECK_INT(fontrules_registry_face("Microsoft YaHei & Microsoft YaHei UI (TrueType)", "Microsoft YaHei"), 0);
+    CHECK_INT(fontrules_registry_face("Microsoft YaHei Bold & Microsoft YaHei UI Bold (TrueType)", "Microsoft YaHei"), -1);
+    CHECK_INT(fontrules_registry_face("Microsoft YaHei & Microsoft YaHei UI (TrueType)", "Microsoft YaHei UI"), 1);
+    CHECK_INT(fontrules_registry_face("Nirmala UI & Nirmala UI Bold & Nirmala UI Semilight & Nirmala Text (TrueType)", "Nirmala Text"), 3);
+    CHECK_INT(fontrules_registry_face("Sylfaen (OpenType)", "Sylfaen"), 0);
+    CHECK_INT(fontrules_registry_face("DejaVu Sans Oblique (TrueType)", "DejaVu Sans"), -1);   // As long as " Regular", and not it
+}
+
 int main(void)
 {
     test_skip();
@@ -150,5 +200,7 @@ int main(void)
     test_skip_blank_apart();
     test_insert_order();
     test_face_text();
+    test_windows_order();
+    test_registry_face();
     return check_report();
 }

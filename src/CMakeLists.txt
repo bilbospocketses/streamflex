@@ -50,6 +50,11 @@ set(SOURCES
   fontlist.h
   fontscan.c
   fontscan.h
+  fontrules.c
+  fontrules.h
+  fontset.c
+  fontset.h
+  fontcand.c
   bindings.c
   bindings.h
   keycodes.c

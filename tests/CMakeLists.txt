@@ -231,3 +231,22 @@ target_compile_definitions(test_fontset PRIVATE FONTSET_TEST_FONTS="${PROJECT_SO
 target_link_libraries(test_fontset SDL3_ttf::SDL3_ttf SDL3::SDL3)
 link_fileio(test_fontset)
 add_test(NAME fontset COMMAND test_fontset)
+
+# The fallback candidates: fontconfig's sort over a fixture file on Linux (its one folder is the
+# bundled fonts, its cache the test's own), the runner's Fonts registry key on Windows. The test stands
+# in for find_default_font() and the launcher's log
+add_executable(test_fontcand test_fontcand.c "${PROJECT_SOURCE_DIR}/src/fontcand.c" "${PROJECT_SOURCE_DIR}/src/fontrules.c")
+target_include_directories(test_fontcand PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_fontcand PRIVATE FONTCAND_TEST_FONTS="${PROJECT_SOURCE_DIR}/assets/fonts")
+target_link_libraries(test_fontcand SDL3_ttf::SDL3_ttf SDL3::SDL3)
+add_test(NAME fontcand COMMAND test_fontcand)
+if (UNIX)
+  target_link_libraries(test_fontcand Fontconfig::Fontconfig)
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/fontcand-fonts.conf"
+    "<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n<fontconfig>\n"
+    "  <dir>${PROJECT_SOURCE_DIR}/assets/fonts</dir>\n"
+    "  <cachedir>${CMAKE_CURRENT_BINARY_DIR}/fontcand-cache</cachedir>\n</fontconfig>\n")
+  set_tests_properties(fontcand PROPERTIES ENVIRONMENT "FONTCONFIG_FILE=${CMAKE_CURRENT_BINARY_DIR}/fontcand-fonts.conf")
+else ()
+  target_link_libraries(test_fontcand advapi32)
+endif ()

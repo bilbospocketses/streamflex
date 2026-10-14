@@ -67,3 +67,87 @@ void fontrules_face_text(int index, char *out, size_t size)
     else
         snprintf(out, size, "face %i", index & 0xFFFF);
 }
+
+// Windows' Han and Hangul families. YaHei stays behind Yu Gothic, which lacks simplified Han.
+static const char *const CJK[] = { "Yu Gothic", "Microsoft YaHei", "Microsoft JhengHei", "Malgun Gothic" };
+
+// The families after them: Indic, Thai and Lao, African, Myanmar, Javanese, Tibetan, Mongolian,
+// Armenian and Georgian, and historic scripts
+static const char *const AFTER_CJK[] = {
+    "Nirmala UI", "Leelawadee UI", "Ebrima", "Gadugi", "Myanmar Text", "Javanese Text", "Microsoft Himalaya",
+    "Mongolian Baiti", "Sylfaen", "Segoe UI Historic"
+};
+
+// A function to compare two ASCII strings without case; NULL matches nothing
+static bool same(const char *a, const char *b)
+{
+    if (a == NULL || b == NULL)
+        return false;
+    for (; *a != '\0' && *b != '\0'; a++, b++) {
+        char x = (*a >= 'A' && *a <= 'Z') ? (char) (*a - 'A' + 'a') : *a;
+        char y = (*b >= 'A' && *b <= 'Z') ? (char) (*b - 'A' + 'a') : *b;
+        if (x != y)
+            return false;
+    }
+    return *a == *b;
+}
+
+// A function to choose the CJK family Windows' list tries first, from the user's preferred locale
+// (SDL_GetPreferredLocales' first): ja Yu Gothic, ko Malgun Gothic, zh with TW, HK or MO Microsoft
+// JhengHei, anything else Microsoft YaHei
+const char *fontrules_cjk_first(const char *language, const char *country)
+{
+    if (same(language, "ja"))
+        return "Yu Gothic";
+    if (same(language, "ko"))
+        return "Malgun Gothic";
+    if (same(language, "zh") && (same(country, "TW") || same(country, "HK") || same(country, "MO")))
+        return "Microsoft JhengHei";
+    return "Microsoft YaHei";
+}
+
+// A function to list Windows' fallback families in the order they are tried, FONTRULES_WINDOWS_FAMILIES
+// of them: Segoe UI; Segoe UI Emoji before Symbol, so emoji draw in color; Segoe UI Symbol; the four
+// CJK families, the locale's first; then the other scripts. Returns how many it wrote.
+int fontrules_windows_families(const char *language, const char *country, const char **out)
+{
+    int n = 0;
+    out[n++] = "Segoe UI";
+    out[n++] = "Segoe UI Emoji";
+    out[n++] = "Segoe UI Symbol";
+    const char *first = fontrules_cjk_first(language, country);
+    out[n++] = first;
+    for (size_t i = 0; i < sizeof(CJK) / sizeof(CJK[0]); i++) {
+        if (strcmp(CJK[i], first) != 0)
+            out[n++] = CJK[i];
+    }
+    for (size_t i = 0; i < sizeof(AFTER_CJK) / sizeof(AFTER_CJK[0]); i++)
+        out[n++] = AFTER_CJK[i];
+    return n;
+}
+
+// A function to find a family's face in a Fonts registry value name. "Yu Gothic Regular & Yu Gothic UI
+// Semilight (TrueType)" lists a collection's faces in order, and "Segoe UI (TrueType)" a file's one
+// face. A face is the family when it reads the family's name alone, or with " Regular" after it, so
+// Segoe UI Bold is never Segoe UI. -1 when no face is.
+int fontrules_registry_face(const char *value_name, const char *family)
+{
+    size_t length = strlen(value_name);
+    const char *paren = strrchr(value_name, '(');   // " (TrueType)" or " (OpenType)"
+    if (paren != NULL && paren > value_name && paren[-1] == ' ')
+        length = (size_t) (paren - 1 - value_name);
+    size_t family_length = strlen(family);
+    const char *start = value_name;
+    const char *end = value_name + length;
+    for (int face = 0; start < end; face++) {
+        const char *amp = strstr(start, " & ");
+        const char *stop = amp != NULL && amp < end ? amp : end;
+        size_t n = (size_t) (stop - start);
+        if ((n == family_length && strncmp(start, family, n) == 0)
+            || (n == family_length + 8 && strncmp(start, family, family_length) == 0
+                && strncmp(start + family_length, " Regular", 8) == 0))
+            return face;
+        start = stop == end ? end : stop + 3;
+    }
+    return -1;
+}
