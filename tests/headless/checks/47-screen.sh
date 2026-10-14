@@ -1,7 +1,19 @@
 # The screen's size and the display's scale (spec section 6). The OS's scale is logged, never applied:
 # under SDL_VIDEO_X11_SCALING_FACTOR=2 the log says so, and the home grid's pixels are those of a run
 # without it.
-s47_shot() { wait_line 'Begin program loop' "$2" && sleep 1 && xwd -root -silent -out "$out/$1.xwd"; }
+# A function to tell whether a screenshot shows the highlight's #FF00FF box: a frame was drawn in it
+s47_drawn() { python3 "$HERE/pixels.py" "$1" count 255,0,255 inside 255,0,255 > /dev/null 2>&1; }
+# A function for a +key: once the program loop has begun, a screenshot every 0.2 s (10 s at most) until
+# one shows the box, kept in NAME.xwd, so a screen nothing was drawn on yet is never the one compared
+s47_shot() {
+    local i
+    wait_line 'Begin program loop' "$2" || return 1
+    for i in $(seq 50); do
+        xwd -root -silent -out "$out/$1.xwd" && s47_drawn "$out/$1.xwd" && return 0
+        sleep 0.2
+    done
+    return 1
+}
 CFG=$FX/f47-grid.ini run_keys f47-scale1 +s47_shot
 CFG=$FX/f47-grid.ini SDL_VIDEO_X11_SCALING_FACTOR=2 run_keys f47-scale2 +s47_shot
 # The two screenshots' pixels are compared, never the files: xwd may leave the pad byte of each
@@ -11,6 +23,7 @@ s47_same=$?
 ok=1
 grep -qx 'Screen: 1920x1080 px, pixel density 1.00, display scale 1.00' "$out/f47-scale1.log" \
     && grep -qx 'Screen: 1920x1080 px, pixel density 1.00, display scale 2.00' "$out/f47-scale2.log" \
+    && s47_drawn "$out/f47-scale1.xwd" && s47_drawn "$out/f47-scale2.xwd" \
     && [ "$s47_same" = 0 ] && ran_clean f47-scale1 && ran_clean f47-scale2 && ok=0
 result "screen: a display scale of 2 is logged and not applied, the grid drawn as at 1 (exit $(cat "$out/f47-scale1.code"), $(cat "$out/f47-scale2.code"))" $ok
 grep -h '^Screen: ' "$out/f47-scale1.log" "$out/f47-scale2.log" | sed 's/^/      /'
@@ -116,7 +129,9 @@ grep -qx 'Screen: 1280x720 px, was 1920x1080; reloading' "$log" \
     && ran_clean f47-resize && ok=0
 result "screen: a new size reloads once, and Main is drawn whole at 1280x720 ($(cat "$out/f47-resize.path" 2> /dev/null); exit $(cat "$out/f47-resize.code"))" $ok
 sed 's/^/      /' "$out/f47-resize.boxes" 2> /dev/null
-grep -E '^(Screen|Reload|Layout area):' "$log" | sed 's/^/      /'
+# The size events the launcher handled say which path answered: SDL's own event, none, or one that already read
+# 1920x1080 again (SDL put the window back), each logged by the hook build
+grep -E "^(Screen|Reload|Layout area):|^Test hook: (a size event found|the window's size reads)" "$log" | sed 's/^/      /'
 
 # With settings open on the Background page, an edit made (Color steps to #1E1E1E): the screen is
 # measured again, the page and the row under the cursor survive, and the edit is saved
@@ -191,6 +206,24 @@ grep -qx 'Screen: 1920x1080 px again; nothing to reload' "$out/f47-appback.log" 
     && ! grep -q '^Reload: done at ' "$out/f47-appback.log" && ran_clean f47-appback && ok=0
 result "screen: a size that came back by the time the app is done reloads nothing (exit $(cat "$out/f47-appback.code"))" $ok
 grep -E '^(Screen|Reload|Application|Test hook: a size event)' "$out/f47-appback.log" | sed 's/^/      /'
+
+# A new size and a launch in one batch of events: the launcher is stopped while the size file is written
+# and Return pressed, then let go, so its next pass pushes the size event and then pumps the key. The
+# size, marked as no app is in front yet, waits for the launch, which f50-launch.ini's ApplicationTimeout
+# gives up on after 3 s (sleep opens no window), and reloads then, once. A reload that dropped the mark
+# without deferring it would never lay the size out; one that kept it would log that the size is back.
+# A stop that lands between the hook's push and the pump brings the size a pass after the launch, where
+# it waits as any size in front does: the same result. The 0.5 s only lets the key reach the X server,
+# and the give-up only has to come within UNTIL's 20 s.
+s47_batch() { kill -STOP "$2"; echo 1280x720 > "$S47_SIZE"; frame_nowait=yes xdotool key Return; sleep 0.5; kill -CONT "$2"; }
+rm -f "$S47_SIZE"
+CFG=$FX/f50-launch.ini STREAMFLEX_TEST_PIXEL_SIZE=$S47_SIZE UNTIL='Reload: done at 1280x720 px' run_keys f47-batch +s47_batch
+log=$out/f47-batch.log
+ok=1
+[ "$(grep -c '^Reload: done at ' "$log")" = 1 ] && grep -qx "Reload: done at 1280x720 px, for the window's size" "$log" \
+    && ! grep -q 'again; nothing to reload$' "$log" && ran_clean f47-batch && ok=0
+result "screen: a new size in the batch that launches an app waits for the app, then reloads once (exit $(cat "$out/f47-batch.code"))" $ok
+grep -E "^(Screen|Reload|Application|Key |Test hook: (a size event found|the window's size reads))" "$log" | sed 's/^/      /'
 
 # A move to another display reads its refresh rate and works the frame timing out again (a test hook
 # pushes SDL_EVENT_WINDOW_DISPLAY_CHANGED: Xvfb has one display). Read from the hook's own line on, in

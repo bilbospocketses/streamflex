@@ -341,7 +341,7 @@ void reload_clock(void);        // Also lays the menu out again: the clock's siz
 void stop_clock(void);          // Waits for a render in flight; the settings screen stops it before writing a clock setting
 void reload_screensaver(void);
 void remake_screensaver_texture(void);   // A reload's: the layer made again, the dim and its transition kept
-void reload_gamepad(void);     // Also the Device setting: closes the pads and opens the chosen one
+void reload_gamepad(void);      // Also the Device setting: closes the pads and opens the chosen one
 void reload_title_font(void);   // Closes the size cache and the fixed font, opens the font again, then reload_titles()
 void apply_frame_timing(void);  // VSync and FPSLimit, live
 void apply_os_screensaver(void);
