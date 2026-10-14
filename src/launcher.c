@@ -267,16 +267,16 @@ static bool recreate_wanted = false;                // window_follow_background(
 COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
 
 // StreamFlex's power and connection values are SDL's own, so a pad's report is stored as it comes
-COMPILE_CHECK(padpower_error_is_sdls, (int) PADPOWER_ERROR == (int) SDL_POWERSTATE_ERROR);
-COMPILE_CHECK(padpower_unknown_is_sdls, (int) PADPOWER_UNKNOWN == (int) SDL_POWERSTATE_UNKNOWN);
-COMPILE_CHECK(padpower_on_battery_is_sdls, (int) PADPOWER_ON_BATTERY == (int) SDL_POWERSTATE_ON_BATTERY);
-COMPILE_CHECK(padpower_no_battery_is_sdls, (int) PADPOWER_NO_BATTERY == (int) SDL_POWERSTATE_NO_BATTERY);
-COMPILE_CHECK(padpower_charging_is_sdls, (int) PADPOWER_CHARGING == (int) SDL_POWERSTATE_CHARGING);
-COMPILE_CHECK(padpower_charged_is_sdls, (int) PADPOWER_CHARGED == (int) SDL_POWERSTATE_CHARGED);
-COMPILE_CHECK(padconn_invalid_is_sdls, (int) PADCONN_INVALID == (int) SDL_JOYSTICK_CONNECTION_INVALID);
-COMPILE_CHECK(padconn_unknown_is_sdls, (int) PADCONN_UNKNOWN == (int) SDL_JOYSTICK_CONNECTION_UNKNOWN);
-COMPILE_CHECK(padconn_wired_is_sdls, (int) PADCONN_WIRED == (int) SDL_JOYSTICK_CONNECTION_WIRED);
-COMPILE_CHECK(padconn_wireless_is_sdls, (int) PADCONN_WIRELESS == (int) SDL_JOYSTICK_CONNECTION_WIRELESS);
+COMPILE_CHECK(padpower_error_is_sdls, PADPOWER_ERROR == (PadPowerState) SDL_POWERSTATE_ERROR);
+COMPILE_CHECK(padpower_unknown_is_sdls, PADPOWER_UNKNOWN == (PadPowerState) SDL_POWERSTATE_UNKNOWN);
+COMPILE_CHECK(padpower_on_battery_is_sdls, PADPOWER_ON_BATTERY == (PadPowerState) SDL_POWERSTATE_ON_BATTERY);
+COMPILE_CHECK(padpower_no_battery_is_sdls, PADPOWER_NO_BATTERY == (PadPowerState) SDL_POWERSTATE_NO_BATTERY);
+COMPILE_CHECK(padpower_charging_is_sdls, PADPOWER_CHARGING == (PadPowerState) SDL_POWERSTATE_CHARGING);
+COMPILE_CHECK(padpower_charged_is_sdls, PADPOWER_CHARGED == (PadPowerState) SDL_POWERSTATE_CHARGED);
+COMPILE_CHECK(padconn_invalid_is_sdls, PADCONN_INVALID == (PadConnection) SDL_JOYSTICK_CONNECTION_INVALID);
+COMPILE_CHECK(padconn_unknown_is_sdls, PADCONN_UNKNOWN == (PadConnection) SDL_JOYSTICK_CONNECTION_UNKNOWN);
+COMPILE_CHECK(padconn_wired_is_sdls, PADCONN_WIRED == (PadConnection) SDL_JOYSTICK_CONNECTION_WIRED);
+COMPILE_CHECK(padconn_wireless_is_sdls, PADCONN_WIRELESS == (PadConnection) SDL_JOYSTICK_CONNECTION_WIRELESS);
 
 static PadPowerLevel battery_shown = PADPOWER_HIDDEN;   // The glyph as last drawn, for the log
 static SDL_Rect battery_rect = { 0, 0, 0, 0 };
