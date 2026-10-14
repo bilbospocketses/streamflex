@@ -486,14 +486,23 @@ static void test_background_page(void)
     CHECK_STR(rows[2].value, "30 s");
     CHECK_STR(rows[3].value, "1.5 s");
 
-    // Transparent: a note in place of the mode's rows, then the see-through color and the overlay's three rows
+    // Transparent: a note in place of the mode's rows, then on Linux, whose Transparent mode is a
+    // chroma key, the see-through color, then the overlay's three rows. Windows' Transparent mode is
+    // per-pixel alpha, with no key to choose: the note stays, and no see-through color follows it.
     settings_command(state, SETTINGS_RIGHT);
     count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_NOTE);
+    CHECK(rows[1].note != NULL && strstr(rows[1].note, "compositor") != NULL);
+#ifdef _WIN32
+    CHECK_INT(count, 5);
+    CHECK(rows[2].slot == settings_slot(state, SET_ID_OVERLAY, -1));
+    for (int i = 0; i < count; i++)
+        CHECK(rows[i].slot != settings_slot(state, SET_ID_CHROMA_KEY_COLOR, -1));
+#else
     CHECK_INT(count, 6);
     CHECK(rows[2].slot == settings_slot(state, SET_ID_CHROMA_KEY_COLOR, -1));
     CHECK_INT(rows[2].kind, SETTINGS_ROW_PICK);
-    CHECK_INT(rows[1].kind, SETTINGS_ROW_NOTE);
-    CHECK(rows[1].note != NULL && strstr(rows[1].note, "compositor") != NULL);
+#endif
 
     // Closing from the page with Slideshow and no folder puts back the mode the page opened with
     settings_command(state, SETTINGS_LEFT);
