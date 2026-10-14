@@ -1,6 +1,7 @@
 // Pure rules for fallback fonts (spec section 4), with no SDL so tests/test_fontrules.c links them
-// alone: the code points a font set never looks up, the spaces a fallback draws as nothing on
-// purpose, where a provider goes in a set's chain, and the face as the log writes it
+// alone: the code points a font set never looks up, the spaces and the blank Braille pattern a
+// fallback draws as nothing on purpose, where a provider goes in a set's chain, and the face as the
+// log writes it
 #ifndef FONTRULES_H
 #define FONTRULES_H
 

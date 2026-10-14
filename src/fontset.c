@@ -35,7 +35,7 @@ struct FontSet {
 typedef struct {
     TTF_Font *probe;       // At FONTSET_PROBE_SIZE with no fallbacks: the coverage of a candidate with no charset
     bool probed;           // Its probe was tried
-    bool vetted;           // It draws the first character it was picked for that is no space
+    bool vetted;           // It draws the first character it was picked for that is not blank
     bool rejected;         // Skipped for the session
 } CandidateState;
 
@@ -228,8 +228,9 @@ static bool has_ink(TTF_Font *font, Uint32 ch)
 // A function to check, the first time a candidate is picked, that it can draw the character it was
 // picked for. One that cannot be scaled (Noto Color Emoji, a CBDT bitmap font drawn 128 px tall at any
 // size) or that draws no ink for it (Fedora's Noto COLRv1 emoji, at SDL_ttf 3.2.2) is skipped for the
-// session. A space draws no ink by design, so it is not asked for any, and proves nothing: a candidate
-// picked for one is asked again the next time it is picked. False when it was skipped.
+// session. A space, or the blank Braille pattern, draws no ink by design, so it is not asked for any, and
+// proves nothing: a candidate picked for one is asked again the next time it is picked. False when it
+// was skipped.
 static bool vetted(int rank, Uint32 ch)
 {
     CandidateState *state = &states[rank];

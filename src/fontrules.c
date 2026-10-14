@@ -11,11 +11,12 @@ static const uint32_t IGNORABLE[][2] = {
     { 0x1D173, 0x1D17A }, { 0xE0000, 0xE0FFF }
 };
 
-// The spaces, which a font draws as nothing by design: Unicode's Zs, less the Ogham space mark, which
-// has ink, plus the line and paragraph separators (Zl and Zp)
+// What a font draws as nothing by design: the spaces, Unicode's Zs less the Ogham space mark, which has
+// ink, plus the line and paragraph separators (Zl and Zp); and the blank Braille pattern, which is So,
+// not Zs, but has no dots, and is common as an invisible filler in names
 static const uint32_t BLANK[][2] = {
     { 0x0020, 0x0020 }, { 0x00A0, 0x00A0 }, { 0x2000, 0x200A }, { 0x2028, 0x2029 }, { 0x202F, 0x202F },
-    { 0x205F, 0x205F }, { 0x3000, 0x3000 }
+    { 0x205F, 0x205F }, { 0x2800, 0x2800 }, { 0x3000, 0x3000 }
 };
 
 // A function to tell whether a code point lies in one of a table's ranges
@@ -37,8 +38,9 @@ bool fontrules_skip(uint32_t code_point)
     return in_ranges(IGNORABLE, sizeof(IGNORABLE) / sizeof(IGNORABLE[0]), code_point);
 }
 
-// A function to tell whether a code point is a space: a fallback that has it is not asked for ink,
-// or a CJK font would be skipped for the session over its ideographic space
+// A function to tell whether a code point is blank, a space or the blank Braille pattern: a fallback
+// that has it is not asked for ink, or a CJK font would be skipped for the session over its ideographic
+// space
 bool fontrules_blank(uint32_t code_point)
 {
     return in_ranges(BLANK, sizeof(BLANK) / sizeof(BLANK[0]), code_point);

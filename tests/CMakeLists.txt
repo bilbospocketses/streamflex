@@ -226,7 +226,8 @@ add_test(NAME fontrules COMMAND test_fontrules)
 add_executable(test_fontset test_fontset.c "${PROJECT_SOURCE_DIR}/src/fontset.c" "${PROJECT_SOURCE_DIR}/src/fontrules.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
 target_include_directories(test_fontset PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_compile_definitions(test_fontset PRIVATE FONTSET_TEST_FONTS="${PROJECT_SOURCE_DIR}/assets/fonts")
+target_compile_definitions(test_fontset PRIVATE FONTSET_TEST_FONTS="${PROJECT_SOURCE_DIR}/assets/fonts"
+  FONTSET_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/fonts")
 target_link_libraries(test_fontset SDL3_ttf::SDL3_ttf SDL3::SDL3)
 link_fileio(test_fontset)
 add_test(NAME fontset COMMAND test_fontset)

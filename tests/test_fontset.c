@@ -1,7 +1,8 @@
 // Unit test 7, its real half (spec section 9): font sets over SDL_ttf and the bundled fonts. This file
 // stands in for fontcand.c (fontset_candidates() below), so no system font is read: the candidates are
-// the bundled DejaVu Sans, and FreeSans where a chain's order must show. It stands in for the launcher's
-// log too, and reads what fontset.c wrote there.
+// the bundled DejaVu Sans, FreeSans where a chain's order must show, and a fixture font that draws
+// nothing (tests/fixtures/fonts). It stands in for the launcher's log too, and reads what fontset.c
+// wrote there.
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,11 +17,12 @@
 #define OPEN_SANS FONTSET_TEST_FONTS "/OpenSans-Regular.ttf"
 #define DEJAVU FONTSET_TEST_FONTS "/DejaVuSans.ttf"
 #define FREESANS FONTSET_TEST_FONTS "/FreeSans.ttf"
+#define NOINK FONTSET_TEST_FIXTURES "/noink.ttf"   // An empty glyph for each of U+202F, U+E500 and U+2605, and no other
 #define STAR "\xE2\x98\x85"     // U+2605: DejaVu Sans has it; Open Sans and FreeSans do not
 #define ARROW "\xE2\x86\x92"    // U+2192: DejaVu Sans (0.838 em) and FreeSans (0.987 em) have it; Open Sans does not
 #define ZHONG "\xE4\xB8\xAD"    // U+4E2D: none of the three has it
 #define NNBSP "\xE2\x80\xAF"    // U+202F, the narrow no-break space: DejaVu Sans has it, with no ink
-#define BRAILLE "\xE2\xA0\x80"  // U+2800, the blank Braille pattern: DejaVu Sans has it, with no ink, and it is no space
+#define PUA "\xEE\x94\x80"      // U+E500, in the Private Use Area: no bundled font has it, and it is not blank
 #define LINES 64
 #define CANDIDATES 6            // The most candidates a case lists (test_many_fallbacks)
 
@@ -306,32 +308,32 @@ static int closed_fonts(FontSet *set)
 }
 
 // A coverage, as fontconfig's character set gives one, that has three code points: the narrow no-break
-// space, the blank Braille pattern and the star
+// space, U+E500 and the star, the three noink.ttf has
 static bool covers_three(const FontCandidate *candidate, Uint32 ch)
 {
     (void) candidate;
-    return ch == 0x202F || ch == 0x2800 || ch == 0x2605;
+    return ch == 0x202F || ch == 0xE500 || ch == 0x2605;
 }
 
 // A function to test that a candidate first picked for a space is still asked for ink the next time it
-// is picked, for a character that is no space: a space proves nothing about ink. DejaVu Sans, listed with a
-// character set as fontconfig lists it, stands in for a color emoji font that draws nothing: its blank
-// Braille pattern draws no ink, and is no space. Skipped, it is skipped for the session: another set
-// does not pick it, and the log says so once.
+// is picked, for a character that is not blank: a space proves nothing about ink. noink.ttf, listed with
+// a character set as fontconfig lists it, stands in for a color emoji font that draws nothing: it has a
+// glyph for U+E500, which is not blank, and the glyph has no ink. Skipped, it is skipped for the
+// session: another set does not pick it, and the log says so once.
 static void test_blank_then_ink(void)
 {
-    begin(DEJAVU, NULL);
+    begin(NOINK, NULL);
     list[0].covers = covers_three;
     FontSet *set = fontset_open(OPEN_SANS, 36.0f, 0, "titles");
     fontset_prepare(set, "12" NNBSP "h");
-    CHECK_INT(lines_with("Fonts: the 36 pt titles fall back to " DEJAVU " (face 0), first for U+202F"), 1);
-    fontset_prepare(set, BRAILLE);
-    CHECK_INT(lines_with("Fonts: skipped " DEJAVU ": it draws nothing for U+2800"), 1);
-    CHECK_INT(lines_with("Fonts: no installed font draws U+2800; it shows as a box"), 1);
+    CHECK_INT(lines_with("Fonts: the 36 pt titles fall back to " NOINK " (face 0), first for U+202F"), 1);
+    fontset_prepare(set, PUA);
+    CHECK_INT(lines_with("Fonts: skipped " NOINK ": it draws nothing for U+E500"), 1);
+    CHECK_INT(lines_with("Fonts: no installed font draws U+E500; it shows as a box"), 1);
     FontSet *other = fontset_open(OPEN_SANS, 36.0f, 0, "titles");
     fontset_prepare(other, STAR);
     CHECK_INT(lines_with("Fonts: skipped "), 1);
-    CHECK_INT(lines_with(" fall back to " DEJAVU " (face 0), first for U+2605"), 0);
+    CHECK_INT(lines_with(" fall back to " NOINK " (face 0), first for U+2605"), 0);
     CHECK_INT(lines_with("Fonts: no installed font draws U+2605; it shows as a box"), 1);
     fontset_close(other);
     fontset_close(set);

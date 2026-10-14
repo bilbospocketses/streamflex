@@ -69,6 +69,7 @@ static void test_skip_ranges(void)
     CHECK(!fontrules_skip(0x0600));   // The Arabic number sign: a format character with ink
     CHECK(!fontrules_skip(0xFFF9));   // The interlinear annotation anchor: a format character, not ignorable
     CHECK(!fontrules_skip(0xFFFD));   // The replacement character
+    CHECK(!fontrules_skip(0x2800));   // The blank Braille pattern is looked up, and blank
 }
 
 // A function to test the spaces a fallback draws as nothing on purpose
@@ -82,8 +83,9 @@ static void test_blank(void)
     CHECK(!fontrules_blank(0x2605));
 }
 
-// A function to test the rest of the spaces, and the one space with ink: a font with no ink for the Ogham
-// space mark must not be taken as its provider
+// A function to test the rest of the spaces, the one space with ink (a font with no ink for the Ogham
+// space mark must not be taken as its provider), and the one blank that is no space: the blank Braille
+// pattern, an invisible filler in names, and none of the patterns beside it, which have dots
 static void test_blank_edges(void)
 {
     CHECK(fontrules_blank(0x2000));   // The en quad
@@ -93,6 +95,9 @@ static void test_blank_edges(void)
     CHECK(fontrules_blank(0x205F));   // The medium mathematical space
     CHECK(!fontrules_blank(0x1680));  // The Ogham space mark, a stroke
     CHECK(!fontrules_blank(0x3001));  // The ideographic comma
+    CHECK(fontrules_blank(0x2800));   // The blank Braille pattern
+    CHECK(!fontrules_blank(0x27FF));  // The long rightwards squiggle arrow
+    CHECK(!fontrules_blank(0x2801));  // Braille pattern dots-1
 }
 
 // A function to test that no code point is both skipped and blank: a skipped space is never looked up,
