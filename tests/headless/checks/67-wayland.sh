@@ -148,10 +148,14 @@ elif [ $ok = 0 ]; then
         grep -qx 'Screen: 3840x2160 px, pixel density 2.00, display scale 2.00' "$out/f67-scale.log" \
             && grep -qx 'Resolution:    3840x2160' "$out/f67-scale.log" && ran_clean f67-scale && ok=0
         grep -E '^(Video|Screen|Resolution):' "$out/f67-scale.log" | sed 's/^/      /'
+    else
+        echo "      wayland: Weston did not start at scale 2"
+        tail -20 "$out/weston-wayland-sf2.log" 2> /dev/null | sed 's/^/      /'
     fi
     result "wayland: at scale 2 the window gets the output's native pixels (exit $(cat "$out/f67-scale.code" 2> /dev/null))" $ok
     w67_stop
-    w67_start wayland-sf 1920 1080 1
+    w67_start wayland-sf 1920 1080 1 || { echo "      wayland: Weston did not start again at scale 1, so the app id case fails for that"
+                                         tail -20 "$out/weston-wayland-sf.log" 2> /dev/null | sed 's/^/      /'; }
 fi
 
 # The app id is streamflex whatever the program file is called (SDL_SetAppMetadata), not SDL's

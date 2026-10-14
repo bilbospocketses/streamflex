@@ -35,17 +35,18 @@ for e95_line in "${e95_bad[@]}"; do echo "      $e95_line"; done
 # NAME.display says for a run on another X display) at pixel density 1.00 and display scale 1.00, but
 # the Scale leg's run at 2 (f47-scale2), and the Weston leg's run on an output at scale 2 (f67-scale),
 # whose window has the output's 3840x2160 pixels at pixel density 2.00 (the Weston leg's output is
-# 1920x1080 at scale 1 otherwise, Xvfb's size, so its other runs need nothing here); no run reloads unless it changed its window's size on purpose
-# (check 47's and 48's resizes: a NAME.path file, or the size hook's "Test hook: the window's size
-# reads" line), so the event SDL sends as it makes the window, which the loop handles after "Begin
-# program loop", changes nothing; and no run's renderer draws at a size other than its window's (spec
-# section 6). A run that posts a render reset on purpose (check 48's: the render hook's "Test hook:
-# pushed the render event" line) reloads for it, so only its size-change lines count there. A run that
-# recreates its window on purpose (check 60's f60-winrest, whose rests on Mode recreate it under the
-# Windows plan) reloads for each new window, so there a reload counts unless its only reason is "a new
-# window" (describe_reload() names that reason last, so any other comes first). The runs pin GDK_SCALE,
-# Xft.dpi and SDL_VIDEO_X11_SCALING_FACTOR unset (run.sh) except where a check sets one. A later task's
-# new window that reloads at the same size names its runs here too.
+# 1920x1080 at scale 1 otherwise, Xvfb's size, so its other runs need nothing here); no run reloads
+# unless it changed its window's size on purpose (check 47's and 48's resizes: a NAME.path file, or the
+# size hook's "Test hook: the window's size reads" line), so the event SDL sends as it makes the
+# window, which the loop handles after "Begin program loop", changes nothing; and no run's renderer
+# draws at a size other than its window's (spec section 6). A run that posts a render reset on purpose
+# (check 48's: the render hook's "Test hook: pushed the render event" line) reloads for it, so only its
+# size-change lines count there. A run that recreates its window on purpose (check 60's f60-winrest,
+# whose rests on Mode recreate it under the Windows plan) reloads for each new window, so there a reload
+# counts unless its only reason is "a new window" (describe_reload() names that reason last, so any
+# other comes first). The runs pin GDK_SCALE, Xft.dpi and SDL_VIDEO_X11_SCALING_FACTOR unset (run.sh)
+# except where a check sets one. A later task's new window that reloads at the same size names its runs
+# here too.
 e95_bad=() e95_runs=0
 for e95_log in "$out"/*.log; do
     [ -f "$e95_log" ] || continue

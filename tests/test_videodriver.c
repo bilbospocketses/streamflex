@@ -39,7 +39,7 @@ static void test_override(void)
     CHECK(video_driver_note("x11", "x11,wayland", "wayland", "wayland-0", out, sizeof(out)));
     CHECK_STR(out, "Video: the driver list comes from SDL_VIDEO_DRIVER=x11,wayland");
     CHECK(video_driver_note("x11", "", "x11", "wayland-0", out, sizeof(out)));
-    CHECK_STR(out, "Video: the driver list comes from SDL_VIDEODRIVER=x11");
+    CHECK_STR(out, FIFO_NOTE);   // An empty SDL_VIDEO_DRIVER hides SDL_VIDEODRIVER from SDL: no override
 }
 
 // A function to test that a short buffer is cut, never overrun
