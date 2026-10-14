@@ -113,7 +113,7 @@ branding/logo/       The full-resolution logo original; the docs banner is a dow
 branding/library/    Tools for the icon library: generator, brand importer, checks, gallery (see its README)
 design/              Design specs and implementation plans (not published; docs/ is the site)
 tests/               Unit tests (CTest); run them with ctest after building
-tests/headless/      Headless checks: the launcher under Xvfb, driven by key presses, and on a headless Weston (check 67) (see run.sh); CI runs them on Debian and Fedora
+tests/headless/      Headless checks: the launcher under Xvfb, driven by key presses, and beside it on a headless Weston for check 67 (see run.sh); CI runs them on Debian and Fedora
 docs/                Documentation site (GitHub Pages / Jekyll)
 ```
 
