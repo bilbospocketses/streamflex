@@ -407,9 +407,15 @@ running() {
 
 # A function to end the launcher PID's run and return its exit code: TERM (SDL turns it into a
 # quit event), then KILL 10 s later for a launcher stuck in a loop that never reads it (exit
-# 137). Every run ends through here, so every run has the same escalation.
+# 137). Every run ends through here, so every run has the same escalation. A launcher whose log
+# already says "Quitting program" (a key, a TERM of the check's own, a fatal error) is given up to
+# 10 s to exit by itself first: SDL_Quit() in its cleanup puts back TERM's default action, so a TERM
+# between it and the exit (about 20 ms, the leak pass's leak check) ends it with exit 143.
 stop_run() {
     local pid=$1 i
+    if grep -q '^Quitting program' "$LOG" 2> /dev/null; then
+        for i in $(seq 200); do running "$pid" || break; sleep 0.05; done
+    fi
     kill -TERM "$pid" 2> /dev/null
     for i in $(seq 50); do running "$pid" || break; sleep 0.2; done
     kill -KILL "$pid" 2> /dev/null
