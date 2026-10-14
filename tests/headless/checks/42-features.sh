@@ -24,7 +24,7 @@ grep 'VSync' "$out/f42-vsync.log" | sed 's/^/      /'
 # A renderer that will not turn VSync off (the same hook, "off") keeps presenting at the display's
 # rate, so FPSLimit=10 holds only if present_frame() still paces each frame to 100 ms: every frame
 # counted is paced, and there are no more of them than 10 a second allows
-STREAMFLEX_TEST_VSYNC_REFUSED=off STREAMFLEX_TEST_FRAME_REPORT_MS=3000 UNTIL='Test hook: ' run_keys f42-fpsstuck
+STREAMFLEX_TEST_VSYNC_REFUSED=off STREAMFLEX_TEST_FRAME_REPORT_MS=3000 UNTIL=' of them paced' run_keys f42-fpsstuck
 report=$(grep -o 'Test hook: [0-9]* frames in [0-9]* ms, [0-9]* of them paced' "$out/f42-fpsstuck.log" | head -1)
 read -r frames span paced <<< "$(sed 's/Test hook: \([0-9]*\) frames in \([0-9]*\) ms, \([0-9]*\) of them paced/\1 \2 \3/' <<< "$report")"
 ok=1
