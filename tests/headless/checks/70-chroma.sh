@@ -21,7 +21,8 @@ chown -R tester:tester "$TESTER_HOME/keyed"
 # three frames are on show. Writes "<icon> box ...: N pixels of 1,1,1" per icon to NAME.seen, and
 # keeps the last screenshot as NAME.xwd when a frame never showed. It counts the key's pixels inside
 # the box they span too ("background box ..."): Linux clears Transparent to the key (Windows clears it
-# to nothing, Task 1.8b), so the background is that box, and a screen with no key pixel has none.
+# to nothing, Task 1.8b), so the box is the whole screen, corner to corner; a screen whose background
+# is not the key has none, or only the small box a stray pixel of that color spans.
 count_keyed() {
     local name=$1 shot=/tmp/keyed.xwd i icon found
     for i in $(seq 50); do
@@ -44,7 +45,7 @@ seen=$out/f70-chroma.seen
 ok=1
 grep -qE '^rgba box .*: 0 pixels of 1,1,1$' "$seen" && grep -qE '^rgb box .*: 0 pixels of 1,1,1$' "$seen" \
     && grep -qE '^svg box .*: 0 pixels of 1,1,1$' "$seen" \
-    && grep -qE '^background box .*: [1-9][0-9]* pixels of 1,1,1$' "$seen" \
+    && grep -qE '^background box 0,0 to 1919,1079: [1-9][0-9]* pixels of 1,1,1$' "$seen" \
     && grep -q '/home/tester/keyed/rgba.png: moved [0-9]* pixel(s) off the chroma key #010101' "$out/f70-chroma.log" \
     && grep -q '/home/tester/keyed/rgb.png: moved [0-9]* pixel(s) off the chroma key #010101' "$out/f70-chroma.log" \
     && grep -q '/home/tester/keyed/svg.svg: moved [0-9]* pixel(s) off the chroma key #010101' "$out/f70-chroma.log" \
