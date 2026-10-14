@@ -144,8 +144,10 @@ static bool charset_covers(const FontCandidate *candidate, Uint32 ch)
 // FcDefaultSubstitute adds), untrimmed, so a font a skipped one would have shadowed is still there.
 // Each pattern is a face, or a named instance of a variable one; its index is fontconfig's
 // (instance << 16) | face, which SDL3_ttf 3.2.2 hands to FT_Open_Face unchanged. A variable font's own
-// pattern is left out: it opens at the default instance, which for Fedora's Noto Sans CJK VF is Thin,
-// and its named instances follow it in the sort, the Regular one first. Returns how many it added.
+// pattern (FC_VARIABLE true) stands for the whole font, not one instance, and opens at the default
+// instance, which for Fedora's Noto Sans CJK VF is Thin, so it is left out. fontconfig 2.17 sorts those
+// patterns after every named instance, so the walk never reaches one first; the skip guards against a
+// fontconfig that sorts them differently. Returns how many it added.
 static int add_fontconfig(void)
 {
     FcPattern *pattern = FcNameParse((const FcChar8 *) "sans-serif:style=Regular");
