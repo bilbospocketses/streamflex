@@ -87,8 +87,8 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
 # passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
 # at 9550682; 49-fade-wall-time.sh's is an estimate (its two runs wait about 9 s and 5 s, plus
-# start-up). The *-timing.sh files took their cases from the file of the same name without
-# "-timing" (62's, two files: -timing and -pad-timing) on 2026-10-13: each part's time is that
+# start-up). The *-timing.sh files but 60-timing.sh took their cases from the file of the same name
+# without "-timing" (62's, two files: -timing and -pad-timing) on 2026-10-13: each part's time is that
 # file's, times the share its runs took of the file in a full set at 7bcdbd7 (by the time each run's
 # files were written). They only balance the shards: a check file missing here counts as 60 s, and a
 # stale time makes the shards uneven, never a check lost or run twice. 48-pad-repeat.sh's is its
@@ -103,7 +103,10 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # 1.10: on Weston 15 six runs and three Weston starts, on Weston 14 three runs; the launch case on
 # Weston 15 only), until a set measures them. 66-pad-power.sh's is an estimate from its runs (Task
 # 1.11b: four runs, about 3 s each to start and stop, and sixteen steps of about 1.5 s each, a 1 s
-# floor and a screen read), until a set measures it.
+# floor and a screen read), until a set measures it. 60-timing.sh checks the Timing: lines and reads no
+# duration, so it is in the rest set; its time is an estimate from its two runs (Task 1.12: two menus
+# of 48 icons decoded under ASan with a key between them, about 10 s, and a slideshow start that quits,
+# about 3 s, with a little more for the leak pass), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -112,7 +115,7 @@ declare -A shard_seconds=(
     [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
-    [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66
+    [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66 [60-timing.sh]=15
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6

@@ -1463,10 +1463,16 @@ void reload_background()
     else if (config.background_mode == BACKGROUND_SLIDESHOW) {
         init_slideshow();
         if (background_shown == BACKGROUND_SLIDESHOW) {
-            SDL_Surface *surface = load_next_slideshow_background(slideshow, false);
+            Uint64 start = SDL_GetPerformanceCounter(), read = 0, decode = 0;
+            SDL_Surface *surface = load_next_slideshow_background(slideshow, false, &read, &decode);
             if (surface != NULL) {
+                Uint64 decoded = SDL_GetPerformanceCounter();
                 background_luminance = surface_luminance(surface);
+                Uint64 lit = SDL_GetPerformanceCounter();
                 background_texture = load_texture(surface);
+                Uint64 end = SDL_GetPerformanceCounter();
+                log_debug("Timing: background: Slideshow image in %u ms (read %u, decode %u, luminance %u, texture %u)",
+                    timing_ms(end - start), timing_ms(read), timing_ms(decode), timing_ms(lit - decoded), timing_ms(end - lit));
                 ticks.slideshow_load = ticks.main;
             }
             else
@@ -1627,6 +1633,9 @@ static int apply_layout(Menu *menu)
 // button size, and the titles in the menu's own title size
 static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
 {
+    Uint64 timing_start = SDL_GetPerformanceCounter(), titles_time = 0;
+    int icons = 0, titles = 0;
+    timing_read = timing_decode = timing_texture = 0;
     int size = geometry->button;
     title_info.font = fixed_title_font;
     title_info.font_size = (int) config.title_font_size;
@@ -1639,6 +1648,7 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
     }
     int line_height = TTF_GetFontHeight(title_info.font);
     title_info.max_width = layout_title_width(config.title_shadows, size, line_height);   // Room for the shadow
+    titles_time += SDL_GetPerformanceCounter() - timing_start;   // Opening the title font counts as titles
     for (unsigned int i = 0; i < menu->num_entries; i++) {
         Entry *entry = menu->items[i];
         if (entry->icon != NULL)
@@ -1647,7 +1657,9 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
             SDL_DestroyTexture(entry->icon_selected);
         entry->icon = load_icon(entry->icon_path, size);
         entry->icon_selected = entry->icon_selected_path != NULL ? load_icon(entry->icon_selected_path, size) : NULL;
+        icons += (entry->icon_path != NULL) + (entry->icon_selected_path != NULL);
         if (config.titles_enabled) {
+            Uint64 title_start = SDL_GetPerformanceCounter();
             int h;
             if (entry->title_texture != NULL)
                 SDL_DestroyTexture(entry->title_texture);
@@ -1657,6 +1669,8 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
             if (config.title_oversize_mode != OVERSIZE_NONE && entry->text_rect.w > size)
                 log_debug("Menu '%s': the title '%s' is %i px wide, over its %i px button",
                     menu->name, entry->title, entry->text_rect.w, size);
+            titles_time += SDL_GetPerformanceCounter() - title_start;
+            titles++;
         }
     }
 
@@ -1664,6 +1678,10 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
     title_info.font = fixed_title_font;
     title_info.font_size = (int) config.title_font_size;
     log_debug("Menu '%s': rendered its buttons at %i px", menu->name, size);
+    Uint64 icons_time = SDL_GetPerformanceCounter() - timing_start - titles_time;
+    log_debug("Timing: menu '%s': %i icons at %i px in %u ms (read %u, decode %u, texture %u), %i titles in %u ms",
+        menu->name, icons, size, timing_ms(icons_time), timing_ms(timing_read), timing_ms(timing_decode),
+        timing_ms(timing_texture), titles, timing_ms(titles_time));
 }
 
 // A function to position the visible buttons and the highlight for the current menu
@@ -3510,6 +3528,7 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
     log_debug("DPI awareness: %s", dpi_awareness());
 #endif
+    prime_image_formats();
     init_sdl_ttf();
     refresh_effective();
 
@@ -3563,6 +3582,7 @@ int main(int argc, char *argv[])
     
     // Main program loop
     log_debug("Begin program loop");
+    log_debug("Timing: startup: first menu shown %u ms after the window opened", (unsigned) (ticks_ms() - ticks.program_start));
     while (1) {
         ticks.main = ticks_ms();
 #ifdef STREAMFLEX_TEST_HOOKS

@@ -36,6 +36,39 @@ extern TextInfo title_info;
 extern Effective eff;
 NSVGrasterizer *rasterizer = NULL;
 
+// What render_buttons' icons cost in its current render, in performance-counter counts: their reads,
+// their decodes (with the chroma pass, which a decode worker would run too) and their textures. Main
+// thread only: render_buttons zeroes them, and the slideshow's thread never touches them.
+Uint64 timing_read = 0, timing_decode = 0, timing_texture = 0;
+
+// A function to turn performance-counter counts into whole milliseconds, rounded
+unsigned timing_ms(Uint64 counts)
+{
+    Uint64 frequency = SDL_GetPerformanceFrequency();
+    return (unsigned) ((counts * 1000 + frequency / 2) / frequency);
+}
+
+// A function to load an image file as IMG_Load does, in two timed parts: the read (SDL_LoadFile)
+// and the decode (IMG_LoadTyped_IO from memory, with the file's extension as the type, as IMG_Load
+// passes it; IMG_Load_IO would pass none), adding each part's counts to *read and *decode. NULL,
+// with SDL's reason in SDL_GetError(), when either fails. It touches nothing else, so the
+// slideshow's thread can use it.
+static SDL_Surface *load_surface_timed(const char *path, Uint64 *read, Uint64 *decode)
+{
+    Uint64 start = SDL_GetPerformanceCounter();
+    size_t size = 0;
+    void *data = SDL_LoadFile(path, &size);
+    Uint64 loaded = SDL_GetPerformanceCounter();
+    *read += loaded - start;
+    if (data == NULL)
+        return NULL;
+    const char *dot = SDL_strrchr(path, '.');
+    SDL_Surface *surface = IMG_LoadTyped_IO(SDL_IOFromConstMem(data, size), true, dot != NULL ? dot + 1 : NULL);
+    SDL_free(data);
+    *decode += SDL_GetPerformanceCounter() - loaded;
+    return surface;
+}
+
 // A function to initalize SVG rasterization
 int init_svg()
 {
@@ -51,6 +84,70 @@ int init_svg()
 void quit_svg()
 {
     nsvgDeleteRasterizer(rasterizer);
+}
+
+// Three 1 x 1 images, one per format SDL_image decodes for StreamFlex: a mid-gray PNG (RGB), a
+// baseline grayscale JPEG with the standard Huffman tables, and a lossless WebP. Made with
+// ImageMagick 7.1.2 and decoded back by Pillow before they were pasted here.
+static const unsigned char PRIME_PNG[] = {
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x68, 0x68, 0x68, 0x00,
+    0x00, 0x03, 0x04, 0x01, 0x81, 0x9A, 0xF0, 0xCD, 0x4F, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82
+};
+static const unsigned char PRIME_JPEG[] = {
+    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x10, 0x0B, 0x0C, 0x0E, 0x0C, 0x0A, 0x10,
+    0x0E, 0x0D, 0x0E, 0x12, 0x11, 0x10, 0x13, 0x18, 0x28, 0x1A, 0x18, 0x16, 0x16, 0x18, 0x31, 0x23,
+    0x25, 0x1D, 0x28, 0x3A, 0x33, 0x3D, 0x3C, 0x39, 0x33, 0x38, 0x37, 0x40, 0x48, 0x5C, 0x4E, 0x40,
+    0x44, 0x57, 0x45, 0x37, 0x38, 0x50, 0x6D, 0x51, 0x57, 0x5F, 0x62, 0x67, 0x68, 0x67, 0x3E, 0x4D,
+    0x71, 0x79, 0x70, 0x64, 0x78, 0x5C, 0x65, 0x67, 0x63, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
+    0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
+    0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
+    0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01, 0x03,
+    0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D, 0x01, 0x02, 0x03, 0x00,
+    0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32,
+    0x81, 0x91, 0xA1, 0x08, 0x23, 0x42, 0xB1, 0xC1, 0x15, 0x52, 0xD1, 0xF0, 0x24, 0x33, 0x62, 0x72,
+    0x82, 0x09, 0x0A, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x34, 0x35,
+    0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x53, 0x54, 0x55,
+    0x56, 0x57, 0x58, 0x59, 0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x73, 0x74, 0x75,
+    0x76, 0x77, 0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x92, 0x93, 0x94,
+    0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2,
+    0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9,
+    0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6,
+    0xE7, 0xE8, 0xE9, 0xEA, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFF, 0xDA,
+    0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x2B, 0xFF, 0xD9
+};
+static const unsigned char PRIME_WEBP[] = {
+    0x52, 0x49, 0x46, 0x46, 0x1E, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4C,
+    0x11, 0x00, 0x00, 0x00, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x07, 0x50, 0xC0, 0x02, 0x16, 0xB0, 0xFF,
+    0x81, 0x88, 0xE8, 0x7F, 0x00, 0x00
+};
+
+// A function to set SDL_image's PNG, JPEG and WebP loaders up on the main thread, before any thread
+// that decodes starts. SDL_image sets each format up on its first load, with nothing to stop two
+// threads doing it at once, and the slideshow's loader and the settings preview's decode load beside
+// the main thread. Each format decodes its tiny image once; one that cannot says why.
+void prime_image_formats(void)
+{
+    static const struct { const char *name; const char *type; const unsigned char *data; size_t size; } formats[] = {
+        { "PNG", "png", PRIME_PNG, sizeof(PRIME_PNG) },
+        { "JPEG", "jpg", PRIME_JPEG, sizeof(PRIME_JPEG) },
+        { "WebP", "webp", PRIME_WEBP, sizeof(PRIME_WEBP) }
+    };
+    size_t primed = 0;
+    for (size_t i = 0; i < sizeof(formats) / sizeof(formats[0]); i++) {
+        SDL_Surface *surface = IMG_LoadTyped_IO(SDL_IOFromConstMem(formats[i].data, formats[i].size), true, formats[i].type);
+        if (surface == NULL)
+            log_error("Could not prime SDL_image's %s loader\n%s", formats[i].name, SDL_GetError());
+        else {
+            SDL_DestroySurface(surface);
+            primed++;
+        }
+    }
+    if (primed == sizeof(formats) / sizeof(formats[0]))
+        log_debug("Images: primed the PNG, JPEG and WebP loaders");
 }
 
 // A function to make a texture from a surface, filtered linearly when it is drawn scaled, as SDL2's
@@ -190,8 +287,9 @@ void title_fonts_keep(const int *sizes, int count)
 // A function to load the next slideshow image that loads. It also runs on the slideshow thread, so
 // it touches nothing but the slideshow: textures, the draw color and what is shown belong to the
 // main thread. It returns NULL when no image in the folder loads, and sets slideshow->only_one when
-// the only one that does is the image already on show; the main thread falls back from either.
-SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition)
+// the only one that does is the image already on show; the main thread falls back from either. The
+// read and the decode of each try are added to *read and *decode.
+SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition, Uint64 *read, Uint64 *decode)
 {
     SDL_Surface *surface = NULL;
     int initial_index = slideshow->i;
@@ -199,7 +297,7 @@ SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transitio
     // Try each image once at most, starting after the one on show (i is -1 before the first)
     for (int attempts = 0; surface == NULL && attempts < slideshow->num_images; attempts++) {
         slideshow->i = (slideshow->i + 1) % slideshow->num_images;
-        surface = IMG_Load(slideshow->images[slideshow->order[slideshow->i]]);
+        surface = load_surface_timed(slideshow->images[slideshow->order[slideshow->i]], read, decode);
 
         // If the loaded image has no alpha channel (e.g. JPEG), create one
         // so that we can have transparency for the background transition
@@ -231,7 +329,8 @@ int load_next_slideshow_background_async(void *data)
     for (int waited = 0; hold != NULL && waited < 60000 && !fileio_present(hold); waited += 50)
         SDL_Delay(50);
 #endif
-    slideshow->transition_surface = load_next_slideshow_background(slideshow, true);
+    Uint64 read = 0, decode = 0;   // Timed only on the main thread's first load
+    slideshow->transition_surface = load_next_slideshow_background(slideshow, true, &read, &decode);
     slideshow->transition_luminance = slideshow->transition_surface != NULL
                                       ? surface_luminance(slideshow->transition_surface) : -1.0;
     SDL_SetAtomicInt(&state.slideshow_background_rendering, 0);
@@ -274,14 +373,21 @@ SDL_Texture *load_texture_measured(const char *path, double *luminance)
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
-    SDL_Surface *surface = IMG_Load(path);
+    Uint64 start = SDL_GetPerformanceCounter(), read = 0, decode = 0;
+    SDL_Surface *surface = load_surface_timed(path, &read, &decode);
     if (surface == NULL) {
         log_error("Could not load image %s\n%s", path, SDL_GetError());
         return NULL;
     }
+    Uint64 decoded = SDL_GetPerformanceCounter();
     if (luminance != NULL)
         *luminance = surface_luminance(surface);
-    return load_texture(surface);
+    Uint64 lit = SDL_GetPerformanceCounter();
+    SDL_Texture *texture = load_texture(surface);
+    Uint64 end = SDL_GetPerformanceCounter();
+    log_debug("Timing: background: image in %u ms (read %u, decode %u, luminance %u, texture %u)",
+        timing_ms(end - start), timing_ms(read), timing_ms(decode), timing_ms(lit - decoded), timing_ms(end - lit));
+    return texture;
 }
 
 // A function to load a texture from a file
@@ -368,6 +474,7 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     float scale;
 
     // Parse SVG to NSVGimage struct
+    Uint64 start = SDL_GetPerformanceCounter();
     image = nsvgParse(buffer, "px", 96.0f);
     if (image == NULL) {
         log_error("could not open SVG image.");
@@ -407,8 +514,11 @@ static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const 
     // Rasterize image
     nsvgRasterize(rasterizer, image, 0, 0, scale, pixel_buffer, width, height, pitch);
     keep_off_chroma_key(pixel_buffer, width, height, pitch, what);
+    Uint64 rasterized = SDL_GetPerformanceCounter();
+    timing_decode += rasterized - start;
     SDL_Surface *surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32, pixel_buffer, pitch);
     SDL_Texture *texture = surface_texture(surface);
+    timing_texture += SDL_GetPerformanceCounter() - rasterized;
     if (rect != NULL) {
         rect->w = width;
         rect->h = height;
@@ -433,7 +543,9 @@ SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *r
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
+    Uint64 start = SDL_GetPerformanceCounter();
     char *buffer = SDL_LoadFile(path, NULL);
+    timing_read += SDL_GetPerformanceCounter() - start;
     if (buffer == NULL) {
         log_error("Could not load image %s\n%s", path, SDL_GetError());
         return NULL;
@@ -458,12 +570,19 @@ SDL_Texture *load_icon(const char *path, int size)
         log_error("Could not load image %s\n%s", path, fileio_last_error());
         return NULL;
     }
-    SDL_Surface *surface = IMG_Load(path);
+    SDL_Surface *surface = load_surface_timed(path, &timing_read, &timing_decode);
     if (surface == NULL) {
         log_error("Could not load image %s\n%s", path, SDL_GetError());
         return NULL;
     }
-    return load_texture(keep_surface_off_chroma_key(surface, path));
+    // The chroma pass counts as decode: a decode worker would run it too (spec section 8)
+    Uint64 decoded = SDL_GetPerformanceCounter();
+    surface = keep_surface_off_chroma_key(surface, path);
+    Uint64 kept = SDL_GetPerformanceCounter();
+    timing_decode += kept - decoded;
+    SDL_Texture *texture = load_texture(surface);
+    timing_texture += SDL_GetPerformanceCounter() - kept;
+    return texture;
 }
 
 // A function to render the highlight for the buttons

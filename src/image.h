@@ -28,7 +28,7 @@ int load_font(TextInfo *info, const char *configured, int face, const char *defa
 bool font_file_found(const char *configured);   // There, as given or beside the executable, as load_font() looks
 void quit_svg(void);
 int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo);
-SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition);
+SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition, Uint64 *read, Uint64 *decode);
 int load_next_slideshow_background_async(void *data);
 SDL_Texture *load_texture(SDL_Surface *surface);
 SDL_Texture *load_texture_from_file(const char *path);
@@ -37,6 +37,9 @@ double surface_luminance(SDL_Surface *surface);   // -1 when it cannot be read
 SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect);
 SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect);
 SDL_Texture *load_icon(const char *path, int size);
+extern Uint64 timing_read, timing_decode, timing_texture;   // render_buttons' icons, in counter counts; main thread only
+unsigned timing_ms(Uint64 counts);                           // Whole milliseconds, rounded
+void prime_image_formats(void);                              // Main thread, before any thread that decodes
 SDL_Texture *render_highlight(int width, int height, SDL_Rect *rect);
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
 SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
