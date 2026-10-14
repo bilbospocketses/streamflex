@@ -57,13 +57,17 @@ static void test_hysteresis(void)
 
 // A function to test the reports that look like a level and are not: only ON_BATTERY shows, so a
 // wired Xbox pad's CHARGING 100, a charging pad at 20 %, and a driver's UNKNOWN with a percent show
-// nothing, and a pad plugged in while its glyph shows hides it at once
+// nothing, and a pad plugged in while its glyph shows hides it at once. SDL's Windows.Gaming.Input
+// driver sends NO_BATTERY with a percent of 0 and CHARGED with whatever percent it read, so those
+// states are tested at percents the percent rule alone would show
 static void test_not_on_battery(void)
 {
     CHECK_INT(padpower_level(PADPOWER_CHARGING, 100, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_CHARGING, 20, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_CHARGING, 20, PADPOWER_LOW), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_CHARGED, 100, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
+    CHECK_INT(padpower_level(PADPOWER_CHARGED, 30, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
+    CHECK_INT(padpower_level(PADPOWER_NO_BATTERY, 0, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_UNKNOWN, 40, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_UNKNOWN, 10, PADPOWER_LOW), PADPOWER_HIDDEN);
     CHECK_INT(padpower_level(PADPOWER_UNKNOWN, -1, PADPOWER_HIDDEN), PADPOWER_HIDDEN);
@@ -72,7 +76,9 @@ static void test_not_on_battery(void)
 }
 
 // A function to test the pick: the lowest pad whose glyph shows, the first of two at the same
-// percent; none when no pad's glyph shows, a charging pad at a lower percent included
+// percent; none when no pad's glyph shows, a charging pad at a lower percent included. A pad on its
+// battery whose glyph does not show is passed over even below a shown one (41-44 from nothing, or
+// no percent), and of two at one level the lower percent wins, the percent the log names
 static void test_pick(void)
 {
     CHECK_INT(padpower_pick(NULL, 0), -1);
@@ -88,6 +94,12 @@ static void test_pick(void)
     CHECK_INT(padpower_pick(held, 2), 1);
     PadPower tie[] = { pad(PADPOWER_ON_BATTERY, 30, PADPOWER_LOW), pad(PADPOWER_ON_BATTERY, 30, PADPOWER_LOW) };
     CHECK_INT(padpower_pick(tie, 2), 0);
+    PadPower under[] = { pad(PADPOWER_ON_BATTERY, 42, PADPOWER_HIDDEN), pad(PADPOWER_ON_BATTERY, 45, PADPOWER_LOW) };
+    CHECK_INT(padpower_pick(under, 2), 1);
+    PadPower no_percent[] = { pad(PADPOWER_ON_BATTERY, -1, PADPOWER_HIDDEN), pad(PADPOWER_ON_BATTERY, 30, PADPOWER_LOW) };
+    CHECK_INT(padpower_pick(no_percent, 2), 1);
+    PadPower one_level[] = { pad(PADPOWER_ON_BATTERY, 40, PADPOWER_LOW), pad(PADPOWER_ON_BATTERY, 30, PADPOWER_LOW) };
+    CHECK_INT(padpower_pick(one_level, 2), 1);
 }
 
 // A function to test a pad nothing has been read from, and the names the log uses
