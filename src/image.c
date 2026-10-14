@@ -14,6 +14,7 @@
 #include "fileio.h"
 #include "util.h"
 #include "debug.h"
+#include "test_hooks.h"
 #include <ini.h>
 // Vendored code is not held to our warning level (see src/external/README.md)
 #ifdef _MSC_VER
@@ -42,6 +43,33 @@ NSVGrasterizer *rasterizer = NULL;
 // render_buttons zeroes them, and neither the decode threads nor the slideshow's thread touches them.
 Uint64 timing_read = 0, timing_decode = 0, timing_texture = 0;
 
+// SDL_image decodes PNG, JPEG and WebP on several threads at once once they are primed (below). Every
+// other format decodes under this lock, one at a time: TIFF, AVIF and JXL set themselves up on their
+// first load, unprimed, and XPM keeps its line buffer in file-scope statics (SDL_image 3.2.4 and 3.4.6,
+// IMG_xpm.c), which two decodes at once free twice. Made by prime_image_formats() on the main thread
+// before any thread that decodes starts, and destroyed by quit_image_formats() once every such thread
+// has ended. When it could not be made, the spin lock stands in: those formats still wait for each
+// other, spinning instead of sleeping.
+static SDL_Mutex *decode_lock = NULL;
+static SDL_SpinLock decode_spin = 0;
+
+// A function to take the lock the formats SDL_image cannot decode side by side decode under
+static void lock_other_formats(void)
+{
+    if (decode_lock != NULL)
+        SDL_LockMutex(decode_lock);
+    else
+        SDL_LockSpinlock(&decode_spin);
+}
+
+static void unlock_other_formats(void)
+{
+    if (decode_lock != NULL)
+        SDL_UnlockMutex(decode_lock);
+    else
+        SDL_UnlockSpinlock(&decode_spin);
+}
+
 // A function to turn performance-counter counts into whole milliseconds, rounded
 unsigned timing_ms(Uint64 counts)
 {
@@ -52,8 +80,9 @@ unsigned timing_ms(Uint64 counts)
 // A function to load an image file as IMG_Load does, in two timed parts: the read (SDL_LoadFile)
 // and the decode (IMG_LoadTyped_IO from memory, with the file's extension as the type, as IMG_Load
 // passes it; IMG_Load_IO would pass none), adding each part's counts to *read and *decode. NULL,
-// with SDL's reason in SDL_GetError(), when either fails. It touches nothing else, so the
-// slideshow's thread and the icons' decode threads can use it.
+// with SDL's reason in SDL_GetError(), when either fails. It touches nothing else, and decodes a
+// format other than PNG, JPEG and WebP under the decode lock, so the slideshow's thread, the settings
+// preview's and the icons' decode threads can use it.
 static SDL_Surface *load_surface_timed(const char *path, Uint64 *read, Uint64 *decode)
 {
     Uint64 start = SDL_GetPerformanceCounter();
@@ -67,7 +96,14 @@ static SDL_Surface *load_surface_timed(const char *path, Uint64 *read, Uint64 *d
     // SDL 3.2 makes no stream from an empty buffer, so an empty file is read from the file, as IMG_Load
     // read it, and SDL_image gives the reason it always gave
     SDL_IOStream *io = size > 0 ? SDL_IOFromConstMem(data, size) : SDL_IOFromFile(path, "rb");
+    // SDL_image picks the loader by what the file holds, as these do; each reads the first bytes and
+    // puts the stream back where it was
+    bool shared = io != NULL && !(IMG_isPNG(io) || IMG_isJPG(io) || IMG_isWEBP(io));
+    if (shared)
+        lock_other_formats();
     SDL_Surface *surface = IMG_LoadTyped_IO(io, true, dot != NULL ? dot + 1 : NULL);
+    if (shared)
+        unlock_other_formats();
     SDL_free(data);
     *decode += SDL_GetPerformanceCounter() - loaded;
     return surface;
@@ -131,10 +167,24 @@ static const unsigned char PRIME_WEBP[] = {
 
 // A function to set SDL_image's PNG, JPEG and WebP loaders up on the main thread, before any thread
 // that decodes starts. SDL_image sets each format up on its first load, with nothing to stop two
-// threads doing it at once, and the slideshow's loader and the settings preview's decode load beside
-// the main thread. Each format decodes its tiny image once; one that cannot says why.
+// threads doing it at once, and the slideshow's loader, the settings preview's decode and the icons'
+// decode threads load beside the main thread. Each format decodes its tiny image once; one that cannot
+// says why. It also makes the lock every other format decodes under (decode_lock).
 void prime_image_formats(void)
 {
+    if (decode_lock == NULL)
+        decode_lock = SDL_CreateMutex();
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_FAIL=decodelock, the lock is not made
+    if (decode_lock != NULL && test_failing("decodelock")) {
+        SDL_DestroyMutex(decode_lock);
+        decode_lock = NULL;
+        SDL_SetError("the test hook failed it");
+    }
+#endif
+    if (decode_lock == NULL)
+        log_error("Images: could not make the decode lock, so the formats other than PNG, JPEG and WebP wait for "
+                  "each other on a spin lock\n%s", SDL_GetError());
     static const struct { const char *name; const char *type; const unsigned char *data; size_t size; } formats[] = {
         { "PNG", "png", PRIME_PNG, sizeof(PRIME_PNG) },
         { "JPEG", "jpg", PRIME_JPEG, sizeof(PRIME_JPEG) },
@@ -152,6 +202,21 @@ void prime_image_formats(void)
     }
     if (primed == sizeof(formats) / sizeof(formats[0]))
         log_debug("Images: primed the PNG, JPEG and WebP loaders");
+}
+
+// A function to destroy the decode lock, at quit, once every thread that decodes has ended
+void quit_image_formats(void)
+{
+    SDL_DestroyMutex(decode_lock);
+    decode_lock = NULL;
+}
+
+// A function to load an image file whole, for the settings preview's thread: load_surface_timed(),
+// untimed
+SDL_Surface *load_image_file(const char *path)
+{
+    Uint64 read = 0, decode = 0;
+    return load_surface_timed(path, &read, &decode);
 }
 
 // A function to make a texture from a surface, filtered linearly when it is drawn scaled, as SDL2's

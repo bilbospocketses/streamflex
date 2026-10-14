@@ -42,7 +42,9 @@ void *icon_worker_start(void);                          // nsvgCreateRasterizer(
 void icon_worker_end(void *rasterizer);                 // nsvgDeleteRasterizer()
 extern Uint64 timing_read, timing_decode, timing_texture;   // render_buttons' icons, in counter counts; main thread only
 unsigned timing_ms(Uint64 counts);                           // Whole milliseconds, rounded
-void prime_image_formats(void);                              // Main thread, before any thread that decodes
+void prime_image_formats(void);                              // Main thread, before any thread that decodes; makes the decode lock
+void quit_image_formats(void);                               // At quit, after every thread that decodes has ended
+SDL_Surface *load_image_file(const char *path);              // Any thread: read and decode, other formats one at a time
 SDL_Texture *render_highlight(int width, int height, SDL_Rect *rect);
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
 SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);

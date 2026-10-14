@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
-#include <SDL3_image/SDL_image.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "settings.h"
@@ -555,7 +554,7 @@ static int decode_image(void *data)
     if (delay != NULL)
         SDL_Delay((Uint32) atoi(delay));
 #endif
-    decode_surface = IMG_Load(decode_path);
+    decode_surface = load_image_file(decode_path);   // Other formats than PNG, JPEG and WebP one at a time
     if (decode_surface == NULL)
         copy_string(decode_error, SDL_GetError(), sizeof(decode_error));
     SDL_SetAtomicInt(&decode_done, 1);

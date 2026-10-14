@@ -908,6 +908,7 @@ static void cleanup()
     title_info.font_path = NULL;
     TTF_Quit();
     quit_svg();
+    quit_image_formats();   // Every thread that decodes has ended: the slideshow's above, the preview's with settings
 
     // Free dynamically allocated memory
     free(config.default_menu);
@@ -1705,6 +1706,8 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
             *slot = NULL;
             if (job->path == NULL)
                 continue;
+            timing_read += job->read;   // A failed icon's read and decode count too (0 when the guard stopped it)
+            timing_decode += job->decode;
             if (job->surface == NULL) {
                 log_error("Could not load image %s\n%s", job->path, job->error);
                 continue;
@@ -1719,8 +1722,6 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
                 log_debug("%s: moved %i pixel(s) off the chroma key #%02X%02X%02X", job->path, job->moved,
                     config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
 #endif
-            timing_read += job->read;
-            timing_decode += job->decode;
             Uint64 made = SDL_GetPerformanceCounter();
             *slot = load_texture(job->surface);   // Frees the surface
             job->surface = NULL;

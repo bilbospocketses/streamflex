@@ -11,14 +11,20 @@
 # the work done on every thread, so together they are held to the total times the threads. No
 # absolute time is asserted: ASan and lavapipe distort it. The icons are one 512 px PNG drawn 48
 # times in each of two menus, so decoding takes long enough for a part counted twice to show in a sum.
-# The highlighted entry draws its _selected icon, and the entry beside it its own.
+# The highlighted entry draws its _selected icon, and the entry beside it its own. With no decode
+# thread (STREAMFLEX_TEST_ICONLOAD_NO_THREADS), the main thread decodes each menu's icons, says so once a
+# render, and the line adds up as one thread's: parts within the total plus 2 ms.
+# A menu of XPM icons, a format SDL_image cannot decode on two threads at once (its loader keeps its line
+# buffer in file-scope statics), loads every icon and runs clean under ASan: those decodes take a lock in
+# turn. Without the lock (STREAMFLEX_TEST_FAIL=decodelock) they wait on a spin lock instead, as cleanly.
 # The image formats are primed on the main thread before anything decodes (SDL_image sets each
 # format up on its first load, unsynchronized), and a priming that fails says so.
-# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s as a key's frame is
+# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s by the clock as a key's frame is
 rm -rf "$TESTER_HOME/t60"
 mkdir -p "$TESTER_HOME/t60"
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/icon.png" 0,200,200 rgba
 printf 'not a picture\n' > "$TESTER_HOME/t60/broken.png"
+python3 "$HERE/make_images.py" --xpm "$TESTER_HOME/t60/icon.xpm" 512
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/sel.png" 200,40,40 rgb
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/sel_selected.png" 40,200,40 rgb
 chown -R tester:tester "$TESTER_HOME/t60"
@@ -52,14 +58,15 @@ t60_menu_adds_up() {
 }
 
 # A function to check a menu's render in the log LOG: one "rendered its buttons" line, as it always
-# read, one Timing: line of the shipped shape with 48 icons and 48 titles, and its parts adding up
+# read, one Timing: line of the shipped shape with 48 icons and 48 titles, and its parts adding up by the
+# test ADDS_UP names (t60_menu_adds_up unless given; t60_adds_up for a render on one thread)
 t60_menu() {
-    local log=$1 menu=$2 lines
+    local log=$1 menu=$2 adds_up=${3:-t60_menu_adds_up} lines
     lines=$(grep -E "^Timing: menu '$menu': " "$log")
     [ "$(grep -cE "^Menu '$menu': rendered its buttons at [0-9]+ px\$" "$log")" = 1 ] \
         && [ "$(grep -c . <<< "$lines")" = 1 ] \
         && grep -qE "^Timing: menu '$menu': 48 icons at [0-9]+ px in [0-9]+ ms $T60_PARTS, 48 titles in [0-9]+ ms\$" <<< "$lines" \
-        && t60_menu_adds_up "$lines" "$log"
+        && "$adds_up" "$lines" "$log"
 }
 
 UNTIL="Timing: menu 'More': " run_keys f60-icons Return
@@ -72,6 +79,16 @@ ok=1
 [ "$(grep -cE '^Icons: decoding on [1-4] threads$' "$log")" = 1 ] && ok=0
 result "timing: the icons decode on 1 to 4 threads, logged once" $ok
 grep -E '^Icons: ' "$log" | sed 's/^/      /'
+
+# The same two menus with no decode thread: the main thread decodes each render's icons and says so, and
+# each line's parts, all timed on that one thread inside its total, add up within the total plus 2 ms
+STREAMFLEX_TEST_ICONLOAD_NO_THREADS=1 CFG=$FX/f60-icons.ini UNTIL="Timing: menu 'More': " run_keys f60-nothreads Return
+ok=1
+t60_menu "$out/f60-nothreads.log" Main t60_adds_up && t60_menu "$out/f60-nothreads.log" More t60_adds_up \
+    && [ "$(grep -cx 'Icons: no decode thread started, decoding on the main thread' "$out/f60-nothreads.log")" = 2 ] \
+    && ran_clean f60-nothreads && ok=0
+result "timing: with no decode thread, the main thread decodes each menu's icons, and their line adds up as one thread's (exit $(cat "$out/f60-nothreads.code"))" $ok
+grep -E "^Timing: menu |^Icons: " "$out/f60-nothreads.log" | sed 's/^/      /'
 ok=1
 background=$(grep -E '^Timing: background: ' "$log")
 [ "$(grep -c . <<< "$background")" = 1 ] \
@@ -110,11 +127,12 @@ echo "      ${slide:-no Timing: background: line}"
 
 # The selected icon: the highlighted entry draws its _selected copy (green frame) and the other entry
 # its own icon (red frame). A function for a +key (run_keys), once the program loop has begun: once both
-# frames are on screen, write the box each color spans to NAME.seen, trying for up to 60 s, as long as
-# run_keys waits for a key's frame (a loaded runner has drawn nothing for 13 s)
+# frames are on screen, write the box each color spans to NAME.seen, trying until 60 s have passed by the
+# clock (SECONDS), however long each screenshot and its reads take, as long as run_keys waits for a key's
+# frame (a loaded runner has drawn nothing for 13 s); a try begun before then is the last
 t60_selected() {
-    local name=$1 shot=/tmp/t60-selected.xwd i
-    for i in $(seq 300); do
+    local name=$1 shot=/tmp/t60-selected.xwd end=$((SECONDS + 60))
+    while [ "$SECONDS" -lt "$end" ]; do
         : > "$out/$name.seen"
         xwd -root -silent -out "$shot" \
             && echo "selected $(python3 "$HERE/pixels.py" "$shot" count 40,200,40 inside 40,200,40)" >> "$out/$name.seen" \
@@ -132,3 +150,25 @@ ok=1
     && ran_clean f60-selected && ok=0
 result "icons: the highlighted entry draws its _selected icon, and the entry beside it its own (exit $(cat "$out/f60-selected.code"))" $ok
 sed 's/^/      /' "$out/f60-selected.seen" 2> /dev/null
+
+# Icons in a format SDL_image cannot decode on two threads at once: a menu of 48 XPM icons. Each decode
+# takes the decode lock in turn; without it the loader's shared line buffer is freed twice, which ASan
+# reports. The run waits for the menu's Timing: line, then quits.
+xpm_menu_loaded() {
+    local name=$1
+    ran_clean "$name" && grep -qE "^Timing: menu 'Main': 48 icons at [0-9]+ px in " "$out/$name.log" \
+        && ! grep -q '^Could not load image' "$out/$name.log"
+}
+CFG=$FX/f60-xpm.ini UNTIL="Timing: menu 'Main': " run_keys f60-xpm
+ok=1
+xpm_menu_loaded f60-xpm && [ "$(grep -cE '^Icons: decoding on [1-4] threads$' "$out/f60-xpm.log")" = 1 ] && ok=0
+result "icons: a menu of 48 XPM icons, which SDL_image cannot decode two at a time, loads every one and runs clean (exit $(cat "$out/f60-xpm.code"))" $ok
+grep -m3 -E 'ERROR: AddressSanitizer|runtime error' "$out/f60-xpm.err" | sed 's/^/      /'
+# The same menu when the decode lock could not be made: the spin lock stands in
+STREAMFLEX_TEST_FAIL=decodelock CFG=$FX/f60-xpm.ini UNTIL="Timing: menu 'Main': " run_keys f60-xpm-spin
+ok=1
+xpm_menu_loaded f60-xpm-spin && grep -qx 'Test hook: decodelock fails' "$out/f60-xpm-spin.log" \
+    && grep -qx 'Images: could not make the decode lock, so the formats other than PNG, JPEG and WebP wait for each other on a spin lock' "$out/f60-xpm-spin.log" \
+    && ok=0
+result "icons: when the decode lock cannot be made, the XPM icons wait on a spin lock, load every one and run clean (exit $(cat "$out/f60-xpm-spin.code"))" $ok
+grep -m3 -E 'ERROR: AddressSanitizer|runtime error' "$out/f60-xpm-spin.err" | sed 's/^/      /'

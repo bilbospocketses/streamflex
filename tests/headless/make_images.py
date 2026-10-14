@@ -7,6 +7,9 @@ Usage: python3 make_images.py <folder>
            a square of one-pixel columns, black and #020202 in turn, fully opaque; RGB, or RGBA
            with alpha 255. Neither color is the default chroma key, #010101, but drawn at half
            size a linear filter averages each pair of columns to exactly #010101.
+       python3 make_images.py --xpm <file.xpm> <size>
+           an XPM icon of that size, a checkerboard of two colors in 16 px squares, one quoted line a
+           row: SDL_image's XPM loader reads it a line at a time into a buffer it keeps between calls
 """
 import os
 import struct
@@ -40,8 +43,20 @@ def keyed(path, frame, alpha):
     png(path, 512, 512, rows, 6 if alpha else 2)
 
 
+def xpm(path, size):
+    """Write the XPM icon: a checkerboard of #C83228 and #28C832 in 16 px squares."""
+    with open(path, "w", encoding="ascii", newline="\n") as f:
+        f.write(f'/* XPM */\nstatic char *icon[] = {{\n"{size} {size} 2 1",\n"a c #C83228",\n"b c #28C832",\n')
+        for y in range(size):
+            row = "".join("a" if (x // 16 + y // 16) % 2 else "b" for x in range(size))
+            f.write(f'"{row}"{"," if y + 1 < size else ""}\n')
+        f.write("};\n")
+
+
 if sys.argv[1] == "--keyed":
     keyed(sys.argv[2], tuple(int(n) for n in sys.argv[3].split(",")), sys.argv[4] == "rgba")
+elif sys.argv[1] == "--xpm":
+    xpm(sys.argv[2], int(sys.argv[3]))
 else:
     folder = sys.argv[1]
     os.makedirs(folder, exist_ok=True)
