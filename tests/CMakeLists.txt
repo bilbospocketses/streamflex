@@ -18,6 +18,12 @@ add_executable(test_videodriver test_videodriver.c "${PROJECT_SOURCE_DIR}/src/vi
 target_include_directories(test_videodriver PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME videodriver COMMAND test_videodriver)
 
+# Unit tests for the gamepad battery glyph's rules (pure; the glyph's color is kept off the chroma
+# key through chroma.c)
+add_executable(test_padpower test_padpower.c "${PROJECT_SOURCE_DIR}/src/padpower.c" "${PROJECT_SOURCE_DIR}/src/chroma.c")
+target_include_directories(test_padpower PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME padpower COMMAND test_padpower)
+
 # fileio.c finds the Windows places (Pictures, drives) through the shell
 function(link_fileio target)
   if (WIN32)

@@ -18,6 +18,8 @@ set(SOURCES
   chroma.h
   videodriver.c
   videodriver.h
+  padpower.c
+  padpower.h
   library.c
   library.h
   alloc.c
