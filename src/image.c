@@ -306,15 +306,25 @@ SDL_Texture *load_texture(SDL_Surface *surface)
 }
 
 // A function to move an image's opaque pixels off the chroma key (RGBA bytes), always, since
-// Transparent mode can be chosen in settings after the image is loaded: on Windows it makes every
-// pixel of the key color see-through. `what` names the image for the log.
+// Transparent mode can be chosen in settings after the image is loaded: on Linux a compositor's
+// shader makes every pixel of the key color see-through. Windows' Transparent mode is per-pixel
+// alpha, with no key, and ChromaKeyColor is ignored there, so nothing moves. `what` names the image
+// for the log.
 static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int pitch, const char *what)
 {
+#ifdef _WIN32
+    UNUSED(rgba);
+    UNUSED(width);
+    UNUSED(height);
+    UNUSED(pitch);
+    UNUSED(what);
+#else
     int moved = chroma_keep_off(rgba, width, height, pitch,
                     config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
     if (moved > 0)
         log_debug("%s: moved %i pixel(s) off the chroma key #%02X%02X%02X", what, moved,
             config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b);
+#endif
 }
 
 // A function to keep a loaded image's opaque pixels off the chroma key. The pixels are read as
@@ -322,6 +332,10 @@ static void keep_off_chroma_key(unsigned char *rgba, int width, int height, int 
 // converted copy, which replaces it.
 static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char *what)
 {
+#ifdef _WIN32
+    UNUSED(what);
+    return surface;   // No key on Windows (keep_off_chroma_key())
+#else
     if (surface->format != SDL_PIXELFORMAT_RGBA32) {
         SDL_Surface *converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
         if (converted == NULL) {
@@ -341,9 +355,10 @@ static SDL_Surface *keep_surface_off_chroma_key(SDL_Surface *surface, const char
         log_debug("%s: could not be kept off the chroma key, so it is drawn as it is: %s", what, SDL_GetError());
     }
     return surface;
+#endif
 }
 
-// A function to rasterize an SVG from a text buffer, keeping its pixels off the chroma key;
+// A function to rasterize an SVG from a text buffer, keeping its pixels off the chroma key on Linux;
 // `what` names it for the log
 static SDL_Texture *rasterize(char *buffer, int w, int h, SDL_Rect *rect, const char *what)
 {
@@ -429,8 +444,9 @@ SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *r
 }
 
 // A function to load a menu icon. SVGs are rasterized at the button size so they stay sharp
-// at any size; other formats load at their own size and the renderer scales them. Either way its
-// pixels are kept off the chroma key. A path to something that is not a regular file is never opened.
+// at any size; other formats load at their own size and the renderer scales them. Either way, on
+// Linux, its pixels are kept off the chroma key. A path to something that is not a regular file is
+// never opened.
 SDL_Texture *load_icon(const char *path, int size)
 {
     if (path == NULL)

@@ -1,13 +1,14 @@
-# Transparent mode on Windows makes every pixel of the window that is exactly the chroma key color
-# see-through, so an icon's own pixels of that color were holes in it (the Plex icon's diagonal),
-# and so were pixels the renderer's scaling blended onto it from dark neighbors next to it. Every
-# icon is now kept two steps off the key as it loads. Xvfb has no see-through windows, but it draws
-# the key color as the background, so the proof is on screen: inside each icon (found by its
-# frame's color) no pixel may be the key color. Three icons: 512 px PNGs, RGBA and RGB (converted
-# to RGBA first), drawn at 256 px as Plex is by default, whose middle is black and #020202 columns
-# that the linear filter averages to exactly #010101 unless both are moved; and an SVG, rasterized
-# at its size, with a square of #010101. Each frame's red is 0, so no blend of frame and middle can
-# be the key either.
+# Transparent mode on Linux paints the background the chroma key color, and a compositor's shader
+# makes every pixel of the window that is exactly that color see-through, so an icon's own pixels of
+# that color were holes in it (the Plex icon's diagonal), and so were pixels the renderer's scaling
+# blended onto it from dark neighbors next to it. (Windows' Transparent mode is per-pixel alpha, with
+# no key.) Every icon is now kept two steps off the key as it loads. Xvfb has no see-through windows,
+# but it draws the key color as the background, so the proof is on screen: inside each icon (found
+# by its frame's color) no pixel may be the key color. Three icons: 512 px PNGs, RGBA and RGB
+# (converted to RGBA first), drawn at 256 px as Plex is by default, whose middle is black and #020202
+# columns that the linear filter averages to exactly #010101 unless both are moved; and an SVG,
+# rasterized at its size, with a square of #010101. Each frame's red is 0, so no blend of frame and
+# middle can be the key either.
 rm -rf "$TESTER_HOME/keyed"
 mkdir -p "$TESTER_HOME/keyed"
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/keyed/rgba.png" 0,200,200 rgba

@@ -16,10 +16,11 @@ BRAND_GROUPS = ("video", "free-tv", "servers", "music", "games", "web")
 OUTLINE_RADIUS = 0.22           # corner radius as a share of the side: the app icon's plate, 54 of 244
 BRAND_MIN, BRAND_MAX = 512, 1024
 BRAND_KEYS = ("title", "group", "owner", "android", "source", "art", "fill", "size", "sha256")
-# StreamFlex's default chroma key, #010101. Transparent mode on Windows shows through every pixel of
-# the window that is exactly this color, including pixels the renderer's scaling averages onto it
-# from dark neighbors. So brand art keeps its opaque pixels two steps off it, as the launcher does
-# when it loads an icon (src/chroma.c): one within a step of it in every channel becomes OFF_KEY.
+# StreamFlex's default chroma key, #010101. Transparent mode on Linux shows through every pixel of the
+# window that is exactly this color, including pixels the renderer's scaling averages onto it from dark
+# neighbors (Windows' Transparent mode is per-pixel alpha, with no key). So brand art keeps its opaque
+# pixels two steps off it, as the launcher does on Linux when it loads an icon (src/chroma.c): one
+# within a step of it in every channel becomes OFF_KEY.
 CHROMA_KEY = (1, 1, 1)
 OFF_KEY = (3, 3, 3)
 

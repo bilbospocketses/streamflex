@@ -1335,7 +1335,10 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             }
             else {
                 n = add_row(rows, n, max, note_row(TRANSPARENT_NOTE));
+#ifndef _WIN32
+                // Linux's Transparent mode is a chroma key; Windows' is per-pixel alpha, with no key to choose
                 n = add_row(rows, n, max, global_row(state, SET_ID_CHROMA_KEY_COLOR));
+#endif
             }
             bool overlay = is_on(state, SET_ID_OVERLAY);
             n = add_row(rows, n, max, global_row(state, SET_ID_OVERLAY));
