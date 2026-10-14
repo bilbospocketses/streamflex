@@ -1,0 +1,3 @@
+# ThreadSanitizer suppressions for run.sh's tsan mode. A report whose every frame is inside Mesa
+# (lavapipe) or SDL's own threads gets a line here, with the run that showed it and why it is not
+# StreamFlex's; a report with a frame in src/ is never suppressed.

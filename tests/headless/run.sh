@@ -12,6 +12,11 @@
 #                               its check, and each leak is listed at the end as a failure too.
 #                               A run whose leak check never ran, because LeakSanitizer's tracer
 #                               could not attach, is run once more (with_tracer_retry)
+#   run.sh <label> tsan         00-harness.sh, 30-backgrounds.sh and 60-timing.sh only, built
+#                               with ThreadSanitizer instead of ASan and UBSan: the menu icons'
+#                               decode threads (Task 1.13), the slideshow's loader thread and
+#                               the image loaders they share. A data race fails the run that
+#                               showed it; tsan.supp (beside this file) says what is suppressed
 #   run.sh <label> [leaks] K/N  shard K of N of either pass, a run of its own in its own
 #                               container: the build, Xvfb, the fixtures and each check file
 #                               marked "Every shard runs this file" (00-harness.sh,
@@ -45,7 +50,7 @@ unset GDK_SCALE GDK_DPI_SCALE SDL_VIDEO_X11_SCALING_FACTOR
 label=${1:-}
 fault= shard= selection=
 case $label in
-    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks] [K/N] [timing|rest], where <label> names a folder in /out"; exit 2 ;;
+    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks|tsan] [K/N] [timing|rest], where <label> names a folder in /out"; exit 2 ;;
 esac
 # The shard and the selection are arguments, never the environment: a variable left set could
 # quietly turn a whole pass into part of one, which would still end "0 failed". Each comes once,
@@ -53,8 +58,8 @@ esac
 for arg in "${@:2}"; do
     case $arg in
         '') ;;
-        scrollfail | leaks) [ -z "$fault$shard$selection" ] || { echo "the mode comes first, once"; exit 2; }
-                            fault=$arg ;;
+        scrollfail | leaks | tsan) [ -z "$fault$shard$selection" ] || { echo "the mode comes first, once"; exit 2; }
+                                   fault=$arg ;;
         */*) [ -z "$shard$selection" ] || { echo "a shard comes after the mode and before the selection, once"; exit 2; }
              shard=$arg ;;
         timing | rest) [ -z "$selection" ] || { echo "a selection comes last, once"; exit 2; }
@@ -63,12 +68,14 @@ for arg in "${@:2}"; do
     esac
 done
 [ "$fault" != scrollfail ] || [ -z "$selection" ] || { echo "scrollfail runs one check, so it has no selection"; exit 2; }
+[ "$fault" != tsan ] || [ -z "$selection" ] || { echo "tsan runs three check files, so it has no selection"; exit 2; }
 shard_k= shard_n=
 if [ -n "$shard" ]; then
     [[ $shard =~ ^([1-9][0-9]{0,2})/([1-9][0-9]{0,2})$ ]] && [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] \
         || { echo "unknown shard '$shard': give K/N, with 1 <= K <= N"; exit 2; }
     shard_k=${BASH_REMATCH[1]} shard_n=${BASH_REMATCH[2]}
     [ "$fault" != scrollfail ] || { echo "scrollfail runs one check, so it has no shards"; exit 2; }
+    [ "$fault" != tsan ] || { echo "tsan runs three check files, so it has no shards"; exit 2; }
 fi
 HERE=/src/tests/headless
 FX=$HERE/fixtures
@@ -164,6 +171,19 @@ select_checks() {
              exit 2; }
 }
 [ "$fault" = scrollfail ] || select_checks
+# The tsan mode runs the three check files whose runs start the threads that decode images: the
+# harness's own (whose helpers the others rely on), the backgrounds' (the slideshow's loader) and
+# the timing's (the menu icons' decode threads, two menus of 48 icons)
+if [ "$fault" = tsan ]; then
+    tsan_checks=()
+    for check in "${checks[@]}"; do
+        case ${check##*/} in
+            00-harness.sh | 30-backgrounds.sh | 60-timing.sh) tsan_checks+=("$check") ;;
+        esac
+    done
+    [ "${#tsan_checks[@]}" = 3 ] || { echo "THE TSAN MODE'S THREE CHECK FILES ARE NOT ALL IN $HERE/checks"; exit 2; }
+    checks=("${tsan_checks[@]}")
+fi
 # An unsharded run with a selection says what it left out (a shard's plan does, in its own words)
 [ -n "$shard_k" ] || [ -z "$selection" ] \
     || echo "Selection: $selection, ${#checks[@]} check files; left out: ${left_out[*]:-none}"
@@ -223,8 +243,14 @@ if [ "$fault" = scrollfail ]; then
 fi
 
 flags="-fsanitize=address,undefined -fno-omit-frame-pointer -DSTREAMFLEX_TEST_HOOKS"
+linker_flags="-fsanitize=address,undefined"
+if [ "$fault" = tsan ]; then
+    # ThreadSanitizer cannot share a build with ASan, so the tsan mode has neither ASan nor UBSan
+    flags="-fsanitize=thread -fno-omit-frame-pointer -DSTREAMFLEX_TEST_HOOKS"
+    linker_flags="-fsanitize=thread"
+fi
 cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="$flags" \
-      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" > "$out/configure.log" 2>&1 \
+      -DCMAKE_EXE_LINKER_FLAGS="$linker_flags" > "$out/configure.log" 2>&1 \
     || { echo "CONFIGURE FAILED"; tail -20 "$out/configure.log"; exit 2; }
 cmake --build /work/build -j"$(nproc)" > "$out/build.log" 2>&1 \
     || { echo "BUILD FAILED"; tail -30 "$out/build.log"; exit 2; }
@@ -383,8 +409,14 @@ if [ "$fault" = leaks ]; then
         echo "Leak suppressions: $LEAK_SUPPRESSIONS ($(grep -c '^leak:' "$HERE/$LEAK_SUPPRESSIONS") entries)"
     fi
 fi
+# The tsan mode reports every race and goes on (halt_on_error=0), so one run shows them all, with the
+# second stack of a lock-order report too; only what tsan.supp names is suppressed. It keeps setarch -R:
+# ThreadSanitizer's fixed memory layout fails under a kernel that randomizes 32 bits of mmap, as ASan
+# does, and nothing is preloaded.
+sanitizer_options=ASAN_OPTIONS=$asan_options
+[ "$fault" != tsan ] || sanitizer_options=TSAN_OPTIONS=halt_on_error=0:second_deadlock_stack=1:suppressions=$HERE/tsan.supp
 TESTER=(setpriv --reuid=tester --regid=tester --init-groups --
-        env HOME=$TESTER_HOME DISPLAY=:99 ASAN_OPTIONS=$asan_options UBSAN_OPTIONS=print_stacktrace=1
+        env HOME=$TESTER_HOME DISPLAY=:99 "$sanitizer_options" UBSAN_OPTIONS=print_stacktrace=1
             "GALLIUM_DRIVER=$gallium" setarch "$(uname -m)" -R "${preload[@]}")
 
 # A function to give the launcher its config: the fixture NAME.ini, the file CFG names, or
@@ -666,7 +698,7 @@ run_slideshow() {
 run_slideshow_command() { "${slideshow_command[@]}"; }
 
 # A function to tell whether the sanitizers reported nothing for the run NAME
-sanitizer_clean() { ! grep -qE 'AddressSanitizer|runtime error|LeakSanitizer' "$out/$1.err"; }
+sanitizer_clean() { ! grep -qE 'AddressSanitizer|runtime error|LeakSanitizer|ThreadSanitizer' "$out/$1.err"; }
 
 # A function to tell whether the run NAME exited as expected (0 unless CODE is given) with its
 # sanitizers quiet. A launcher that had to be killed exits 137, so it fails here on its own.
@@ -782,6 +814,21 @@ list_leaks() {
     done
 }
 
+# A function for the tsan mode: list each run in the output folder whose stderr holds a
+# ThreadSanitizer report, by its first SUMMARY line, as a RACE line that counts as a failure, so a
+# race in a run whose check never looked at its sanitizers still fails the run
+list_races() {
+    local err errs restore
+    restore=$(shopt -p nullglob); shopt -s nullglob
+    errs=("$out"/*.err)
+    eval "$restore"
+    for err in "${errs[@]}"; do
+        grep -q 'ThreadSanitizer' "$err" || continue
+        echo "RACE  $(basename "$err" .err): $(grep -m1 '^SUMMARY: ThreadSanitizer' "$err" || grep -m1 'ThreadSanitizer' "$err")"
+        failures=$((failures + 1))
+    done
+}
+
 if [ "$fault" = scrollfail ]; then
     run_quick f11-scroll
     ok=1
@@ -816,6 +863,7 @@ else
         results=$((results + failures - shard_leaks))
         shard_end '(leaks)'
     fi
+    [ "$fault" != tsan ] || list_races
 fi
 # The total counts a leaking run twice on purpose: once as its check's FAIL and once as its LEAK
 # line (22 leaking runs read "44 failed"). The LEAK count is what makes a leak in a run whose
