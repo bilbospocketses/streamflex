@@ -25,6 +25,7 @@
 #define CANDIDATES 6            // The most candidates a case lists (test_many_fallbacks)
 
 static char logged[LINES][512];
+static LogLevel logged_level[LINES];
 static int logged_count = 0;
 static FontCandidate list[CANDIDATES];
 static int list_count = 0;
@@ -34,7 +35,6 @@ static int covers_calls = 0;   // Calls to never_covers()
 // The launcher's log, kept for the checks to read
 void output_log(LogLevel log_level, const char *format, ...)
 {
-    (void) log_level;
     if (logged_count == LINES)
         return;
     va_list args;
@@ -42,6 +42,7 @@ void output_log(LogLevel log_level, const char *format, ...)
     vsnprintf(logged[logged_count], sizeof(logged[0]), format, args);
     va_end(args);
     logged[logged_count][strcspn(logged[logged_count], "\r\n")] = '\0';
+    logged_level[logged_count] = log_level;
     logged_count++;
 }
 
@@ -51,6 +52,15 @@ static int lines_with(const char *text)
     int n = 0;
     for (int i = 0; i < logged_count; i++)
         n += strstr(logged[i], text) != NULL;
+    return n;
+}
+
+// A function to count the lines logged at a level that hold a text
+static int lines_at(LogLevel level, const char *text)
+{
+    int n = 0;
+    for (int i = 0; i < logged_count; i++)
+        n += logged_level[i] == level && strstr(logged[i], text) != NULL;
     return n;
 }
 
@@ -242,8 +252,8 @@ static bool primary_first = false; // The first font the set closed was its own
 // The close fontset.c is pointed at: it records the order, and after each close it measures the
 // primary again while that lives. A fallback closed before its font leaves the font's cached
 // positions for the text pointing into the fallback's freed glyphs, and that measure reads them
-// (upstream #549): ASan reports it in the "Unit tests (ASan, UBSan)" job, and the order check fails
-// it everywhere.
+// (upstream #549). ASan cannot see that read: it is SDL_ttf's own, and no SDL_ttf the tests link
+// (the distributions', vcpkg's) is built with ASan. The order check is what fails it, everywhere.
 static void SDLCALL record_close(TTF_Font *font)
 {
     if (closes++ == 0)
@@ -295,8 +305,8 @@ static int closed_fonts(FontSet *set)
     return closes;
 }
 
-// A coverage, as fontconfig's character set gives one, that has the three code points
-// test_blank_then_ink asks for: the narrow no-break space, the blank Braille pattern and the star
+// A coverage, as fontconfig's character set gives one, that has three code points: the narrow no-break
+// space, the blank Braille pattern and the star
 static bool covers_three(const FontCandidate *candidate, Uint32 ch)
 {
     (void) candidate;
@@ -462,6 +472,25 @@ static void test_four_bytes(void)
     fontset_quit();
 }
 
+// A function to test that a candidate skipped when it is picked does not end the walk: the next one
+// provides. The first candidate, listed with a character set that has the star, is a folder, which the
+// check for ink cannot open. And that each line has its level: a character no font has is an error the
+// user can act on (spec section 4), the rest are debug lines.
+static void test_log_levels(void)
+{
+    begin(FONTSET_TEST_FONTS, DEJAVU);
+    list[0].covers = covers_three;
+    FontSet *set = fontset_open(OPEN_SANS, 36.0f, 0, "titles");
+    fontset_prepare(set, STAR ZHONG);
+    fontset_close(set);
+    fontset_quit();
+    CHECK_INT(lines_at(LOGLEVEL_DEBUG, "Fonts: skipped " FONTSET_TEST_FONTS ": not a regular file"), 1);
+    CHECK_INT(lines_at(LOGLEVEL_DEBUG, "Fonts: the 36 pt titles fall back to " DEJAVU " (face 0), first for U+2605"), 1);
+    CHECK_INT(lines_at(LOGLEVEL_ERROR, "Fonts: no installed font draws U+4E2D; it shows as a box"), 1);
+    CHECK_INT(lines_at(LOGLEVEL_DEBUG, "Fonts: let go of 2 fallback candidates and 2 probe fonts at quit"), 1);
+    CHECK_INT(lines_at(LOGLEVEL_ERROR, ""), 1);
+}
+
 int main(void)
 {
     if (!TTF_Init()) {
@@ -484,6 +513,7 @@ int main(void)
     test_resize_then_attach();
     test_not_a_file();
     test_four_bytes();
+    test_log_levels();
     TTF_Quit();
     SDL_Quit();
     return check_report();
