@@ -1,7 +1,7 @@
 # Device loss's timing-sensitive cases, from 48-device-loss.sh: the attempts at a new renderer after a
 # lost device come 2 s apart, and these cases race that pace. The lost device is posted by the render
 # event hook (STREAMFLEX_TEST_RENDER_EVENT) and the attempts fail by STREAMFLEX_TEST_RENDERER_FAIL.
-# Timing-sensitive: a key must land inside the 4 s before the third attempt makes the renderer, and a quit must end StreamFlex within 1000 ms of its TERM
+# Timing-sensitive: a key and a click must land inside the 4 s before the third attempt makes the renderer, and a quit must end StreamFlex within 1000 ms of its TERM
 T48_EVENT=/tmp/t48-event
 # A function to put the render events WORDS in the hook's file in one step (a rename), as
 # 48-device-loss.sh's d48_send does
@@ -31,11 +31,15 @@ t48_reset_runs() { rm -f "$T48_EVENT" "$T48_EVENT.new" "$out/$1.boxes" "$out/$1.
 
 # The first two attempts fail (the test hook): the third, 4 s later, makes the renderer. A key pressed
 # while there is none is ignored, though its entry's command is :quit, and its frame is the first drawn
-# once there is a renderer again: nothing is drawn before attempt 3.
+# once there is a renderer again: nothing is drawn before attempt 3. A click then is ignored too, though
+# MouseSelect is on (f48-retry.ini) and would run the same :quit; it logs nothing, so its proof is that
+# StreamFlex quits only after attempt 3. The click goes to xdotool itself: it is no key, so no frame
+# is waited for.
 t48_lost_waiting() { t48_send lost; wait_line 'Renderer: creating a new renderer, attempt 1 of 5' "$2"; }
+t48_click() { command xdotool click 1; }
 t48_reset_runs f48-retry
-CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$T48_EVENT STREAMFLEX_TEST_RENDERER_FAIL=2 \
-    run_keys f48-retry +t48_before +t48_lost_waiting '!Return' +t48_after
+CFG=$FX/f48-retry.ini STREAMFLEX_TEST_RENDER_EVENT=$T48_EVENT STREAMFLEX_TEST_RENDERER_FAIL=2 \
+    run_keys f48-retry +t48_before +t48_lost_waiting '!Return' +t48_click +t48_after
 log=$out/f48-retry.log
 ok=1
 grep -qx 'Renderer: creating a new renderer, attempt 3 of 5' "$log" && ! grep -q 'attempt 4 of 5' "$log" \

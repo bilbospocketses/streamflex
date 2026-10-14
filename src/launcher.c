@@ -2761,7 +2761,7 @@ static int drop_textures(void)
         }
         menu->rendered_size = 0;
     }
-    settings_drop_textures();   // The settings screen's own, and the browsed image
+    count += settings_drop_textures();   // The settings screen's own, and the browsed image
     return count;
 }
 

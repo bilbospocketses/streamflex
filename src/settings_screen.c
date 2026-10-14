@@ -191,15 +191,19 @@ static CachedText *cached_text(TTF_Font *font, const char *text)
     return entry;
 }
 
-// A function to empty the text cache
-static void clear_text_cache(void)
+// A function to empty the text cache; returns how many textures it destroyed
+static int clear_text_cache(void)
 {
+    int count = 0;
     for (int i = 0; i < TEXT_CACHE_SIZE; i++) {
-        if (text_cache[i].texture != NULL)
+        if (text_cache[i].texture != NULL) {
             SDL_DestroyTexture(text_cache[i].texture);
+            count++;
+        }
         free(text_cache[i].text);
     }
     memset(text_cache, 0, sizeof(text_cache));
+    return count;
 }
 
 // A function to draw a line of text cut with "..." to fit; `right` puts its right edge at x
@@ -1771,20 +1775,26 @@ void settings_reflow(void)
 
 // A function to let go of every texture the screen holds, before the renderer that made them goes (a
 // lost device, Task 1.7b): the text cache, the preview, the font picker's samples and the browsed
-// image. What the screen shows is kept: settings_remake_textures() makes them again.
-void settings_drop_textures(void)
+// image. What the screen shows is kept: settings_remake_textures() makes them again. Returns how many
+// textures it destroyed, for a lost device's count; none while settings are closed.
+int settings_drop_textures(void)
 {
     if (model == NULL)
-        return;
-    clear_text_cache();
-    fonts_clear_samples();
-    if (preview != NULL)
+        return 0;
+    int count = clear_text_cache();
+    count += fonts_clear_samples();
+    if (preview != NULL) {
         SDL_DestroyTexture(preview);
+        count++;
+    }
     preview = NULL;
-    if (background_override != NULL)
+    if (background_override != NULL) {
         SDL_DestroyTexture(background_override);
+        count++;
+    }
     background_override = NULL;
     shown_path[0] = '\0';   // The browsed image is decoded again, if it is still wanted
+    return count;
 }
 
 // A function to make the screen's textures again on a reset or new renderer at the same size,

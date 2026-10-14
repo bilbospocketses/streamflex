@@ -227,18 +227,39 @@ ok=1
 result "device: a lost device gets a new Vulkan renderer and redraws to the pixel (exit $(cat "$out/f48-lost.code"))" $ok
 grep -E '^(Renderer|Reload|Video):' "$log" | sed 's/^/      /'
 
-# With settings open, a lost device's new renderer makes their textures again, and the page stays
+# With every texture holder on (f48-lostall.ini), the lost device drops each one's textures: the
+# three buttons' icons and titles and the highlight (7), the image background (1), its overlay (1),
+# the scroll indicators (1), the clock's time and date (2) and the screensaver's layer (1): 13. Each
+# exists from before the loop (the clock renders both as it starts), so the count is exact. A holder
+# left out would keep a pointer its renderer freed, which only a release build trips on.
+d48_lostall() { wait_line 'Begin program loop' "$2" && d48_send lost && wait_line 'Reload: done at 1920x1080 px' "$2"; }
+d48_reset_runs f48-lostall
+CFG=$FX/f48-lostall.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-lostall +d48_lostall
+log=$out/f48-lostall.log
+ok=1
+grep -qx 'Renderer: dropped 13 textures before the renderer went' "$log" \
+    && grep -qx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log" \
+    && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 2 ] && ran_clean f48-lostall && ok=0
+result "device: a lost device drops the textures of every feature that holds one (exit $(cat "$out/f48-lostall.code"))" $ok
+grep -E '^(Renderer|Reload):' "$log" | sed 's/^/      /'
+
+# With settings open, a lost device's new renderer makes their textures again, and the page stays.
+# Settings' own textures (their text cache and preview) are dropped too, so the count is over the
+# launcher's 7; how far over depends on the rows drawn.
 d48_lost_settings_after() {
     wait_line 'Reload: done at 1920x1080 px' "$2" && look "$1" "$2" after 'Reload: done at 1920x1080 px' 30,30=30,45,60 @5,1074=11,22,32
 }
 d48_reset_runs f48-settings-lost
 CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-settings-lost Menu Down Return +d48_lost +d48_lost_settings_after Down Menu
 log=$out/f48-settings-lost.log
+d48_dropped=$(sed -n 's/^Renderer: dropped \([0-9]*\) textures before the renderer went$/\1/p' "$log" | head -1)
 ok=1
-[ "$(grep -c '^Settings: the preview is at ' "$log")" = 2 ] && grep -qx 'after yes' "$out/f48-settings-lost.seen" \
+[ "${d48_dropped:-0}" -gt 7 ] \
+    && [ "$(grep -c '^Settings: the preview is at ' "$log")" = 2 ] && grep -qx 'after yes' "$out/f48-settings-lost.seen" \
     && sed -n '/^Reload: done at /,$p' "$log" | grep -q "^Settings: the cursor's row reads Color: " \
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f48-settings-lost && ok=0
 result "device: a lost device with settings open makes their textures again and keeps the page (exit $(cat "$out/f48-settings-lost.code"))" $ok
+echo "      dropped: ${d48_dropped:-none}"
 
 # An edit made in settings before the device is lost survives the new renderer and its reload, and is
 # saved (the keys of 47-screen.sh's f47-settings: Color steps from #000000 to #1E1E1E)

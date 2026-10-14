@@ -134,15 +134,19 @@ SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *nam
     return font_cache[oldest].texture;
 }
 
-// A function to empty the family samples' cache
-void fonts_clear_samples(void)
+// A function to empty the family samples' cache; returns how many textures it destroyed
+int fonts_clear_samples(void)
 {
+    int count = 0;
     for (int i = 0; i < FONT_CACHE_SIZE; i++) {
-        if (font_cache[i].texture != NULL)
+        if (font_cache[i].texture != NULL) {
             SDL_DestroyTexture(font_cache[i].texture);
+            count++;
+        }
         alloc_free(font_cache[i].path);
     }
     memset(font_cache, 0, sizeof(font_cache));
+    return count;
 }
 
 // A function to find the bundled fonts' folder (caller frees): the one the bundled title font is
