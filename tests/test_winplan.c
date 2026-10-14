@@ -123,7 +123,9 @@ static void test_window_short_rect(void)
 
 // A function to test when a window gives way to one of another kind: only when the kinds differ, and
 // never to a Transparent window again once no renderer could draw one, while leaving Transparent
-// always goes ahead. On Linux every background plans a fullscreen window, so nothing ever changes.
+// always goes ahead, a Transparent window still in force included: the whole table of the window in
+// force, the kind wanted and the failure. On Linux every background plans a fullscreen window, so
+// nothing ever changes.
 static void test_window_must_change(void)
 {
     CHECK(!window_must_change(WINDOW_FULLSCREEN, WINDOW_FULLSCREEN, false));
@@ -132,6 +134,8 @@ static void test_window_must_change(void)
     CHECK(window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_FULLSCREEN, false));
     CHECK(!window_must_change(WINDOW_FULLSCREEN, WINDOW_TRANSPARENT_SHORT, true));
     CHECK(window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_FULLSCREEN, true));
+    CHECK(window_must_change(WINDOW_TRANSPARENT_SHORT, WINDOW_TRANSPARENT_SHORT, true));
+    CHECK(!window_must_change(WINDOW_FULLSCREEN, WINDOW_FULLSCREEN, true));
     for (int background = BG_COLOR; background <= BG_TRANSPARENT; background++)
         CHECK(!window_must_change(WINDOW_FULLSCREEN, window_plan(background, false, NULL).kind, false));
     CHECK(window_must_change(WINDOW_FULLSCREEN, window_plan(BG_TRANSPARENT, true, NULL).kind, false));

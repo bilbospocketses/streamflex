@@ -182,7 +182,7 @@ void taskbar_mark_fullscreen(SDL_Window *window, bool mark)
                 ITaskbarList2_Release(made);
         }
         if (FAILED(hr)) {
-            log_error("Video: the taskbar cannot be told the window covers the screen (error 0x%08lX)", (unsigned long) hr);
+            log_error("Video: the taskbar cannot be told whether the window covers the screen (error 0x%08lX)", (unsigned long) hr);
             if (com_started)
                 CoUninitialize();
             com_started = false;
@@ -193,7 +193,7 @@ void taskbar_mark_fullscreen(SDL_Window *window, bool mark)
     HWND hwnd = hwnd_of(window);   // Task 1.2a's property read
     hr = hwnd != NULL ? ITaskbarList2_MarkFullscreenWindow(taskbar, hwnd, mark ? TRUE : FALSE) : E_HANDLE;
     if (FAILED(hr))
-        log_error("Video: the taskbar cannot be told the window covers the screen (error 0x%08lX)", (unsigned long) hr);
+        log_error("Video: the taskbar cannot be told whether the window covers the screen (error 0x%08lX)", (unsigned long) hr);
     else if (mark)
         log_debug("Video: the taskbar knows the window covers the screen");
     else

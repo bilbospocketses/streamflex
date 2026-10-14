@@ -41,6 +41,7 @@ WindowRect window_short_rect(WindowRect display);
 // the kinds differ, and never to a Transparent window again once no renderer could draw one
 // (`transparent_failed`, cleared when another Mode is chosen)
 bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_failed);
+
 // The log's Renderer: line for the renderer SDL chose from render_list (NULL: SDL_RENDER_DRIVER chose);
 // chosen must not be NULL: it is SDL_GetRendererName's result for a valid renderer
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size);
