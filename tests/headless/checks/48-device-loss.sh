@@ -2,15 +2,17 @@
 # (STREAMFLEX_TEST_RENDER_EVENT), since no software renderer sends them. A target or device reset runs
 # the full reload a config change runs, once per batch of events, after they are drained: every
 # texture made again, the menu and the screen kept, and the screen redrawn to the pixel. With
-# settings open, their textures are made again and the page stays. While an app holds a size change
-# back, a reset rebuilds the textures at the geometry in force; the size waits for the app.
-# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, the size and the reset that must share a batch are written while the launcher is stopped, and no case races a deadline
+# settings open, their textures are made again and the page stays, an open folder browser with it,
+# its image decoded again. While an app holds a size change back, a reset rebuilds the textures at
+# the geometry in force; the size waits for the app.
+# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped, and no case races a deadline
 D48_EVENT=/tmp/d48-event D48_SIZE=/tmp/d48-size D48_APP=/tmp/d48-app
 # A function to put the render events WORDS in the hook's file in one step (a rename), so the hook
 # never reads half of them
 d48_send() { printf '%s\n' "$1" > "$D48_EVENT.new" && mv -f "$D48_EVENT.new" "$D48_EVENT"; }
 # The background's corner and the box the highlight's #FF00FF spans, once the frame is on screen,
-# kept under TAG; d48_same says both match before and after
+# kept under TAG; d48_same says both match before and after, and that the shot before found the box
+# (pixels.py's line for a screen with no #FF00FF, the same in both shots, would compare equal)
 d48_box() {
     local name=$1 tag=$2 shot=/tmp/d48.xwd
     sleep 1
@@ -20,7 +22,11 @@ d48_box() {
 }
 d48_boxline() { sed -n "s/^$2 //p" "$out/$1.boxes" 2> /dev/null | head -1; }
 d48_same() {
-    [ -n "$(d48_boxline "$1" before)" ] && [ "$(d48_boxline "$1" before)" = "$(d48_boxline "$1" after)" ] \
+    case $(d48_boxline "$1" before) in
+        'box '*) ;;
+        *) return 1 ;;
+    esac
+    [ "$(d48_boxline "$1" before)" = "$(d48_boxline "$1" after)" ] \
         && grep -qx 'before corner yes' "$out/$1.seen" && grep -qx 'after corner yes' "$out/$1.seen"
 }
 d48_before() { wait_line 'Begin program loop' "$2" && d48_box "$1" before; }
@@ -119,7 +125,8 @@ result "device: a target reset and a device reset in one batch reload once (exit
 # the launcher is stopped, so its next pass reads both; and the render hook pushes a size its file
 # took since the size hook's read in that pass first, so a stop that lands between the two hooks
 # still brings both events in one batch, the size first. The files sit at the top of /tmp, which
-# the leak pass's retry puts back as they were before the run.
+# the leak pass's retry puts back as they were before the run. The reset's own line is logged once,
+# after its push and before the reload, though a size was marked first in the batch.
 d48_both() {
     wait_line 'Begin program loop' "$2" || return 1
     kill -STOP "$2"
@@ -135,6 +142,8 @@ log=$out/f48-sizereset.log
 ok=1
 [ "$(grep -c '^Reload: done at ' "$log")" = 1 ] \
     && grep -qx "Reload: done at 1280x720 px, for the window's size and a device reset or loss" "$log" \
+    && [ "$(grep -cx 'Renderer: device lost; reloading' "$log")" = 1 ] \
+    && in_range "$log" "Test hook: pushed the render event 'reset'" 'Reload: done at ' 'Renderer: device lost; reloading' \
     && ran_clean f48-sizereset && ok=0
 result "device: a new size and a device reset in one batch reload once, geometry first (exit $(cat "$out/f48-sizereset.code"))" $ok
 grep -E "^(Screen|Reload|Renderer):|^Test hook: (pushed the render event|the window's size reads|a size event found)" "$log" | sed 's/^/      /'
@@ -155,6 +164,30 @@ ok=1
     && grep -q 'Settings: nothing changed' "$log" && ran_clean f48-settings && ok=0
 result "device: a reset with settings open makes their textures again and keeps the page (exit $(cat "$out/f48-settings.code"))" $ok
 sed 's/^/      /' "$out/f48-settings.seen" 2> /dev/null
+
+# With the Background image's folder browser open on blue.png (60-settings-background.sh's f60-preview
+# keys and config: Mode to Image, then the Image row's browser), the reset keeps the browser open and
+# decodes the image again, as only the textures are made again: the image's line is logged once more
+# after the reload, the preview shows it, and settings are not re-measured (a reflow would re-measure
+# them and close the browser). The probe is check 60's shows_blue, written here as check 60 may run
+# in the other shard. The count before the reset is taken once the image's first line is in.
+D48_BLUE='Settings: the preview shows /home/tester/Pictures/blue.png'
+d48_browsing() { d48_blue=; wait_line "$D48_BLUE" "$2" && d48_blue=$(d48_count "$D48_BLUE"); }
+d48_browse_after() {
+    [ -n "$d48_blue" ] && wait_line 'Reload: done at 1920x1080 px' "$2" && d48_more "$D48_BLUE" "$2" "$d48_blue" \
+        && look "$1" "$2" after "$D48_BLUE" 30,30=40,70,160
+}
+d48_reset_runs f48-browse
+CFG=$FX/f60-color.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
+    run_keys f48-browse Menu Down Return Right Down Return +d48_browsing +d48_reset +d48_browse_after Menu
+log=$out/f48-browse.log
+ok=1
+[ "$(grep -cxF "$D48_BLUE" "$log")" = 2 ] && sed -n '/^Reload: done at /,$p' "$log" | grep -qxF "$D48_BLUE" \
+    && grep -qx 'after yes' "$out/f48-browse.seen" && ! grep -q '^Settings: re-measured for ' "$log" \
+    && ran_clean f48-browse && ok=0
+result "device: a reset with the folder browser open keeps it open and shows its image again (exit $(cat "$out/f48-browse.code"))" $ok
+sed 's/^/      /' "$out/f48-browse.seen" 2> /dev/null
+grep -E '^(Reload: done|Settings: (the preview shows|re-measured))' "$log" | sed 's/^/      /'
 
 # While an app holds a size change back, a reset rebuilds the textures at the size laid out; the new
 # size is laid out once the app is done
