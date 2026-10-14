@@ -34,6 +34,7 @@ static bool recreate_window(const WindowPlan *plan);
 static void fall_back_to_opaque(const char *reason);
 static void transparent_reason(const WindowPlan *plan, char *out, size_t size);
 static void run_recreation(void);
+static void refit_transparent_window(void);
 static int drop_textures(void);
 static bool create_renderer(const WindowPlan *plan);
 static void raise_restarted_window(void);
@@ -724,6 +725,25 @@ static void run_recreation(void)
     char why[512];
     transparent_reason(&plan, why, sizeof(why));
     fall_back_to_opaque(why);
+}
+
+// A function to fit a Transparent window to the display it is on again, one row short, after a
+// display-mode change or a move to another display: SDL re-fits only a fullscreen window. No
+// recreation: the SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED that follows runs the reload, and waits for an
+// app in front as any size change does.
+static void refit_transparent_window(void)
+{
+    if (window_kind != WINDOW_TRANSPARENT_SHORT)
+        return;
+    SDL_Rect bounds;
+    SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+    if (display == 0 || !SDL_GetDisplayBounds(display, &bounds)) {
+        log_error("Video: could not fit the transparent window to its display\n%s", SDL_GetError());
+        return;
+    }
+    WindowRect rect = window_short_rect((WindowRect) { bounds.x, bounds.y, bounds.w, bounds.h });
+    SDL_SetWindowPosition(window, rect.x, rect.y);
+    SDL_SetWindowSize(window, rect.w, rect.h);
 }
 
 // A function to set the color of the renderer
@@ -1879,7 +1899,20 @@ void present_frame()
     }
     test_present_start_ns = SDL_GetTicksNS();
 #endif
-    SDL_RenderPresent(renderer);
+    static int present_failures = 0;   // SDL_RenderPresent's failures in a row on a Transparent window
+    bool presented = SDL_RenderPresent(renderer);
+
+    // Three in a row on a Transparent window are handled as SDL_EVENT_RENDER_DEVICE_LOST, which SDL
+    // never sends for them: the next drain makes a new renderer from the Transparent list
+    if (present_failed_lost(&present_failures, presented, window_kind == WINDOW_TRANSPARENT_SHORT)) {
+        log_error("Renderer: %i presents in a row failed on the transparent window\n%s", PRESENT_FAILURES_LOST, SDL_GetError());
+        SDL_Event lost;
+        SDL_zero(lost);
+        lost.type = SDL_EVENT_RENDER_DEVICE_LOST;
+        lost.render.windowID = window_id;
+        if (!SDL_PushEvent(&lost))
+            log_error("Renderer: could not treat the failing presents as a lost device\n%s", SDL_GetError());
+    }
 
     // Paced unless the renderer gives the VSync wanted. A renderer that keeps VSync on when it is not
     // wanted still gets the delay, which holds the FPS limit: the present waits at most one refresh more.
@@ -3422,6 +3455,12 @@ int main(int argc, char *argv[])
 
                 case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
                     display_changed((SDL_DisplayID) event.window.data1);
+                    refit_transparent_window();
+                    break;
+
+                case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+                case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+                    refit_transparent_window();
                     break;
 
                 case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:

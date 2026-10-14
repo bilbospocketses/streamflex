@@ -84,6 +84,19 @@ bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_fail
     return wanted != now;
 }
 
+// A function to count failed presents on a Transparent window, and say when they make a lost device
+bool present_failed_lost(int *failures, bool presented, bool transparent)
+{
+    if (presented || !transparent) {
+        *failures = 0;
+        return false;
+    }
+    if (++*failures < PRESENT_FAILURES_LOST)
+        return false;
+    *failures = 0;
+    return true;
+}
+
 // A function to word the log's Renderer: line: the renderer SDL chose, and the list's first entry
 // named as unavailable when it was not that one, or SDL_RENDER_DRIVER named when it chose (no list)
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size)

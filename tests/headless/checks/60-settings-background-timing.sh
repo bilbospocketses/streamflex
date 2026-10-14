@@ -1,7 +1,8 @@
 # The Background page's timing-sensitive cases, from 60-settings-background.sh: OK during a decode the
-# harness build holds for 4 s, and a mode stepped inside a slideshow's 3 s fade. f60-slideshow's run is
-# not timing-sensitive; it is here because the Folder row's result reads its log beside f60-running's.
-# Timing-sensitive: a key must land inside a 4 s decode or a 3 s fade
+# harness build holds for 4 s, a mode stepped inside a slideshow's 3 s fade, and Mode stepped faster
+# than its 300 ms rest. f60-slideshow's run is not timing-sensitive; it is here because the Folder
+# row's result reads its log beside f60-running's.
+# Timing-sensitive: a key must land inside a 4 s decode or a 3 s fade, and steps 100 ms apart inside a 300 ms rest
 
 # OK while the highlighted image is still decoding: the test hook (STREAMFLEX_TEST_DECODE_DELAY_MS,
 # in the harness's build only) makes each decode take 4 s, so OK lands while blue.png, the image
@@ -53,6 +54,19 @@ ran_clean f60-running && grep -q 'Settings: nothing changed' "$out/f60-running.l
     && ok=0
 result "settings: switching modes while a slideshow runs frees its fade cleanly (exit $(cat "$out/f60-running.code"))" $ok
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
+
+# Mode's rest (PREVIEW_REST_MS, 300 ms) starts again at each step, so six steps 100 ms apart, through
+# Transparent and back, rest once, on Color, where they end: on Windows they recreate nothing. On Linux
+# the test hook's line is what shows the rest (60-settings-background.sh's slow walk rests on each
+# step). A loaded host that held a step back 200 ms would give a rest of its own.
+f60_fast_modes() { xdotool key --delay 100 Right Right Right Left Left Left; sleep 1; }
+CFG=$FX/f60-color.ini run_keys f60-moderest Menu Down Return +f60_fast_modes BackSpace BackSpace
+ok=1
+[ "$(grep -c "Test hook: the Mode row's cursor rested on " "$out/f60-moderest.log")" = 1 ] \
+    && grep -q "Test hook: the Mode row's cursor rested on Color" "$out/f60-moderest.log" \
+    && grep -q 'Settings: nothing changed' "$out/f60-moderest.log" && ran_clean f60-moderest && ok=0
+result "settings: stepping Mode fast through Transparent rests once, on Color (exit $(cat "$out/f60-moderest.code"))" $ok
+grep "Test hook: the Mode row's cursor rested on " "$out/f60-moderest.log" | sed 's/^/      /'
 
 # The Folder row shows the folder's name and its image count: counted when the page opens (the
 # running slideshow's Pictures) and again when a folder is chosen in the browser

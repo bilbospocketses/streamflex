@@ -54,6 +54,38 @@ ok=1
 result "settings: stepping Mode through Image and Slideshow with nothing chosen writes no error" $ok
 grep -E "Background 'Image' setting|Couldn't load background image|does not exist" "$out/f60-transparent.err" | sort | uniq -c | sed 's/^/      /'
 
+# Windows recreates the window when Mode's cursor rests (PREVIEW_REST_MS) on a value whose window
+# differs, never on each step, so stepping through Transparent to another mode recreates nothing.
+# On Linux every mode keeps the fullscreen window, so the test hook's line is what shows each rest:
+# the slow walk above rested on each of its six steps. Six fast steps rest once, on Color, where they
+# end: that case is timing-sensitive, in 60-settings-background-timing.sh.
+ok=1
+[ "$(grep -c "Test hook: the Mode row's cursor rested on " "$out/f60-transparent.log")" = 6 ] \
+    && [ "$(grep -o "Test hook: the Mode row's cursor rested on [A-Za-z]*" "$out/f60-transparent.log" | sed 's/.* on //' | paste -sd,)" = Image,Slideshow,Transparent,Slideshow,Image,Color ] \
+    && ok=0
+result "settings: a slow walk through Mode rests on each step" $ok
+grep "Test hook: the Mode row's cursor rested on " "$out/f60-transparent.log" | sed 's/^/      /'
+
+# Under the Windows plan forced on Linux (Task 1.8b's STREAMFLEX_TEST_WINDOWS_PLAN) the same slow walk
+# recreates the window: the rest on Transparent makes it one row short, the rest on Slideshow after it
+# makes it fullscreen again, the rests on Image and Color change nothing, and the page stays open
+# through both recreations
+f60_win_short() { wait_line 'Reload: done at 1920x1079 px, for ' "$2"; }
+f60_win_full() { wait_line 'Reload: done at 1920x1080 px, for ' "$2"; }
+CFG=$FX/f60-color.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 \
+    run_keys f60-winrest Menu Down Return Right Right Right +f60_win_short Left +f60_win_full Left Left BackSpace BackSpace
+log=$out/f60-winrest.log
+ok=1
+[ "$(grep -cx 'Video: recreating the window for a transparent background' "$log")" = 1 ] \
+    && [ "$(grep -cx 'Video: recreating the window for an opaque background' "$log")" = 1 ] \
+    && precedes "$log" 'Video: recreating the window for a transparent background' 'Reload: done at 1920x1079 px, for ' \
+    && precedes "$log" 'Video: recreating the window for an opaque background' 'Reload: done at 1920x1080 px, for ' \
+    && grep -qE '^Reload: done at 1920x1079 px, for .*a new window$' "$log" \
+    && grep -qE '^Reload: done at 1920x1080 px, for .*a new window$' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f60-winrest && ok=0
+result "settings: under the Windows plan, a rest on Transparent recreates the window one row short, and a rest back on Slideshow fullscreen (exit $(cat "$out/f60-winrest.code"))" $ok
+grep -E "^(Video: recreating|Reload: done|Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
+
 # A config whose own Mode names an image or folder it never gives is a config problem: at startup
 # that still says so as an error, on stderr. The slideshow's case runs f30-nodir's config here,
 # under a name of its own, so this check reads only what it ran.

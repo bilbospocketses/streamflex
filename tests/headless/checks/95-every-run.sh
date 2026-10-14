@@ -35,9 +35,11 @@ for e95_line in "${e95_bad[@]}"; do echo "      $e95_line"; done
 # reads" line), so the event SDL sends as it makes the window, which the loop handles after "Begin
 # program loop", changes nothing; and no run's renderer draws at a size other than its window's (spec
 # section 6). A run that posts a render reset on purpose (check 48's: the render hook's "Test hook:
-# pushed the render event" line) reloads for it, so only its size-change lines count there. The
-# runs pin GDK_SCALE, Xft.dpi and SDL_VIDEO_X11_SCALING_FACTOR unset (run.sh) except where a check sets
-# one. A later task's new window that reloads at the same size names its runs here too.
+# pushed the render event" line) reloads for it, so only its size-change lines count there, and so does
+# a run that recreates its window on purpose (check 60's f60-winrest, whose rests on Mode recreate it
+# under the Windows plan, each recreation reloading for its new window). The runs pin GDK_SCALE,
+# Xft.dpi and SDL_VIDEO_X11_SCALING_FACTOR unset (run.sh) except where a check sets one. A later task's
+# new window that reloads at the same size names its runs here too.
 e95_bad=() e95_runs=0
 for e95_log in "$out"/*.log; do
     [ -f "$e95_log" ] || continue
@@ -53,6 +55,7 @@ for e95_log in "$out"/*.log; do
     if [ ! -f "$out/$e95_name.path" ] && ! grep -q "^Test hook: the window's size reads " "$e95_log"; then
         e95_stray='^(Screen: .*; reloading|Reload: done at )'
         grep -q "^Test hook: pushed the render event '" "$e95_log" && e95_stray='^Screen: .*; reloading'
+        [ "$e95_name" = f60-winrest ] && e95_stray='^Screen: .*; reloading'
         e95_reload=$(grep -m1 -E "$e95_stray" "$e95_log")
         [ -z "$e95_reload" ] || e95_bad+=("$e95_name: a reload with no size change asked for: '$e95_reload'")
     fi

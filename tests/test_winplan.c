@@ -141,6 +141,27 @@ static void test_window_must_change(void)
     CHECK(window_must_change(WINDOW_FULLSCREEN, window_plan(BG_TRANSPARENT, true, NULL).kind, false));
 }
 
+// A function to test the count of failed presents on a Transparent window: the third in a row is a
+// lost device, and the count starts again for the renderer that follows; a present that works ends a
+// run, and an opaque window's failures are never counted
+static void test_present_failures(void)
+{
+    int failures = 0;
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(present_failed_lost(&failures, false, true));
+    CHECK_INT(failures, 0);
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(!present_failed_lost(&failures, true, true));
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(!present_failed_lost(&failures, false, true));
+    CHECK(present_failed_lost(&failures, false, true));
+    for (int i = 0; i < 5; i++)
+        CHECK(!present_failed_lost(&failures, false, false));
+    CHECK_INT(failures, 0);
+}
+
 int main(void)
 {
     test_transparent_on_windows();
@@ -151,5 +172,6 @@ int main(void)
     test_renderer_line();
     test_window_short_rect();
     test_window_must_change();
+    test_present_failures();
     return check_report();
 }

@@ -43,7 +43,7 @@ extern TextInfo title_info;
 #define MAX_COLUMN_RATIO 0.32F
 #define TEXT_CACHE_SIZE 96
 #define NOTE_TEXT_MAX 1600         // Longest note a row shows: a failed save's path and reason
-#define PREVIEW_REST_MS 300        // How long the Menus list's cursor rests before the preview follows it
+#define PREVIEW_REST_MS 300        // How long a cursor rests before the screen follows it: the Menus list's preview, Mode's window
 #define SLOW_KEY_MS 50             // A key that keeps the screen waiting this long is logged
 #define ALPHA_VALUE 180            // A row's value
 #define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
@@ -101,6 +101,8 @@ static char logged_path[512];                 // The page path last logged
 static char logged_hint[160];                 // The key hint last logged
 static Menu *preview_wanted = NULL;           // The menu the preview switches to once the cursor rests...
 static Uint32 preview_asked = 0;              // ...since when it has rested
+static bool kind_waiting = false;             // Mode changed: the window may need another kind...
+static Uint32 kind_asked = 0;                 // ...once Mode's cursor has rested since this step
 static int shown_first = -1;                  // The rows last on show, for the log
 static int shown_last = -1;
 static int shown_count = -1;
@@ -801,6 +803,7 @@ static void free_screen(void)
         close_browser();
     stop_decoding();
     preview_wanted = NULL;
+    kind_waiting = false;
     if (preview != NULL)
         SDL_DestroyTexture(preview);
     preview = NULL;
@@ -826,6 +829,7 @@ static void close_settings(void)
     free_screen();
     log_debug("Settings closed");
     trim_title_fonts();
+    window_follow_background();   // Saved, left or put back, the Mode in force may want another window
 #ifdef _WIN32
     retry_exit_hotkey(true);   // Whether or not anything changed: its key may have been let go meanwhile
 #endif
@@ -954,10 +958,17 @@ static void handle_event(const SettingsEvent *event)
         case SETTINGS_EVENT_CHANGED:
             log_change(event->slot, &event->before);
             apply_slot(event->slot, true);
+            // Each step of Mode starts the rest again, so stepping through Transparent recreates nothing
+            if (event->slot->def->id == SET_ID_BACKGROUND_MODE) {
+                kind_waiting = true;
+                kind_asked = ticks_ms();   // Task 1.2a's 32-bit milliseconds, as preview_asked takes them
+            }
             break;
         case SETTINGS_EVENT_DISCARD:
             log_debug("Settings: discarded the changes");
             apply_all();
+            kind_waiting = false;
+            window_follow_background();   // The Mode put back may want the window it had
             if (bindings != NULL)
                 apply_bindings(bindings);
             pickers_end_probation();   // The change the 10 s were for went with the rest
@@ -1546,6 +1557,17 @@ void settings_draw(void)
         Menu *menu = preview_wanted;
         preview_wanted = NULL;
         show_preview(menu);
+    }
+
+    // Mode's cursor has rested: the window takes the kind its background needs, when that differs
+    if (kind_waiting && ticks_ms() - kind_asked >= PREVIEW_REST_MS) {
+        kind_waiting = false;
+#ifdef STREAMFLEX_TEST_HOOKS
+        // Only the headless harness builds this: on Linux no Mode changes the window (unless the
+        // harness forces the Windows plan), so this says the rest came
+        log_debug("Test hook: the Mode row's cursor rested on %s", get_mode_setting(MODE_SETTING_BACKGROUND, (int) config.background_mode));
+#endif
+        window_follow_background();
     }
 
     // The page's rows, built once for the frame: the column draws them, and the caption says why the
