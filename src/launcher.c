@@ -27,6 +27,14 @@
 
 static void init_sdl(void);
 static void create_window(void);
+static WindowPlan plan_for(int background);
+static WindowPlan plan_in_force(void);
+static SDL_Window *make_window(const WindowPlan *plan, SDL_DisplayID display);
+static bool recreate_window(const WindowPlan *plan);
+static void fall_back_to_opaque(const char *reason);
+static void transparent_reason(const WindowPlan *plan, char *out, size_t size);
+static void run_recreation(void);
+static int drop_textures(void);
 static bool create_renderer(const WindowPlan *plan);
 static void raise_restarted_window(void);
 static void init_sdl_ttf(void);
@@ -240,12 +248,15 @@ static bool gamepad_on = false;   // The game controller subsystem is running
 static bool vsync_wanted = true; // VSync and FPSLimit ask the renderer for VSync
 static bool vsync_on = false;    // The renderer really gives it; unless both are true present_frame() paces each frame
 static VsyncWatch vsync_watch;   // Whether a renderer that reports VSync presents at the display's pace (vsyncwatch.h)
-static WindowPlan plan_in_force;  // The plan of the window that exists: its renderer list, or none under SDL_RENDER_DRIVER
 #define RENDERER_RETRIES 5        // Attempts at a new renderer after a lost device...
 #define RENDERER_RETRY_MS 2000    // ...this far apart, the main loop pumping events between them
 static bool renderer_owed = false;       // The device was lost: a new renderer is owed
 static int renderer_attempt = 0;         // The attempts made at it so far; 0 at startup
 static Uint64 renderer_next_try = 0;     // When the next one is due (SDL_GetTicks)
+static SDL_WindowID window_id = 0;                  // The window's ID: a window event naming another is a replaced window's
+static WindowKind window_kind = WINDOW_FULLSCREEN;  // The window in force: fullscreen, or Transparent one row short
+static bool transparent_failed = false;             // No renderer could draw a transparent window since Transparent was chosen
+static bool recreate_wanted = false;                // window_follow_background() asked for a window of another kind
 
 COMPILE_CHECK(winplan_knows_transparent, WINPLAN_BACKGROUND_TRANSPARENT == BACKGROUND_TRANSPARENT);
 
@@ -432,19 +443,11 @@ static void read_refresh_rate(void)
         log_debug("The display reports no refresh rate, using %i Hz", DEFAULT_REFRESH_RATE);
 }
 
-// A function to create the window and renderer
-static void create_window()
+// A function to read what a window startup has just made gives: the screen from its pixel size (spec
+// section 6), the OS's scale, logged and never applied, its display's refresh rate, and the frame
+// timing worked out from that rate, whose VSync wish create_renderer() then asks for
+static void window_made(void)
 {
-    // The window asks for the primary display's bounds and its native pixels: with no window manager
-    // to carry out the fullscreen request (Xvfb), a window asked for at 0 x 0 stays 1 x 1. A display
-    // whose bounds cannot be read leaves them 0 x 0, as before.
-    SDL_Rect bounds = { 0 };
-    SDL_GetDisplayBounds(SDL_GetPrimaryDisplay(), &bounds);
-    window = SDL_CreateWindow(PROJECT_NAME, bounds.w, bounds.h, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-    if (window == NULL)
-        log_fatal("Could not create SDL Window\n%s", SDL_GetError());
-    SDL_HideCursor();
-
     // The screen is the window's pixel size (spec section 6). The OS's scale is logged, never applied:
     // pixel and point settings keep meaning pixels and points.
     read_screen_geometry();
@@ -452,16 +455,37 @@ static void create_window()
     log_debug("Screen: %ix%i px, pixel density %.2f, display scale %.2f", geo.screen_width, geo.screen_height,
               (double) SDL_GetWindowPixelDensity(window), (double) display_scale);
     read_refresh_rate();
-
-    // The renderer, from the platform's Vulkan-first list (spec section 3). Until Task 1.8 makes the
-    // Transparent window, every window here is the opaque fullscreen one, so a Transparent plan
-    // gives way to the opaque one. SDL_getenv, not getenv: MSVC refuses getenv at /W4 /WX (C4996).
     apply_frame_timing();
-    plan_in_force = window_plan((int) config.background_mode, WINPLAN_WINDOWS, SDL_getenv("SDL_RENDER_DRIVER"));
-    if (plan_in_force.kind != WINDOW_FULLSCREEN || plan_in_force.refused)
-        plan_in_force = window_plan(BACKGROUND_COLOR, WINPLAN_WINDOWS, SDL_getenv("SDL_RENDER_DRIVER"));
-    if (!create_renderer(&plan_in_force))
-        quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
+}
+
+// A function to create the window and its renderer, the window made as the kind the background needs
+// from the start (spec section 3): Transparent on Windows is a see-through window one row short of the
+// display, every other background is fullscreen. An override outside the transparent list is refused
+// by its name before any renderer is made, and a Transparent window that gets no renderer falls back
+// to an opaque one; fall_back_to_opaque() then makes the window and its renderer itself, as below.
+static void create_window()
+{
+    WindowPlan plan = plan_for((int) config.background_mode);
+    if (plan.refused)
+        fall_back_to_opaque(plan.reason);
+    else {
+        window = make_window(&plan, SDL_GetPrimaryDisplay());
+        if (window == NULL)
+            log_fatal("Could not create SDL Window\n%s", SDL_GetError());
+        window_id = SDL_GetWindowID(window);
+        window_kind = plan.kind;
+        window_made();
+        if (!create_renderer(&plan)) {
+            if (plan.kind != WINDOW_TRANSPARENT_SHORT)
+                quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
+            char why[512];
+            transparent_reason(&plan, why, sizeof(why));
+            SDL_DestroyWindow(window);
+            window = NULL;
+            fall_back_to_opaque(why);
+        }
+    }
+    SDL_HideCursor();
 
     // One cross-check, once: what the renderer draws to is the window's size. SDL_GetCurrentRenderOutputSize
     // is never asked: it follows the render target, which is the settings preview while that draws.
@@ -471,7 +495,9 @@ static void create_window()
         log_error("Screen: the renderer draws %ix%i px, not the window's %ix%i",
                   output_width, output_height, geo.screen_width, geo.screen_height);
 #ifdef _WIN32
-    platform_window_changed(NULL, window);   // Read after the renderer exists: OpenGL's replaces the native window
+    // The handle, read after the renderer exists (OpenGL's replaces the native window), and with it
+    // the taskbar's mark for a Transparent window (Task 1.8a's call inside platform_window_changed())
+    platform_window_changed(NULL, window);
 #endif
 }
 
@@ -490,11 +516,229 @@ static void raise_restarted_window()
 #endif
 }
 
+// A function to plan the window for a background on this platform, under SDL_RENDER_DRIVER when it is
+// set. SDL_getenv, not getenv, which MSVC's /W4 /WX refuses as unsafe.
+static WindowPlan plan_for(int background)
+{
+    bool windows = WINPLAN_WINDOWS;
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: STREAMFLEX_TEST_WINDOWS_PLAN plans every window as Windows
+    // does, so Xvfb runs the Transparent window, its recreation and its fallbacks (the Windows-only
+    // calls around them stay Windows')
+    if (getenv("STREAMFLEX_TEST_WINDOWS_PLAN") != NULL)
+        windows = true;
+#endif
+    return window_plan(background, windows, SDL_getenv("SDL_RENDER_DRIVER"));
+}
+
+// A function to plan a new renderer for the window in force, after a lost device: the window's kind
+// picks the list, never the Mode setting, which may have moved on while settings wait for a rest
+static WindowPlan plan_in_force(void)
+{
+    return plan_for(window_kind == WINDOW_TRANSPARENT_SHORT ? BACKGROUND_TRANSPARENT : BACKGROUND_COLOR);
+}
+
+// A function to make the window a plan asks for, on a display, at native pixels: fullscreen (SDL3's
+// desktop fullscreen), or for Transparent on Windows borderless and see-through at the display's
+// top-left corner, one pixel row short of it. Shown, with no renderer yet; NULL, with SDL's reason,
+// when it could not be made.
+static SDL_Window *make_window(const WindowPlan *plan, SDL_DisplayID display)
+{
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (props == 0)
+        return NULL;
+    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, PROJECT_NAME);
+    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
+    SDL_Rect bounds = { 0 };
+    bool bounds_read = SDL_GetDisplayBounds(display, &bounds);
+    if (plan->kind == WINDOW_TRANSPARENT_SHORT) {
+        if (!bounds_read) {
+            SDL_DestroyProperties(props);
+            return NULL;
+        }
+        WindowRect rect = window_short_rect((WindowRect) { bounds.x, bounds.y, bounds.w, bounds.h });
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_TRANSPARENT_BOOLEAN, true);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, rect.x);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, rect.y);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, rect.w);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, rect.h);
+    }
+    else {
+        // The display's bounds as its size: with no window manager to carry out the fullscreen request
+        // (Xvfb), a window asked for at 0 x 0 stays 1 x 1. A display whose bounds cannot be read leaves
+        // them 0 x 0, as before.
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_UNDEFINED_DISPLAY(display));
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_UNDEFINED_DISPLAY(display));
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, bounds.w);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, bounds.h);
+    }
+    SDL_Window *made = SDL_CreateWindowWithProperties(props);
+    SDL_DestroyProperties(props);
+    return made;
+}
+
+// A function to say why no renderer could draw a transparent window, right after create_renderer()
+// failed for its plan, while SDL's error is still that failure's
+static void transparent_reason(const WindowPlan *plan, char *out, size_t size)
+{
+    if (plan->render_list != NULL)
+        snprintf(out, size, "no renderer on the list %s could be made: %s", plan->render_list, SDL_GetError());
+    else
+        snprintf(out, size, "SDL_RENDER_DRIVER=%s could not be made: %s", SDL_getenv("SDL_RENDER_DRIVER"), SDL_GetError());
+}
+
+// A function to replace the window with one of the kind a plan gives, keeping StreamFlex in front, its
+// hotkeys live and its focus logic quiet. The new window and its renderer are made while the old ones
+// still stand: a process whose only window is gone loses its right to the foreground, and SDL drops
+// pad events for an unfocused window. Every texture goes with the old renderer, every holder of the
+// window moves to the new one, the new window takes the foreground while the old one still holds it,
+// and only then does the old one go. The full reload is marked, whatever the new window's size. A new
+// renderer a lost device still owed is owed no more: the new window's renderer stands in for it.
+// False, with SDL's reason logged and still in SDL_GetError(), when the new window or its renderer
+// could not be made: the old window, its renderer, its textures and any renderer still owed stand as
+// they were.
+static bool recreate_window(const WindowPlan *plan)
+{
+    SDL_Window *old_window = window;
+    SDL_Renderer *old_renderer = renderer;
+    SDL_DisplayID display = SDL_GetDisplayForWindow(old_window);
+    SDL_Window *made = make_window(plan, display != 0 ? display : SDL_GetPrimaryDisplay());
+    if (made == NULL) {
+        log_error("Could not create SDL Window\n%s", SDL_GetError());
+        return false;
+    }
+    window = made;
+    renderer = NULL;
+
+    // Not a retry: Task 1.7b's schedule ends here, and its test hooks (which fail and trim retries by
+    // their attempt number) leave this renderer alone. A failure puts the schedule back as it was.
+    bool was_owed = renderer_owed;
+    int was_attempt = renderer_attempt;
+    renderer_owed = false;
+    renderer_attempt = 0;
+    if (!create_renderer(plan)) {
+        char why[256];
+        SDL_strlcpy(why, SDL_GetError(), sizeof(why));
+        SDL_DestroyWindow(made);
+        window = old_window;
+        renderer = old_renderer;
+        renderer_owed = was_owed;
+        renderer_attempt = was_attempt;
+        SDL_SetError("%s", why);   // The caller's reason: destroying the window may have set another error
+        return false;
+    }
+
+    // Every texture belongs to the old renderer and goes before it; the reload makes them again
+    drop_textures();
+    if (old_renderer != NULL)
+        SDL_DestroyRenderer(old_renderer);
+    window_id = SDL_GetWindowID(window);
+    window_kind = plan->kind;
+#ifdef _WIN32
+    platform_window_changed(old_window, window);   // The hotkeys leave the old HWND for the new, which is marked if Transparent
+#endif
+
+    // To the front while the old window still holds the foreground, which this process may then give
+    SDL_RaiseWindow(window);
+#ifdef _WIN32
+    state.has_focus = take_foreground();
+    if (state.has_focus)
+        log_debug("Video: the new window is in front, with the keyboard");
+    else
+        log_error("Video: Windows kept the new window behind another, so it has no keyboard until it is brought to the front");
+#endif
+    SDL_DestroyWindow(old_window);
+    reload_mark(RELOAD_RECREATE);
+    return true;
+}
+
+// A function to give up on a transparent window: say why, show the Color background, and see that an
+// opaque fullscreen window with a renderer is in force. A recreation that failed, or an override
+// refused before it began, leaves the opaque window it would have replaced, still in front with its
+// renderer and textures. A Transparent window whose renderer is gone (every device-loss attempt
+// failed) is recreated opaque. At startup, with no window yet, the opaque one is made. Transparent is
+// not tried again until another Mode is chosen and then Transparent again. Only an opaque window that
+// gets no renderer ends StreamFlex.
+static void fall_back_to_opaque(const char *reason)
+{
+    log_error("Video: no renderer can draw a transparent window (%s); using an opaque background", reason);
+    transparent_failed = true;
+    background_shown = BACKGROUND_COLOR;
+    if (window != NULL && window_kind == WINDOW_FULLSCREEN && renderer != NULL) {
+        set_draw_color();
+        return;
+    }
+    WindowPlan plan = plan_for(BACKGROUND_COLOR);
+    if (window != NULL) {
+        if (!recreate_window(&plan))
+            quit(EXIT_FAILURE);   // recreate_window() or create_renderer() logged SDL's reason
+        return;
+    }
+    window = make_window(&plan, SDL_GetPrimaryDisplay());
+    if (window == NULL)
+        log_fatal("Could not create SDL Window\n%s", SDL_GetError());
+    window_id = SDL_GetWindowID(window);
+    window_kind = plan.kind;
+    window_made();
+    if (!create_renderer(&plan))
+        quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
+}
+
+// A function to give the window the kind the Mode setting needs. Closing settings, Discard and the
+// Mode row's rest ask for it (Task 1.9a); the recreation itself runs in the main loop, between the
+// drain and the reload, once no app is in front and a renderer exists. An override outside the
+// transparent list is refused here, by its name, before any renderer is made. On Linux every
+// background is fullscreen, so this asks for nothing, unless the harness forces the Windows plan
+// (STREAMFLEX_TEST_WINDOWS_PLAN).
+void window_follow_background(void)
+{
+    if (config.background_mode != BACKGROUND_TRANSPARENT)
+        transparent_failed = false;   // Chosen again, Transparent is tried again
+    WindowPlan plan = plan_for((int) config.background_mode);
+    if (plan.refused) {
+        if (!transparent_failed)
+            fall_back_to_opaque(plan.reason);
+        return;
+    }
+    recreate_wanted = window_must_change(window_kind, plan.kind, transparent_failed);
+}
+
+// A function to make the recreation window_follow_background() asked for, from the main loop after the
+// drain and before the reload it marks. One asked for while an app is in front waits for post_launch().
+static void run_recreation(void)
+{
+    recreate_wanted = false;
+    WindowPlan plan = plan_for(transparent_failed ? BACKGROUND_COLOR : (int) config.background_mode);
+    if (plan.refused || plan.kind == window_kind)
+        return;   // Asked for, then changed back before it ran
+    if (plan.kind == WINDOW_TRANSPARENT_SHORT)
+        log_debug("Video: recreating the window for a transparent background");
+    else
+        log_debug("Video: recreating the window for an opaque background");
+    if (recreate_window(&plan))
+        return;
+    if (plan.kind != WINDOW_TRANSPARENT_SHORT)
+        quit(EXIT_FAILURE);   // recreate_window() or create_renderer() logged SDL's reason
+    char why[512];
+    transparent_reason(&plan, why, sizeof(why));
+    fall_back_to_opaque(why);
+}
+
 // A function to set the color of the renderer
 void set_draw_color()
 {
     if (renderer == NULL)
         return;   // A new renderer sets its draw color as it is made
+#ifdef _WIN32
+    // Per-pixel alpha: the background clears to nothing, and SDL's blending over it gives the
+    // premultiplied pixels the compositor is told to expect. ChromaKeyColor is not read.
+    if (background_shown == BACKGROUND_TRANSPARENT) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        return;
+    }
+#endif
     SDL_Color *color = NULL;
     if (background_shown == BACKGROUND_COLOR)
         color = &config.background_color;
@@ -582,6 +826,10 @@ static void cleanup()
 
     // Wait until all threads have completed; the slideshow's may have read an image, which is freed
     stop_slideshow();
+
+#ifdef _WIN32
+    taskbar_release();   // Before SDL_Quit(), while COM that SDL started still stands
+#endif
 
     // Destroy renderer and window
     if (renderer != NULL) {
@@ -1139,6 +1387,10 @@ void reload_background()
     background_luminance = -1.0;
 
     background_shown = config.background_mode;
+    // No renderer could draw a transparent window since Transparent was chosen: the color shows
+    // instead (fall_back_to_opaque(); never set on Linux)
+    if (background_shown == BACKGROUND_TRANSPARENT && transparent_failed)
+        background_shown = BACKGROUND_COLOR;
     if (config.background_mode == BACKGROUND_IMAGE) {
         // While settings are open, a mode with no image chosen yet is not a config problem; an
         // image that was chosen and fails to load is one, and says so as it does at startup
@@ -1169,12 +1421,6 @@ void reload_background()
     }
     if (background_shown == BACKGROUND_IMAGE || background_shown == BACKGROUND_SLIDESHOW)
         log_luminance();
-#ifdef _WIN32
-    if (background_shown == BACKGROUND_TRANSPARENT)
-        make_window_transparent();
-    else
-        make_window_opaque();
-#endif
     stop_overlay();
     start_overlay();
     set_draw_color();
@@ -2789,14 +3035,17 @@ static void renderer_lost(void)
 // section 3). It is called once a pass of the main loop, so events are pumped between the attempts:
 // the window never stops answering, and every quit path stays live. The new renderer is made as at
 // startup, for the window in force; on Windows its handle is read again. The last attempt's failure
-// takes the startup error path.
+// takes the startup error path, but on a Transparent window, which falls back to an opaque one.
 static void renderer_retry(void)
 {
     if (!renderer_owed || app_in_front() || SDL_GetTicks() < renderer_next_try)
         return;
     renderer_attempt++;
     log_debug("Renderer: creating a new renderer, attempt %i of %i", renderer_attempt, RENDERER_RETRIES);
-    if (create_renderer(&plan_in_force)) {
+    // The window's kind picks the list, never the Mode setting, which may have moved on while
+    // settings wait for a rest, or after a fallback
+    WindowPlan plan = plan_in_force();
+    if (create_renderer(&plan)) {
         renderer_owed = false;
         renderer_attempt = 0;
 #ifdef _WIN32
@@ -2805,8 +3054,16 @@ static void renderer_retry(void)
         reload_mark(RELOAD_DEVICE);
         return;
     }
-    if (renderer_attempt >= RENDERER_RETRIES)
-        quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as at startup
+    if (renderer_attempt >= RENDERER_RETRIES) {
+        if (window_kind != WINDOW_TRANSPARENT_SHORT)
+            quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as at startup
+        // A Transparent window never ends StreamFlex: an opaque one takes its place, whose renderer
+        // ends the schedule (recreate_window() owes no other)
+        char why[512];
+        snprintf(why, sizeof(why), "%i attempts at a new renderer failed: %s", RENDERER_RETRIES, SDL_GetError());
+        fall_back_to_opaque(why);
+        return;
+    }
     renderer_next_try = SDL_GetTicks() + RENDERER_RETRY_MS;
 }
 
@@ -3071,6 +3328,12 @@ int main(int argc, char *argv[])
         test_render_event_update();
 #endif
         while (SDL_PollEvent(&event)) {
+            // A window event names its window: one from a window a recreation replaced (its focus lost as
+            // the new one took the foreground) is not the window's, and is never read as an app's launch
+            // or return, or as a size or display change
+            if (event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST &&
+                event.window.windowID != window_id)
+                continue;
             switch (event.type) {
                 case SDL_EVENT_QUIT:
                     quit(EXIT_SUCCESS);
@@ -3208,6 +3471,11 @@ int main(int argc, char *argv[])
         // A lost device's new renderer when it is due, then one reload for every reason the events
         // above marked, geometry first, before anything is drawn
         renderer_retry();
+        // A window of another kind, asked for by settings, is made once no app is in front and a
+        // renderer exists (a lost device's new renderer comes first, from renderer_retry()), before the
+        // reload it marks
+        if (recreate_wanted && !app_in_front() && renderer != NULL)
+            run_recreation();
         reload_run_pending();
 
         // While a new renderer is owed, nothing is drawn or updated; the events above still run

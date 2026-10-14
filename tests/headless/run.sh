@@ -94,20 +94,22 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # stale time makes the shards uneven, never a check lost or run twice. 48-pad-repeat.sh's is its
 # 11 s in that full set, times check 62's ratio of its time here to its time there (1069 to 1282
 # s), so that the timing set's two shards plan even. 47-screen.sh's and 47-screen-timing.sh's are
-# estimates from their runs' waits (Task 1.6b), and 48-device-loss.sh's from its fourteen runs' and
-# 48-device-loss-timing.sh's from its two runs' (Tasks 1.7a and 1.7b), until a set measures them.
+# estimates from their runs' waits (Task 1.6b), and 48-device-loss.sh's from its fifteen runs' and
+# 48-device-loss-timing.sh's from its two runs' (Tasks 1.7a, 1.7b and 1.8b), until a set measures them;
+# 60-settings-background.sh's and 70-chroma.sh's add Task 1.8b's two quick runs and its background count
+# to their measured times, by estimate too.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
     [47-screen.sh]=100 [47-screen-timing.sh]=12
-    [48-device-loss.sh]=135 [48-device-loss-timing.sh]=20 [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
+    [48-device-loss.sh]=150 [48-device-loss-timing.sh]=20 [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
     [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
     [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
     [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
-    [60-settings-background.sh]=124 [60-settings-background-timing.sh]=56
+    [60-settings-background.sh]=130 [60-settings-background-timing.sh]=56
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
-    [70-chroma.sh]=2
+    [70-chroma.sh]=3
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest

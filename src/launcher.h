@@ -328,6 +328,7 @@ extern double background_luminance;              // The image on show's mean lum
 void draw_scene(bool preview);
 void present_frame(void);
 void reload_background(void);
+void window_follow_background(void);   // The window takes the kind the Mode setting needs (a recreation, from the main loop)
 void reload_titles(void);
 void trim_title_fonts(void);
 void refresh_layout(void);

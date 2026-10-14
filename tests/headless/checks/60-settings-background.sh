@@ -203,3 +203,29 @@ grep -q 'Settings: the caption says This image cannot be opened for /home/tester
     && ran_clean f60-broken && ok=0
 result "settings: a broken image says so as soon as it is highlighted, and cannot be chosen (exit $(cat "$out/f60-broken.code"))" $ok
 grep -E 'Settings: (browsing|could not|the caption|This image|chose)' "$out/f60-broken.log" | sed 's/^/      /'
+
+# The Windows plan, forced on Linux by the harness build's STREAMFLEX_TEST_WINDOWS_PLAN (Task 1.8b), so
+# Xvfb runs the window Windows makes for Transparent. Startup makes it as that kind directly: one pixel
+# row short of the screen, on the transparent list's first renderer, with no recreation.
+echo 1920x1079 > "$out/f60-wintransparent.display"   # 95-every-run.sh: this run's screen is one row short
+CFG=$FX/f60-winplan.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 run_quick f60-wintransparent
+log=$out/f60-wintransparent.log
+ok=1
+grep -qx 'Renderer: vulkan' "$log" && grep -qx 'Screen: 1920x1079 px, pixel density 1.00, display scale 1.00' "$log" \
+    && grep -qx 'Resolution:    1920x1079' "$log" && grep -qx 'Background set up: Transparent' "$log" \
+    && ! grep -q '^Video: recreating' "$log" && ! grep -q '^Video: no renderer can draw' "$log" \
+    && ran_clean f60-wintransparent && ok=0
+result "transparent: under the Windows plan, startup makes the window one row short, with no recreation (exit $(cat "$out/f60-wintransparent.code"))" $ok
+grep -E '^(Video|Renderer|Screen|Resolution|Background set up):' "$log" | sed 's/^/      /'
+
+# A forced renderer outside the transparent list is refused by its name before any window is made: the
+# window is the opaque fullscreen one, the background Color, and StreamFlex runs on
+CFG=$FX/f60-winplan.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 SDL_RENDER_DRIVER=opengl run_quick f60-winrefused
+log=$out/f60-winrefused.log
+ok=1
+grep -qx 'Video: no renderer can draw a transparent window (SDL_RENDER_DRIVER=opengl is not in the transparent list); using an opaque background' "$log" \
+    && grep -qx 'Renderer: opengl (from SDL_RENDER_DRIVER)' "$log" && grep -qx 'Background set up: Color' "$log" \
+    && grep -qx 'Resolution:    1920x1080' "$log" && ! grep -q '^Video: recreating' "$log" \
+    && ran_clean f60-winrefused && ok=0
+result "transparent: under the Windows plan, SDL_RENDER_DRIVER=opengl gives the Color background and runs on (exit $(cat "$out/f60-winrefused.code"))" $ok
+grep -E '^(Video|Renderer|Background set up):' "$log" | sed 's/^/      /'

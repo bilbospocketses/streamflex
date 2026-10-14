@@ -7,9 +7,9 @@
 # the geometry in force; the size waits for the app. A lost device drops every texture and then the
 # renderer, and a new renderer is made from the window's plan, at once or once a launched app is
 # done, then the one reload; a failed attempt is tried again 2 s later, and the fifth failure ends
-# StreamFlex as a failed start does. The cases that race the attempts' 2 s are in
-# 48-device-loss-timing.sh.
-# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup waits for are paced 2 s apart in wall time and end inside the 20 s line wait, and no case races a deadline
+# StreamFlex as a failed start does, but on a Transparent window (the Windows plan, forced), which
+# falls back to an opaque one. The cases that race the attempts' 2 s are in 48-device-loss-timing.sh.
+# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup and f48-wingiveup wait for are paced 2 s apart in wall time and end inside the 20 s line wait, f48-wingiveup's 3 s sleep is a floor too (a correct run makes no sixth attempt, however long; one that does makes it in the pass after the fallback's reload), and no case races a deadline
 D48_EVENT=/tmp/d48-event D48_SIZE=/tmp/d48-size D48_APP=/tmp/d48-app
 # A function to put the render events WORDS in the hook's file in one step (a rename), so the hook
 # never reads half of them
@@ -334,3 +334,25 @@ if [ -f "$D48_FONTS" ]; then
 else
     echo "      device: the fallback title's redraw waits for Task 1.16's $D48_FONTS"
 fi
+
+# A Transparent window whose new renderer never comes (Task 1.8b), under the Windows plan forced on Linux
+# (STREAMFLEX_TEST_WINDOWS_PLAN): after the fifth failed attempt it falls back to an opaque window, whose
+# renderer ends the schedule, and StreamFlex runs on with the Color background. 3 s after the fallback's
+# reload no sixth attempt has come (one would be due at once, or 2 s later), and no sixth "Could not
+# initialize renderer". The message box is left out, as f48-giveup leaves it, so a build that exits
+# here instead does so at once.
+d48_given_up() { wait_line 'Video: no renderer can draw a transparent window (' "$2" && wait_line 'Reload: done at 1920x1080 px, for ' "$2"; sleep 3; }
+d48_reset_runs f48-wingiveup
+echo 1920x1079 > "$out/f48-wingiveup.display"   # 95-every-run.sh: this run's screen starts one row short
+CFG=$FX/f48-transparent.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT STREAMFLEX_TEST_RENDERER_FAIL=5 \
+    STREAMFLEX_TEST_NO_MESSAGE_BOX=1 run_keys f48-wingiveup +d48_lost +d48_given_up
+log=$out/f48-wingiveup.log
+ok=1
+grep -qx 'Renderer: creating a new renderer, attempt 5 of 5' "$log" && ! grep -q 'attempt 6 of 5' "$log" \
+    && grep -qx 'Video: no renderer can draw a transparent window (5 attempts at a new renderer failed: Test hook: attempt 5 fails); using an opaque background' "$log" \
+    && precedes "$log" 'Video: no renderer can draw a transparent window (' 'Reload: done at 1920x1080 px, for ' \
+    && grep -qE '^Reload: done at 1920x1080 px, for .*a new window$' "$log" \
+    && [ "$(grep '^Background set up: ' "$log" | tail -1)" = 'Background set up: Color' ] \
+    && [ "$(grep -cx 'Could not initialize renderer' "$log")" = 5 ] && ran_clean f48-wingiveup && ok=0
+result "device: a Transparent window whose five attempts fail falls back to an opaque one and runs on (exit $(cat "$out/f48-wingiveup.code"))" $ok
+grep -E '^(Renderer|Video|Reload|Could not initialize|Background set up)' "$log" | sed 's/^/      /'

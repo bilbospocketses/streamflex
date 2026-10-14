@@ -41,8 +41,6 @@ void listen_exit_hotkey(bool on);   // While an app runs, the exit hotkey's WM_H
 void set_foreground_window(void);
 bool make_self(void);           // A restart: the fresh copy, made and given the foreground before the teardown
 bool take_foreground(void);     // A restart's fresh copy: true when its window came to the front
-void make_window_transparent(void);
-void make_window_opaque(void);
 void hide_cursor(Entry* entry);
 void taskbar_mark_fullscreen(SDL_Window *window, bool mark);   // ITaskbarList2::MarkFullscreenWindow on the window's HWND
 void taskbar_release(void);                                    // At quit: the taskbar's list, and COM if it was started for it

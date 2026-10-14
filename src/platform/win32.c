@@ -132,24 +132,6 @@ void set_foreground_window()
     SetForegroundWindow(window_hwnd);
 }
 
-void make_window_transparent()
-{
-    HWND hwnd = window_hwnd;
-    SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED);
-    SetLayeredWindowAttributes(hwnd,
-        RGB(config.chroma_key_color.r, config.chroma_key_color.g, config.chroma_key_color.b),
-        0,
-        LWA_COLORKEY
-    );
-}
-
-// A function to make the window solid again after a transparent background
-void make_window_opaque()
-{
-    HWND hwnd = window_hwnd;
-    SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-}
-
 // When the window is transparent, we need to hide the cursor behind the non-transparent icon
 void hide_cursor(Entry *entry)
 {
