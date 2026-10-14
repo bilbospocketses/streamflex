@@ -78,7 +78,11 @@ grep '^Fonts:' "$log" | sed 's/^/      /'
 
 # Shrink mode over box glyphs: each title keeps one scratch set, opened at its smaller size with its
 # fallbacks and resized step by step, so every size measured carries the fallback the drawn one does.
-# 90-titles-fit.sh then finds no title wider than its button in this run either.
+# The third title, 17 boxes, is 1054 px at 78 pt, so its first smaller size is 41 pt, where SDL_ttf
+# rounds each box's advance up and it still measures 561 px in its 556 px button: it steps down once,
+# to 40 pt (544 px). The other two fit at their first smaller size, 58 and 23 pt (measured in both
+# images' SDL_ttf, t116a/light/shrink-probe.c). 90-titles-fit.sh then finds no title wider than its
+# button in this run either.
 FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf run_quick f72-shrink
 log=$out/f72-shrink.log
 smaller=$(grep -E '^Fonts: the [0-9]+ pt titles fall back to .*/sf-box\.ttf \(face 0\), first for U\+' "$log" | grep -vc '^Fonts: the 78 pt ')
@@ -89,15 +93,18 @@ grep -q "Menu 'Main': 3 x 1 grid, 556 px buttons, 78 pt titles" "$log" \
 result "fallback fonts: Shrink measures CJK titles with their fallback at every size and fits them (exit $(cat "$out/f72-shrink.code"))" $ok
 grep -E '^Fonts:|px wide, over its' "$log" | sed 's/^/      /'
 
-# Shrink when every step down fails (the harness build's STREAMFLEX_TEST_FAIL_SHRINK_STEP): the scratch
-# set is closed, its font before its fallback, and the title is cut at the menu's size
+# Shrink when every step down fails (the harness build's STREAMFLEX_TEST_FAIL_SHRINK_STEP): the third
+# title's step down from 41 pt fails, so its scratch set is closed, its font before its fallback, and the
+# title is cut at the menu's size. The set it closed carried the box font: its fallback line, at the size
+# the failed step left, is in the log.
 FONTCONFIG_FILE=$TESTER_HOME/fcbox/fonts.conf STREAMFLEX_TEST_FAIL_SHRINK_STEP=1 CFG=$FX/f72-shrink.ini run_quick f72-shrinkfail
 log=$out/f72-shrinkfail.log
+f72_step=$(sed -n 's/^Test hook: the step down to \([0-9]*\) pt fails$/\1/p' "$log" | head -1)
 ok=1
-grep -q 'Test hook: the step down to [0-9]* pt fails' "$log" && ! grep -q 'px wide, over its' "$log" \
-    && ran_clean f72-shrinkfail && ok=0
+[ -n "$f72_step" ] && grep -qxF "Fonts: the $((f72_step + 1)) pt titles fall back to $TESTER_HOME/fcbox/fonts/sf-box.ttf (face 0), first for U+4E2D" "$log" \
+    && ! grep -q 'px wide, over its' "$log" && ran_clean f72-shrinkfail && ok=0
 result "fallback fonts: a failed step down closes the scratch set and still cuts the title to fit (exit $(cat "$out/f72-shrinkfail.code"))" $ok
-grep -E 'Test hook|px wide, over its' "$log" | sed 's/^/      /'
+grep -E '^Fonts:|Test hook|px wide, over its' "$log" | sed 's/^/      /'
 
 # The settings screen: its fonts are sets too. The Menus list's widths are measured when settings
 # open, so the CJK menu name gives the 30 pt row font (2.8 % of 1080) its fallback there
