@@ -116,8 +116,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s, the
 # two menus again with no decode thread, about 10 s, and two menus of 48 XPM icons, about 4 s each),
 # until a set measures it. 72-fallback-fonts.sh's is an estimate from its five runs (Task 1.16a: about 3 s
-# each to start and stop, and the run with no fallback font reading the screen for the full 10 s, about 25
-# readings of a second each, for a filled glyph that never comes), until a set measures it.
+# each to start and stop, and the run with no fallback font reading the screen 25 times, each a 0.4 s
+# sleep, a screenshot and a pixel count, so roughly 15 to 25 s, for a filled glyph that never comes),
+# until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
