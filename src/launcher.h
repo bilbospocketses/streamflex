@@ -356,8 +356,11 @@ bool gamepad_running(void);
 bool gamepad_connected(void);                  // A pad is open to read
 int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none
 
-// One reload, geometry first (spec section 3): what asked for it, marked by the event handlers
-typedef enum { RELOAD_NONE = 0, RELOAD_TARGETS = 1, RELOAD_DEVICE = 2, RELOAD_SIZE = 4, RELOAD_RECREATE = 8 } ReloadReason;
+// One reload, geometry first (spec section 3): what asked for it, marked by the event handlers.
+// RELOAD_DISPLAY (a move to another display, or a new mode of the window's display) reads the refresh
+// rate again and makes no texture again; a new size that comes with it marks RELOAD_SIZE.
+typedef enum { RELOAD_NONE = 0, RELOAD_TARGETS = 1, RELOAD_DEVICE = 2, RELOAD_SIZE = 4, RELOAD_RECREATE = 8,
+               RELOAD_DISPLAY = 16 } ReloadReason;
 void reload_mark(ReloadReason why);   // Event handlers only mark; nothing reloads inside the drain
 void reload_run_pending(void);        // After the drain, before drawing: geometry first, then the textures
 bool app_in_front(void);              // state.application_launching || state.application_running

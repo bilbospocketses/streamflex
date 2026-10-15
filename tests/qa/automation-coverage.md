@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 584 |
-| Row halves | 1023 |
-| Verdicts per release (row x desktop) | 2395 |
+| Rows | 585 |
+| Row halves | 1025 |
+| Verdicts per release (row x desktop) | 2400 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 275 (1100 verdicts) |
+| `streamflex-headless` halves | 276 (1104 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 588 (1135 verdicts) |
-| **Automated today** | 435 of 1023 halves; 1260 of 2395 verdicts (52 %) |
+| `manual` halves | 589 (1136 verdicts) |
+| **Automated today** | 436 of 1025 halves; 1264 of 2400 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -1041,6 +1041,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 16.15 | `[All]` | manual | needs a second display, of another size than the first |
 | 16.16 | `[Linux]` | manual | qa-harness item 75, planned |
 | 16.17 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.18 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-mode` |
+| 16.18 | `[Win]` | manual | needs a GPU driving the display, and a real change of display mode |
 | 17.1 | `[Linux]` | streamflex-headless | `66-pad-power.sh` run `f66-power` |
 | 17.2 | `[Win]` | manual | needs a real Xbox Wireless Controller on low batteries; no virtual pad reports a battery |
 | 17.3 | `[Win]` | manual | needs a real Xbox Wireless Controller and its cable |

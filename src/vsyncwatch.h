@@ -29,5 +29,8 @@ void vsyncwatch_reset(VsyncWatch *watch);
 // A present that returned at now_ns, on a display of rate_hz (at least 1, as derive_refresh_rate()
 // gives it): true once, at the present that finds VSync not delivered; false before it, and after
 bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, int rate_hz);
+// The display's rate read again, was_hz before it and rate_hz now: a new rate starts the watch afresh,
+// as what it found was timed against the old rate's frame. True when it did; the same rate keeps it.
+bool vsyncwatch_follow_rate(VsyncWatch *watch, int was_hz, int rate_hz);
 
 #endif

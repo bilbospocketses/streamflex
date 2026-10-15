@@ -3167,6 +3167,7 @@ static void update_clock(bool block)
 
 static int reload_pending = RELOAD_NONE;   // The ReloadReasons marked since the last reload
 static bool size_deferred = false;         // A size change came while an app was in front: post_launch() reads it again
+static bool display_moved = false;         // The RELOAD_DISPLAY pending is a move to another display, not only a new mode
 
 // A function to tell whether an app is launching or running: nothing is laid out for a new size then
 bool app_in_front(void)
@@ -3197,25 +3198,53 @@ static void describe_reload(int why, char *out, size_t size)
     }
 }
 
+// A function to read the refresh rate of the window's display again, after a move to another display
+// or a new display mode, or a new size: a move always works the frame timing out again (whose Frame
+// timing: line follows this one's), and a new rate does so too, and starts the VSync watch afresh, as
+// what it found was timed against the old rate. The same rate after a mode change or a size changes
+// nothing, and says nothing.
+static void follow_display(bool moved)
+{
+    int was = display_rate;
+    read_refresh_rate();
+    unsigned int display = (unsigned int) SDL_GetDisplayForWindow(window);
+    if (moved)
+        log_debug("Screen: now on display %u, %i Hz", display, display_rate);
+    else if (display_rate != was)
+        log_debug("Screen: display %u now runs at %i Hz, was %i Hz", display, display_rate, was);
+    else
+        return;
+    apply_frame_timing();
+    if (vsyncwatch_follow_rate(&vsync_watch, was, display_rate))
+        log_debug("Frame timing: the VSync watch starts again at %i Hz", display_rate);
+}
+
 // A function to run the one reload the marks ask for, after the events are drained and before
-// anything is drawn: the screen geometry first, then every texture in the order Discard uses
-// (REFRESH_ORDER), the gamepad left running and the screensaver's dim kept. While an app is launching
-// or running, geo stays as it is and a size change waits for post_launch(), so a game's temporary
-// resolution never becomes the layout; a reset in the same batch still rebuilds, at the size laid out.
-// A reload with no renderer waits for the new one.
+// anything is drawn: the screen geometry first, then the refresh rate, then every texture in the
+// order Discard uses (REFRESH_ORDER), the gamepad left running and the screensaver's dim kept. While
+// an app is launching or running, geo stays as it is and a size change waits for post_launch(), so a
+// game's temporary resolution never becomes the layout; a reset in the same batch still rebuilds, at
+// the size laid out. A move or a new display mode alone makes no texture again: the size event that
+// may come with it does. A reload with no renderer waits for the new one.
 void reload_run_pending(void)
 {
     if (reload_pending == RELOAD_NONE || renderer == NULL)
         return;
     int why = reload_pending;
+    bool moved = display_moved;
     reload_pending = RELOAD_NONE;
+    display_moved = false;
     if (app_in_front() && (why & RELOAD_SIZE)) {
         size_deferred = true;   // The size is read again when the app is done, and reloads then if still new
         why &= ~RELOAD_SIZE;
-        if (why == RELOAD_NONE)
-            return;
     }
-    bool resized = !app_in_front() && read_screen_geometry();
+    bool display_marked = (why & RELOAD_DISPLAY) != 0;
+    why &= ~RELOAD_DISPLAY;
+    bool resized = why != RELOAD_NONE && !app_in_front() && read_screen_geometry();
+    if (display_marked || resized)
+        follow_display(moved);
+    if (why == RELOAD_NONE)
+        return;
     if (why == RELOAD_SIZE && !resized) {
         log_debug("Screen: %ix%i px again; nothing to reload", geo.screen_width, geo.screen_height);
         return;
@@ -3276,14 +3305,22 @@ static void recheck_deferred_size(void)
         log_debug("Screen: %ix%i px again; nothing to reload", width, height);
 }
 
-// A function to follow the window to another display (SDL_EVENT_WINDOW_DISPLAY_CHANGED): its refresh
-// rate, and the frame timing worked out from it again (whose Frame timing: line follows this one's).
-// A new size comes as its own event.
-static void display_changed(SDL_DisplayID display)
+// A function to mark the reload a move to another display (SDL_EVENT_WINDOW_DISPLAY_CHANGED) needs:
+// its refresh rate read again, and the frame timing worked out from it (follow_display()). A new size
+// comes as its own event.
+static void display_changed(void)
 {
-    read_refresh_rate();
-    log_debug("Screen: now on display %u, %i Hz", (unsigned int) display, display_rate);
-    apply_frame_timing();
+    display_moved = true;
+    reload_mark(RELOAD_DISPLAY);
+}
+
+// A function to mark the reload a new mode of the window's display needs (SDL's current and desktop
+// mode-change events): a TV switching from 4K at 60 Hz to 1080p at 120 Hz changes the refresh rate
+// the frame timing and the VSync watch go by. Another display's mode is not the window's.
+static void display_mode_changed(SDL_DisplayID display)
+{
+    if (display == SDL_GetDisplayForWindow(window))
+        reload_mark(RELOAD_DISPLAY);
 }
 
 // A function to log a change of the OS's scale (SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED), which is
@@ -3768,12 +3805,13 @@ int main(int argc, char *argv[])
                     break;
 
                 case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-                    display_changed((SDL_DisplayID) event.window.data1);
+                    display_changed();
                     refit_transparent_window();
                     break;
 
                 case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
                 case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+                    display_mode_changed(event.display.displayID);
                     refit_transparent_window();
                     break;
 

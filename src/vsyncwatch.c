@@ -56,3 +56,14 @@ bool vsyncwatch_present(VsyncWatch *watch, uint64_t now_ns, int rate_hz)
     watch->undelivered = true;
     return true;
 }
+
+// A function to follow the display to a new refresh rate (a display-mode change, a move to another
+// display): a renderer found presenting early at 60 Hz may be delivering VSync at 120, so the watch
+// starts afresh at the new rate and finds it again only if it is still early there
+bool vsyncwatch_follow_rate(VsyncWatch *watch, int was_hz, int rate_hz)
+{
+    if (rate_hz == was_hz)
+        return false;
+    vsyncwatch_reset(watch);
+    return true;
+}
