@@ -8,6 +8,8 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
 v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SDL3 and needs Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10 (or a newer release of each), Arch Linux, or Windows. Debian bookworm, Ubuntu 24.04 LTS and older releases package no SDL3, so users there stay on v0.4.1, which stays downloadable; there is no backport.
 
 StreamFlex now runs on SDL3 and draws with Vulkan first. Text the title font cannot draw comes from fallback fonts, Linux desktops with a current compositor run StreamFlex as a native Wayland client, the screen stays sharp at any display scale and follows a change of resolution, a gamepad low on its battery shows a small glyph, and on Windows the Transparent background is see-through pixel by pixel, with soft edges. A config written for 0.4.x reads and saves as before.
