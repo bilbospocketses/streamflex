@@ -521,6 +521,13 @@ static unsigned char *rasterize_pixels(NSVGrasterizer *with, char *buffer, int w
         return NULL;
     }
 
+    // A file that is not an SVG parses to an empty image, 0 x 0: nothing to scale by
+    if (!(image->width > 0.0f && image->height > 0.0f)) {
+        nsvgDelete(image);
+        SDL_snprintf(error, error_size, "could not open SVG image.");
+        return NULL;
+    }
+
     // Calculate scaling and dimensions
     if (w == -1 && h == -1) {
         scale = 1.0f;
