@@ -26,11 +26,14 @@ grep 'px wide, over its' "$out/f45-shadowlong.log" | sed 's/^/      /'
 # A title of only a zero-width space (U+200B), as a config that hides one entry's title might hold,
 # shadowed and not: SDL_ttf measures it zero wide and renders no surface for it, and its button is
 # drawn with no title, the menu's other titles as ever, where StreamFlex read the surface it never got
-for f45_run in f45-blank f45-blank-plain; do
-    run_quick "$f45_run"
+f45_blank() {
     ok=1
-    ran_clean "$f45_run" && grep -q '^Text .* is zero wide: it draws nothing$' "$out/$f45_run.log" \
-        && grep -qx "Menu 'Main': rendered its buttons at [0-9]* px" "$out/$f45_run.log" && ok=0
-    result "a title of only a zero-width space draws nothing, $([ "$f45_run" = f45-blank ] && echo shadowed || echo with no shadow) (exit $(cat "$out/$f45_run.code"))" $ok
-    grep -E '^(Text |Menu .Main.: rendered)' "$out/$f45_run.log" | sed 's/^/      /'
-done
+    ran_clean "$1" && grep -q '^Text .* is zero wide: it draws nothing$' "$out/$1.log" \
+        && grep -qx "Menu 'Main': rendered its buttons at [0-9]* px" "$out/$1.log" && ok=0
+    result "a title of only a zero-width space draws nothing, $2 (exit $(cat "$out/$1.code"))" $ok
+    grep -E '^(Text |Menu .Main.: rendered)' "$out/$1.log" | sed 's/^/      /'
+}
+run_quick f45-blank
+f45_blank f45-blank shadowed
+run_quick f45-blank-plain
+f45_blank f45-blank-plain 'with no shadow'
