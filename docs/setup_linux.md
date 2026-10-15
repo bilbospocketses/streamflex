@@ -36,9 +36,7 @@ I recommend [Openbox](http://openbox.org/wiki/Main_Page), which is not a full-fl
 Openbox is lightweight and highly customizable. The basic install of Openbox provides only a black root window, over which StreamFlex and your desired applications can be drawn.
 
 ## Display Protocol
-Being based on SDL, StreamFlex has support for both X11 and Wayland display protocols. I recommend using X11. The benefits that Wayland offers aren't broadly applicable to an HTPC, and Wayland support is still lacking in many areas.
-
-If you choose to run StreamFlex in Wayland, it is strongly recommended to use it with the latest stable release of SDL, as later versions have seen significantly improved support.
+StreamFlex runs on both X11 and Wayland, and SDL chooses between them: StreamFlex runs as a native Wayland client where the compositor offers the `wp_fifo_manager_v1` protocol (GNOME 48 and later, KDE Plasma 6.4 and later), and on X11, or XWayland, otherwise. Run StreamFlex with debug logging (`-d`) to see which: the log's `Video:` line at startup names the driver, and when SDL kept to X11 while a Wayland compositor runs, the log says why. To use X11 anyway, set the `SDL_VIDEO_DRIVER` environment variable to `x11` (SDL2's name for it, `SDL_VIDEODRIVER`, works too).
 
 ## Transparent Backgrounds
 Transparent backgrounds requires compositor support. I recommend [picom](https://github.com/yshui/picom), which supports transparency via GLSL shaders. The method described below requires version 10 or later which, as of this writing, is not yet packaged for most Linux distros. If this is this case for your distro, you will need to build it from source yourself.
@@ -182,8 +180,8 @@ The above example script takes an argument which determines which application to
 ### Prerequisites
 Before starting I assume that you have one of the following operating systems installed *without* a desktop evironnment (only a console login):
 - Arch Linux
-- Debian Bookworm or later
-- Raspberry Pi OS Lite
+- Debian trixie or later
+- Raspberry Pi OS Lite, trixie or later
 
 I also assume that you can use the Linux command line at an intermediate level or higher.
 

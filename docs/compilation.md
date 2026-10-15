@@ -10,9 +10,10 @@ title: Compilation Guide
 
 ## Overview
  StreamFlex builds natively on Linux and Windows, and features a cross-platform CMake build system. The following external dependencies are required:
- - SDL ≥ 2.0.18
- - SDL_image ≥ 2.0.5
- - SDL_ttf ≥ 2.0.15
+ - SDL3 ≥ 3.2.10
+ - SDL3_image ≥ 3.2.4
+ - SDL3_ttf ≥ 3.2.2
+ - fontconfig (Linux only)
  - inih
  - getopt (Windows only; provided by vcpkg)
 
@@ -21,19 +22,19 @@ StreamFlex on Linux builds with GCC. This guide assumes you already have the dev
 
 First, install the dependencies. The steps to do so are dependent on your distro:
 
-#### APT-based Distributions (Debian, Ubuntu, Mint, Raspberry Pi OS etc.)
+#### APT-based Distributions (Debian trixie, Ubuntu 25.10, Raspberry Pi OS trixie or newer, Mint, etc.)
 ```bash
-sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libinih-dev
+sudo apt install libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
 ```
 
 #### Pacman-based Distributions (Arch, Manjaro, etc.)
 ```bash
-sudo pacman -S sdl2 sdl2_image sdl2_ttf libinih
+sudo pacman -S sdl3 sdl3_image sdl3_ttf fontconfig libinih
 ```
 
 #### DNF-based Distributions (Fedora)
 ```bash
-sudo dnf install SDL2-devel SDL2_image-devel SDL2_ttf-devel inih-devel
+sudo dnf install SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel
 ```
 
 ### Building
