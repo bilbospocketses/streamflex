@@ -3247,7 +3247,7 @@ static void pixel_size_changed(void)
     // Only the headless harness builds this: every size event, so a check can wait for one that changes nothing
     log_debug("Test hook: a size event found the window %ix%i px", width, height);
 #endif
-    SizeDecision decision = derive_size_decision(geo.screen_width, geo.screen_height, width, height, app_in_front(), false);
+    SizeDecision decision = derive_size_decision(geo.screen_width, geo.screen_height, width, height, app_in_front());
     if (decision == SIZE_RELOAD) {
         log_debug("Screen: %ix%i px, was %ix%i; reloading", width, height, geo.screen_width, geo.screen_height);
         reload_mark(RELOAD_SIZE);
@@ -3268,7 +3268,7 @@ static void recheck_deferred_size(void)
     size_deferred = false;
     int width, height;
     window_pixel_size(&width, &height);
-    if (derive_size_decision(geo.screen_width, geo.screen_height, width, height, false, false) == SIZE_RELOAD) {
+    if (derive_size_decision(geo.screen_width, geo.screen_height, width, height, false) == SIZE_RELOAD) {
         log_debug("Screen: %ix%i px, was %ix%i; reloading", width, height, geo.screen_width, geo.screen_height);
         reload_mark(RELOAD_SIZE);
     }

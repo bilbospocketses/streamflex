@@ -143,14 +143,12 @@ int derive_refresh_rate(float reported)
     return reported >= DERIVE_MIN_REFRESH_RATE ? (int) (reported + 0.5F) : DERIVE_DEFAULT_REFRESH_RATE;
 }
 
-// A function to decide what a change of the window's pixel size does (spec section 6): a recreated
-// window always reloads, with its new renderer; the size laid out already does nothing; a new size
-// reloads, or waits while an app is launching or running, so a game's temporary resolution never
-// becomes the layout
-SizeDecision derive_size_decision(int laid_out_width, int laid_out_height, int width, int height, bool app_in_front, bool recreated)
+// A function to decide what a change of the window's pixel size does (spec section 6): the size laid
+// out already does nothing; a new size reloads, or waits while an app is launching or running, so a
+// game's temporary resolution never becomes the layout. A recreated window is not decided here: the
+// recreation marks its own reload (RELOAD_RECREATE), whatever the size.
+SizeDecision derive_size_decision(int laid_out_width, int laid_out_height, int width, int height, bool app_in_front)
 {
-    if (recreated)
-        return SIZE_RELOAD;
     if (width == laid_out_width && height == laid_out_height)
         return SIZE_NOTHING;
     return app_in_front ? SIZE_WAIT : SIZE_RELOAD;
