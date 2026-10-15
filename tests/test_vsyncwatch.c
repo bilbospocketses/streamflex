@@ -7,6 +7,7 @@
 #include "vsyncwatch.h"
 
 #define FRAME 16666667ULL     // A 60 Hz display's frame, in nanoseconds, as its VSync gives presents
+#define FRAME_120 8333333ULL  // A 120 Hz display's
 #define FRAME_240 4166667ULL  // A 240 Hz display's
 #define FAST 1500000ULL       // A present 1.5 ms after the one before, as lavapipe gives them under Xvfb
 #define START 5000000000ULL   // Five seconds after SDL started
@@ -179,6 +180,24 @@ static void test_reset(void)
     CHECK_INT(presents(&watch, &now, 100, FAST), 0);
 }
 
+// A new refresh rate starts the watch afresh, as a TV switching from 4K at 60 Hz to 1080p at 120 Hz
+// needs: presents a 120 Hz frame apart are early at 60 Hz, so the watch finds them there, and once the
+// rate is 120 Hz they are VSync delivered, never found however many come. The same rate read again
+// keeps what was found.
+static void test_follow_rate(void)
+{
+    VsyncWatch watch;
+    uint64_t now = START;
+    vsyncwatch_reset(&watch);
+    CHECK_INT(presents_at(&watch, &now, VSYNCWATCH_RUN + 1, FRAME_120, 60), 1);
+    CHECK(!vsyncwatch_follow_rate(&watch, 60, 60));
+    CHECK(watch.undelivered);
+    CHECK(vsyncwatch_follow_rate(&watch, 60, 120));
+    CHECK(!watch.undelivered);
+    CHECK_INT(presents_at(&watch, &now, 1000, FRAME_120, 120), 0);
+    CHECK(!watch.undelivered);
+}
+
 int main(void)
 {
     test_delivered();
@@ -190,5 +209,6 @@ int main(void)
     test_run_measured();
     test_first_present();
     test_reset();
+    test_follow_rate();
     return check_report();
 }

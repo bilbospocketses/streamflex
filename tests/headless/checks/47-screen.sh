@@ -248,3 +248,34 @@ s47_moved "$log" | grep -qE '^Screen: now on display [0-9]+, 60 Hz$' \
     && ran_clean f47-display && ok=0
 result "screen: a move to another display works the frame timing out again (exit $(cat "$out/f47-display.code"))" $ok
 s47_moved "$log" | grep -E '^(Test hook|Screen|Frame timing):' | sed 's/^/      /'
+
+# A display-mode change on the window's display to another refresh rate, as a TV switching from 4K at
+# 60 Hz to 1080p at 120 Hz makes: the rate is read again, the frame timing worked out again at it, and
+# the VSync watch starts afresh, since what it found was timed against the old rate; the change back
+# does the same at 60 Hz. No hook: xrandr changes Xvfb's mode for real, on an X display of the run's own
+# (run_keys_at), so the main display keeps its mode. To a 1280x720 mode at 120 Hz added for it, then
+# back to Xvfb's own 1920x1080, which reports no rate, so 60 Hz: SDL sends the display's mode-change
+# events for both (for a new rate at the same size, Xvfb sends none). No window manager re-fits the
+# window, so it keeps its size and nothing reloads. A second try (the leak pass's retry) finds the mode
+# already made, which xrandr refuses to make again, and uses it.
+s47_mode() {
+    local o
+    wait_line 'Begin program loop' "$2" || return 1
+    o=$(xrandr | awk '/ connected/ { print $1; exit }')
+    xrandr --newmode sf720x120 148.50 1280 1390 1430 1650 720 725 730 750 +hsync +vsync 2> /dev/null
+    xrandr --addmode "$o" sf720x120 2> /dev/null
+    xrandr --output "$o" --mode sf720x120 && wait_line 'now runs at 120 Hz, was 60 Hz' "$2" \
+        && xrandr --output "$o" --mode 1920x1080 && wait_line 'now runs at 60 Hz, was 120 Hz' "$2"
+}
+run_keys_at 1920x1080 f47-mode +s47_mode
+log=$out/f47-mode.log
+ok=1
+[ "$(grep -cE '^Screen: display [0-9]+ now runs at 120 Hz, was 60 Hz$' "$log")" = 1 ] \
+    && [ "$(grep -cE '^Screen: display [0-9]+ now runs at 60 Hz, was 120 Hz$' "$log")" = 1 ] \
+    && in_range "$log" 'now runs at 120 Hz, was 60 Hz' 'now runs at 60 Hz, was 120 Hz' 'Frame timing: VSync at 120 Hz, 8 ms a frame' \
+    && in_range "$log" 'now runs at 120 Hz, was 60 Hz' 'now runs at 60 Hz, was 120 Hz' 'Frame timing: the VSync watch starts again at 120 Hz' \
+    && sed -n '/now runs at 60 Hz, was 120 Hz$/,$p' "$log" | grep -qx 'Frame timing: VSync at 60 Hz, 16 ms a frame' \
+    && sed -n '/now runs at 60 Hz, was 120 Hz$/,$p' "$log" | grep -qx 'Frame timing: the VSync watch starts again at 60 Hz' \
+    && ! grep -qE '^Reload: done at |; reloading$' "$log" && ran_clean f47-mode && ok=0
+result "screen: a display-mode change to another refresh rate works the frame timing out again and watches VSync afresh (exit $(cat "$out/f47-mode.code"))" $ok
+grep -E '^(Screen|Frame timing):|reports no refresh rate' "$log" | sed 's/^/      /'
