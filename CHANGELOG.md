@@ -41,6 +41,7 @@ StreamFlex now runs on SDL3 and draws with Vulkan first. Text the title font can
 
 ### Fixed
 - An icon file named `.svg` that holds no SVG, such as a text file, is refused, and under the log's `Could not load image` line, which names the file, the reason reads `could not open SVG image.` nanosvg read it as an image of size zero, and StreamFlex divided by that size to scale it, which is undefined behavior.
+- A title of only zero-width characters, such as a zero-width space (U+200B) used to hide one entry's title, no longer crashes StreamFlex as it draws the menu: the button shows no title. SDL_ttf renders no image for a text with no width, and StreamFlex read the one it never got.
 - When SDL cannot give the folder StreamFlex's executable is in, StreamFlex no longer crashes: it looks for its bundled font only where the packages install it (on Windows, `assets\fonts` under the folder it was started in), and on Windows the log goes to stderr instead of to a file beside the executable. Both read that folder's path without checking there was one.
 
 ### Known limits

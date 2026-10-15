@@ -861,7 +861,9 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
     }
     output_font = reduced != NULL ? fontset_font(reduced) : info->font;
 
-    // Render surface
+    // Render surface. SDL_ttf renders none for a text it measures zero wide (a title of only zero-width
+    // characters, such as U+200B, which a config may use to hide one entry's title), and none when it
+    // fails: either way the text draws nothing, its texture NULL and its size 0 x 0.
     SDL_Surface *surface = NULL;
     if (info->shadow) {
         int shadow_offset = layout_shadow_offset(h);
@@ -875,13 +877,16 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
                                   0,
                                   *info->shadow_color
                               );
-        surface = SDL_CreateSurface(foreground->w + shadow_offset, foreground->h + shadow_offset, SDL_PIXELFORMAT_ARGB8888);
-        Uint32 color = SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0);
-        SDL_FillSurfaceRect(surface, NULL, color);
-        SDL_Rect shadow_rect = {shadow_offset, shadow_offset, shadow->w, shadow->h};
-        SDL_BlitSurface(shadow, NULL, surface, &shadow_rect);
-        SDL_Rect foreground_rect = {0, 0, foreground->w, foreground->h};
-        SDL_BlitSurface(foreground, NULL, surface, &foreground_rect);
+        if (foreground != NULL && shadow != NULL)
+            surface = SDL_CreateSurface(foreground->w + shadow_offset, foreground->h + shadow_offset, SDL_PIXELFORMAT_ARGB8888);
+        if (surface != NULL) {
+            Uint32 color = SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0);
+            SDL_FillSurfaceRect(surface, NULL, color);
+            SDL_Rect shadow_rect = {shadow_offset, shadow_offset, shadow->w, shadow->h};
+            SDL_BlitSurface(shadow, NULL, surface, &shadow_rect);
+            SDL_Rect foreground_rect = {0, 0, foreground->w, foreground->h};
+            SDL_BlitSurface(foreground, NULL, surface, &foreground_rect);
+        }
         SDL_DestroySurface(foreground);
         SDL_DestroySurface(shadow);
     }
@@ -891,10 +896,14 @@ SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *
                       0,
                       *info->color
                   );
+    if (surface == NULL && w <= 0)
+        log_debug("Text '%s' is zero wide: it draws nothing", text);
+    else if (surface == NULL)
+        log_error("Could not render the text '%s'\n%s", text, SDL_GetError());
 
     // Set geometry
-    rect->w = surface->w;
-    rect->h = surface->h;
+    rect->w = surface != NULL ? surface->w : 0;
+    rect->h = surface != NULL ? surface->h : 0;
     if (info->oversize_mode == OVERSIZE_SHRINK && text_height != NULL)
         *text_height = h;
 

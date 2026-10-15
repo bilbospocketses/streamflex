@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 585 |
-| Row halves | 1025 |
-| Verdicts per release (row x desktop) | 2400 |
+| Rows | 586 |
+| Row halves | 1027 |
+| Verdicts per release (row x desktop) | 2405 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 276 (1104 verdicts) |
+| `streamflex-headless` halves | 277 (1108 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 589 (1136 verdicts) |
-| **Automated today** | 436 of 1025 halves; 1264 of 2400 verdicts (52 %) |
+| `manual` halves | 590 (1137 verdicts) |
+| **Automated today** | 437 of 1027 halves; 1268 of 2405 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -245,6 +245,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 2.37 | `[All]` | manual | qa-harness item 75, planned |
 | 2.38 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-brokensvg` |
 | 2.38 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.39 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-blank` |
+| 2.39 | `[Win]` | manual | qa-harness item 75, planned |
 | 3.1 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
