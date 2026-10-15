@@ -257,7 +257,8 @@ s47_moved "$log" | grep -E '^(Test hook|Screen|Frame timing):' | sed 's/^/      
 # back to Xvfb's own 1920x1080, which reports no rate, so 60 Hz: SDL sends the display's mode-change
 # events for both (for a new rate at the same size, Xvfb sends none). No window manager re-fits the
 # window, so it keeps its size and nothing reloads. A second try (the leak pass's retry) finds the mode
-# already made, which xrandr refuses to make again, and uses it.
+# already made, which xrandr refuses to make again, and uses it. The run takes f47-grid.ini, as
+# f47-display does: there is no f47-mode.ini, and a config that is not found is fatal at startup.
 s47_mode() {
     local o
     wait_line 'Begin program loop' "$2" || return 1
@@ -267,7 +268,7 @@ s47_mode() {
     xrandr --output "$o" --mode sf720x120 && wait_line 'now runs at 120 Hz, was 60 Hz' "$2" \
         && xrandr --output "$o" --mode 1920x1080 && wait_line 'now runs at 60 Hz, was 120 Hz' "$2"
 }
-run_keys_at 1920x1080 f47-mode +s47_mode
+CFG=$FX/f47-grid.ini run_keys_at 1920x1080 f47-mode +s47_mode
 log=$out/f47-mode.log
 ok=1
 [ "$(grep -cE '^Screen: display [0-9]+ now runs at 120 Hz, was 60 Hz$' "$log")" = 1 ] \
