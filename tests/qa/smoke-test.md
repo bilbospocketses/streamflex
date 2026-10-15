@@ -6,7 +6,7 @@
 
 - **One observable claim per row.** A row's steps say how to reach the claim on each desktop its tag covers; its expected cell is the claim itself, with the log line or frame that shows it where there is one.
 - **The ☐ box** is for working through a pass by hand: write `x` for a pass, `F` for a fail and `-` where the row does not apply. The boxes are a worksheet, not a record.
-- **The record of a release is its results file**, `results/vX.Y.Z.md`, in the format [`results/README.md`](results/README.md) describes.
+- **The record of a release is its results file**, `results/vX.Y.Z.md`, in the format [`results/README.md`](results/README.md) describes. v0.5.0 has none; v0.6.0's is the first, as that file says.
 - **A row with no verdict is never green.** An empty box or cell is not a pass.
 - **A row's tag is part of its claim.** The claim holds on every desktop the tag covers, and the row says nothing about the others.
 
@@ -811,4 +811,4 @@ Every Linux guest's desktop user is `qa`, with the home `/home/qa`. `ubuntu-gues
 
 ## Global pass criteria
 
-A release passes when every row has a verdict on every desktop its tag covers, and none is `F<n>` or `S<n>`. An unmeasured half is not a pass: it holds the release exactly as a fail does, until it is measured or the user decides to ship with it, and the results file records that decision.
+A release passes when every row has a verdict on every desktop its tag covers, and none is `F<n>` or `S<n>`. An unmeasured half is not a pass: it holds the release exactly as a fail does, until it is measured or the user decides to ship with it, and the results file records that decision. v0.5.0 is the exception: it has no results file and records no pass ([`results/README.md`](results/README.md)).
