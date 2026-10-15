@@ -3253,7 +3253,7 @@ void reload_run_pending(void)
         refresh_effective();      // The percentages of the screen, worked out again
         calculate_layout_area();
     }
-    settings_refresh_for_reload();   // REFRESH_ORDER, the gamepad kept running and the screensaver's dim kept
+    settings_refresh_for_reload();   // REFRESH_ORDER, the title font, the gamepad and the screensaver's dim kept
     if (settings_is_open() && resized)
         settings_reflow();
     else if (settings_is_open())

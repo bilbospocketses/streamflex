@@ -421,11 +421,13 @@ void settings_refresh_all(void)
 // A function to refresh what a reload of the whole launcher must make again (a new screen size, a reset
 // or new renderer), in REFRESH_ORDER, keeping the screen's state (spec section 3): the gamepad keeps
 // running, its pads open, and the screensaver keeps its dim and its transition, only its screen-sized
-// layer made again at the new size. Whether settings are open or not.
+// layer made again at the new size. The title font stays open (spec section 4): fonts are not the
+// renderer's, and the titles group renders the titles again from the sets open, a percentage size a
+// new screen needs opened as the layout asks for it. Whether settings are open or not.
 void settings_refresh_for_reload(void)
 {
     for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++) {
-        if (REFRESH_ORDER[i] == SET_REFRESH_GAMEPAD)
+        if (REFRESH_ORDER[i] == SET_REFRESH_GAMEPAD || REFRESH_ORDER[i] == SET_REFRESH_TITLE_FONT)
             continue;
         if (REFRESH_ORDER[i] == SET_REFRESH_SCREENSAVER)
             remake_screensaver_texture();
