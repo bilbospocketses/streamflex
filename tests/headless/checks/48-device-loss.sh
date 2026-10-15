@@ -76,19 +76,31 @@ d48_resize() {
 d48_to_720_later() { d48_resize "$1" "$2" 1280x720 'Screen: 1280x720 px, was 1920x1080; reloading when the app is done'; }
 d48_reset_runs() { rm -f "$D48_EVENT" "$D48_EVENT.new" "$D48_SIZE" "$D48_APP" "$out/$1.boxes" "$out/$1.seen" "$out/$1.path"; }
 
-# A device reset: the reload runs once, every group refreshed, and the screen redraws to the pixel
+# A function to tell whether the log LOG opened no title font from its first line holding FROM on: the
+# fixed title font opened again ("Titles: opened"), or a size of it (the hook build's line). Spec
+# section 4: device loss does not touch fonts, and the reload renders the titles from the same sets.
+d48_no_font_opened() {
+    s=$2 awk 'index($0, ENVIRON["s"]) { from = 1 } from && /^(Titles: opened |Test hook: the title font opened at )/ { bad = 1 } END { exit !(from && !bad) }' "$1"
+}
+
+# A device reset: the reload runs once, every group but the title font's refreshed (the titles are
+# rendered again from the sets open, the defaults' percentage size among them, opened before the reset),
+# and the screen redraws to the pixel
 d48_reset_runs f48-reset
 CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-reset +d48_before +d48_reset +d48_after
 log=$out/f48-reset.log
 ok=1
 [ "$(grep -cx 'Renderer: device lost; reloading' "$log")" = 1 ] && [ "$(grep -c '^Reload: done at ' "$log")" = 1 ] \
     && grep -qx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log" \
-    && in_range "$log" 'Renderer: device lost; reloading' 'Reload: done at ' 'Settings: refreshed the title font' \
+    && ! in_range "$log" 'Renderer: device lost; reloading' 'Reload: done at ' 'Settings: refreshed the title font' \
+    && in_range "$log" 'Renderer: device lost; reloading' 'Reload: done at ' 'Settings: refreshed the titles' \
+    && grep -q '^Test hook: the title font opened at ' "$log" && d48_no_font_opened "$log" 'Renderer: device lost; reloading' \
     && in_range "$log" 'Renderer: device lost; reloading' 'Reload: done at ' 'Settings: refreshed the layout' \
     && ! in_range "$log" 'Renderer: device lost; reloading' 'Reload: done at ' 'Gamepad stopped' \
     && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 1 ] && d48_same f48-reset && ran_clean f48-reset && ok=0
-result "device: a reset reloads once, leaves the gamepad running, and redraws to the pixel (exit $(cat "$out/f48-reset.code"))" $ok
+result "device: a reset reloads once, leaves the gamepad running and the title fonts open, and redraws to the pixel (exit $(cat "$out/f48-reset.code"))" $ok
 sed 's/^/      /' "$out/f48-reset.boxes" 2> /dev/null
+grep -E '^(Titles: opened |Test hook: the title font opened at |Settings: refreshed the title)' "$log" | sed 's/^/      /'
 
 # A reset while the screensaver dims: the reload makes its layer again and keeps it dimming (spec
 # section 3: the screen's state is kept), so the frame stays dimmed, and the screensaver neither stops
@@ -143,14 +155,18 @@ d48_reset_runs f48-sizereset
 CFG=$FX/f48-loss.ini STREAMFLEX_TEST_PIXEL_SIZE=$D48_SIZE STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT \
     run_keys f48-sizereset +d48_both
 log=$out/f48-sizereset.log
+# The titles' percentage size the reload lays Main out at (the last Menu line), which the reload opens
+# by itself, though the title font is not opened again
+d48_size=$(sed -n "s/^Menu 'Main': .*, \([0-9]*\) pt titles$/\1/p" "$log" | tail -1)
 ok=1
 [ "$(grep -c '^Reload: done at ' "$log")" = 1 ] \
     && grep -qx "Reload: done at 1280x720 px, for the window's size and a device reset or loss" "$log" \
     && [ "$(grep -cx 'Renderer: device lost; reloading' "$log")" = 1 ] \
     && in_range "$log" "Test hook: pushed the render event 'reset'" 'Reload: done at ' 'Renderer: device lost; reloading' \
-    && ran_clean f48-sizereset && ok=0
-result "device: a new size and a device reset in one batch reload once, geometry first (exit $(cat "$out/f48-sizereset.code"))" $ok
-grep -E "^(Screen|Reload|Renderer):|^Test hook: (pushed the render event|the window's size reads|a size event found)" "$log" | sed 's/^/      /'
+    && [ -n "$d48_size" ] && grep -qx "Test hook: the title font opened at $d48_size pt" "$log" \
+    && ! grep -q '^Titles: opened ' "$log" && ran_clean f48-sizereset && ok=0
+result "device: a new size and a device reset in one batch reload once, geometry first, the titles at the new size (exit $(cat "$out/f48-sizereset.code"))" $ok
+grep -E "^(Screen|Reload|Renderer|Titles):|^Test hook: (pushed the render event|the window's size reads|a size event found|the title font opened)|^Menu 'Main': " "$log" | sed 's/^/      /'
 
 # With settings open on the Background page: the reset makes their textures again (the preview anew,
 # placed where it was), the preview shows the background, and the page and its cursor stay
@@ -223,9 +239,11 @@ ok=1
     && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 2 ] \
     && [ "$(grep -cx "Video: SDL's x11 driver, the vulkan renderer" "$log")" = 2 ] \
     && grep -qx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log" \
+    && grep -q '^Test hook: the title font opened at ' "$log" \
+    && d48_no_font_opened "$log" 'Renderer: device lost and not recovered; creating a new renderer' \
     && d48_same f48-lost && ran_clean f48-lost && ok=0
-result "device: a lost device gets a new Vulkan renderer and redraws to the pixel (exit $(cat "$out/f48-lost.code"))" $ok
-grep -E '^(Renderer|Reload|Video):' "$log" | sed 's/^/      /'
+result "device: a lost device gets a new Vulkan renderer, keeps the title fonts open, and redraws to the pixel (exit $(cat "$out/f48-lost.code"))" $ok
+grep -E '^(Renderer|Reload|Video|Titles):|^Test hook: the title font opened at ' "$log" | sed 's/^/      /'
 
 # With every texture holder on (f48-lostall.ini), the lost device drops each one's textures: the
 # three buttons' icons and titles and the highlight (7), the image background (1), its overlay (1),

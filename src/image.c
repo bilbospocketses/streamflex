@@ -316,6 +316,11 @@ FontSet *title_font(int size)
         log_error("Could not open the title font at %i pt\n%s", size, SDL_GetError());
         return NULL;
     }
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: each size opened, so a check can tell a reload that
+    // renders the titles from the sets it has from one that opens them again
+    log_debug("Test hook: the title font opened at %i pt", size);
+#endif
     if (title_font_count == MAX_TITLE_FONTS) {
         fontset_close(title_fonts[0].set);
         memmove(&title_fonts[0], &title_fonts[1], (MAX_TITLE_FONTS - 1) * sizeof(title_fonts[0]));
