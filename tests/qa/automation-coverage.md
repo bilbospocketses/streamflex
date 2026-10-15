@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 581 |
-| Row halves | 1019 |
-| Verdicts per release (row x desktop) | 2390 |
+| Rows | 584 |
+| Row halves | 1023 |
+| Verdicts per release (row x desktop) | 2395 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 274 (1096 verdicts) |
+| `streamflex-headless` halves | 275 (1100 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 585 (1134 verdicts) |
-| **Automated today** | 434 of 1019 halves; 1256 of 2390 verdicts (52 %) |
+| `manual` halves | 588 (1135 verdicts) |
+| **Automated today** | 435 of 1023 halves; 1260 of 2395 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -243,7 +243,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 2.36 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-selected` |
 | 2.36 | `[Win]` | manual | qa-harness item 75, planned |
 | 2.37 | `[All]` | manual | qa-harness item 75, planned |
-| 2.38 | `[All]` | manual | qa-harness item 75, planned |
+| 2.38 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-brokensvg` |
+| 2.38 | `[Win]` | manual | qa-harness item 75, planned |
 | 3.1 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
@@ -458,6 +459,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.97 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.98 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.99 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.100 | `[Win]` | manual | needs a GPU driving the display, and a real loss of the device |
 | 6.1 | `[All]` | manual | qa-harness item 75, planned |
 | 6.2 | `[All]` | manual | qa-harness item 75, planned |
 | 6.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -589,7 +591,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 7.44 | `[All]` | manual | qa-harness item 75, planned |
 | 7.45 | `[Linux]` | streamflex-headless | `49-fade-wall-time.sh` run `f49-slowdim` |
 | 7.45 | `[Win]` | manual | qa-harness item 75, planned |
-| 7.46 | `[All]` | manual | needs a GPU driving the display, whose refresh the display delivers |
+| 7.46 | `[Win]` | manual | needs a GPU driving the display, whose refresh the display delivers |
 | 7.47 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
 | 7.48 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.1 | `[All]` | manual | qa-harness item 75, planned |
@@ -969,7 +971,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 13.24 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.25 | `[Win]` | manual | qa-harness item 75, planned |
 | 13.26 | `[Win]` | manual | qa-harness item 75, planned |
-| 13.27 | `[Win]` | manual | qa-harness item 75, planned |
+| 13.27 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
 | 14.1 | `[All]` | manual | qa-harness item 75, planned |
 | 14.2 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-fps10` |
 | 14.2 | `[Win]` | manual | qa-harness item 75, planned |
@@ -1037,6 +1039,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 16.14b | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-browser` |
 | 16.14b | `[Win]` | manual | qa-harness item 75, planned |
 | 16.15 | `[All]` | manual | needs a second display, of another size than the first |
+| 16.16 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.17 | `[Linux]` | manual | qa-harness item 75, planned |
 | 17.1 | `[Linux]` | streamflex-headless | `66-pad-power.sh` run `f66-power` |
 | 17.2 | `[Win]` | manual | needs a real Xbox Wireless Controller on low batteries; no virtual pad reports a battery |
 | 17.3 | `[Win]` | manual | needs a real Xbox Wireless Controller and its cable |
