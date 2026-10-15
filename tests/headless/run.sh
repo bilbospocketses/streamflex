@@ -2,50 +2,80 @@
 # StreamFlex headless checks. Builds the launcher with ASan and UBSan, starts a virtual X display,
 # runs fixture configs (some with key presses) and reads the debug log, the files they write and
 # the screen. Runs inside the image built from this folder's Dockerfile (Debian) or
-# Dockerfile.fedora (whose SDL2 is sdl2-compat over SDL3), with the repo mounted read-only at
+# Dockerfile.fedora (Fedora 44), with the repo mounted read-only at
 # /src and an output folder at /out. No step branches on the distribution: what differs between
-# the images is detected.
+# the images is detected, or declared by the image (LEAK_SUPPRESSIONS, the leak pass's suppressions).
 #   run.sh <label>              every check in checks/, in name order
 #   run.sh <label> scrollfail   item 11 only: the scroll arrow's texture is forced to fail,
 #                               a path no config or input can reach
 #   run.sh <label> leaks        every check again, with LeakSanitizer on: a run that leaks fails
-#                               its check, and each leak is listed at the end as a failure too
+#                               its check, and each leak is listed at the end as a failure too.
+#                               A run whose leak check never ran, because LeakSanitizer's tracer
+#                               could not attach, is run once more (with_tracer_retry)
+#   run.sh <label> tsan         00-harness.sh, 30-backgrounds.sh and 60-timing.sh only, built
+#                               with ThreadSanitizer instead of ASan and UBSan: the menu icons'
+#                               decode threads (Task 1.13), the slideshow's loader thread and
+#                               the image loaders they share. A data race fails the run that
+#                               showed it; tsan.supp (beside this file) says what is suppressed
 #   run.sh <label> [leaks] K/N  shard K of N of either pass, a run of its own in its own
 #                               container: the build, Xvfb, the fixtures and each check file
 #                               marked "Every shard runs this file" (00-harness.sh,
-#                               90-titles-fit.sh) run in every shard, and each other check file
-#                               in exactly one, planned from its measured time so the shards take
-#                               about as long. Its console says which check file each result
-#                               belongs to (SHARD lines). merge.py adds the N consoles up into the
-#                               pass's one result, and fails when they are not one complete run;
-#                               run-shards.ps1 (Windows) runs a set of passes in shards and merges
-#                               each. A shard alone is not the pass: only the merge is.
+#                               90-titles-fit.sh, 95-every-run.sh) run in every shard, and each
+#                               other check file in exactly one, planned from its measured time so
+#                               the shards take about as long. Its console says which check file
+#                               each result belongs to (SHARD lines). merge.py adds the N consoles
+#                               up into the pass's one result, and fails when they are not one
+#                               complete run; run-shards.ps1 (Windows) runs a set of passes in
+#                               shards and merges each. A shard alone is not the pass: only the
+#                               merge is.
+#   run.sh <label> [leaks] [K/N] timing|rest
+#                               only the check files with a line "# Timing-sensitive" (timing), or
+#                               only those without one (rest), and in both the files every shard
+#                               runs. A file is timing-sensitive when a loaded box could change its
+#                               results: they read wall time, frame rates, frame gaps or durations,
+#                               or a hold or a wait that scheduling latency can cut short or
+#                               stretch. The timing set needs a quiet box; the rest can run beside
+#                               other work. Run in shards, the two sets of one tree run every check
+#                               file once between them, which merge.py --cover proves. The marked
+#                               files are pinned in timing_pinned below, so a mark cannot be lost
+#                               or added without a word.
 # The build defines STREAMFLEX_TEST_HOOKS, which only this harness does: each hook it enables sits
 # under #ifdef STREAMFLEX_TEST_HOOKS in src/, and a STREAMFLEX_TEST_* environment variable drives it.
 # Prints PASS or FAIL per check and exits non-zero when any failed. Every run's output, log and
 # exit code are kept in /out/<label>.
 set -u
+# The display's scale is pinned: no GDK or SDL scale reaches the launcher unless a check sets one
+# (47-screen.sh's Scale leg), and Xvfb has no X resources, so no Xft.dpi
+unset GDK_SCALE GDK_DPI_SCALE SDL_VIDEO_X11_SCALING_FACTOR
 label=${1:-}
-fault=${2:-}
-shard=${3:-}
+fault= shard= selection=
 case $label in
-    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks] [K/N], where <label> names a folder in /out"; exit 2 ;;
+    '' | . | .. | */*) echo "usage: run.sh <label> [scrollfail|leaks|tsan] [K/N] [timing|rest], where <label> names a folder in /out"; exit 2 ;;
 esac
-# The shard is an argument, never the environment: a variable left set could quietly turn a
-# whole pass into part of one, which would still end "0 failed". It comes second when there is
-# no mode.
-case $fault in
-    '' | scrollfail | leaks) ;;
-    */*) [ -z "$shard" ] || { echo "a shard comes after the mode, once"; exit 2; }
-         shard=$fault; fault= ;;
-    *) echo "unknown mode '$fault'"; exit 2 ;;
-esac
+# The shard and the selection are arguments, never the environment: a variable left set could
+# quietly turn a whole pass into part of one, which would still end "0 failed". Each comes once,
+# in this order: the mode, the shard, the selection.
+for arg in "${@:2}"; do
+    case $arg in
+        '') ;;
+        scrollfail | leaks | tsan) [ -z "$fault$shard$selection" ] || { echo "the mode comes first, once"; exit 2; }
+                                   fault=$arg ;;
+        */*) [ -z "$shard$selection" ] || { echo "a shard comes after the mode and before the selection, once"; exit 2; }
+             shard=$arg ;;
+        timing | rest) [ -z "$selection" ] || { echo "a selection comes last, once"; exit 2; }
+                       selection=$arg ;;
+        *) echo "unknown mode '$arg'"; exit 2 ;;
+    esac
+done
+[ "$fault" != scrollfail ] || [ -z "$selection" ] || { echo "scrollfail runs one check, so it has no selection"; exit 2; }
+[ "$fault" != tsan ] || [ -z "$selection" ] || { echo "tsan runs three check files, so it has no selection"; exit 2; }
 shard_k= shard_n=
 if [ -n "$shard" ]; then
     [[ $shard =~ ^([1-9][0-9]{0,2})/([1-9][0-9]{0,2})$ ]] && [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] \
         || { echo "unknown shard '$shard': give K/N, with 1 <= K <= N"; exit 2; }
     shard_k=${BASH_REMATCH[1]} shard_n=${BASH_REMATCH[2]}
     [ "$fault" != scrollfail ] || { echo "scrollfail runs one check, so it has no shards"; exit 2; }
+    [ "$fault" != tsan ] || { echo "tsan runs three check files, so it has no shards"; exit 2; }
 fi
 HERE=/src/tests/headless
 FX=$HERE/fixtures
@@ -63,31 +93,115 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 
 # Seconds each check file took on 2026-10-07 (the mean of the Debian, Fedora and both leak
 # passes at 8c37db5, after the build); 64-settings-restart.sh's is the same mean from 2026-10-08,
-# at 9550682. They only balance the shards: a check file missing here counts as 60 s, and a stale
-# time makes the shards uneven, never a check lost or run twice.
+# at 9550682; 49-fade-wall-time.sh's is an estimate (its two runs wait about 9 s and 5 s, plus
+# start-up). The *-timing.sh files but 60-timing.sh took their cases from the file of the same name
+# without "-timing" (62's, two files: -timing and -pad-timing) on 2026-10-13: each part's time is that
+# file's, times the share its runs took of the file in a full set at 7bcdbd7 (by the time each run's
+# files were written). They only balance the shards: a check file missing here counts as 60 s, and a
+# stale time makes the shards uneven, never a check lost or run twice. 48-pad-repeat.sh's is its
+# 11 s in that full set, times check 62's ratio of its time here to its time there (1069 to 1282
+# s), so that the timing set's two shards plan even. 47-screen.sh's and 47-screen-timing.sh's are
+# estimates from their runs' waits (Task 1.6b), and 48-device-loss.sh's from its fifteen runs' and
+# 48-device-loss-timing.sh's from its two runs' (Tasks 1.7a, 1.7b and 1.8b), until a set measures them;
+# 60-settings-background.sh's and 70-chroma.sh's add Task 1.8b's two quick runs and its background count
+# to their measured times, by estimate too, and 60-settings-background.sh's and
+# 60-settings-background-timing.sh's add Task 1.9a's runs (f60-winrest, about 15 s; f60-moderest, about
+# 10 s) the same way. 67-wayland.sh's and 67-wayland-timing.sh's are estimates from their runs (Task
+# 1.10: on Weston 15 six runs and three Weston starts, on Weston 14 three runs; the launch case on
+# Weston 15 only), until a set measures them. 66-pad-power.sh's is an estimate from its runs (Task
+# 1.11b: four runs, about 3 s each to start and stop, and sixteen steps of about 1.5 s each, a 1 s
+# floor and a screen read), until a set measures it. 60-timing.sh checks the Timing: lines and reads no
+# duration, so it is in the rest set; its time is an estimate from its seven runs (Task 1.12: two menus
+# of 48 icons decoded under ASan with a key between them, about 10 s, and a slideshow start that quits,
+# about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s, the
+# two menus again with no decode thread, about 10 s, and two menus of 48 XPM icons, about 4 s each;
+# Task 1.17: a menu of one broken SVG icon, about 3 s), until a set measures it. 72-fallback-fonts.sh's
+# is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each).
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
-    [50-settings.sh]=203 [55-settings-pages.sh]=231 [58-settings-pickers.sh]=506
-    [59-settings-fonts.sh]=416 [60-settings-background.sh]=180 [62-settings-bindings.sh]=1069
+    [47-screen.sh]=100 [47-screen-timing.sh]=12
+    [48-device-loss.sh]=150 [48-device-loss-timing.sh]=20 [48-pad-repeat.sh]=9 [49-fade-wall-time.sh]=25
+    [50-settings.sh]=174 [50-settings-timing.sh]=29 [55-settings-pages.sh]=214 [55-settings-pages-timing.sh]=17
+    [58-settings-pickers.sh]=483 [58-settings-pickers-timing.sh]=23
+    [59-settings-fonts.sh]=390 [59-settings-fonts-timing.sh]=26
+    [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66 [60-timing.sh]=38
+    [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
-    [70-chroma.sh]=2
+    [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
+    [70-chroma.sh]=3 [72-fallback-fonts.sh]=40
 )
+
+# The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
+# set, which may run beside other work, and no check would fail for it; so the marks must match
+# this list, or nothing runs. A file added or renamed, or a mark changed, changes it.
+timing_pinned=(42-features.sh 47-screen-timing.sh 48-device-loss-timing.sh 48-pad-repeat.sh 49-fade-wall-time.sh
+               50-settings-timing.sh 55-settings-pages-timing.sh 58-settings-pickers-timing.sh
+               59-settings-fonts-timing.sh 60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
+               62-settings-bindings-timing.sh 67-wayland-timing.sh)
+
+# A function to find the check files and choose the ones this run runs (checks, in name order):
+# with no selection all of them; with timing those marked "# Timing-sensitive", with rest the
+# others, and with either those marked "Every shard runs this file". The others are kept in
+# left_out. Stops the run when the marks do not match timing_pinned, or a file has both marks.
+select_checks() {
+    local check base restore marked=() both=() every
+    restore=$(shopt -p nullglob); shopt -s nullglob
+    checks=("$HERE"/checks/*.sh)
+    eval "$restore"
+    [ "${#checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    local -a all=("${checks[@]}")
+    checks=() left_out=()
+    for check in "${all[@]}"; do
+        base=${check##*/} every=
+        grep -q '^# Every shard runs this file' "$check" && every=yes
+        if grep -q '^# Timing-sensitive' "$check"; then
+            marked+=("$base")
+            [ -z "$every" ] || both+=("$base")
+            [ "$selection" != rest ] || [ -n "$every" ] || { left_out+=("$base"); continue; }
+        else
+            [ "$selection" != timing ] || [ -n "$every" ] || { left_out+=("$base"); continue; }
+        fi
+        checks+=("$check")
+    done
+    [ "${#both[@]}" = 0 ] || { echo "MARKED BOTH TIMING-SENSITIVE AND EVERY SHARD: ${both[*]}"; exit 2; }
+    # Compared as sets, in one order whatever the locale sorts the files by
+    [ "$(printf '%s\n' "${marked[@]}" | LC_ALL=C sort)" = "$(printf '%s\n' "${timing_pinned[@]}" | LC_ALL=C sort)" ] \
+        || { echo "THE TIMING-SENSITIVE MARKS DO NOT MATCH timing_pinned in run.sh"
+             echo "  marked: ${marked[*]:-none}"
+             echo "  pinned: ${timing_pinned[*]}"
+             exit 2; }
+}
+[ "$fault" = scrollfail ] || select_checks
+# The tsan mode runs the three check files whose runs start the threads that decode images: the
+# harness's own (whose helpers the others rely on), the backgrounds' (the slideshow's loader) and
+# the timing's (the menu icons' decode threads, two menus of 48 icons)
+if [ "$fault" = tsan ]; then
+    tsan_checks=()
+    for check in "${checks[@]}"; do
+        case ${check##*/} in
+            00-harness.sh | 30-backgrounds.sh | 60-timing.sh) tsan_checks+=("$check") ;;
+        esac
+    done
+    [ "${#tsan_checks[@]}" = 3 ] || { echo "THE TSAN MODE'S THREE CHECK FILES ARE NOT ALL IN $HERE/checks"; exit 2; }
+    checks=("${tsan_checks[@]}")
+fi
+# An unsharded run with a selection says what it left out (a shard's plan does, in its own words)
+[ -n "$shard_k" ] || [ -z "$selection" ] \
+    || echo "Selection: $selection, ${#checks[@]} check files; left out: ${left_out[*]:-none}"
 
 # A function to plan the shards and print the plan. A check file with a line "# Every shard runs
 # this file" runs in every shard; each other one goes, longest first, to the shard with the least
 # time so far (the lowest-numbered on a tie), so every shard works out the same plan. Prints the
-# shard's header (with a digest of the source it copied, so shards of different trees cannot be
-# merged), then a DECLARED line for each check file the harness has and the shard that runs it:
-# (build) first, and (leaks) last in the leak pass, are the build's result and the LEAK lines.
+# shard's header (with the selection, and a digest of the source it copied, so shards of different
+# trees cannot be merged), then a DECLARED line for each check file the selection runs and the
+# shard that runs it: (build) first, and (leaks) last in the leak pass, are the build's result and
+# the LEAK lines. Each check file the selection leaves out has a LEFT OUT line of its own.
 shard_plan() {
     local check base seconds k best tree
     local -a load
     declare -gA shard_of=()
-    restore=$(shopt -p nullglob); shopt -s nullglob
-    shard_checks=("$HERE"/checks/*.sh)
-    eval "$restore"
-    [ "${#shard_checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    shard_checks=("${checks[@]}")
     for check in "${shard_checks[@]}"; do
         grep -q '^# Every shard runs this file' "$check" && shard_of[${check##*/}]=every
     done
@@ -102,10 +216,11 @@ shard_plan() {
                  [ "${shard_of[$base]:-}" = every ] || echo "${shard_seconds[$base]:-60} $base"
              done | LC_ALL=C sort -k1,1nr -k2,2)
     tree=$(find /work -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16)
-    echo "SHARD $shard_k of $shard_n: label $label, mode ${fault:-plain}, tree $tree, planned ${load[shard_k]} s"
+    echo "SHARD $shard_k of $shard_n: label $label, mode ${fault:-plain}, selection ${selection:-all}, tree $tree, planned ${load[shard_k]} s"
     echo "SHARD DECLARED (build) every"
     for check in "${shard_checks[@]}"; do echo "SHARD DECLARED ${check##*/} ${shard_of[${check##*/}]}"; done
     [ "$fault" != leaks ] || echo "SHARD DECLARED (leaks) every"
+    for base in "${left_out[@]}"; do echo "SHARD LEFT OUT $base"; done
 }
 [ -z "$shard_k" ] || shard_plan
 
@@ -130,8 +245,14 @@ if [ "$fault" = scrollfail ]; then
 fi
 
 flags="-fsanitize=address,undefined -fno-omit-frame-pointer -DSTREAMFLEX_TEST_HOOKS"
+linker_flags="-fsanitize=address,undefined"
+if [ "$fault" = tsan ]; then
+    # ThreadSanitizer cannot share a build with ASan, so the tsan mode has neither ASan nor UBSan
+    flags="-fsanitize=thread -fno-omit-frame-pointer -DSTREAMFLEX_TEST_HOOKS"
+    linker_flags="-fsanitize=thread"
+fi
 cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="$flags" \
-      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" > "$out/configure.log" 2>&1 \
+      -DCMAKE_EXE_LINKER_FLAGS="$linker_flags" > "$out/configure.log" 2>&1 \
     || { echo "CONFIGURE FAILED"; tail -20 "$out/configure.log"; exit 2; }
 cmake --build /work/build -j"$(nproc)" > "$out/build.log" 2>&1 \
     || { echo "BUILD FAILED"; tail -30 "$out/build.log"; exit 2; }
@@ -201,6 +322,10 @@ xdotool() {
 # at random when the kernel randomizes 32 bits of mmap (WSL2, and GitHub's ubuntu-24.04
 # runners); it needs the container started with --security-opt seccomp=unconfined.
 exe=/work/build/streamflex
+# A launcher built without ThreadSanitizer would read clean in every tsan run, so the mode stops
+# instead, as the leak pass does without its ASan runtime
+[ "$fault" != tsan ] || ldd "$exe" | grep -q 'libtsan\.so' \
+    || { echo "THE LAUNCHER IS NOT BUILT WITH THREADSANITIZER (no libtsan in ldd $exe)"; exit 2; }
 TESTER_HOME=/home/tester
 LOG=$TESTER_HOME/.local/share/streamflex/streamflex.log
 
@@ -222,6 +347,15 @@ printf 'not a picture\n' > "$TESTER_HOME/broken/a.png"
 printf 'not a picture\n' > "$TESTER_HOME/broken/b.png"
 cp "$TESTER_HOME/Pictures/red.png" "$TESTER_HOME/mixed/"
 printf 'not a picture\n' > "$TESTER_HOME/mixed/broken.png"
+# Fallback fonts (72-fallback-fonts.sh): two fontconfig files a run names with FONTCONFIG_FILE, each
+# reading one folder of its own and keeping its cache beside it. fcbox's folder holds sf-box.ttf, whose
+# glyphs for 中, 游 and 戏 (U+4E2D, U+6E38, U+620F) are filled squares; fcempty's holds nothing.
+for fc in fcbox fcempty; do
+    mkdir -p "$TESTER_HOME/$fc/fonts" "$TESTER_HOME/$fc/cache"
+    printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n<fontconfig>\n  <dir>%s</dir>\n  <cachedir>%s</cachedir>\n</fontconfig>\n' \
+        "$TESTER_HOME/$fc/fonts" "$TESTER_HOME/$fc/cache" > "$TESTER_HOME/$fc/fonts.conf"
+done
+python3 "$HERE/make_fonts.py" box "$TESTER_HOME/fcbox/fonts/sf-box.ttf" "SF Box" "$(printf '\xe4\xb8\xad\xe6\xb8\xb8\xe6\x88\x8f')"
 chown -R tester:tester "$TESTER_HOME"
 
 # Mesa's software driver, found from Mesa's GL library for X, libGLX_mesa: before Mesa 24.2 it is
@@ -238,16 +372,36 @@ gallium=llvmpipe
 grep -qa softpipe "$mesa_driver" && gallium=softpipe
 echo "Mesa: $gallium, from $mesa_driver"
 
-# The leak pass preloads Mesa's driver into the launcher. Unpreloaded, libGL unloads it at exit,
-# before LeakSanitizer looks, so the few blocks the driver still holds (from context creation and
-# its first flush) lose their only pointers and read as leaks, with stacks in an unknown module.
-# A libgallium driver, which libGLX_mesa links, was clean without the preload (Fedora 44); it is
-# preloaded all the same, so both kinds of Mesa take one path. ASan must come first in the
-# preload list. Only the launcher gets the preload (the env after setarch): an ASan runtime in
-# setarch starts before randomization is off, and crashes. Whole stacks
-# (fast_unwind_on_malloc=0) reach our code through libraries built without frame pointers; that
-# is slower, so only this pass does it. It keeps setarch -R: the ASan build crashes at random
-# without it whether or not leaks are looked for.
+# Mesa's Vulkan driver, lavapipe, which the launcher's Vulkan-first renderer list uses: found from its
+# ICD file, which names the library. VK_DRIVER_FILES keeps the Vulkan loader to it alone, so no other
+# ICD in the image is tried first. lavapipe always uses LLVM's JIT (llvmpipe's; softpipe has no Vulkan).
+# Debian names the file lvp_icd.json, Fedora lvp_icd.<arch>.json
+lvp_icd=$(ls /usr/share/vulkan/icd.d/lvp_icd.json "/usr/share/vulkan/icd.d/lvp_icd.$(uname -m).json" 2> /dev/null | head -1)
+lvp_driver=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["ICD"]["library_path"])' "$lvp_icd" 2> /dev/null)
+[ -f "$lvp_driver" ] || lvp_driver=$(ldconfig -p | awk -v name="$(basename "${lvp_driver:-none}")" '$1 == name { print $NF; exit }')
+vulkan_loader=$(ldconfig -p | awk '$1 == "libvulkan.so.1" { print $NF; exit }')
+[ -n "$lvp_icd" ] && [ -f "$lvp_driver" ] && [ -f "$vulkan_loader" ] \
+    || { echo "NO LAVAPIPE FOUND (ICD: '$lvp_icd', driver: '$lvp_driver', loader: '$vulkan_loader')"; exit 2; }
+echo "Vulkan: lavapipe, from $lvp_driver"
+# Exported, never set in TESTER's env below: env would set it again for every run, over a check's own
+# VK_DRIVER_FILES=... prefix (the OpenGL fallback runs hide Vulkan that way); setpriv, env and setarch
+# pass an exported variable through
+export VK_DRIVER_FILES="$lvp_icd"
+
+# The leak pass preloads Mesa's driver into the launcher. The Vulkan loader and lavapipe are
+# preloaded for the same reason: SDL unloads the loader when the renderer goes, and the loader
+# unloads lavapipe. Unpreloaded, libGL unloads it at exit, before LeakSanitizer looks, so the few
+# blocks the driver still holds (from context creation and its first flush) lose their only
+# pointers and read as leaks, with stacks in an unknown module. A libgallium driver, which
+# libGLX_mesa links, was clean without the preload (Fedora 44); it is preloaded all the same, so
+# both kinds of Mesa take one path. libX11 is preloaded for the same reason again: an SDL that
+# loads it at run time (Fedora's) unloads it at SDL_Quit, and the blocks its input method and
+# resource database keep from SDL_Init read as leaks; with OpenGL, libGL linked it and kept it, and
+# Vulkan does not. ASan must come first in the preload list. Only the launcher gets the preload
+# (the env after setarch): an ASan runtime in setarch starts before randomization is off, and
+# crashes. Whole stacks (fast_unwind_on_malloc=0) reach our code through libraries built without
+# frame pointers; that is slower, so only this pass does it. It keeps setarch -R: the ASan build
+# crashes at random without it whether or not leaks are looked for.
 asan_options=detect_leaks=0
 preload=()
 if [ "$fault" = leaks ]; then
@@ -256,10 +410,28 @@ if [ "$fault" = leaks ]; then
     # cannot preload
     libasan=$(ldd "$exe" | awk '$1 ~ /^libasan\.so/ { print $3; exit }')
     [ -f "$libasan" ] || { echo "NO ASAN RUNTIME TO PRELOAD"; exit 2; }
-    preload=(env "LD_PRELOAD=$libasan $mesa_driver")
+    # SDL3 dlopens libX11 and SDL_Quit dlcloses it (under SDL2, libGL kept it mapped): preloaded
+    # when the image has it
+    libx11=$(ldconfig -p | awk '$1 == "libX11.so.6" { print $NF; exit }')
+    [ -f "$libx11" ] || libx11=
+    preload=(env "LD_PRELOAD=$libasan $mesa_driver $vulkan_loader $lvp_driver${libx11:+ $libx11}")
+    # The image names the suppressions its own libraries need, if any (LEAK_SUPPRESSIONS, a file
+    # beside this one): each names one function in a library's code, and says why. Debian's image
+    # names lsan-debian.supp, Fedora's lsan-fedora.supp.
+    if [ -n "${LEAK_SUPPRESSIONS:-}" ]; then
+        [ -f "$HERE/$LEAK_SUPPRESSIONS" ] || { echo "NO SUPPRESSIONS FILE $HERE/$LEAK_SUPPRESSIONS"; exit 2; }
+        preload+=("LSAN_OPTIONS=suppressions=$HERE/$LEAK_SUPPRESSIONS")
+        echo "Leak suppressions: $LEAK_SUPPRESSIONS ($(grep -c '^leak:' "$HERE/$LEAK_SUPPRESSIONS") entries)"
+    fi
 fi
+# The tsan mode reports every race and goes on (halt_on_error=0), so one run shows them all, with the
+# second stack of a lock-order report too; only what tsan.supp names is suppressed. It keeps setarch -R:
+# ThreadSanitizer's fixed memory layout fails under a kernel that randomizes 32 bits of mmap, as ASan
+# does, and nothing is preloaded.
+sanitizer_options=ASAN_OPTIONS=$asan_options
+[ "$fault" != tsan ] || sanitizer_options=TSAN_OPTIONS=halt_on_error=0:second_deadlock_stack=1:suppressions=$HERE/tsan.supp
 TESTER=(setpriv --reuid=tester --regid=tester --init-groups --
-        env HOME=$TESTER_HOME DISPLAY=:99 ASAN_OPTIONS=$asan_options UBSAN_OPTIONS=print_stacktrace=1
+        env HOME=$TESTER_HOME DISPLAY=:99 "$sanitizer_options" UBSAN_OPTIONS=print_stacktrace=1
             "GALLIUM_DRIVER=$gallium" setarch "$(uname -m)" -R "${preload[@]}")
 
 # A function to give the launcher its config: the fixture NAME.ini, the file CFG names, or
@@ -291,9 +463,15 @@ running() {
 
 # A function to end the launcher PID's run and return its exit code: TERM (SDL turns it into a
 # quit event), then KILL 10 s later for a launcher stuck in a loop that never reads it (exit
-# 137). Every run ends through here, so every run has the same escalation.
+# 137). Every run ends through here, so every run has the same escalation. A launcher whose log
+# already says "Quitting program" (a key, a TERM of the check's own, a fatal error) is given up to
+# 10 s to exit by itself first: SDL_Quit() in its cleanup puts back TERM's default action, so a TERM
+# between it and the exit (about 20 ms, the leak pass's leak check) ends it with exit 143.
 stop_run() {
     local pid=$1 i
+    if grep -q '^Quitting program' "$LOG" 2> /dev/null; then
+        for i in $(seq 200); do running "$pid" || break; sleep 0.05; done
+    fi
     kill -TERM "$pid" 2> /dev/null
     for i in $(seq 50); do running "$pid" || break; sleep 0.2; done
     kill -KILL "$pid" 2> /dev/null
@@ -301,11 +479,85 @@ stop_run() {
     wait "$pid" 2> /dev/null
 }
 
+# The leak pass's one retry. LeakSanitizer sometimes cannot attach its tracer as a run exits: the
+# run's stderr then says "ptrace appears to be blocked" and "Child exited with signal N", and lists
+# no leak, because no leak check ran at all (CONTRIBUTING.md). A busy host brings it on. Such a run
+# is run once more, from the state it started in; nothing else is ever retried. Where the state is
+# kept (retry_save), and the folder whose top-level files it keeps:
+retry_dir=/var/tmp/sf-retry retry_tmp=/tmp
+
+# A function to tell whether the run NAME met that and nothing else: its stderr has the tracer's two
+# lines and no sanitizer's report (so no leak was listed, and none could be), and the harness found
+# the run whole (NAME.code is the exit code alone: no line missing, no frame missed, no hang)
+tracer_flake() {
+    local err=$out/$1.err
+    grep -q 'WARNING: ptrace appears to be blocked' "$err" 2> /dev/null \
+        && grep -q 'Child exited with signal' "$err" \
+        && ! grep -qE 'ERROR: LeakSanitizer|AddressSanitizer|runtime error' "$err" \
+        && [[ $(cat "$out/$1.code" 2> /dev/null) =~ ^[0-9]+$ ]]
+}
+
+# A function to keep, before the run NAME, what a run or its +keys can change: the test user's home
+# (configs, fonts and folders), the files at the top of retry_tmp (the pads', the loader's) and
+# NAME's own files in the output folder (a .display written before it, say). Fails when it could
+# not keep them.
+retry_save() {
+    local name=$1
+    rm -rf "$retry_dir"; mkdir -p "$retry_dir/out" || return 1
+    tar -C "$TESTER_HOME" -cf "$retry_dir/home.tar" . || return 1
+    find "$TESTER_HOME" -mindepth 1 -type d -printf '%P\n' > "$retry_dir/home.dirs" || return 1
+    find "$retry_tmp" -mindepth 1 -maxdepth 1 ! -name '.*' ! -type d -printf '%P\0' \
+        | tar -C "$retry_tmp" --null -T - -cf "$retry_dir/tmp.tar" || return 1
+    cp -a "$out/$name".* "$retry_dir/out/" 2> /dev/null
+    return 0
+}
+
+# A function to put back what retry_save kept, once the run NAME's first try is over. That try's
+# files go to flake/NAME/, and its stderr also to NAME.flake.err, where list_leaks still finds any
+# leak it lists. The home's folders are kept, not made anew, so a run started from inside one finds
+# the same folder.
+retry_restore() {
+    local name=$1 dir
+    rm -rf "$out/flake/$name"; mkdir -p "$out/flake/$name"
+    mv "$out/$name".* "$out/flake/$name/"
+    cp "$out/flake/$name/$name.err" "$out/$name.flake.err"
+    cp -a "$retry_dir/out/." "$out/"
+    find "$TESTER_HOME" -mindepth 1 ! -type d -delete
+    find "$TESTER_HOME" -mindepth 1 -depth -type d -printf '%P\n' | while read -r dir; do
+        grep -qxF -- "$dir" "$retry_dir/home.dirs" || rmdir -- "$TESTER_HOME/$dir"
+    done
+    tar -C "$TESTER_HOME" -xpf "$retry_dir/home.tar"
+    find "$retry_tmp" -mindepth 1 -maxdepth 1 ! -name '.*' ! -type d -delete
+    tar -C "$retry_tmp" -xpf "$retry_dir/tmp.tar"
+}
+
+# A function to run the launcher run NAME (the command after it, which writes NAME's files) and, in
+# the leak pass, once more when tracer_flake says its leak check never ran. Each says so on the
+# console. A retry that meets the flake again says so in NAME.code too, so its check fails, and
+# list_leaks lists it. A run whose state could not be kept is not retried: its flake stands.
+with_tracer_retry() {
+    local name=$1 saved=yes; shift
+    [ "$fault" = leaks ] || { "$@"; return 0; }
+    retry_save "$name" || saved=
+    "$@"
+    tracer_flake "$name" || return 0
+    [ -n "$saved" ] || { echo "LSan tracer flake in $name: not retried, as its state could not be kept"; return 0; }
+    echo "LSan tracer flake in $name: retried"
+    retry_restore "$name"
+    "$@"
+    tracer_flake "$name" || return 0
+    echo "$(cat "$out/$name.code"), and LeakSanitizer's tracer could not attach on its first try or its retry" > "$out/$name.code"
+    echo "LSan tracer flake in $name again on its retry: it fails (CONTRIBUTING.md)"
+}
+
+# A function to run a config whose StartupCmd quits by itself (run_quick_once), retried as above
+run_quick() { with_tracer_retry "$1" run_quick_once "$@"; }
+
 # A function to run a config whose StartupCmd quits by itself. One still running after 30 s
 # (QUICK_LIMIT, which only the harness's own checks shorten) is ended by stop_run, and "did not
 # quit by itself" goes into NAME.code beside the exit code, so its check fails even when TERM
 # made it exit 0.
-run_quick() {
+run_quick_once() {
     local name=$1 limit=${QUICK_LIMIT:-30} pid code hung="" i
     local args; mapfile -t args < <(config_args "$name")
     rm -f "$LOG"
@@ -392,8 +644,11 @@ frame_settle() {
 # the run's name and PID instead: that is how a check does something at a moment the log chooses.
 # Every wait is bounded; a line that never came, or a key whose frame never did (the run then sends
 # no more keys), is written into NAME.code beside the exit code, so the check's exit code test
-# fails. run_after_line and run_slideshow use this too.
-run_keys() {
+# fails. run_after_line and run_slideshow use this too. The leak pass retries a run as
+# with_tracer_retry says, its +keys and all, so a +key must do the same when called again from the
+# same state.
+run_keys() { with_tracer_retry "$1" run_keys_once "$@"; }
+run_keys_once() {
     local name=$1; shift
     local args; mapfile -t args < <(config_args "$name")
     local start=${WAIT_FOR:-Loading menu} missing="" pid code k frame_pid="" frame_missed="" frame_owed="" frame_owed_by=""
@@ -427,6 +682,7 @@ run_keys() {
 run_keys_at() {
     local size=$1 xvfb i word at=()
     shift
+    echo "$size" > "$out/$1.display"   # 95-every-run.sh reads the size of the display this run used
     Xvfb :97 -screen 0 "${size}x24" -ac > /dev/null 2>&1 &
     xvfb=$!
     for i in $(seq 100); do DISPLAY=:97 command xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
@@ -457,7 +713,7 @@ run_slideshow() {
 run_slideshow_command() { "${slideshow_command[@]}"; }
 
 # A function to tell whether the sanitizers reported nothing for the run NAME
-sanitizer_clean() { ! grep -qE 'AddressSanitizer|runtime error|LeakSanitizer' "$out/$1.err"; }
+sanitizer_clean() { ! grep -qE 'AddressSanitizer|runtime error|LeakSanitizer|ThreadSanitizer' "$out/$1.err"; }
 
 # A function to tell whether the run NAME exited as expected (0 unless CODE is given) with its
 # sanitizers quiet. A launcher that had to be killed exits 137, so it fails here on its own.
@@ -531,9 +787,6 @@ look() {
         echo "$tag no" >> "$out/$name.seen"
         return
     fi
-    # Xvfb has no window manager to carry out the launcher's fullscreen request, so its window
-    # stays 1 x 1 and nothing it draws reaches the screen: give it the screen, as one would
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     if wait_line "$line" "$pid"; then
         for p in "$@"; do
             rest=${p#*,}
@@ -549,8 +802,10 @@ look() {
     echo "$tag $seen" >> "$out/$name.seen"
 }
 
-# A function to list each run in the output folder whose LeakSanitizer found a leak. Each one
-# counts as a failure, so the list cannot disagree with the verdict, even for a run whose check
+# A function to list each run in the output folder whose LeakSanitizer found a leak, its first
+# try's stderr (NAME.flake.err) included, and each run whose tracer could not attach, on its first
+# try and its retry or on a run that was not retried, so that no leak check ran; it says which. Each
+# one counts as a failure, so the list cannot disagree with the verdict, even for a run whose check
 # never looked at its sanitizers. nullglob is on only while the .err files are collected.
 list_leaks() {
     local err errs restore
@@ -558,8 +813,33 @@ list_leaks() {
     errs=("$out"/*.err)
     eval "$restore"
     for err in "${errs[@]}"; do
-        grep -q 'ERROR: LeakSanitizer' "$err" || continue
-        echo "LEAK  $(basename "$err" .err): $(grep -m1 '^SUMMARY' "$err")"
+        if grep -q 'ERROR: LeakSanitizer' "$err"; then
+            echo "LEAK  $(basename "$err" .err): $(grep -m1 '^SUMMARY' "$err")"
+        elif [[ $err != *.flake.err ]] && grep -q 'WARNING: ptrace appears to be blocked' "$err"; then
+            # A run retried kept its first try's stderr beside it (with_tracer_retry)
+            if [ -e "${err%.err}.flake.err" ]; then
+                echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach on its first try or its retry, so no leak check ran"
+            else
+                echo "LEAK  $(basename "$err" .err): LeakSanitizer's tracer could not attach, and the run was not retried, so no leak check ran"
+            fi
+        else
+            continue
+        fi
+        failures=$((failures + 1))
+    done
+}
+
+# A function for the tsan mode: list each run in the output folder whose stderr holds a
+# ThreadSanitizer report, by its first SUMMARY line, as a RACE line that counts as a failure, so a
+# race in a run whose check never looked at its sanitizers still fails the run
+list_races() {
+    local err errs restore
+    restore=$(shopt -p nullglob); shopt -s nullglob
+    errs=("$out"/*.err)
+    eval "$restore"
+    for err in "${errs[@]}"; do
+        grep -q 'ThreadSanitizer' "$err" || continue
+        echo "RACE  $(basename "$err" .err): $(grep -m1 '^SUMMARY: ThreadSanitizer' "$err" || grep -m1 'ThreadSanitizer' "$err")"
         failures=$((failures + 1))
     done
 }
@@ -574,14 +854,8 @@ if [ "$fault" = scrollfail ]; then
     grep -m3 -E 'AddressSanitizer|double-free|runtime error' "$out/f11-scroll.err" | sed 's/^/      /'
 else
     # A check file that does not parse would stop part-way through when sourced, and the checks
-    # after the error would be missing without a word, so each is parsed first. nullglob is on
-    # only while they are collected: the checks run with bash's own glob rules.
-    restore=$(shopt -p nullglob); shopt -s nullglob
-    checks=("$HERE"/checks/*.sh)
-    eval "$restore"
-    # A shard runs from the list its plan printed, which merge.py holds it to
-    [ -z "$shard_k" ] || checks=("${shard_checks[@]}")
-    [ "${#checks[@]}" -gt 0 ] || { echo "NO CHECKS FOUND in $HERE/checks"; exit 2; }
+    # after the error would be missing without a word, so each is parsed first. The checks run
+    # from the list select_checks made, which a shard's plan printed and merge.py holds it to.
     for check in "${checks[@]}"; do
         # A shard runs its own check files and those every shard runs, and skips the others
         shard_file=${check##*/}
@@ -604,6 +878,7 @@ else
         results=$((results + failures - shard_leaks))
         shard_end '(leaks)'
     fi
+    [ "$fault" != tsan ] || list_races
 fi
 # The total counts a leaking run twice on purpose: once as its check's FAIL and once as its LEAK
 # line (22 leaking runs read "44 failed"). The LEAK count is what makes a leak in a run whose

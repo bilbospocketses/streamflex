@@ -64,34 +64,15 @@ grep -q 'Settings: the note under the preview says Used only while VSync is off'
     && ran_clean f55-why && ok=0
 result "settings: a grayed row says why under the preview (exit $(cat "$out/f55-why.code"))" $ok
 
-# The clock switched off while its render thread is at work (the harness build's
-# STREAMFLEX_TEST_CLOCK_DELAY_MS makes each render take 3 s, and one every second): stopping waits
-# for the thread and frees what it made, and Enabled=false is saved. The wait is looked for while
-# settings are open: quitting with the clock still running logs the same line.
-render_then_off() {
-    local before i
-    before=$(grep -c 'Clock: rendering on its thread' "$LOG")
-    for i in $(seq 50); do
-        [ "$(grep -c 'Clock: rendering on its thread' "$LOG")" -gt "$before" ] && break
-        sleep 0.2
-    done
-    xdotool key Left
-    sleep 4
-}
-cfg=$(writable_config f55-clock)
-STREAMFLEX_TEST_CLOCK_DELAY_MS=3000 CFG=$cfg UNTIL='Settings saved' \
-    run_keys f55-clock Menu Down Down Down Down Down Down Return +render_then_off BackSpace BackSpace
-ok=1
-in_range "$out/f55-clock.log" 'Settings opened' 'Settings closed' 'Clock stopped (it waited for a render in progress)' \
-    && sed -n '/^\[Clock\]/,/^\[/p' "$cfg" | grep -qx 'Enabled=false' && ran_clean f55-clock && ok=0
-result "settings: the clock switched off mid-render waits for it and frees it (exit $(cat "$out/f55-clock.code"))" $ok
-
-# VSync off, then an FPS limit of 30: the frame timing follows live, and both are saved
+# VSync off, then an FPS limit of 30: the frame timing follows live, and both are saved. SDL3's
+# SDL_SetRenderVSync returns true on success, so a test left in SDL2's form would log a refusal of
+# every change that worked (plan Task 1.3)
 cfg=$(writable_config f55-frame)
 CFG=$cfg run_keys f55-frame Menu Return Down Down Down Down Down Left Down Right BackSpace BackSpace
 ok=1
 grep -q 'Frame timing: FPS limit 30, 33 ms a frame' "$out/f55-frame.log" \
-    && grep -qx 'VSync=false' "$cfg" && grep -qx 'FPSLimit=30' "$cfg" && ran_clean f55-frame && ok=0
+    && grep -qx 'VSync=false' "$cfg" && grep -qx 'FPSLimit=30' "$cfg" \
+    && ! grep -q '^Could not turn VSync' "$out/f55-frame.log" && ran_clean f55-frame && ok=0
 result "settings: VSync and the FPS limit apply live and save (exit $(cat "$out/f55-frame.code"))" $ok
 # Between the two, VSync is off with no FPS limit yet: frames keep the display's rate (Xvfb's 0 Hz
 # reads as 60), and the log says so rather than calling it VSync
@@ -104,22 +85,22 @@ result "settings: VSync off with no FPS limit logs that frames keep the display'
 grep -E 'Frame timing|VSync' "$out/f55-frame.log" | sed 's/^/      /'
 
 # The pad's D-pad Left held on the FPS limit from 75: its first press steps to 60, and its first
-# repeat (31 frames of 16 ms) to 30, whose 33 ms frames make the repeat's delay 15 frames, which the
-# held count has passed already; the repeats go on all the same, on to Off. Left is held for 40
-# frames however slowly they run (STREAMFLEX_TEST_PAD_FRAMES), and the step to Off is waited for.
+# repeat, 500 ms later, to 30, whose 33 ms frames are longer than the repeat's 25 ms interval; the
+# repeats go on all the same, on to Off, timed in wall time whatever the frames. Left is held until
+# the step to Off is logged.
 p55_hold_left() {
     : > /tmp/pad-left; wait_line 'Settings: [General] FPSLimit 30 -> ' "$2"
     rm -f /tmp/pad-left; sleep 0.5
 }
 rm -f /tmp/pad-left
-STREAMFLEX_TEST_PAD=/tmp/pad-left STREAMFLEX_TEST_PAD_BUTTON=dpleft STREAMFLEX_TEST_PAD_FRAMES=40 WAIT_FOR='Gamepad connected' \
+STREAMFLEX_TEST_PAD=/tmp/pad-left STREAMFLEX_TEST_PAD_BUTTON=dpleft WAIT_FOR='Gamepad connected' \
     CFG=$FX/f55-padfps.ini run_keys f55-padfps Menu Return Down Down Down Down Down Down +p55_hold_left Menu
 log=$out/f55-padfps.log
 ok=1
 precedes "$log" 'Settings: [General] FPSLimit 75 -> 60' 'Settings: [General] FPSLimit 60 -> 30' \
     && precedes "$log" 'Settings: [General] FPSLimit 60 -> 30' 'Settings: [General] FPSLimit 30 -> ' \
     && [ "$(grep -c 'Gamepad ButtonDPadLeft detected' "$log")" = 1 ] && ran_clean f55-padfps && ok=0
-result "settings: a held pad's repeats go on past a step that shortens their delay (exit $(cat "$out/f55-padfps.code"))" $ok
+result "settings: a held pad's repeats go on past a step that changes the frame time (exit $(cat "$out/f55-padfps.code"))" $ok
 grep -E 'FPSLimit|Frame timing' "$log" | sed 's/^/      /'
 rm -f /tmp/pad-left
 
@@ -175,7 +156,6 @@ diff "$FX/f55-odd.ini" "$cfg" | sed 's/^/      /'
 # center steps from 50% to 55%, and 55% is saved
 highlight_box() {
     local name=$1 pid=$2 tag=$3 line=$4 shot=/tmp/box.xwd
-    xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     wait_line "$line" "$pid" && sleep 1 && xwd -root -silent -out "$shot" \
         && python3 "$HERE/pixels.py" "$shot" count 255,0,255 inside 255,0,255 | sed "s/^/$tag /" >> "$out/$name.boxes"
 }

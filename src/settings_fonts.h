@@ -7,8 +7,8 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "settings.h"
 #include "listpick.h"
 
@@ -22,7 +22,7 @@ bool fonts_fill(ListPick *to);    // One row a family; false when out of memory
 void fonts_value_in_use(SettingId id, char *out, size_t size);   // The font the titles or the clock use, as a row's value
 const char *fonts_value_path(const char *value);                 // The file in a row's value
 SDL_Texture *fonts_sample(TTF_Font *row_font, const char *value, const char *name, int *w, int *h);
-void fonts_clear_samples(void);
+int fonts_clear_samples(void);    // How many textures it destroyed
 void fonts_quit(void);            // At quit: wait for a listing, let the list go, and say so
 
 #endif

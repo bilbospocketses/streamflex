@@ -1,0 +1,29 @@
+# LeakSanitizer suppressions for the Fedora image's leak pass only (its Dockerfile names this file in
+# LEAK_SUPPRESSIONS; Debian's names lsan-debian.supp). Each entry names one function in a library's own
+# code, never a whole library. Spec section 9 and CONTRIBUTING.md list each, with these reasons.
+
+# libdecor 0.2.5 (libdecor-0.2.5-2.fc44), its GTK plugin, every run on SDL's Wayland driver (check 67's
+# Weston 15 runs): 672 bytes in 4 objects, a DBusError's name and message from each of two calls.
+#   malloc / realloc <- _dbus_strdup / _dbus_string_append_printf_valist <- _dbus_set_error_valist
+#   <- dbus_set_error <- _dbus_read_local_machine_uuid <- _dbus_get_local_machine_uuid_encoded
+#   <- _dbus_transport_open_autolaunch <- _dbus_transport_open <- _dbus_connection_open_internal
+#   <- internal_bus_get <- libdecor_plugin_new (libdecor-gtk.so, at +0x70d5 and +0x7152)
+#   <- libdecor_new <- Wayland_LoadLibdecor <- Wayland_VideoInit <- SDL_InitSubSystem <- init_sdl
+# libdecor's src/desktop-settings.c (0.2.5, read in Fedora's source package) asks D-Bus's session bus
+# for the cursor theme (libdecor_get_cursor_settings(), :121-168) and the color scheme
+# (libdecor_get_color_scheme(), :170-200). When dbus_bus_get() fails, each returns without
+# dbus_error_free() on the DBusError dbus_bus_get() filled (:137-138 and :185-186). The harness has no
+# session bus, so it fails; on a desktop with a session bus it succeeds and nothing leaks. Debian's
+# image holds no libdecor plugin, so no plugin runs this code there.
+# The entry names the plugin's constructor, the narrowest name LeakSanitizer can see. Fedora's build
+# inlines both functions into it: addr2line -i on libdecor-debuginfo's file puts +0x70d0 in
+# libdecor_get_cursor_settings (desktop-settings.c:135) inlined at libdecor-gtk.c:2806, and +0x714d in
+# libdecor_get_color_scheme (:183) inlined at :2812. LeakSanitizer names frames from the stripped
+# plugin's MiniDebugInfo, which holds libdecor_plugin_new and not the inlined functions, and it did not
+# name them with libdecor-debuginfo installed either (measured), so the entry cannot name them.
+# StreamFlex's code never runs under libdecor_plugin_new, which SDL calls once as it starts the Wayland
+# driver, so the entry cannot hide a leak of StreamFlex's own: a deliberate one in init_sdl(), beside
+# this one, is still reported (measured).
+# Giving the image a machine-id does not stop it: D-Bus's autolaunch then fails on its next step, and
+# the runs leak 4,368 bytes in 8 objects instead (measured).
+leak:libdecor_plugin_new

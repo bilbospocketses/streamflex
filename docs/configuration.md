@@ -82,7 +82,7 @@ VSync and the FPS limit take effect at once, with no restart.
   - Color: *Color* ([Color](#color)). Left and Right step through ten presets, Black, Charcoal, Graphite, Slate, Midnight, Navy, Teal, Forest, Plum and Burgundy; OK opens the [color picker](#the-color-picker). Every color row names its color as the color picker does: by the swatch's name, such as *White*, when it is one of the picker's 24 swatches, and as *Custom #RRGGBB* when it is not.
   - Image: *Image* ([Image](#image)), chosen in the [folder browser](#the-folder-browser).
   - Slideshow: *Folder* ([SlideshowDirectory](#slideshowdirectory)), chosen in the folder browser; *Change every* ([SlideshowImageDuration](#slideshowimageduration)): 5, 10, 15 or 30 seconds, or 1, 2, 5, 10, 30 or 60 minutes; and *Fade* ([SlideshowTransitionTime](#slideshowtransitiontime)): 0 to 3 seconds, in steps of 0.5.
-  - Transparent: a note that the desktop shows through, and *See-through color* ([ChromaKeyColor](#chromakeycolor)).
+  - Transparent: a note that the desktop shows through, and, on Linux only, *See-through color* ([ChromaKeyColor](#chromakeycolor)). Windows needs no see-through color: see [Transparent Backgrounds](#transparent-backgrounds).
 - *Overlay* ([Overlay](#overlay)): On or Off.
 - *Overlay color* ([OverlayColor](#overlaycolor)) and *Overlay opacity* ([OverlayOpacity](#overlayopacity)): 0% to 100%, in steps of 5. Both are grayed until Overlay is on.
 
@@ -381,7 +381,7 @@ When `Mode` is set to "Slideshow", this setting defines the amount of time in se
 Default: 1.5 (the sample config's commented-out line shows 3)
 
 ##### ChromaKeyColor
-When `Mode` is set to "Transparent", this setting defines the color that will be applied to the background for chroma key transparency.
+**Linux only; ignored on Windows.** When `Mode` is set to "Transparent", this setting defines the color that will be applied to the background for chroma key transparency. On Windows, Transparent mode needs no key color: the setting is still read and saved, so a config shared with a Linux machine keeps it, but nothing uses it.
 
 Default: #010101
 
@@ -910,9 +910,21 @@ The following axis and buttons are available for control in StreamFlex:
 - ButtonDPadRight
 
 ## Transparent Backgrounds
-*Note for Linux users only: this feature requires compositor implementation. See the [Linux Setup Guide](https://bilbospocketses.github.io/streamflex/setup_linux#transparent-backgrounds) for details. To see whether SDL chose X11 or Wayland, and which renderer, run StreamFlex with debug logging (`-d`): the log's `Video:` line at startup names both.*
+Transparent mode lets the desktop, or a program running behind StreamFlex, show through the background. Windows and Linux do it in different ways.
 
-StreamFlex supports transparent backgrounds using the chroma key technique. This method works by setting a strategically chosen color to the background, which is removed later. In film production, this technique is often refered to as "blue screening" or "green screening".
+### Transparent on Windows
+On Windows, every pixel of the window carries its own opacity. The background is fully see-through, and icons, titles and the highlight are drawn over it as over any other background, their soft edges blending into the desktop. No key color is involved: [ChromaKeyColor](#chromakeycolor) is ignored, the settings screen shows no *See-through color* row, and no color in your icons, text or highlight can turn see-through.
+
+- The window is one pixel row shorter than the display, and Windows treats it as fullscreen, so the taskbar never draws over icons or titles. A taskbar behind the window shows through the see-through background, as the rest of the desktop does, and the missing bottom row shows the desktop.
+- A background [Overlay](#overlay) tints the desktop at its [OverlayOpacity](#overlayopacity). At 100% it hides the desktop. The screensaver's dim darkens the desktop the same way, at its dim level.
+- The see-through area still belongs to StreamFlex: a mouse click there goes to StreamFlex, not to the window behind it.
+- StreamFlex draws a Transparent background with Vulkan where the graphics driver offers the alpha it needs, and with Direct3D 11 otherwise. Setting the `SDL_RENDER_DRIVER` environment variable to `vulkan` or `direct3d11` chooses one of them. No other renderer can draw a transparent window, so with `SDL_RENDER_DRIVER` set to another, such as `direct3d12`, `direct3d` or `opengl`, StreamFlex shows the Color background instead, and the log says why (`Video: no renderer can draw a transparent window (...); using an opaque background`).
+- Per-pixel transparency does not work on every machine. SDL's own documentation says it "does not work on all hardware configurations", such as laptops whose display is driven by one GPU while another one renders. Where it does not work, choose another background.
+
+### Transparent on Linux
+*This needs a compositor. See the [Linux Setup Guide](https://bilbospocketses.github.io/streamflex/setup_linux#transparent-backgrounds) for details. To see whether SDL chose X11 or Wayland, and which renderer, run StreamFlex with debug logging (`-d`): the log's `Video:` line at startup names both.*
+
+On Linux, StreamFlex makes the background transparent with the chroma key technique. This method works by setting a strategically chosen color to the background, which is removed later. In film production, this technique is often referred to as "blue screening" or "green screening".
 
 Every pixel of the window that is exactly the chroma key color becomes transparent. StreamFlex keeps icons clear of it: as an icon loads, any opaque pixel within one step of the key in every channel is moved two steps away from it (with the default key, near-black becomes `#030303`). Text and the colors you configure are not changed, so choose a key color that your fonts, highlight and other colors do not use. The color is set with the `ChromaKeyColor` setting in the Background section. The default is `#010101`, a slight off-shade of black.
 
@@ -925,12 +937,9 @@ Some icons have shadows which are intended to provide a textured look. The shado
 Another common issue is the highlight. The default highlight is semi-transparent, which will not render properly when blended with the chroma key background. There are a few ways to address with this:
 - Set the `FillOpacity` setting to 0%, and use an outline-only highlight instead
 - Use custom [Selected Icons](#selected-icon-overrides) in place of StreamFlex's highlight
-- Linux only: use a shader to recover the highlight's transparency. See the [Linux Setup Guide](https://bilbospocketses.github.io/streamflex/setup_linux#transparent-backgrounds) for details.
+- Use a shader to recover the highlight's transparency. See the [Linux Setup Guide](https://bilbospocketses.github.io/streamflex/setup_linux#transparent-backgrounds) for details.
 
 Transparent backgrounds will require some effort to obtain a setup that looks good and works well. Be prepared to do a significant amount of tinkering if you wish to use this feature.
-
-### Windows Implenetation 
-The Windows implementation of transparency is not hardware accelerated. If your refresh rate is very high, this can result in a signficant load on the CPU. If you find that the trasparent background is causing a high load on your system, consider changing the `VSync` setting to false and setting `FPSLimit` to 30 or lower, which will reduce the amount of computation required.
 
 ### Animated Backgrounds
 Transparent backgrounds can be used to implement animated backgrounds in combination with another program. On Windows, [Wallpaper Engine](https://www.wallpaperengine.io) and [Lively](https://github.com/rocksdanister/lively) are popular choices. For Linux, I recommend [anipaper](https://github.com/Theldus/anipaper); see the [Linux Setup Guide](https://bilbospocketses.github.io/streamflex/setup_linux#animated-backgrounds) for details.

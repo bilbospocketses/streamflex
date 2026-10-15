@@ -1,16 +1,22 @@
-# The StreamFlex headless test image on Fedora, whose SDL2 is sdl2-compat (SDL2's API on top of
-# SDL3) rather than SDL2 itself. It holds the Fedora equivalents of the Debian image's packages:
-# the build dependencies, a virtual X display (Xvfb) with Mesa's software OpenGL, xdotool to press
-# keys, xwd for the screenshots pixels.py reads, xrandr for the display's refresh rate, and
-# util-linux for setpriv and setarch. run.sh is the same for both images; see it for how they
-# are used.
+# The StreamFlex headless test image on Fedora 44, with SDL3 native (sdl2-compat no longer comes into
+# it). It holds the Fedora equivalents of the Debian image's packages: the build dependencies, a
+# virtual X display (Xvfb) with Mesa's software drivers (lavapipe for Vulkan, llvmpipe for OpenGL),
+# xdotool to press keys, xwd for the screenshots pixels.py reads, xrandr for the display's refresh
+# rate, util-linux for setpriv and setarch, the Noto CJK (variable) and color emoji fonts, and Weston
+# (15, which has fifo-v1) with xkeyboard-config, which its --fake-seat needs to compile a keymap and
+# which install_weak_deps=False would leave out. run.sh is the same for both images; see it for how
+# they are used.
 # Through mirror.gcr.io, Google's public Docker Hub mirror: Docker Hub rate-limits the unauthenticated
 # pulls of GitHub's runners. The digest is the same image's.
 FROM mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
 RUN dnf install -y --setopt=install_weak_deps=False \
       gcc make cmake pkgconf-pkg-config file git tar gawk findutils diffutils \
       libasan libubsan \
-      sdl2-compat-devel SDL2_image-devel SDL2_ttf-devel inih-devel \
-      xorg-x11-server-Xvfb xdotool xwd xrandr mesa-dri-drivers python3 util-linux shadow-utils \
+      SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel \
+      xorg-x11-server-Xvfb xdotool xwd xrandr mesa-dri-drivers mesa-vulkan-drivers vulkan-loader \
+      google-noto-sans-cjk-vf-fonts google-noto-color-emoji-fonts weston xkeyboard-config python3 util-linux shadow-utils \
  && dnf clean all \
  && useradd --create-home tester
+# The leak pass's suppressions for this image's own libraries (lsan-fedora.supp, which gives each entry's
+# stack and reason): one function in libdecor's GTK plugin, which the Wayland runs load
+ENV LEAK_SUPPRESSIONS=lsan-fedora.supp

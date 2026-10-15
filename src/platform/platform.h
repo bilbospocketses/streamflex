@@ -34,13 +34,15 @@ SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey
 int unused_exit_hotkeys(SDL_Keycode *out, int max);   // The later :exit bindings, which nothing runs; how many
 SDL_Keycode refused_exit_hotkey(const char **why);    // The exit hotkey Windows would not register, and why; 0 when none
 void register_exit_hotkey(void);
+void platform_window_changed(SDL_Window *old_window, SDL_Window *new_window);   // UnregisterHotKey on the old HWND, every hotkey on the new one, and the taskbar mark when the new window is Transparent
 bool retry_exit_hotkey(bool at_once);   // The exit hotkey Windows refused, tried again when due; true when taken now
 void clear_exit_hotkey(void);
-void check_exit_hotkey(SDL_SysWMmsg *msg);
+void listen_exit_hotkey(bool on);   // While an app runs, the exit hotkey's WM_HOTKEY closes it
 void set_foreground_window(void);
 bool make_self(void);           // A restart: the fresh copy, made and given the foreground before the teardown
 bool take_foreground(void);     // A restart's fresh copy: true when its window came to the front
-void make_window_transparent(void);
-void make_window_opaque(void);
 void hide_cursor(Entry* entry);
+void taskbar_mark_fullscreen(SDL_Window *window, bool mark);   // ITaskbarList2::MarkFullscreenWindow on the window's HWND
+void taskbar_release(void);                                    // At quit: the taskbar's list, and COM if it was started for it
+const char *dpi_awareness(void);   // How Windows scales this process's windows, as the manifest set it
 #endif

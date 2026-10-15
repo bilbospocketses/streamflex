@@ -6,6 +6,8 @@ set(SOURCES
   util.h
   image.c
   image.h
+  iconload.c
+  iconload.h
   debug.c
   debug.h
   clock.c
@@ -16,6 +18,10 @@ set(SOURCES
   utf8.h
   chroma.c
   chroma.h
+  videodriver.c
+  videodriver.h
+  padpower.c
+  padpower.h
   library.c
   library.h
   alloc.c
@@ -30,6 +36,10 @@ set(SOURCES
   settings.h
   derive.c
   derive.h
+  winplan.c
+  winplan.h
+  vsyncwatch.c
+  vsyncwatch.h
   config_fields.c
   config_fields.h
   listpick.c
@@ -40,8 +50,15 @@ set(SOURCES
   fontlist.h
   fontscan.c
   fontscan.h
+  fontrules.c
+  fontrules.h
+  fontset.c
+  fontset.h
+  fontcand.c
   bindings.c
   bindings.h
+  keycodes.c
+  keycodes.h
   browser.c
   browser.h
   settings_screen.c
@@ -74,23 +91,19 @@ add_custom_command(TARGET ${EXECUTABLE_TITLE} POST_BUILD
 # Build libraries
 add_subdirectory("platform")
 
-# Link libraries together 
-target_link_libraries(${EXECUTABLE_TITLE} platform)
+# Link libraries together
+target_link_libraries(${EXECUTABLE_TITLE} platform SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3::SDL3)
 if (UNIX)
-  target_link_libraries(${EXECUTABLE_TITLE} PkgConfig::SDL2 PkgConfig::SDL2_IMAGE PkgConfig::SDL2_TTF PkgConfig::INIH m)
+  target_link_libraries(${EXECUTABLE_TITLE} Fontconfig::Fontconfig PkgConfig::INIH m)
 else ()
-  target_link_libraries(${EXECUTABLE_TITLE} 
-  $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
-  $<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
-	$<IF:$<TARGET_EXISTS:SDL2_image::SDL2_image>,SDL2_image::SDL2_image,SDL2_image::SDL2_image-static>
-	$<IF:$<TARGET_EXISTS:SDL2_ttf::SDL2_ttf>,SDL2_ttf::SDL2_ttf,SDL2_ttf::SDL2_ttf-static>
-	${INIH}
-  ${GETOPT}
-	PowrProf
-	shell32
-	ole32
-	uuid
-	advapi32
+  target_link_libraries(${EXECUTABLE_TITLE}
+    ${INIH}
+    ${GETOPT}
+    PowrProf
+    shell32
+    ole32
+    uuid
+    advapi32
   )
   target_include_directories(${EXECUTABLE_TITLE} PUBLIC ${INIH_INCLUDE_DIR} ${GETOPT_INCLUDE_DIR})
 endif ()

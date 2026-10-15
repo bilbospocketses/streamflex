@@ -13,6 +13,24 @@
 #define DERIVE_MAX_SCROLL_OUTLINE_PM 10       // The scroll arrow's outline: at most 1% of the screen height
 #define DERIVE_SHADOW_ALPHA_PERCENT 75        // A shadow is three quarters as opaque as its text
 #define DERIVE_EXIT_RETRY_MS 5000             // A refused Windows exit hotkey is tried again this often
+#define DERIVE_REPEAT_DELAY_MS 500            // A held pad control first repeats this long after its press
+#define DERIVE_REPEAT_INTERVAL_MS 25          // and then this often, at most once a frame
+#define DERIVE_SCREENSAVER_DIM_MS 1500        // The screensaver dims to its intensity over this long
+#define DERIVE_DEFAULT_REFRESH_RATE 60        // Hz, when the display reports none
+#define DERIVE_MIN_REFRESH_RATE 1.0F          // Hz: a display that reports less reports none
+#define DERIVE_SCREEN_MARGIN 0.05F            // The screen's margin: 5% of its height
+#define DERIVE_TITLE_MIN_SIZE 0.02F           // The readable minimum title size: 2% of the screen height
+
+// The screen geometry every menu shares, from the window's size in pixels (spec section 6)
+typedef struct {
+    int screen_width;
+    int screen_height;
+    int screen_margin;
+    int title_min_size;   // In points
+} ScreenGeometry;
+
+// What a change of the window's pixel size does (spec section 6)
+typedef enum { SIZE_NOTHING, SIZE_RELOAD, SIZE_WAIT } SizeDecision;
 
 typedef struct {
     unsigned char r;
@@ -82,7 +100,12 @@ typedef struct Effective {
 
 int derive_alpha(int hundredths);
 void derive_settings(const DeriveInput *in, Effective *out);
-unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval);
+bool derive_repeat_due(unsigned int now, unsigned int pressed, unsigned int due);
+unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned int due, unsigned int interval);
+int derive_fade_alpha(unsigned int now, unsigned int start, unsigned int duration, int end_value);
 bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try);
+ScreenGeometry geometry_from_pixels(int width, int height);
+int derive_refresh_rate(float reported);
+SizeDecision derive_size_decision(int laid_out_width, int laid_out_height, int width, int height, bool app_in_front);
 
 #endif

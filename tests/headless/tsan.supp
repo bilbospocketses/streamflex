@@ -1,0 +1,28 @@
+# ThreadSanitizer suppressions for run.sh's tsan mode. A report whose every access is inside Mesa
+# (lavapipe) or SDL's own threads gets a line here, with the run that showed it and why it is not
+# StreamFlex's; a report with a frame in src/ in an access stack never does. A frame of ours in the stack
+# that created a thread or a mutex does not count: SDL creates its renderer from create_window, so every
+# lavapipe thread and mutex is made under it. A thread leak is the exception: its only stack is the one
+# that created the thread, so that stack counts, and a frame of ours in it makes the leak ours. Each
+# entry names one Mesa or SDL function, never one of ours, and a report it hides has that function making
+# one of its accesses, though frames of ours may sit below it as its callers: ThreadSanitizer hides a
+# report when any frame of any of its stacks matches an entry, and lvp_DestroyDevice, run on the main
+# thread from our shutdown, could drop a fence's last reference into lp_fence_destroy.
+
+# Task 1.13's tsan run at 6694f8a (R12), the unmutated control: 9 runs (f30-mixed, f30-vanish, f60-icons,
+# f60-nothreads, f60-selected, f60-xpm, f60-xpm-spin, h-order, h-slow), each with two data races on one
+# llvmpipe fence, named with mesa-vulkan-drivers-dbgsym (Mesa 25.0.7-2+deb13u1). lavapipe's first thread
+# (the queue submit thread lvp_queue_init starts first) destroys the fence's mutex in lp_fence_destroy
+# (lp_fence.c:130) against a rasterizer thread's (llvmpipe-N) lock of it in mtx_lock, and the fence's
+# condition variable (lp_fence.c:131) against another rasterizer thread's broadcast on it in
+# cnd_broadcast; the fence was allocated in lp_fence_create. The two addresses are the mutex and the
+# condition variable of struct lp_fence, which only lp_fence_signal broadcasts. No frame of src/ is in
+# either access stack. Mesa's cause: each rasterizer thread locks the fence, counts and broadcasts in
+# lp_fence_signal, and the thread that drops the last reference destroys it. llvmpipe orders the two
+# through an unlocked read of the count and an atomic reference count, and lavapipe is not built with
+# ThreadSanitizer, so it sees neither. The unlocked read is in
+# lp_fence_signalled (Mesa's own name; spelling: allow). Upstream ignores that function and
+# lp_fence_signal in Mesa's own ThreadSanitizer builds for the unlocked read (tsan-blacklist.txt, commit
+# 7c36c4f0a418, merge request 28650). No upstream fix for lp_fence_destroy was found; Mesa's issue
+# tracker was not searched.
+race:^lp_fence_destroy$

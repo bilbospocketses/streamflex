@@ -230,9 +230,13 @@ precedes "$log" 'Cannot restart StreamFlex: there was no memory to keep its argu
     && ! grep -q 'Restarting StreamFlex' "$log" && ran_clean f64-oom && ok=0
 result "restart: with no memory for its arguments, the restart is logged and goes no further (exit $(cat "$out/f64-oom.code"))" $ok
 
-# --help lists the internal flag
-"${TESTER[@]}" "$exe" --help > "$out/f64-help.out" 2> "$out/f64-help.err"
-echo $? > "$out/f64-help.code"
+# --help lists the internal flag. A launcher run of its own, so the leak pass retries it as it does
+# run_quick's and run_keys' (with_tracer_retry, in run.sh)
+p64_help() {
+    "${TESTER[@]}" "$exe" --help > "$out/f64-help.out" 2> "$out/f64-help.err"
+    echo $? > "$out/f64-help.code"
+}
+with_tracer_retry f64-help p64_help
 ok=1
 grep -qF -- '--restarted  Internal: StreamFlex restarting itself, which runs no StartupCmd.' "$out/f64-help.out" \
     && ran_clean f64-help && ok=0

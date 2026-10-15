@@ -17,3 +17,5 @@ branding/library/__pycache__/
 branding/library/build/
 # Python caches from the tests/qa smoke lint
 tests/qa/__pycache__/
+# Python caches from the headless harness's merge.py
+tests/headless/__pycache__/

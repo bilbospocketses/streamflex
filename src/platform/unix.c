@@ -11,7 +11,7 @@
 #include <sys/prctl.h>
 #endif
 #include <signal.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <ini.h>
 #include "../launcher.h"
 #include <launcher_config.h>

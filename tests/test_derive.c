@@ -286,28 +286,214 @@ static void test_title_padding_one_of_two(void)
     CHECK_INT(eff.title_padding_pct, 0);
 }
 
-// A function to test a held gamepad control's count after a repeat: at a fixed rate one interval short
-// of the delay; past a delay that a change of frame timing shortened, back to it, so the repeats keep
-// their interval rather than coming on every frame
-static void test_repeated_count(void)
+// A held pad control run frame by frame as poll_gamepad() runs it: pressed on frame 0 (SDL's ticks, at
+// next_start), held `hold_ms`, at `fps` frames a second, each frame at its whole millisecond. How many
+// times it repeated, when it first did (ms after the press; -1 for never), and the longest gap between
+// two repeats.
+typedef struct {
+    int repeats;
+    int first;
+    int longest;
+} HoldRun;
+
+// Each run is pressed at its own time, from 256 ms before the ticks' wrap down to 151 ms before it, so
+// each 2 s hold crosses the wrap, and even its first repeat is due after it
+static unsigned int next_start = 0xFFFFFF00u;
+
+static HoldRun hold_at(int fps, int hold_ms)
 {
-    CHECK_INT((int) derive_repeated_count(31, 31, 1), 30);   // 60 Hz: 500 ms, then every frame
-    CHECK_INT((int) derive_repeated_count(62, 62, 3), 59);   // 120 fps: every 3 frames
-    CHECK_INT((int) derive_repeated_count(5, 5, 1), 4);      // 10 fps, the slowest frame time
-    CHECK_INT((int) derive_repeated_count(3, 5, 1), 2);      // A count short of the delay keeps its place
-    CHECK_INT((int) derive_repeated_count(1, 1, 3), 0);      // An interval past the count stops at 0
-    // 240 Hz to 120 fps while held: the count is 119 after a repeat at 240 Hz's delay (125, interval
-    // 6); with the delay 62 and the interval 3, the next 30 frames repeat on every third
-    unsigned int count = 119;
-    int repeats = 0;
-    for (int frame = 0; frame < 30; frame++) {
-        count++;
-        if (count >= 62) {
-            repeats++;
-            count = derive_repeated_count(count, 62, 3);
-        }
+    HoldRun run = { 0, -1, 0 };
+    unsigned int pressed = next_start;
+    next_start += 7;
+    unsigned int due = DERIVE_REPEAT_DELAY_MS;
+    int last = 0;
+    for (int frame = 1;; frame++) {
+        int held = frame * 1000 / fps;
+        if (held > hold_ms)
+            break;
+        unsigned int now = pressed + (unsigned int) held;
+        if (!derive_repeat_due(now, pressed, due))
+            continue;
+        due = derive_next_repeat(now, pressed, due, DERIVE_REPEAT_INTERVAL_MS);
+        if (run.repeats == 0)
+            run.first = held;
+        else if (held - last > run.longest)
+            run.longest = held - last;
+        last = held;
+        run.repeats++;
     }
-    CHECK_INT(repeats, 10);
+    return run;
+}
+
+// The frame time at `fps`, in whole ms rounded up
+static int frame_ms(int fps)
+{
+    return (1000 + fps - 1) / fps;
+}
+
+// A function to tell whether a 2 s hold at `fps` first repeats at the delay, within one frame
+static bool first_repeat_at_delay(int fps)
+{
+    HoldRun run = hold_at(fps, 2000);
+    return run.first >= DERIVE_REPEAT_DELAY_MS && run.first <= DERIVE_REPEAT_DELAY_MS + frame_ms(fps);
+}
+
+// A function to tell whether a 2 s hold at `fps` then repeats every interval, or every frame when a
+// frame is longer: as many repeats as that makes, give or take one, and no gap longer than that by more
+// than a frame
+static bool repeats_keep_interval(int fps)
+{
+    HoldRun run = hold_at(fps, 2000);
+    int every = frame_ms(fps) > DERIVE_REPEAT_INTERVAL_MS ? 1000 / fps : DERIVE_REPEAT_INTERVAL_MS;
+    int wanted = (2000 - run.first) / every + 1;
+    return run.first >= 0 && run.repeats >= wanted - 1 && run.repeats <= wanted + 1
+           && run.longest <= every + frame_ms(fps);
+}
+
+// A function to tell whether a hold of `hold_ms` at `fps` never repeats
+static bool never_repeats(int fps, int hold_ms)
+{
+    return hold_at(fps, hold_ms).repeats == 0;
+}
+
+// A function to test a held pad control's repeat: timed in wall time, it comes at the same times at 30,
+// 60, 100 and 144 fps. Counted in frames, as it was, a 100 fps machine repeated a 300 ms tap and a
+// 30 fps one waited a second.
+static void test_repeat_wall_time(void)
+{
+    CHECK(first_repeat_at_delay(30));
+    CHECK(first_repeat_at_delay(60));
+    CHECK(first_repeat_at_delay(100));
+    CHECK(first_repeat_at_delay(144));
+    CHECK(repeats_keep_interval(30));
+    CHECK(repeats_keep_interval(60));
+    CHECK(repeats_keep_interval(100));
+    CHECK(repeats_keep_interval(144));
+    CHECK(never_repeats(30, 300));
+    CHECK(never_repeats(60, 300));
+    CHECK(never_repeats(100, 300));
+    CHECK(never_repeats(144, 300));
+    CHECK(never_repeats(30, 400));
+    CHECK(never_repeats(60, 400));
+    CHECK(never_repeats(100, 400));
+    CHECK(never_repeats(144, 400));
+    // The two functions alone: due at the delay to the millisecond, across the ticks' wrap (and not 16 ms
+    // after a press 256 ms before it, as `now >= pressed + due` would say), and a frame that came late moves
+    // the next repeat an interval past it rather than leaving a burst due
+    CHECK(!derive_repeat_due(0xFFFFFF00u + 16, 0xFFFFFF00u, 500));
+    CHECK(!derive_repeat_due(0xFFFFFF00u + 499, 0xFFFFFF00u, 500));
+    CHECK(derive_repeat_due(0xFFFFFF00u + 500, 0xFFFFFF00u, 500));
+    CHECK_INT((int) derive_next_repeat(1000 + 510, 1000, 500, 25), 525);
+    CHECK_INT((int) derive_next_repeat(1000 + 600, 1000, 500, 25), 625);
+}
+
+// A fade run frame by frame as update_slideshow() and update_screensaver() run it: begun on frame 0 (SDL's
+// ticks, at next_fade_start), at `fps` frames a second, each frame at its whole millisecond, and run on to
+// twice its duration. When its alpha first reached end_value (ms after its start; -1 for never), its alpha
+// on the first frame at half its duration or later, the highest alpha seen, and whether it ever went down.
+typedef struct {
+    int ended;
+    int at_half;
+    int highest;
+    bool monotonic;
+} FadeRun;
+
+// Each run begins at its own time, from 256 ms before the ticks' wrap down to 95 ms before it, so each run
+// straddles the wrap: its first frame comes before it, and its end after it
+static unsigned int next_fade_start = 0xFFFFFF00u;
+
+static FadeRun fade_at(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = { -1, -1, 0, true };
+    unsigned int start = next_fade_start;
+    next_fade_start += 7;
+    int last = 0;
+    for (int frame = 1;; frame++) {
+        int elapsed = frame * 1000 / fps;
+        if (elapsed > 2 * (int) duration)
+            break;
+        int alpha = derive_fade_alpha(start + (unsigned int) elapsed, start, duration, end_value);
+        if (alpha < last)
+            run.monotonic = false;
+        if (alpha > run.highest)
+            run.highest = alpha;
+        if (run.at_half < 0 && elapsed >= (int) duration / 2)
+            run.at_half = alpha;
+        if (run.ended < 0 && alpha >= end_value)
+            run.ended = elapsed;
+        last = alpha;
+    }
+    return run;
+}
+
+// A function to tell whether a fade at `fps` ends at its duration, within one frame
+static bool fade_ends_at_duration(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = fade_at(fps, duration, end_value);
+    return run.ended >= (int) duration && run.ended <= (int) duration + frame_ms(fps);
+}
+
+// A function to tell whether a fade at `fps` rises steadily: never back down, and half way at half its
+// duration, give or take what one frame adds
+static bool fade_rises_steadily(int fps, unsigned int duration, int end_value)
+{
+    FadeRun run = fade_at(fps, duration, end_value);
+    int slack = end_value * frame_ms(fps) / (int) duration + 1;
+    return run.monotonic && run.at_half >= end_value / 2 - 1 && run.at_half <= end_value / 2 + slack;
+}
+
+// A function to tell whether a fade at `fps`, run on past its end, stays at end_value and never passes it
+static bool fade_stops_at_end(int fps, unsigned int duration, int end_value)
+{
+    return fade_at(fps, duration, end_value).highest == end_value;
+}
+
+// A function to test the slideshow's fade and the screensaver's dim: timed in wall time, each ends at its
+// duration at 30, 60, 100 and 144 fps. Counted in frames, as they were, each frame added the share of the
+// fade a 16 ms display frame holds, so a 30 fps machine took twice as long and a 100 fps one 0.6 times as
+// long. The fade is the default 1.5 s to full; the dim is DERIVE_SCREENSAVER_DIM_MS to the default
+// intensity's alpha, 70%.
+static void test_fade_wall_time(void)
+{
+    unsigned int fade = 1500;
+    unsigned int dim = DERIVE_SCREENSAVER_DIM_MS;
+    int dark = derive_alpha(7000);
+    CHECK(fade_ends_at_duration(30, fade, 255));
+    CHECK(fade_ends_at_duration(60, fade, 255));
+    CHECK(fade_ends_at_duration(100, fade, 255));
+    CHECK(fade_ends_at_duration(144, fade, 255));
+    CHECK(fade_rises_steadily(30, fade, 255));
+    CHECK(fade_rises_steadily(60, fade, 255));
+    CHECK(fade_rises_steadily(100, fade, 255));
+    CHECK(fade_rises_steadily(144, fade, 255));
+    CHECK(fade_stops_at_end(30, fade, 255));
+    CHECK(fade_stops_at_end(60, fade, 255));
+    CHECK(fade_stops_at_end(100, fade, 255));
+    CHECK(fade_stops_at_end(144, fade, 255));
+    CHECK(fade_ends_at_duration(30, dim, dark));
+    CHECK(fade_ends_at_duration(60, dim, dark));
+    CHECK(fade_ends_at_duration(100, dim, dark));
+    CHECK(fade_ends_at_duration(144, dim, dark));
+    CHECK(fade_rises_steadily(30, dim, dark));
+    CHECK(fade_rises_steadily(60, dim, dark));
+    CHECK(fade_rises_steadily(100, dim, dark));
+    CHECK(fade_rises_steadily(144, dim, dark));
+    CHECK(fade_stops_at_end(30, dim, dark));
+    CHECK(fade_stops_at_end(60, dim, dark));
+    CHECK(fade_stops_at_end(100, dim, dark));
+    CHECK(fade_stops_at_end(144, dim, dark));
+    // The function alone: none at the start, the share of end_value the time passed is of the duration
+    // (truncated), all of it from the duration on, and all of it at once for a fade of no time. Across the
+    // ticks' wrap, a fade begun 256 ms before it is 16 ms in at 16 ms after its start (and not done, as
+    // `now >= start + duration` would say), and done 1500 ms after it
+    CHECK_INT(derive_fade_alpha(1000, 1000, 1500, 255), 0);
+    CHECK_INT(derive_fade_alpha(1000 + 750, 1000, 1500, 255), 127);
+    CHECK_INT(derive_fade_alpha(1000 + 1499, 1000, 1500, 255), 254);
+    CHECK_INT(derive_fade_alpha(1000 + 1500, 1000, 1500, 255), 255);
+    CHECK_INT(derive_fade_alpha(1000 + 9000, 1000, 1500, 255), 255);
+    CHECK_INT(derive_fade_alpha(1000, 1000, 0, dark), dark);
+    CHECK_INT(derive_fade_alpha(0xFFFFFF00u + 16, 0xFFFFFF00u, 1500, 255), 2);
+    CHECK_INT(derive_fade_alpha(0xFFFFFF00u + 1500, 0xFFFFFF00u, 1500, 255), 255);
 }
 
 // A function to test when a refused Windows exit hotkey is tried again: only while refused, every
@@ -325,10 +511,61 @@ static void test_exit_retry_due(void)
     CHECK(derive_exit_retry_due(true, false, 4000, 0xFFFFFC17));  // 5 s across the wrap
 }
 
+// Unit test 9 (spec section 9): the screen's geometry from the window's size in pixels, with the
+// arithmetic and rounding init_sdl() always used: the margin truncated, the title minimum rounded
+static void test_geometry_from_pixels(void)
+{
+    ScreenGeometry hd = geometry_from_pixels(1920, 1080);
+    CHECK_INT(hd.screen_width, 1920);
+    CHECK_INT(hd.screen_height, 1080);
+    CHECK_INT(hd.screen_margin, 54);
+    CHECK_INT(hd.title_min_size, 22);
+    ScreenGeometry uhd = geometry_from_pixels(3840, 2160);
+    CHECK_INT(uhd.screen_width, 3840);
+    CHECK_INT(uhd.screen_height, 2160);
+    CHECK_INT(uhd.screen_margin, 108);
+    CHECK_INT(uhd.title_min_size, 43);
+    ScreenGeometry small = geometry_from_pixels(1280, 720);
+    CHECK_INT(small.screen_width, 1280);
+    CHECK_INT(small.screen_height, 720);
+    CHECK_INT(small.screen_margin, 36);
+    CHECK_INT(small.title_min_size, 14);
+}
+
+// A function to test the refresh rate taken from the display: rounded to whole hertz, and 60 when the
+// display reports none (Xvfb, some VMs and remote desktops report 0), since every timing divides by it
+static void test_refresh_rate(void)
+{
+    CHECK_INT(derive_refresh_rate(0.0f), 60);
+    CHECK_INT(derive_refresh_rate(-1.0f), 60);
+    CHECK_INT(derive_refresh_rate(0.99f), 60);
+    CHECK_INT(derive_refresh_rate(1.0f), 1);
+    CHECK_INT(derive_refresh_rate(59.94f), 60);
+    CHECK_INT(derive_refresh_rate(60.0f), 60);
+    CHECK_INT(derive_refresh_rate(143.98f), 144);
+    CHECK_INT(derive_refresh_rate(29.97f), 30);
+}
+
+// Unit test 10 (spec section 9): what a change of the window's pixel size does. The size laid out
+// already does nothing; a new size reloads, or waits while an app is in front; a size that came back
+// by the time the app is done reloads nothing. A recreated window reloads through its own mark
+// (RELOAD_RECREATE), which check 60's f60-winrest proves, not through this decision.
+static void test_size_decision(void)
+{
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, false), SIZE_NOTHING);   // As the window is made
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, true), SIZE_NOTHING);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 720, false), SIZE_RELOAD);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 720, true), SIZE_WAIT);
+    CHECK_INT(derive_size_decision(1920, 1080, 1280, 1080, false), SIZE_RELOAD);    // Only the width
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 720, false), SIZE_RELOAD);     // Only the height
+    CHECK_INT(derive_size_decision(1920, 1080, 1920, 1080, false), SIZE_NOTHING);   // Came back: post_launch() asks again
+}
+
 int main(void)
 {
     test_exit_retry_due();
-    test_repeated_count();
+    test_repeat_wall_time();
+    test_fade_wall_time();
     test_defaults();
     test_twice();
     test_clamps_restore();
@@ -337,5 +574,8 @@ int main(void)
     test_conversions();
     test_titles_off();
     test_title_padding_one_of_two();
+    test_geometry_from_pixels();
+    test_refresh_rate();
+    test_size_decision();
     return check_report();
 }

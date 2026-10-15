@@ -1,22 +1,31 @@
 # Item 22: Xvfb reports a refresh rate of 0, as some VMs and remote desktops do. The launcher
 # must start, use 60 Hz and say so, instead of dividing by zero. Whether the 0 reaches it depends
-# on the SDL2 underneath: SDL2 passes it on, while sdl2-compat (SDL2's API over SDL3) reports 60 Hz
-# for any display that says 0, so there the launcher must use the 60 it is given, and not claim a
-# fallback it never made. What this SDL2 reports is asked, through the library the launcher uses.
+# on the SDL underneath, which may stand a rate in for a display that says 0: then the launcher must
+# use the rate it is given, and not claim a fallback it never made. What this SDL reports is asked,
+# through the library the launcher uses, rounded to whole hertz as the launcher rounds it.
 # Both branches rest on the X display itself saying 0 Hz, which is asserted first: a display that
 # said 60 would make the 60 branch pass with no fallback exercised anywhere.
 x_hz=$(xrandr --verbose 2> "$out/f22-xrandr.err" \
     | awk '/[*]current/ { cur = 1; next } cur && $1 == "v:" { print $NF; exit }')
 sdl_hz=$(python3 - 2> "$out/f22-sdl.err" << 'EOF'
 import ctypes
-sdl = ctypes.CDLL("libSDL2-2.0.so.0")
+sdl = ctypes.CDLL("libSDL3.so.0")
 class DisplayMode(ctypes.Structure):
-    _fields_ = [("format", ctypes.c_uint32), ("w", ctypes.c_int), ("h", ctypes.c_int),
-                ("refresh_rate", ctypes.c_int), ("driverdata", ctypes.c_void_p)]
-mode = DisplayMode()
-if sdl.SDL_Init(0x20) != 0 or sdl.SDL_GetDesktopDisplayMode(0, ctypes.byref(mode)) != 0:
+    _fields_ = [("displayID", ctypes.c_uint32), ("format", ctypes.c_uint32), ("w", ctypes.c_int),
+                ("h", ctypes.c_int), ("pixel_density", ctypes.c_float), ("refresh_rate", ctypes.c_float),
+                ("refresh_rate_numerator", ctypes.c_int), ("refresh_rate_denominator", ctypes.c_int),
+                ("internal", ctypes.c_void_p)]
+sdl.SDL_Init.restype = ctypes.c_bool
+sdl.SDL_Init.argtypes = [ctypes.c_uint32]
+sdl.SDL_GetPrimaryDisplay.restype = ctypes.c_uint32
+sdl.SDL_GetDesktopDisplayMode.restype = ctypes.POINTER(DisplayMode)
+sdl.SDL_GetDesktopDisplayMode.argtypes = [ctypes.c_uint32]
+if not sdl.SDL_Init(0x20):
     raise SystemExit(1)
-print(mode.refresh_rate)
+mode = sdl.SDL_GetDesktopDisplayMode(sdl.SDL_GetPrimaryDisplay())
+if not mode:
+    raise SystemExit(1)
+print(int(mode.contents.refresh_rate + 0.5))
 sdl.SDL_Quit()
 EOF
 )

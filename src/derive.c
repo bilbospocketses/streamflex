@@ -85,14 +85,35 @@ void derive_settings(const DeriveInput *in, Effective *out)
     out->screensaver_alpha = derive_alpha(in->screensaver_intensity);
 }
 
-// A function to work out a held gamepad control's count of frames once it has repeated: one interval
-// short of the delay, so the next repeat comes one interval later. A count past the delay (a change of
-// frame timing shortened the delay under a held control) comes back to it, rather than repeating on
-// every frame until it falls under the delay.
-unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsigned int interval)
+// A function to decide if a held gamepad control repeats now: held since `pressed`, with its next repeat
+// due `due` ms after that. Timed in wall time, never in frames, so the frame rate cannot change it. The
+// times are SDL's ticks, so the subtraction is unsigned and holds across their wrap.
+bool derive_repeat_due(unsigned int now, unsigned int pressed, unsigned int due)
 {
-    unsigned int from = count < delay ? count : delay;
-    return from > interval ? from - interval : 0;
+    return now - pressed >= due;
+}
+
+// A function to work out when a held control's next repeat is due, in ms after its press, once it has
+// repeated now: an interval after the last due time, so the repeats keep the interval on average
+// whatever the frame time, or an interval after now when the frame came later than that, so a slow
+// frame repeats once rather than catching up in a burst
+unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned int due, unsigned int interval)
+{
+    unsigned int held = now - pressed;
+    return due + interval > held ? due + interval : held + interval;
+}
+
+// A function to work out a fade's alpha now (the slideshow's fade, the screensaver's dim): begun at
+// `start`, it rises to end_value over `duration` ms in step with the time passed, and is end_value from
+// then on, or at once for a fade of no time. Timed in wall time, never in frames, so the frame rate cannot
+// stretch or shorten it. The times are SDL's ticks, so the subtraction is unsigned and holds across their
+// wrap.
+int derive_fade_alpha(unsigned int now, unsigned int start, unsigned int duration, int end_value)
+{
+    unsigned int elapsed = now - start;
+    if (elapsed >= duration)
+        return end_value;
+    return (int) ((unsigned long long) end_value * elapsed / duration);
 }
 
 // A function to decide if the Windows exit hotkey is tried again now: only while Windows refuses it,
@@ -101,4 +122,34 @@ unsigned int derive_repeated_count(unsigned int count, unsigned int delay, unsig
 bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try)
 {
     return refused && (at_once || now - last_try >= DERIVE_EXIT_RETRY_MS);
+}
+
+// A function to work out the screen's geometry from the window's size in pixels, with the arithmetic
+// and rounding the launcher has always used: the margin truncated, the title minimum rounded
+ScreenGeometry geometry_from_pixels(int width, int height)
+{
+    ScreenGeometry screen;
+    screen.screen_width = width;
+    screen.screen_height = height;
+    screen.screen_margin = (int) (DERIVE_SCREEN_MARGIN * (float) height);
+    screen.title_min_size = (int) (DERIVE_TITLE_MIN_SIZE * (float) height + 0.5F);
+    return screen;
+}
+
+// A function to take the display's refresh rate in whole hertz, rounded (SDL3 gives a float: 59.94);
+// a display that reports less than 1 Hz gets the default, since every frame time divides by it
+int derive_refresh_rate(float reported)
+{
+    return reported >= DERIVE_MIN_REFRESH_RATE ? (int) (reported + 0.5F) : DERIVE_DEFAULT_REFRESH_RATE;
+}
+
+// A function to decide what a change of the window's pixel size does (spec section 6): the size laid
+// out already does nothing; a new size reloads, or waits while an app is launching or running, so a
+// game's temporary resolution never becomes the layout. A recreated window is not decided here: the
+// recreation marks its own reload (RELOAD_RECREATE), whatever the size.
+SizeDecision derive_size_decision(int laid_out_width, int laid_out_height, int width, int height, bool app_in_front)
+{
+    if (width == laid_out_width && height == laid_out_height)
+        return SIZE_NOTHING;
+    return app_in_front ? SIZE_WAIT : SIZE_RELOAD;
 }

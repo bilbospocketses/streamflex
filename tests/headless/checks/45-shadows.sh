@@ -22,3 +22,18 @@ ran_clean f45-shadowlong && grep -qE "Menu 'Main': 4 x 1 grid, [0-9]+ px buttons
     && ! grep -q 'px wide, over its' "$out/f45-shadowlong.log" && ok=0
 result "a shadowed title cut to fit keeps its shadow inside its button (exit $(cat "$out/f45-shadowlong.code"))" $ok
 grep 'px wide, over its' "$out/f45-shadowlong.log" | sed 's/^/      /'
+
+# A title of only a zero-width space (U+200B), as a config that hides one entry's title might hold,
+# shadowed and not: SDL_ttf measures it zero wide and renders no surface for it, and its button is
+# drawn with no title, the menu's other titles as ever, where StreamFlex read the surface it never got
+f45_blank() {
+    ok=1
+    ran_clean "$1" && grep -q '^Text .* is zero wide: it draws nothing$' "$out/$1.log" \
+        && grep -qx "Menu 'Main': rendered its buttons at [0-9]* px" "$out/$1.log" && ok=0
+    result "a title of only a zero-width space draws nothing, $2 (exit $(cat "$out/$1.code"))" $ok
+    grep -E '^(Text |Menu .Main.: rendered)' "$out/$1.log" | sed 's/^/      /'
+}
+run_quick f45-blank
+f45_blank f45-blank shadowed
+run_quick f45-blank-plain
+f45_blank f45-blank-plain 'with no shadow'

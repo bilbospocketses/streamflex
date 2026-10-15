@@ -5,21 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
-#include <SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "settings.h"
 #include "config_fields.h"
 #include "settings_screen.h"
 #include "settings_pickers.h"
+#include "settings_fonts.h"
 #include "config_save.h"
 #include "browser.h"
 #include "fileio.h"
 #include "alloc.h"
 #include "inidoc.h"
 #include "image.h"
+#include "fontset.h"
 #include "util.h"
 #include "debug.h"
 #include "test_hooks.h"
@@ -42,7 +43,7 @@ extern TextInfo title_info;
 #define MAX_COLUMN_RATIO 0.32F
 #define TEXT_CACHE_SIZE 96
 #define NOTE_TEXT_MAX 1600         // Longest note a row shows: a failed save's path and reason
-#define PREVIEW_REST_MS 300        // How long the Menus list's cursor rests before the preview follows it
+#define PREVIEW_REST_MS 300        // How long a cursor rests before the screen follows it: the Menus list's preview, Mode's window
 #define SLOW_KEY_MS 50             // A key that keeps the screen waiting this long is logged
 #define ALPHA_VALUE 180            // A row's value
 #define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
@@ -77,6 +78,9 @@ static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the r
 static TTF_Font *font_header = NULL;
 static TTF_Font *font_row = NULL;
 static TTF_Font *font_small = NULL;
+static FontSet *set_header = NULL;    // The three fonts' sets: each font above is its set's, fallbacks attached
+static FontSet *set_row = NULL;
+static FontSet *set_small = NULL;
 static CachedText text_cache[TEXT_CACHE_SIZE];
 static Uint32 text_clock = 0;
 static int margin = 0;
@@ -100,6 +104,8 @@ static char logged_path[512];                 // The page path last logged
 static char logged_hint[160];                 // The key hint last logged
 static Menu *preview_wanted = NULL;           // The menu the preview switches to once the cursor rests...
 static Uint32 preview_asked = 0;              // ...since when it has rested
+static bool kind_waiting = false;             // Mode changed: the window may need another kind...
+static Uint32 kind_asked = 0;                 // ...once Mode's cursor has rested since this step
 static int shown_first = -1;                  // The rows last on show, for the log
 static int shown_last = -1;
 static int shown_count = -1;
@@ -113,7 +119,7 @@ static char browser_note[128] = "";      // Why the last OK did nothing, for the
 
 // The preview's image, decoded on its own thread so moving through a folder never stalls
 static SDL_Thread *decode_thread = NULL;
-static SDL_atomic_t decode_done;
+static SDL_AtomicInt decode_done;
 static char decode_path[BROWSER_PATH_MAX];  // What the thread is decoding
 static SDL_Surface *decode_surface = NULL;  // Its result; NULL when it failed
 static char decode_error[256];              // Why it failed, copied on the thread (SDL's error is per thread)
@@ -140,17 +146,30 @@ bool settings_is_open(void)
     return model != NULL;
 }
 
-// A function to measure a line of text
+// A function to get the set a settings font belongs to; NULL for any other font
+static FontSet *set_of(TTF_Font *font)
+{
+    if (font == NULL)
+        return NULL;
+    if (font == font_row)
+        return set_row;
+    if (font == font_small)
+        return set_small;
+    return font == font_header ? set_header : NULL;
+}
+
+// A function to measure a line of text, the fallbacks of the characters its font lacks attached first
 static int text_width(TTF_Font *font, const char *text)
 {
     int w = 0;
     int h = 0;
+    fontset_prepare(set_of(font), text);
     if (text[0] != '\0')
-        TTF_SizeUTF8(font, text, &w, &h);
+        TTF_GetStringSize(font, text, 0, &w, &h);
     return w;
 }
 
-// A function to get a line of text as a texture, from the cache when it was drawn recently
+// A function to get a line of text as a texture, from the cache when it was drawn recently; its text is prepared, as draw_text() measures it first
 static CachedText *cached_text(TTF_Font *font, const char *text)
 {
     text_clock++;
@@ -170,13 +189,13 @@ static CachedText *cached_text(TTF_Font *font, const char *text)
         free(entry->text);
         memset(entry, 0, sizeof(*entry));
     }
-    SDL_Surface *surface = TTF_RenderUTF8_Blended(font, text, WHITE);
+    SDL_Surface *surface = TTF_RenderText_Blended(font, text, 0, WHITE);
     if (surface == NULL)
         return NULL;
-    entry->texture = SDL_CreateTextureFromSurface(renderer, surface);
+    entry->texture = surface_texture(surface);
     entry->w = surface->w;
     entry->h = surface->h;
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     if (entry->texture == NULL)
         return NULL;
     entry->font = font;
@@ -190,15 +209,19 @@ static CachedText *cached_text(TTF_Font *font, const char *text)
     return entry;
 }
 
-// A function to empty the text cache
-static void clear_text_cache(void)
+// A function to empty the text cache; returns how many textures it destroyed
+static int clear_text_cache(void)
 {
+    int count = 0;
     for (int i = 0; i < TEXT_CACHE_SIZE; i++) {
-        if (text_cache[i].texture != NULL)
+        if (text_cache[i].texture != NULL) {
             SDL_DestroyTexture(text_cache[i].texture);
+            count++;
+        }
         free(text_cache[i].text);
     }
     memset(text_cache, 0, sizeof(text_cache));
+    return count;
 }
 
 // A function to draw a line of text cut with "..." to fit; `right` puts its right edge at x
@@ -216,7 +239,7 @@ static void draw_text(TTF_Font *font, const char *text, int x, int y, int max_wi
         return;
     SDL_SetTextureAlphaMod(line->texture, alpha);
     SDL_Rect rect = { right ? x - line->w : x, y, line->w, line->h };
-    SDL_RenderCopy(renderer, line->texture, NULL, &rect);
+    draw_texture(renderer, line->texture, NULL, &rect);
 }
 
 // A function to draw a paragraph wrapped to a width; returns its height
@@ -224,16 +247,17 @@ static int draw_wrapped(TTF_Font *font, const char *text, int x, int y, int widt
 {
     if (text == NULL || text[0] == '\0' || width <= 0)
         return 0;
-    SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(font, text, WHITE, (Uint32) width);
+    fontset_prepare(set_of(font), text);
+    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
     int h = surface->h;
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Texture *texture = surface_texture(surface);
     SDL_Rect rect = { x, y, surface->w, surface->h };
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     if (texture != NULL) {
         SDL_SetTextureAlphaMod(texture, alpha);
-        SDL_RenderCopy(renderer, texture, NULL, &rect);
+        draw_texture(renderer, texture, NULL, &rect);
         SDL_DestroyTexture(texture);
     }
     return h;
@@ -250,10 +274,6 @@ static SettingValue read_value(SettingId id, int menu_index)
 {
     return config_read(id, menu_index >= 0 ? menus[menu_index] : NULL);
 }
-
-// A check made when this file compiles: CONDITION false makes an array of size -1, which does not
-// compile. MSVC's default C mode has no _Static_assert, so this stands in for it everywhere.
-#define COMPILE_CHECK(name, condition) typedef char name[(condition) ? 1 : -1]
 
 // Each refresh group's name for the log, in the enum's order
 static const char *const REFRESH_NAMES[] = { "nothing", "the layout", "the titles", "the background",
@@ -280,17 +300,21 @@ static const char *refresh_name(SettingRefresh refresh)
 
 // A function to name the gamepads present for the Device row, by their device index now (the
 // launcher opens them by instance id, so an index is only good at the moment it is listed): every
-// joystick SDL lists while the gamepad runs, as SDL names it. A nameless one, or a failed count,
-// is the model's to describe ("Pad N", or none).
+// joystick SDL lists while the gamepad runs, as SDL names it. A nameless one, or a failed list, is
+// the model's to describe ("Pad N", or none).
 static void list_pads(void)
 {
     const char *names[SETTINGS_MAX_PADS] = { NULL };
-    int count = gamepad_running() ? SDL_NumJoysticks() : 0;
+    int count = 0;
+    SDL_JoystickID *ids = gamepad_running() ? SDL_GetJoysticks(&count) : NULL;
+    if (ids == NULL)
+        count = 0;
     if (count > SETTINGS_MAX_PADS)
         count = SETTINGS_MAX_PADS;
     for (int i = 0; i < count; i++)
-        names[i] = SDL_JoystickNameForIndex(i);
-    settings_set_pads(model, names, count);
+        names[i] = SDL_GetJoystickNameForID(ids[i]);
+    settings_set_pads(model, names, count);   // It copies the names
+    SDL_free(ids);
 }
 
 // A function to name the pads again after one was plugged in or pulled out, while settings are
@@ -358,8 +382,6 @@ static void apply_slot(const SettingSlot *slot, bool refresh)
     if (slot->def->refresh == SET_REFRESH_CLOCK)
         stop_clock();
     config_store(slot->def->id, slot->menu >= 0 ? menus[slot->menu] : NULL, &slot->value);
-    if (slot->def->id == SET_ID_SLIDESHOW_FADE)
-        update_slideshow_timing();
     refresh_effective();
     if (slot->def->id == SET_ID_INHIBIT_OS_SCREENSAVER)
         apply_os_screensaver();
@@ -385,6 +407,31 @@ static void apply_all(void)
     }
     for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++) {
         if (due[REFRESH_ORDER[i]])
+            run_refresh(REFRESH_ORDER[i]);
+    }
+}
+
+// A function to refresh every group, in REFRESH_ORDER, as Discard would if every setting had changed
+void settings_refresh_all(void)
+{
+    for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++)
+        run_refresh(REFRESH_ORDER[i]);
+}
+
+// A function to refresh what a reload of the whole launcher must make again (a new screen size, a reset
+// or new renderer), in REFRESH_ORDER, keeping the screen's state (spec section 3): the gamepad keeps
+// running, its pads open, and the screensaver keeps its dim and its transition, only its screen-sized
+// layer made again at the new size. The title font stays open (spec section 4): fonts are not the
+// renderer's, and the titles group renders the titles again from the sets open, a percentage size a
+// new screen needs opened as the layout asks for it. Whether settings are open or not.
+void settings_refresh_for_reload(void)
+{
+    for (size_t i = 0; i < sizeof(REFRESH_ORDER) / sizeof(REFRESH_ORDER[0]); i++) {
+        if (REFRESH_ORDER[i] == SET_REFRESH_GAMEPAD || REFRESH_ORDER[i] == SET_REFRESH_TITLE_FONT)
+            continue;
+        if (REFRESH_ORDER[i] == SET_REFRESH_SCREENSAVER)
+            remake_screensaver_texture();
+        else
             run_refresh(REFRESH_ORDER[i]);
     }
 }
@@ -423,13 +470,31 @@ static bool open_fonts(void)
         log_error("Settings: the font %s is missing, so they use %s", FILENAME_DEFAULT_FONT, path);
     }
     float height = (float) geo.screen_height;
-    font_header = open_font_file(path, max_int(8, (int) (HEADER_FONT_RATIO * height)), 0);
-    font_row = open_font_file(path, max_int(8, (int) (ROW_FONT_RATIO * height)), 0);
-    font_small = open_font_file(path, max_int(8, (int) (SMALL_FONT_RATIO * height)), 0);
+    set_header = fontset_open(path, (float) max_int(8, (int) (HEADER_FONT_RATIO * height)), 0, "settings headers");
+    set_row = fontset_open(path, (float) max_int(8, (int) (ROW_FONT_RATIO * height)), 0, "settings rows");
+    set_small = fontset_open(path, (float) max_int(8, (int) (SMALL_FONT_RATIO * height)), 0, "settings notes");
+    font_header = fontset_font(set_header);
+    font_row = fontset_font(set_row);
+    font_small = fontset_font(set_small);
     if (font_header == NULL || font_row == NULL || font_small == NULL)
-        log_error("Settings cannot open: could not open the font %s\n%s", path, TTF_GetError());
+        log_error("Settings cannot open: could not open the font %s\n%s", path, SDL_GetError());
     free(bundled);
     return font_header != NULL && font_row != NULL && font_small != NULL;
+}
+
+// A function to close the screen's three font sets, each font before its fallbacks (fontset_close()).
+// A set that never opened is NULL, which fontset_close() passes over.
+static void close_fonts(void)
+{
+    fontset_close(set_header);
+    fontset_close(set_row);
+    fontset_close(set_small);
+    set_header = NULL;
+    set_row = NULL;
+    set_small = NULL;
+    font_header = NULL;
+    font_row = NULL;
+    font_small = NULL;
 }
 
 // A function to size the column and the preview for this screen. The column is as wide as its
@@ -458,7 +523,7 @@ static void measure_layout(void)
     int w = geo.screen_width;
     int h = geo.screen_height;
     margin = (int) (MARGIN_RATIO * (float) h);
-    row_height = (int) (ROW_HEIGHT_RATIO * (float) TTF_FontHeight(font_row));
+    row_height = (int) (ROW_HEIGHT_RATIO * (float) TTF_GetFontHeight(font_row));
     int widest_label = 0;
     int widest_value = 0;
     for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++)
@@ -473,7 +538,7 @@ static void measure_layout(void)
 
     int x = 2 * margin + column_width;
     int available_w = w - x - margin;
-    int caption = 2 * TTF_FontHeight(font_small);
+    int caption = 2 * TTF_GetFontHeight(font_small);
     int available_h = h - 2 * margin - caption;
     int preview_w = available_w;
     int preview_h = preview_w * h / w;
@@ -491,9 +556,9 @@ static void measure_layout(void)
 // at a size, rasterizing its icons) took
 static void show_preview(Menu *menu)
 {
-    Uint32 start = SDL_GetTicks();
+    Uint32 start = ticks_ms();
     show_menu(menu);
-    log_debug("Settings: the preview shows menu '%s' (%u ms)", menu->name, SDL_GetTicks() - start);
+    log_debug("Settings: the preview shows menu '%s' (%u ms)", menu->name, ticks_ms() - start);
 }
 
 // A function to show in the preview the menu the page is about: a menu being edited or
@@ -511,7 +576,7 @@ static void follow_preview(void)
         return;
     if (settings_page(model) == SETTINGS_PAGE_MENUS) {
         preview_wanted = want;
-        preview_asked = SDL_GetTicks();
+        preview_asked = ticks_ms();
     }
     else
         show_preview(want);
@@ -527,10 +592,10 @@ static int decode_image(void *data)
     if (delay != NULL)
         SDL_Delay((Uint32) atoi(delay));
 #endif
-    decode_surface = IMG_Load(decode_path);
+    decode_surface = load_image_file(decode_path);   // Other formats than PNG, JPEG and WebP one at a time
     if (decode_surface == NULL)
-        copy_string(decode_error, IMG_GetError(), sizeof(decode_error));
-    SDL_AtomicSet(&decode_done, 1);
+        copy_string(decode_error, SDL_GetError(), sizeof(decode_error));
+    SDL_SetAtomicInt(&decode_done, 1);
     return 0;
 }
 
@@ -541,7 +606,7 @@ static void start_decode(void)
     if (decode_thread != NULL || wanted_path[0] == '\0' || strcmp(wanted_path, shown_path) == 0 || strcmp(wanted_path, broken_path) == 0)
         return;
     copy_string(decode_path, wanted_path, sizeof(decode_path));
-    SDL_AtomicSet(&decode_done, 0);
+    SDL_SetAtomicInt(&decode_done, 0);
     decode_thread = SDL_CreateThread(decode_image, "Preview image", NULL);
 }
 
@@ -573,7 +638,7 @@ static const char *browser_caption(void)
 // it if it is still wanted, then start the next
 static void poll_decode(bool wait)
 {
-    if (decode_thread == NULL || (!wait && !SDL_AtomicGet(&decode_done)))
+    if (decode_thread == NULL || (!wait && !SDL_GetAtomicInt(&decode_done)))
         return;
     SDL_WaitThread(decode_thread, NULL);
     decode_thread = NULL;
@@ -584,7 +649,7 @@ static void poll_decode(bool wait)
             log_debug("Settings: the caption says %s for %s", CANNOT_OPEN, decode_path);
     }
     else if (strcmp(decode_path, wanted_path) == 0) {
-        SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, decode_surface);
+        SDL_Texture *texture = surface_texture(decode_surface);
         if (texture != NULL) {
             if (background_override != NULL)
                 SDL_DestroyTexture(background_override);
@@ -594,7 +659,7 @@ static void poll_decode(bool wait)
         }
     }
     if (decode_surface != NULL)
-        SDL_FreeSurface(decode_surface);
+        SDL_DestroySurface(decode_surface);
     decode_surface = NULL;
     start_decode();
 }
@@ -607,7 +672,7 @@ static void stop_decoding(void)
         decode_thread = NULL;
     }
     if (decode_surface != NULL)
-        SDL_FreeSurface(decode_surface);
+        SDL_DestroySurface(decode_surface);
     decode_surface = NULL;
     wanted_path[0] = '\0';
     shown_path[0] = '\0';
@@ -761,19 +826,12 @@ static void free_screen(void)
         close_browser();
     stop_decoding();
     preview_wanted = NULL;
+    kind_waiting = false;
     if (preview != NULL)
         SDL_DestroyTexture(preview);
     preview = NULL;
     clear_text_cache();
-    if (font_header != NULL)
-        TTF_CloseFont(font_header);
-    if (font_row != NULL)
-        TTF_CloseFont(font_row);
-    if (font_small != NULL)
-        TTF_CloseFont(font_small);
-    font_header = NULL;
-    font_row = NULL;
-    font_small = NULL;
+    close_fonts();
     settings_free(model);
     model = NULL;
     bindings_free(bindings);
@@ -794,6 +852,7 @@ static void close_settings(void)
     free_screen();
     log_debug("Settings closed");
     trim_title_fonts();
+    window_follow_background();   // Saved, left or put back, the Mode in force may want another window
 #ifdef _WIN32
     retry_exit_hotkey(true);   // Whether or not anything changed: its key may have been let go meanwhile
 #endif
@@ -922,10 +981,17 @@ static void handle_event(const SettingsEvent *event)
         case SETTINGS_EVENT_CHANGED:
             log_change(event->slot, &event->before);
             apply_slot(event->slot, true);
+            // Each step of Mode starts the rest again, so stepping through Transparent recreates nothing
+            if (event->slot->def->id == SET_ID_BACKGROUND_MODE) {
+                kind_waiting = true;
+                kind_asked = ticks_ms();   // Task 1.2a's 32-bit milliseconds, as preview_asked takes them
+            }
             break;
         case SETTINGS_EVENT_DISCARD:
             log_debug("Settings: discarded the changes");
             apply_all();
+            kind_waiting = false;
+            window_follow_background();   // The Mode put back may want the window it had
             if (bindings != NULL)
                 apply_bindings(bindings);
             pickers_end_probation();   // The change the 10 s were for went with the rest
@@ -1143,9 +1209,9 @@ void settings_handle_command(const char *command)
     snprintf(text, sizeof(text), "%s", command);
     if (text[0] == ':')
         text[strcspn(text, " ")] = '\0';
-    Uint32 start = SDL_GetTicks();
+    Uint32 start = ticks_ms();
     handle_command(text);
-    Uint32 took = SDL_GetTicks() - start;
+    Uint32 took = ticks_ms() - start;
     if (took >= SLOW_KEY_MS)
         log_debug("Settings: '%s' kept the screen waiting %u ms", text, took);
 }
@@ -1176,11 +1242,12 @@ static int wrapped_height(TTF_Font *font, const char *text, int width)
 #ifdef STREAMFLEX_TEST_HOOKS
     measures++;   // Only the headless harness builds this: free_screen() logs the count
 #endif
-    SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(font, text, WHITE, (Uint32) width);
+    fontset_prepare(set_of(font), text);
+    SDL_Surface *surface = TTF_RenderText_Blended_Wrapped(font, text, 0, WHITE, width);
     if (surface == NULL)
         return 0;
     int h = surface->h;
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     return h;
 }
 
@@ -1269,10 +1336,10 @@ static int value_room(const SettingsRow *row, int width)
 static int draw_row(const SettingsRow *row, bool highlighted, int x, int y, int width, int note_room)
 {
     int pad = margin / 2;
-    int text_y = y + (row_height - TTF_FontHeight(font_row)) / 2;
+    int text_y = y + (row_height - TTF_GetFontHeight(font_row)) / 2;
     if (row->kind == SETTINGS_ROW_DIVIDER) {
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_DIVIDER);
-        SDL_RenderDrawLine(renderer, x, y + row_height / 2, x + width, y + row_height / 2);
+        draw_line(renderer, x, y + row_height / 2, x + width, y + row_height / 2);
         return row_height;
     }
     if (row->kind == SETTINGS_ROW_NOTE) {
@@ -1283,9 +1350,9 @@ static int draw_row(const SettingsRow *row, bool highlighted, int x, int y, int 
     if (highlighted) {
         SDL_Rect box = { x, y, width, row_height - 2 };
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_FILL);
-        SDL_RenderFillRect(renderer, &box);
+        fill_rect(renderer, &box);
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_OUTLINE);
-        SDL_RenderDrawRect(renderer, &box);
+        outline_rect(renderer, &box);
     }
     char value[320];
     row_value_text(row, highlighted, value, sizeof(value));
@@ -1321,7 +1388,7 @@ static void draw_model_rows(SettingsRow *rows, int count, int x, int top, int bo
     if (notes > 0) {
         int others = min_int(count - notes, visible - 1);
         note_room = ((bottom - top) - others * row_height) / notes - row_height / 2;
-        note_room = max_int(note_room, 3 * TTF_FontHeight(font_small));
+        note_room = max_int(note_room, 3 * TTF_GetFontHeight(font_small));
     }
 
     // With the cursor on the last row it can rest on, what follows it (the Menus page's note on
@@ -1415,9 +1482,10 @@ static void draw_column(SettingsRow *rows, int count)
         copy_string(path, browser_folder(browser) != NULL ? browser_folder(browser) : "Places", sizeof(path));
     else
         settings_path(model, path, sizeof(path));
-    draw_text(font_small, path, x, margin + TTF_FontHeight(font_header), column_width, ALPHA_DIM, false);
+    draw_text(font_small, path, x, margin + TTF_GetFontHeight(font_header),
+              column_width, ALPHA_DIM, false);
     int top = (int) (ROWS_TOP_RATIO * (float) geo.screen_height);
-    int hint_y = geo.screen_height - margin - TTF_FontHeight(font_small);
+    int hint_y = geo.screen_height - margin - TTF_GetFontHeight(font_small);
     if (pickers_active())
         pickers_draw(x, top, hint_y - margin);
     else if (browser != NULL)
@@ -1481,7 +1549,8 @@ static void draw_caption(const char *row_note, int x, int y, int width)
     const char *note = pickers_active() || pickers_busy() ? pickers_note()
                      : browser != NULL ? browser_caption()
                      : settings_notice(model)[0] != '\0' ? settings_notice(model) : row_note;
-    draw_text(font_small, note, x, y + TTF_FontHeight(font_small), width, 255, false);
+    draw_text(font_small, note, x, y + TTF_GetFontHeight(font_small), width,
+              255, false);
     if (strcmp(note, drawn_note) != 0) {
         copy_string(drawn_note, note, sizeof(drawn_note));
         if (note[0] != '\0')
@@ -1495,7 +1564,7 @@ static void dim_preview(void)
     if (settings_page(model) != SETTINGS_PAGE_SCREENSAVER || eff.screensaver_alpha < 1)
         return;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, (Uint8) eff.screensaver_alpha);
-    SDL_RenderFillRect(renderer, NULL);
+    fill_rect(renderer, NULL);
 }
 
 // A function to draw one frame of the screen and present it
@@ -1508,10 +1577,21 @@ void settings_draw(void)
     log_path();   // A capture's end or the 10 s's moves no key through handle_command()
 
     // The Menus list's cursor has rested: the preview follows it now
-    if (preview_wanted != NULL && SDL_GetTicks() - preview_asked >= PREVIEW_REST_MS) {
+    if (preview_wanted != NULL && ticks_ms() - preview_asked >= PREVIEW_REST_MS) {
         Menu *menu = preview_wanted;
         preview_wanted = NULL;
         show_preview(menu);
+    }
+
+    // Mode's cursor has rested: the window takes the kind its background needs, when that differs
+    if (kind_waiting && ticks_ms() - kind_asked >= PREVIEW_REST_MS) {
+        kind_waiting = false;
+#ifdef STREAMFLEX_TEST_HOOKS
+        // Only the headless harness builds this: on Linux no Mode changes the window (unless the
+        // harness forces the Windows plan), so this says the rest came
+        log_debug("Test hook: the Mode row's cursor rested on %s", get_mode_setting(MODE_SETTING_BACKGROUND, (int) config.background_mode));
+#endif
+        window_follow_background();
     }
 
     // The page's rows, built once for the frame: the column draws them, and the caption says why the
@@ -1529,9 +1609,9 @@ void settings_draw(void)
         SDL_SetRenderTarget(renderer, NULL);
         SDL_SetRenderDrawColor(renderer, BACKDROP.r, BACKDROP.g, BACKDROP.b, BACKDROP.a);
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, preview, NULL, &preview_rect);
+        draw_texture(renderer, preview, NULL, &preview_rect);
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_FRAME);
-        SDL_RenderDrawRect(renderer, &preview_rect);
+        outline_rect(renderer, &preview_rect);
         draw_caption(row_note, preview_rect.x, preview_rect.y + preview_rect.h + margin / 2, preview_rect.w);
     }
     else {
@@ -1541,10 +1621,10 @@ void settings_draw(void)
         dim_preview();
         SDL_SetRenderDrawColor(renderer, BACKDROP.r, BACKDROP.g, BACKDROP.b, 220);
         SDL_Rect backing = { 0, 0, column_width + 2 * margin, geo.screen_height };
-        SDL_RenderFillRect(renderer, &backing);
-        int caption_h = 2 * TTF_FontHeight(font_small) + margin;
+        fill_rect(renderer, &backing);
+        int caption_h = 2 * TTF_GetFontHeight(font_small) + margin;
         SDL_Rect strip = { backing.w, geo.screen_height - caption_h, geo.screen_width - backing.w, caption_h };
-        SDL_RenderFillRect(renderer, &strip);
+        fill_rect(renderer, &strip);
         draw_caption(row_note, strip.x + margin, strip.y + margin / 2, strip.w - 2 * margin);
     }
     draw_column(rows, count);
@@ -1604,6 +1684,45 @@ static void load_bindings(void)
     settings_set_bindings(model, bindings, pickers_key_name);
 }
 
+// A function to hand the pickers what they draw with: the model, the menus, the fonts, and the sizes
+// measure_layout() worked out
+static void begin_pickers(void)
+{
+    PickerHost host = {
+        .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
+        .quiet = handle_quiet, .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
+        .row_height = row_height, .column_width = column_width, .margin = margin
+    };
+    pickers_begin(&host);
+}
+
+// A function to make the preview's texture at the screen's size, or none when the renderer has no render targets (the scene is then drawn behind the column)
+static void make_preview(void)
+{
+    if (preview != NULL)
+        SDL_DestroyTexture(preview);
+    preview = NULL;
+    bool targets = true;   // Every SDL3 renderer has render targets (README-migration, SDL_render.h)
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: it draws as a renderer without render targets would
+    if (getenv("STREAMFLEX_TEST_NO_RENDER_TARGETS") != NULL)
+        targets = false;
+#endif
+    if (!targets)
+        log_debug("Settings: the renderer has no render targets, so the menu is drawn behind them");
+    else {
+        preview = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, geo.screen_width, geo.screen_height);
+        if (preview == NULL)
+            log_error("Settings: no preview texture, the menu is drawn behind the settings instead\n%s", SDL_GetError());
+        else {
+            SDL_SetTextureBlendMode(preview, SDL_BLENDMODE_NONE);
+            SDL_SetTextureScaleMode(preview, SDL_SCALEMODE_LINEAR);
+            log_debug("Settings: the preview is at %i,%i, %i x %i", preview_rect.x, preview_rect.y,
+                preview_rect.w, preview_rect.h);
+        }
+    }
+}
+
 // A function to open settings over the menu on show
 void settings_open(void)
 {
@@ -1655,30 +1774,8 @@ void settings_open(void)
     logged_path[0] = '\0';
     logged_hint[0] = '\0';
     measure_layout();
-    PickerHost host = {
-        .model = model, .menus = menus, .menu_count = menu_count, .apply = apply_slot, .event = handle_event,
-        .quiet = handle_quiet, .text = draw_text, .row = draw_row, .font_row = font_row, .font_small = font_small,
-        .row_height = row_height, .column_width = column_width, .margin = margin
-    };
-    pickers_begin(&host);
-    bool targets = SDL_RenderTargetSupported(renderer);
-#ifdef STREAMFLEX_TEST_HOOKS
-    // Only the headless harness builds this: it draws as a renderer without render targets would
-    if (getenv("STREAMFLEX_TEST_NO_RENDER_TARGETS") != NULL)
-        targets = false;
-#endif
-    if (!targets)
-        log_debug("Settings: the renderer has no render targets, so the menu is drawn behind them");
-    else {
-        preview = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, geo.screen_width, geo.screen_height);
-        if (preview == NULL)
-            log_error("Settings: no preview texture, the menu is drawn behind the settings instead\n%s", SDL_GetError());
-        else {
-            SDL_SetTextureBlendMode(preview, SDL_BLENDMODE_NONE);
-            log_debug("Settings: the preview is at %i,%i, %i x %i", preview_rect.x, preview_rect.y,
-                preview_rect.w, preview_rect.h);
-        }
-    }
+    begin_pickers();
+    make_preview();
     log_debug("Settings opened over menu '%s'", origin->name);
 }
 
@@ -1687,4 +1784,73 @@ void settings_close_now(void)
 {
     if (model != NULL)
         free_screen();
+}
+
+// A function to measure the screen again for a new size (spec section 6), keeping the page, its
+// cursor and every unsaved edit: the fonts open again at the new height, the text cache empties, the
+// column and the preview are measured again, and the preview is made anew. An open picker or the
+// folder browser, measured when it opened, closes as Back closes it. What was logged as last drawn is
+// forgotten, so the next frame logs the page and the cursor's row again.
+void settings_reflow(void)
+{
+    if (model == NULL)
+        return;
+    if (pickers_active())
+        pickers_cancel();
+    if (browser != NULL)
+        close_browser();
+    clear_text_cache();
+    close_fonts();
+    if (!open_fonts()) {
+        close_settings();   // open_fonts() said why; the fonts opened when settings did
+        return;
+    }
+    fitted_width = -1;
+    shown_first = -1;
+    shown_last = -1;
+    shown_count = -1;
+    drawn_note[0] = '\0';
+    drawn_cursor[0] = '\0';
+    logged_path[0] = '\0';
+    logged_hint[0] = '\0';
+    measure_layout();
+    begin_pickers();
+    make_preview();
+    log_debug("Settings: re-measured for %ix%i px", geo.screen_width, geo.screen_height);
+}
+
+// A function to let go of every texture the screen holds, before the renderer that made them goes (a
+// lost device, Task 1.7b): the text cache, the preview, the font picker's samples and the browsed
+// image. What the screen shows is kept: settings_remake_textures() makes them again. Returns how many
+// textures it destroyed, for a lost device's count; none while settings are closed.
+int settings_drop_textures(void)
+{
+    if (model == NULL)
+        return 0;
+    int count = clear_text_cache();
+    count += fonts_clear_samples();
+    if (preview != NULL) {
+        SDL_DestroyTexture(preview);
+        count++;
+    }
+    preview = NULL;
+    if (background_override != NULL) {
+        SDL_DestroyTexture(background_override);
+        count++;
+    }
+    background_override = NULL;
+    shown_path[0] = '\0';   // The browsed image is decoded again, if it is still wanted
+    return count;
+}
+
+// A function to make the screen's textures again on a reset or new renderer at the same size,
+// keeping the page, its cursor, an open picker or the browser, and every unsaved edit: the preview is
+// made anew and the browsed image decoded again; the cache and the font samples fill as they are drawn
+void settings_remake_textures(void)
+{
+    if (model == NULL)
+        return;
+    settings_drop_textures();
+    make_preview();
+    start_decode();
 }

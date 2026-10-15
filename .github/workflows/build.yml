@@ -26,9 +26,11 @@ defaults:
   run:
     shell: bash
 env:
-  # vcpkg 2026.07.29. The previous pin (10b7a17) fetched getopt-win32 from a
-  # GitHub archive that now 404s, which broke the Windows build.
-  VCPKG_COMMITTISH: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+  # vcpkg master at 12788a7 (2026-10-06, "[sdl3-image] Update to 3.4.8"): the first commit with sdl3
+  # 3.4.18, sdl3-image 3.4.8 and sdl3-ttf 3.2.2. No vcpkg release carries them yet (2026.07.29's sdl3
+  # is 3.4.12). The overlay ports in vcpkg-overlays/ are copies of this commit's sdl3 and sdl3-ttf, so
+  # moving this pin means copying them again from the new commit.
+  VCPKG_COMMITTISH: 12788a7e255cc937fa3d30618e487e02a983d4ad
 
 # Read-only by default; only the release job widens its token.
 # All actions are pinned to commit SHAs (repo-level sha_pinning_required) with
@@ -110,8 +112,30 @@ jobs:
       - name: Build
         run: cmake --build build --target package --config ${{ env.CMAKE_BUILD_TYPE }}
 
+      # The zip and the exe it holds, by size: the release notes state what HarfBuzz costs the zip
+      # (spec section 2), measured against a build without it (plan Task 1.2b)
+      - name: Show the package size
+        shell: pwsh
+        run: |
+          Get-ChildItem build/*.zip, build/Release/streamflex.exe | ForEach-Object { '{0}: {1:N0} bytes' -f $_.Name, $_.Length }
+
       - name: Unit tests
         run: ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
+
+      # Unit test 11's built half (spec section 9): the manifest the exe carries asks for per-monitor
+      # v2. CMake merges config/streamflex.manifest.in into the exe as resource 1; mt.exe reads it back.
+      - name: Check the built exe asks for per-monitor v2 DPI awareness
+        shell: pwsh
+        run: |
+          $mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\mt.exe" | Sort-Object FullName | Select-Object -Last 1
+          if (-not $mt) { Write-Error 'mt.exe is not in the Windows SDK'; exit 1 }
+          $exe = 'build/Release/streamflex.exe'   # EXECUTABLE_OUTPUT_PATH is the build folder (CMakeLists.txt:10)
+          if (-not (Test-Path $exe)) { Write-Error "$exe was not built"; exit 1 }
+          & $mt.FullName -nologo "-inputresource:$exe;#1" -out:build/embedded.manifest
+          if ($LASTEXITCODE -ne 0) { Write-Error "mt.exe could not read the manifest in $exe"; exit 1 }
+          $text = Get-Content -Raw build/embedded.manifest
+          if ($text -notmatch '<dpiAwareness[^>]*>PerMonitorV2</dpiAwareness>') { Write-Error "the exe's manifest does not ask for PerMonitorV2:`n$text"; exit 1 }
+          'the built exe asks for PerMonitorV2'
 
       - name: Check the icon library is beside the executable in the zip
         shell: pwsh
@@ -143,12 +167,11 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # bookworm: bullseye is past end of life and its security mirror
-          # now 404s on package downloads. Every Docker Hub image here comes
-          # through mirror.gcr.io, Google's public Docker Hub mirror: Docker
-          # Hub rate-limits the runners' unauthenticated pulls.
+          # trixie: the oldest Debian with SDL3, whose 3.2.10 is the port's floor (spec section 2).
+          # Every Docker Hub image here comes through mirror.gcr.io, Google's public Docker Hub
+          # mirror: Docker Hub rate-limits the runners' unauthenticated pulls.
           - name: Debian
-            docker_image: mirror.gcr.io/library/debian:bookworm
+            docker_image: mirror.gcr.io/library/debian:trixie
             package_ext: .deb
 
     container:
@@ -164,7 +187,7 @@ jobs:
       - name: "Install dependencies"
         run: |
           if [[ "${{matrix.config.name}}" == "Debian" ]]; then
-            apt update && apt install -y build-essential file git cmake pkg-config libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libinih-dev
+            apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
           fi
 
       - name: Build
@@ -176,7 +199,18 @@ jobs:
           fi
 
       - name: Show package metadata
-        run: dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+        run: |
+          dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+          # SDL3's three libraries at the floors StreamFlex is built and tested at, CMakeLists.txt's
+          # MIN_*_VERSION, never SDL2's. shlibdeps adds each again at 3.2.0, which is not checked
+          depends=$(dpkg-deb -f build/*.deb Depends)
+          for pair in libsdl3-0:MIN_SDL_VERSION libsdl3-image0:MIN_SDL_IMAGE_VERSION libsdl3-ttf0:MIN_SDL_TTF_VERSION; do
+            lib=${pair%%:*} var=${pair#*:}
+            floor=$(sed -n "s/^set($var \"\(.*\)\")\$/\1/p" CMakeLists.txt)
+            if [ -z "$floor" ]; then echo "::error::CMakeLists.txt sets no $var"; exit 1; fi
+            grep -qF "$lib (>= $floor)" <<< "$depends" || { echo "::error::The package does not depend on $lib (>= $floor): $depends"; exit 1; }
+          done
+          if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 
       - name: Check the icon library is in the package
         run: |
@@ -192,11 +226,9 @@ jobs:
           path: build/*${{matrix.config.package_ext}}
           if-no-files-found: error
 
-  # Native arm64 runner with a Debian bookworm container. This replaces the
-  # QEMU chroot into a 2022 Raspberry Pi OS (bullseye) image, which can no
-  # longer install packages now that bullseye is past end of life. Raspberry
-  # Pi OS is Debian-based and -DRPI=1 only changes the default config, so a
-  # bookworm arm64 build is the equivalent package.
+  # Native arm64 runner with a Debian trixie container. Raspberry Pi OS trixie is Debian-based and
+  # -DRPI=1 only changes the default config, so a trixie arm64 build is the equivalent package, built
+  # at SDL3's floor as the Debian one is.
   build_rpi:
     name: Raspberry Pi
     runs-on: ubuntu-24.04-arm
@@ -205,7 +237,7 @@ jobs:
 
     # Through mirror.gcr.io, as the Linux job's image.
     container:
-      image: mirror.gcr.io/library/debian:bookworm
+      image: mirror.gcr.io/library/debian:trixie
 
     env:
       CMAKE_BUILD_TYPE: Release
@@ -215,7 +247,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
-        run: apt update && apt install -y build-essential file git cmake pkg-config libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libinih-dev
+        run: apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
 
       - name: Build
         run: |
@@ -224,7 +256,18 @@ jobs:
           ctest --test-dir build --output-on-failure
 
       - name: Show package metadata
-        run: dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+        run: |
+          dpkg-deb -f build/*.deb Package Version Architecture Maintainer Depends Homepage
+          # SDL3's three libraries at the floors StreamFlex is built and tested at, CMakeLists.txt's
+          # MIN_*_VERSION, never SDL2's. shlibdeps adds each again at 3.2.0, which is not checked
+          depends=$(dpkg-deb -f build/*.deb Depends)
+          for pair in libsdl3-0:MIN_SDL_VERSION libsdl3-image0:MIN_SDL_IMAGE_VERSION libsdl3-ttf0:MIN_SDL_TTF_VERSION; do
+            lib=${pair%%:*} var=${pair#*:}
+            floor=$(sed -n "s/^set($var \"\(.*\)\")\$/\1/p" CMakeLists.txt)
+            if [ -z "$floor" ]; then echo "::error::CMakeLists.txt sets no $var"; exit 1; fi
+            grep -qF "$lib (>= $floor)" <<< "$depends" || { echo "::error::The package does not depend on $lib (>= $floor): $depends"; exit 1; }
+          done
+          if grep -q 'libsdl2' <<< "$depends"; then echo "::error::The package still depends on SDL2: $depends"; exit 1; fi
 
       - name: Check the icon library is in the package
         run: |
@@ -256,7 +299,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git cmake sdl2 sdl2_image sdl2_ttf libinih
+        run: pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih
 
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -360,30 +403,20 @@ jobs:
       - name: Build the test image
         run: docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
 
+      # tests/unit.sh is the one recipe, the same file a local run uses (CONTRIBUTING.md): it builds
+      # a copy of the read-only /src and prints CONFIGURE FAILED, BUILD FAILED or WARNINGS OUTSIDE
+      # src/external when a step before ctest fails
       - name: Build and run the unit tests
         run: |
-          docker run --rm -i --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
-            streamflex-test-debian bash -s <<'EOF'
-          set -u
-          rm -rf /work; mkdir -p /work
-          tar -C /src --exclude=./build --exclude=./.git -cf - . | tar -C /work -xf -
-          chown -R tester /work
-          flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
-          su tester -c "cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='$flags' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DEXTRA_WARNINGS=ON" > /tmp/configure.log 2>&1 \
-            || { echo "::error::CMake configure failed"; cat /tmp/configure.log; exit 2; }
-          su tester -c "cmake --build /work/build -j$(nproc)" > /tmp/build.log 2>&1 \
-            || { echo "::error::The build failed"; cat /tmp/build.log; exit 2; }
-          ours=$(grep -iE 'warning:' /tmp/build.log | grep -vE '^g?make(\[[0-9]+\])?: ' | grep -v '^/work/src/external/')
-          if [ -n "$ours" ]; then echo "::error::Compiler warnings outside src/external"; echo "$ours"; exit 1; fi
-          su tester -c "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 setarch $(uname -m) -R ctest --test-dir /work/build --output-on-failure"
-          EOF
+          docker run --rm --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+            streamflex-test-debian bash /src/tests/unit.sh
 
   # What only a running launcher shows: the settings screen, key handling and startup paths,
   # driven by key presses under a virtual display (tests/headless). It runs in its own container
   # because the harness turns off address randomization for ASan (setarch -R), which Docker's
-  # default seccomp profile refuses. One image per distro: Debian, and Fedora, whose SDL2 is
-  # sdl2-compat (SDL2's API over SDL3) rather than SDL2 itself. One run.sh serves both; what
-  # differs between them is detected, not named.
+  # default seccomp profile refuses. One image per distro: Debian trixie, with SDL3 at the port's
+  # floor, and Fedora 44, with its own newer SDL3. One run.sh serves both; what differs between
+  # them is detected, not named.
   # A pass (every check, plain or with LeakSanitizer on) is too long for one job, so each runs in
   # 2 shards, one job each, as run-shards.ps1 does locally: run.sh <label> [leaks] K/2 runs shard
   # K, and headless_merge adds a pass's two shard consoles up into its one result. A shard alone

@@ -1,33 +1,29 @@
 #include "layout.h"
 #include "derive.h"
-
-// Color masking bit logic
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-#define RMASK 0xff000000
-#define GMASK 0x00ff0000
-#define BMASK 0x0000ff00
-#define AMASK 0x000000ff
-#else
-#define RMASK 0x000000ff
-#define GMASK 0x0000ff00
-#define BMASK 0x00ff0000
-#define AMASK 0xff000000
-#endif
-#define COLOR_MASKS RMASK, GMASK, BMASK, AMASK
+#include "padpower.h"
 
 // Launcher parameters
-#define DEFAULT_REFRESH_RATE 60
+#define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
 #define MIN_FPS_LIMIT 10
 #define GAMEPAD_DEADZONE 10000
-#define GAMEPAD_REPEAT_DELAY 500
-#define GAMEPAD_REPEAT_INTERVAL 25
+#define GAMEPAD_REPEAT_DELAY DERIVE_REPEAT_DELAY_MS
+#define GAMEPAD_REPEAT_INTERVAL DERIVE_REPEAT_INTERVAL_MS
 #define CLOCK_UPDATE_PERIOD 1000
 #define SCROLL_INDICATOR_HEIGHT 0.11F
-#define SCREEN_MARGIN 0.05F
-#define SCREENSAVER_TRANSITION_TIME 1500
+#define SCREENSAVER_TRANSITION_TIME DERIVE_SCREENSAVER_DIM_MS
 #define APPLICATION_WAIT_PERIOD 100
-#define TITLE_MIN_SIZE 0.02F       // The readable minimum title size: 2% of the screen height
 #define TITLE_MEASURE_SIZE 1000    // Point size a title font's line height is measured at
+#define BATTERY_GLYPH_DIVISOR 60   // The battery glyph is 1/60 of the screen tall (18 px at 1080), twice that wide
+#define BATTERY_GLYPH_MIN 9        // ...and never under 9 px tall
+#define MAX_BATTERY_PADS 16        // The pads the glyph looks at, in the order they connected
+
+// SDL3's SDL_GetTicks() counts milliseconds in 64 bits; StreamFlex keeps SDL2's 32-bit count, which
+// every tick field and every "now - then" below is written for (each difference survives the wrap at
+// 49.7 days, as it did on SDL2)
+static inline Uint32 ticks_ms(void)
+{
+    return (Uint32) SDL_GetTicks();
+}
 
 // Special commands
 #define SCMD_SELECT ":select"
@@ -103,13 +99,13 @@ typedef struct {
     bool application_running;
     bool has_focus;
     bool slideshow_transition;
-    SDL_atomic_t slideshow_background_rendering; // Both also written by the slideshow's loader thread
-    SDL_atomic_t slideshow_background_ready;
+    SDL_AtomicInt slideshow_background_rendering; // Both also written by the slideshow's loader thread
+    SDL_AtomicInt slideshow_background_ready;
     bool slideshow_paused;
     bool screensaver_active;
     bool screensaver_transition;
-    SDL_atomic_t clock_rendering;   // Both also written by the clock's render thread
-    SDL_atomic_t clock_ready;
+    SDL_AtomicInt clock_rendering;   // Both also written by the clock's render thread
+    SDL_AtomicInt clock_ready;
 } State;
 
 // Timing information
@@ -154,17 +150,26 @@ typedef struct menu {
 } Menu;
 
 typedef struct gamepad {
-    SDL_GameController *controller;
+    SDL_Gamepad *controller;
     int id;                          // The instance id; its device index is looked up when it opens
+    PadPower power;                  // Its battery, read as it opens, then from each battery event
     struct gamepad *previous;
     struct gamepad *next;
 } Gamepad;
+
+// A gamepad control's press in progress, in wall time: held since pressed_at (SDL's ticks), with its
+// next repeat due repeat_due ms after that (derive_repeat_due())
+typedef struct {
+    bool   held;
+    Uint32 pressed_at;
+    Uint32 repeat_due;
+} ControlHold;
 
 // Linked list of gamepad controls
 typedef struct gamepad_control {
     ControlType            type;
     int                    index;
-    Uint32                 repeat;
+    ControlHold            hold;
     const char             *label;
     char                   *cmd;
     struct gamepad_control *next;
@@ -213,8 +218,7 @@ typedef struct {
     int *order;
     int i;
     int num_images;
-    float transition_alpha;
-    float transition_change_rate;
+    Uint32 transition_start;   // When the fade in progress began (SDL's ticks); its alpha is derive_fade_alpha()'s
     SDL_Surface *transition_surface;
     SDL_Texture *transition_texture;
     bool only_one;   // Set by the loader: the only image that loads is the one already on show
@@ -223,9 +227,9 @@ typedef struct {
 
 // Screensaver
 typedef struct {
-    float alpha;
+    float alpha;               // The dim as last set
     float alpha_end_value;
-    float transition_change_rate;
+    Uint32 transition_start;   // When the dim began (SDL's ticks); its alpha is derive_fade_alpha()'s
     SDL_Texture *texture;
 } Screensaver;
 
@@ -329,7 +333,7 @@ extern double background_luminance;              // The image on show's mean lum
 void draw_scene(bool preview);
 void present_frame(void);
 void reload_background(void);
-void update_slideshow_timing(void);
+void window_follow_background(void);   // The window takes the kind the Mode setting needs (a recreation, from the main loop)
 void reload_titles(void);
 void trim_title_fonts(void);
 void refresh_layout(void);
@@ -342,6 +346,7 @@ void reload_scroll(void);
 void reload_clock(void);        // Also lays the menu out again: the clock's size moves the buttons
 void stop_clock(void);          // Waits for a render in flight; the settings screen stops it before writing a clock setting
 void reload_screensaver(void);
+void remake_screensaver_texture(void);   // A reload's: the layer made again, the dim and its transition kept
 void reload_gamepad(void);      // Also the Device setting: closes the pads and opens the chosen one
 void reload_title_font(void);   // Closes the size cache and the fixed font, opens the font again, then reload_titles()
 void apply_frame_timing(void);  // VSync and FPSLimit, live
@@ -349,7 +354,13 @@ void apply_os_screensaver(void);
 void apply_default_menu(void);  // Points :home at config.default_menu
 bool gamepad_running(void);
 bool gamepad_connected(void);                  // A pad is open to read
-#ifdef STREAMFLEX_TEST_HOOKS
-Uint32 test_pad_repeat_delay(void);            // The frames a held pad control waits before it repeats
-#endif
 int gamepad_pressed_label(void);               // The first control held on any open pad; -1 for none
+
+// One reload, geometry first (spec section 3): what asked for it, marked by the event handlers.
+// RELOAD_DISPLAY (a move to another display, or a new mode of the window's display) reads the refresh
+// rate again and makes no texture again; a new size that comes with it marks RELOAD_SIZE.
+typedef enum { RELOAD_NONE = 0, RELOAD_TARGETS = 1, RELOAD_DEVICE = 2, RELOAD_SIZE = 4, RELOAD_RECREATE = 8,
+               RELOAD_DISPLAY = 16 } ReloadReason;
+void reload_mark(ReloadReason why);   // Event handlers only mark; nothing reloads inside the drain
+void reload_run_pending(void);        // After the drain, before drawing: geometry first, then the textures
+bool app_in_front(void);              // state.application_launching || state.application_running

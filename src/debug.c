@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "util.h"
@@ -51,7 +51,14 @@ static int init_log()
               "so the log goes to stderr\n", stderr);
     }
 #else
-    join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
+    if (config.exe_path != NULL)
+        join_paths(log_file_path, sizeof(log_file_path), 2, config.exe_path, FILENAME_LOG);
+    else {
+        // No base path (SDL_GetBasePath() failed): no folder beside the executable to keep a log
+        // file in, so the log goes to stderr
+        log_file = stderr;
+        fputs("No base path: SDL gives no folder for the executable, so the log goes to stderr\n", stderr);
+    }
 #endif
 
     // Open log; a restart's fresh copy goes on with the log the restart wrote to
@@ -367,18 +374,26 @@ void debug_slideshow(Slideshow *slideshow)
         log_debug("  %s", slideshow->images[slideshow->order[i]]);
 }
 
-// A function to debug the video settings
-void debug_video(SDL_Renderer *renderer, SDL_DisplayMode *display_mode)
+// A function to debug the video settings: the screen is the window's size in pixels (spec section 6),
+// in the format four harness checks match with grep -qx
+void debug_video(SDL_Renderer *renderer, int width, int height, int refresh_rate)
 {
     log_debug("================== Video Information ===================\n");
-    log_debug("Resolution:    %ix%i", display_mode->w, display_mode->h);
-    log_debug("Refresh rate:  %i Hz", display_mode->refresh_rate);
+    log_debug("Resolution:    %ix%i", width, height);
+    log_debug("Refresh rate:  %i Hz", refresh_rate);
     log_debug("Video driver:  %s", SDL_GetCurrentVideoDriver());
     log_debug("");
-    SDL_RendererInfo info;
-    SDL_GetRendererInfo(renderer, &info);
+    // The renderer, from SDL3's renderer properties: its name, its largest texture, its VSync and the
+    // texture formats it takes. "Render" leads each line: "Renderer:" lines are the renderer's choice.
+    SDL_PropertiesID properties = SDL_GetRendererProperties(renderer);
+    int vsync = 0;
+    SDL_GetRenderVSync(renderer, &vsync);
+    log_debug("Render driver: %s", SDL_GetRendererName(renderer));
+    log_debug("Max texture:   %lli px", (long long) SDL_GetNumberProperty(properties, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
+    log_debug("Render VSync:  %i", vsync);
     log_debug("Supported Texture formats:");
-    for(size_t i = 0; i < info.num_texture_formats; i++)
-        log_debug("  %s", SDL_GetPixelFormatName(info.texture_formats[i]));
+    const SDL_PixelFormat *formats = SDL_GetPointerProperty(properties, SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, NULL);
+    for (int i = 0; formats != NULL && formats[i] != SDL_PIXELFORMAT_UNKNOWN; i++)
+        log_debug("  %s", SDL_GetPixelFormatName(formats[i]));
     log_debug("");
 }

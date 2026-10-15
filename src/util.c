@@ -5,8 +5,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <getopt.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "util.h"
@@ -528,33 +527,59 @@ void add_hotkey(const char *keycode, const char *cmd)
 // label of entry i is bindings_label(i), the one list of labels both read, so they cannot drift apart.
 // The table must hold one entry per label, which the assert below holds it to; each row names its label.
 static const struct gamepad_info GAMEPAD_INFO[] = {
-    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTX},               // LStickX-
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTX},               // LStickX+
-    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_LEFTY},               // LStickY-
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_LEFTY},               // LStickY+
-    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTX},              // RStickX-
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTX},              // RStickX+
-    {TYPE_AXIS_NEG, SDL_CONTROLLER_AXIS_RIGHTY},              // RStickY-
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_RIGHTY},              // RStickY+
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERLEFT},         // LTrigger
-    {TYPE_AXIS_POS, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},        // RTrigger
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_A},                 // ButtonA
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_B},                 // ButtonB
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_X},                 // ButtonX
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_Y},                 // ButtonY
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_BACK},              // ButtonBack
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_GUIDE},             // ButtonGuide
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_START},             // ButtonStart
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSTICK},         // ButtonLeftStick
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSTICK},        // ButtonRightStick
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_LEFTSHOULDER},      // ButtonLeftShoulder
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},     // ButtonRightShoulder
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_UP},           // ButtonDPadUp
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_DOWN},         // ButtonDPadDown
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_LEFT},         // ButtonDPadLeft
-    {TYPE_BUTTON,   SDL_CONTROLLER_BUTTON_DPAD_RIGHT}         // ButtonDPadRight
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTX},              // LStickX-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTX},              // LStickX+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_LEFTY},              // LStickY-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFTY},              // LStickY+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTX},             // RStickX-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTX},             // RStickX+
+    {TYPE_AXIS_NEG, SDL_GAMEPAD_AXIS_RIGHTY},             // RStickY-
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHTY},             // RStickY+
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_LEFT_TRIGGER},       // LTrigger
+    {TYPE_AXIS_POS, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER},      // RTrigger
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_SOUTH},            // ButtonA
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_EAST},             // ButtonB
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_WEST},             // ButtonX
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_NORTH},            // ButtonY
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_BACK},             // ButtonBack
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_GUIDE},            // ButtonGuide
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_START},            // ButtonStart
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_STICK},       // ButtonLeftStick
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_STICK},      // ButtonRightStick
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},    // ButtonLeftShoulder
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},   // ButtonRightShoulder
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_UP},          // ButtonDPadUp
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_DOWN},        // ButtonDPadDown
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_LEFT},        // ButtonDPadLeft
+    {TYPE_BUTTON,   SDL_GAMEPAD_BUTTON_DPAD_RIGHT}        // ButtonDPadRight
 };
 SDL_COMPILE_TIME_ASSERT(gamepad_info_labels, sizeof(GAMEPAD_INFO) / sizeof(GAMEPAD_INFO[0]) == BINDINGS_LABELS);
+
+// A label reads the button SDL2 numbered for it: SDL3 names the face buttons by position and keeps
+// SDL2's numbers (SDL_CONTROLLER_BUTTON_A was 0, as SDL_GAMEPAD_BUTTON_SOUTH is), so a ButtonA in an
+// SDL2-era config is the same button on Xbox and PlayStation pads; on Nintendo pads it is now the
+// south button (user ruling, 2026-10-11; labels are todo item 26; spec section 1, item 7)
+SDL_COMPILE_TIME_ASSERT(pad_south_is_sdl2_a, SDL_GAMEPAD_BUTTON_SOUTH == 0);
+SDL_COMPILE_TIME_ASSERT(pad_east_is_sdl2_b, SDL_GAMEPAD_BUTTON_EAST == 1);
+SDL_COMPILE_TIME_ASSERT(pad_west_is_sdl2_x, SDL_GAMEPAD_BUTTON_WEST == 2);
+SDL_COMPILE_TIME_ASSERT(pad_north_is_sdl2_y, SDL_GAMEPAD_BUTTON_NORTH == 3);
+SDL_COMPILE_TIME_ASSERT(pad_back, SDL_GAMEPAD_BUTTON_BACK == 4);
+SDL_COMPILE_TIME_ASSERT(pad_guide, SDL_GAMEPAD_BUTTON_GUIDE == 5);
+SDL_COMPILE_TIME_ASSERT(pad_start, SDL_GAMEPAD_BUTTON_START == 6);
+SDL_COMPILE_TIME_ASSERT(pad_left_stick, SDL_GAMEPAD_BUTTON_LEFT_STICK == 7);
+SDL_COMPILE_TIME_ASSERT(pad_right_stick, SDL_GAMEPAD_BUTTON_RIGHT_STICK == 8);
+SDL_COMPILE_TIME_ASSERT(pad_left_shoulder, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER == 9);
+SDL_COMPILE_TIME_ASSERT(pad_right_shoulder, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER == 10);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_up, SDL_GAMEPAD_BUTTON_DPAD_UP == 11);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_down, SDL_GAMEPAD_BUTTON_DPAD_DOWN == 12);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_left, SDL_GAMEPAD_BUTTON_DPAD_LEFT == 13);
+SDL_COMPILE_TIME_ASSERT(pad_dpad_right, SDL_GAMEPAD_BUTTON_DPAD_RIGHT == 14);
+SDL_COMPILE_TIME_ASSERT(pad_left_x, SDL_GAMEPAD_AXIS_LEFTX == 0);
+SDL_COMPILE_TIME_ASSERT(pad_left_y, SDL_GAMEPAD_AXIS_LEFTY == 1);
+SDL_COMPILE_TIME_ASSERT(pad_right_x, SDL_GAMEPAD_AXIS_RIGHTX == 2);
+SDL_COMPILE_TIME_ASSERT(pad_right_y, SDL_GAMEPAD_AXIS_RIGHTY == 3);
+SDL_COMPILE_TIME_ASSERT(pad_left_trigger, SDL_GAMEPAD_AXIS_LEFT_TRIGGER == 4);
+SDL_COMPILE_TIME_ASSERT(pad_right_trigger, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER == 5);
 
 // How many times the gamepad's controls were freed: poll_gamepad() stops reading a list a command
 // it ran rebuilt under it
@@ -597,7 +622,7 @@ void add_gamepad_control(const char *label, const char *cmd)
         .type     = GAMEPAD_INFO[i].type,
         .index    = GAMEPAD_INFO[i].index,
         .label    = bindings_label(i),
-        .repeat   = 0,
+        .hold     = { false, 0, 0 },
         .next     = NULL
     };
     control->cmd = command;

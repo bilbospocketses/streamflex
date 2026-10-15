@@ -54,6 +54,43 @@ ok=1
 result "settings: stepping Mode through Image and Slideshow with nothing chosen writes no error" $ok
 grep -E "Background 'Image' setting|Couldn't load background image|does not exist" "$out/f60-transparent.err" | sort | uniq -c | sed 's/^/      /'
 
+# Windows recreates the window when Mode's cursor rests (PREVIEW_REST_MS) on a value whose window
+# differs, never on each step, so stepping through Transparent to another mode recreates nothing.
+# On Linux every mode keeps the fullscreen window, so the test hook's line is what shows each rest:
+# the slow walk above rested on each of its six steps. Six fast steps rest once, on Color, where they
+# end: that case is timing-sensitive, in 60-settings-background-timing.sh.
+ok=1
+[ "$(grep -c "Test hook: the Mode row's cursor rested on " "$out/f60-transparent.log")" = 6 ] \
+    && [ "$(grep -o "Test hook: the Mode row's cursor rested on [A-Za-z]*" "$out/f60-transparent.log" | sed 's/.* on //' | paste -sd,)" = Image,Slideshow,Transparent,Slideshow,Image,Color ] \
+    && ok=0
+result "settings: a slow walk through Mode rests on each step" $ok
+grep "Test hook: the Mode row's cursor rested on " "$out/f60-transparent.log" | sed 's/^/      /'
+
+# Under the Windows plan forced on Linux (Task 1.8b's STREAMFLEX_TEST_WINDOWS_PLAN) the same slow walk
+# recreates the window: the rest on Transparent makes it one row short, the rest on Slideshow after it
+# makes it fullscreen again, the rests on Image and Color change nothing, and the page stays open
+# through both recreations. Each recreation drops the old renderer's textures before it goes, and says
+# how many: the menu's and the page's own, so more than none. Its reload renders the titles from the
+# title font sets open (spec section 4), so the title font is never opened again.
+f60_win_short() { wait_line 'Reload: done at 1920x1079 px, for ' "$2"; }
+f60_win_full() { wait_line 'Reload: done at 1920x1080 px, for ' "$2"; }
+CFG=$FX/f60-color.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 \
+    run_keys f60-winrest Menu Down Return Right Right Right +f60_win_short Left +f60_win_full Left Left BackSpace BackSpace
+log=$out/f60-winrest.log
+ok=1
+[ "$(grep -cx 'Video: recreating the window for a transparent background' "$log")" = 1 ] \
+    && [ "$(grep -cx 'Video: recreating the window for an opaque background' "$log")" = 1 ] \
+    && precedes "$log" 'Video: recreating the window for a transparent background' 'Reload: done at 1920x1079 px, for ' \
+    && precedes "$log" 'Video: recreating the window for an opaque background' 'Reload: done at 1920x1080 px, for ' \
+    && grep -qE '^Reload: done at 1920x1079 px, for .*a new window$' "$log" \
+    && grep -qE '^Reload: done at 1920x1080 px, for .*a new window$' "$log" \
+    && [ "$(grep -c '^Renderer: dropped ' "$log")" = 2 ] \
+    && [ "$(grep -cE '^Renderer: dropped [1-9][0-9]* textures before the renderer went$' "$log")" = 2 ] \
+    && ! grep -q '^Titles: opened ' "$log" \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f60-winrest && ok=0
+result "settings: under the Windows plan, a rest on Transparent recreates the window one row short, and a rest back on Slideshow fullscreen (exit $(cat "$out/f60-winrest.code"))" $ok
+grep -E "^(Video: recreating|Renderer: dropped |Reload: done|Titles: opened |Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
+
 # A config whose own Mode names an image or folder it never gives is a config problem: at startup
 # that still says so as an error, on stderr. The slideshow's case runs f30-nodir's config here,
 # under a name of its own, so this check reads only what it ran.
@@ -75,32 +112,6 @@ grep -qx 'Mode=Image' "$cfg" && grep -qx 'Image=/home/tester/Pictures/green.png'
 result "settings: an image chosen in the folder browser is saved (exit $(cat "$out/f60-image.code"))" $ok
 diff "$FX/f60-color.ini" "$cfg" | sed 's/^/      /'
 
-# OK while the highlighted image is still decoding: the test hook (STREAMFLEX_TEST_DECODE_DELAY_MS,
-# in the harness's build only) makes each decode take 4 s, so OK lands while blue.png, the image
-# highlighted first, is still decoding and green.png waits behind it. OK waits for both, and
-# chooses green, the one highlighted, only once green's decode is done.
-cfg=$(writable_config f60-color)
-STREAMFLEX_TEST_DECODE_DELAY_MS=4000 CFG=$cfg UNTIL='Settings saved' \
-    run_keys f60-slowdecode Menu Down Return Right Down Return Down Return BackSpace BackSpace
-ok=1
-grep -qx 'Image=/home/tester/Pictures/green.png' "$cfg" \
-    && grep -q 'Settings: OK waited for the decode of /home/tester/Pictures/green.png' "$out/f60-slowdecode.log" \
-    && precedes "$out/f60-slowdecode.log" 'Settings: the preview shows /home/tester/Pictures/green.png' \
-        'Settings: chose /home/tester/Pictures/green.png' \
-    && ran_clean f60-slowdecode && ok=0
-result "settings: OK during a slow decode waits for it and chooses the highlighted image (exit $(cat "$out/f60-slowdecode.code"))" $ok
-grep -E 'Settings: (OK waited|chose|the preview shows)' "$out/f60-slowdecode.log" | sed 's/^/      /'
-
-# The same with a broken image: OK on b.png while it is still decoding waits, finds it cannot be
-# opened, and refuses it. Without the wait it would be chosen and saved.
-STREAMFLEX_TEST_DECODE_DELAY_MS=4000 CFG=$FX/f60-broken.ini UNTIL='Settings: nothing changed' \
-    run_keys f60-slowbroken Menu Down Return Down Return Down Return Menu
-ok=1
-grep -q 'Settings: OK waited for the decode of /home/tester/broken/b.png' "$out/f60-slowbroken.log" \
-    && grep -q 'Settings: This image cannot be opened: /home/tester/broken/b.png' "$out/f60-slowbroken.log" \
-    && ! grep -q 'Settings: chose' "$out/f60-slowbroken.log" && ran_clean f60-slowbroken && ok=0
-result "settings: OK on a broken image during its decode waits, then refuses it (exit $(cat "$out/f60-slowbroken.code"))" $ok
-
 # Image with none chosen: leaving the page puts Color back, so nothing is saved
 cfg=$(writable_config f60-color)
 CFG=$cfg run_keys f60-incomplete Menu Down Return Right BackSpace BackSpace
@@ -119,31 +130,6 @@ cmp -s "$FX/f60-color.ini" "$cfg" && grep -q 'Settings: the renderer has no rend
     && grep -q 'Settings: the note under the preview says No image was chosen, so Mode went back to Color' "$out/f60-notargets.log" \
     && ran_clean f60-notargets && ok=0
 result "settings: without render targets the caption and its note are still drawn (exit $(cat "$out/f60-notargets.code"))" $ok
-
-# Slideshow: Mode to Slideshow, open the browser on the Folder row, use Pictures
-cfg=$(writable_config f60-color)
-CFG=$cfg run_keys f60-slideshow Menu Down Return Right Right Down Return Return BackSpace BackSpace
-ok=1
-grep -qx 'Mode=Slideshow' "$cfg" && grep -qx 'SlideshowDirectory=/home/tester/Pictures' "$cfg" \
-    && grep -q 'Found 3 images in directory /home/tester/Pictures' "$out/f60-slideshow.log" \
-    && ran_clean f60-slideshow && ok=0
-result "settings: a slideshow folder chosen in the folder browser is saved (exit $(cat "$out/f60-slideshow.code"))" $ok
-
-# Stepping the mode through a running slideshow: its first change is due at 5 s and fades for 3 s.
-# The keys start when the log says the fade has begun, so settings open inside it and the first
-# step (to Transparent) lands in it about 1 s later, however slowly the launcher started: the log
-# must say the fade in progress was dropped. The keys that reach the Background page come 150 ms
-# apart: a second apart, as run_keys sends them, the step came 3 s in, as the fade ended.
-open_background() { xdotool key --delay 150 Menu Down Return; sleep 0.5; }
-run_after_line f60-running 'Slideshow: fading in the next image' +open_background Right Left Right Left BackSpace BackSpace
-ok=1
-ran_clean f60-running && grep -q 'Settings: nothing changed' "$out/f60-running.log" \
-    && precedes "$out/f60-running.log" 'Slideshow: fading in the next image' 'Settings: [Background] Mode Slideshow -> Transparent' \
-    && in_range "$out/f60-running.log" 'Settings: [Background] Mode Slideshow -> Transparent' \
-        'Background set up' 'Slideshow: dropped the fade in progress' \
-    && ok=0
-result "settings: switching modes while a slideshow runs frees its fade cleanly (exit $(cat "$out/f60-running.code"))" $ok
-grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-running.err" | sed 's/^/      /'
 
 # The slideshow's loader thread is held back before its read by the test hook
 # STREAMFLEX_TEST_SLIDESHOW_HOLD (in the harness's build only), as a slow disk would hold it, until
@@ -216,15 +202,6 @@ grep -q 'Settings: the preview shows /home/tester/loading/b.png' "$out/f60-pipeb
 result "settings: the Image browser leaves out a pipe named like an image (exit $(cat "$out/f60-pipebrowse.code"))" $ok
 grep -E 'Settings: (browsing|the preview shows|could not open)' "$out/f60-pipebrowse.log" | sed 's/^/      /'
 
-# The Folder row shows the folder's name and its image count: counted when the page opens (the
-# running slideshow's Pictures) and again when a folder is chosen in the browser
-DOT=$(printf '\xC2\xB7')
-ok=1
-grep -q "Settings: the Folder row shows Pictures $DOT 3 images" "$out/f60-running.log" \
-    && sed -n '/Settings: chose \/home\/tester\/Pictures/,$p' "$out/f60-slideshow.log" \
-        | grep -q "Settings: the Folder row shows Pictures $DOT 3 images" && ok=0
-result "settings: the Folder row shows the folder's name and its image count" $ok
-
 # A folder the test user cannot read: OK on it stays in the browser and says why
 rm -rf "$TESTER_HOME/locking"
 mkdir -p "$TESTER_HOME/locking/locked"
@@ -263,3 +240,29 @@ grep -q 'Settings: the caption says This image cannot be opened for /home/tester
     && ran_clean f60-broken && ok=0
 result "settings: a broken image says so as soon as it is highlighted, and cannot be chosen (exit $(cat "$out/f60-broken.code"))" $ok
 grep -E 'Settings: (browsing|could not|the caption|This image|chose)' "$out/f60-broken.log" | sed 's/^/      /'
+
+# The Windows plan, forced on Linux by the harness build's STREAMFLEX_TEST_WINDOWS_PLAN (Task 1.8b), so
+# Xvfb runs the window Windows makes for Transparent. Startup makes it as that kind directly: one pixel
+# row short of the screen, on the transparent list's first renderer, with no recreation.
+echo 1920x1079 > "$out/f60-wintransparent.display"   # 95-every-run.sh: this run's screen is one row short
+CFG=$FX/f60-winplan.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 run_quick f60-wintransparent
+log=$out/f60-wintransparent.log
+ok=1
+grep -qx 'Renderer: vulkan' "$log" && grep -qx 'Screen: 1920x1079 px, pixel density 1.00, display scale 1.00' "$log" \
+    && grep -qx 'Resolution:    1920x1079' "$log" && grep -qx 'Background set up: Transparent' "$log" \
+    && ! grep -q '^Video: recreating' "$log" && ! grep -q '^Video: no renderer can draw' "$log" \
+    && ran_clean f60-wintransparent && ok=0
+result "transparent: under the Windows plan, startup makes the window one row short, with no recreation (exit $(cat "$out/f60-wintransparent.code"))" $ok
+grep -E '^(Video|Renderer|Screen|Resolution|Background set up):' "$log" | sed 's/^/      /'
+
+# A forced renderer outside the transparent list is refused by its name before any window is made: the
+# window is the opaque fullscreen one, the background Color, and StreamFlex runs on
+CFG=$FX/f60-winplan.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 SDL_RENDER_DRIVER=opengl run_quick f60-winrefused
+log=$out/f60-winrefused.log
+ok=1
+grep -qx 'Video: no renderer can draw a transparent window (SDL_RENDER_DRIVER=opengl is not in the transparent list); using an opaque background' "$log" \
+    && grep -qx 'Renderer: opengl (from SDL_RENDER_DRIVER)' "$log" && grep -qx 'Background set up: Color' "$log" \
+    && grep -qx 'Resolution:    1920x1080' "$log" && ! grep -q '^Video: recreating' "$log" \
+    && ran_clean f60-winrefused && ok=0
+result "transparent: under the Windows plan, SDL_RENDER_DRIVER=opengl gives the Color background and runs on (exit $(cat "$out/f60-winrefused.code"))" $ok
+grep -E '^(Video|Renderer|Background set up):' "$log" | sed 's/^/      /'

@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "launcher.h"
 #include <launcher_config.h>
 #include "settings.h"
 #include "settings_pickers.h"
 #include "settings_fonts.h"
 #include "bindings.h"
+#include "keycodes.h"
 #include "listpick.h"
 #include "colorpick.h"
 #include "fileio.h"
@@ -17,7 +18,6 @@
 #include "util.h"
 #include "debug.h"
 #ifdef _WIN32
-#include <SDL_syswm.h>
 #include "platform/platform.h"
 #endif
 
@@ -366,8 +366,9 @@ static void fill_open_fonts(void)
     forget_list_log();
 }
 
-// A function to name a key or button for the screen: a key by SDL's name ("Menu" for both of the
-// Menu key's codes), a pad's control by its label; "#<HEX>" for a key SDL cannot name
+// A function to name a key or button for the screen: a key by SDL's name for the key its stored code
+// is ("Menu" for both of the Menu key's codes), a pad's control by its label; "#<HEX>" for a key SDL
+// cannot name, or one SDL3 never sends
 void pickers_key_name(int device, int code, char *out, size_t size)
 {
     if (device == BINDINGS_GAMEPAD) {
@@ -378,7 +379,7 @@ void pickers_key_name(int device, int code, char *out, size_t size)
         snprintf(out, size, "Menu");
         return;
     }
-    const char *name = SDL_GetKeyName((SDL_Keycode) code);
+    const char *name = SDL_GetKeyName((SDL_Keycode) keycode_from_stored((uint32_t) code));
     if (name != NULL && name[0] != '\0')
         snprintf(out, size, "%s", name);
     else
@@ -406,7 +407,7 @@ void pickers_capture(int device)
     }
     int starting = device == BINDINGS_KEYBOARD ? key_held : gamepad_pressed_label();
     capture_device = device;
-    capture_begin(&capture, SDL_GetTicks(), starting);
+    capture_begin(&capture, ticks_ms(), starting);
 #ifdef STREAMFLEX_TEST_HOOKS
     // Only the headless harness builds this: STREAMFLEX_TEST_CAPTURE_SECONDS=<s> listens that long
     // instead of 5 s, so a held control can run past the repeat's delay on a slow runner
@@ -456,7 +457,7 @@ static void captured(int code)
 void pickers_probation(int device, int code, const char *command)
 {
     char name[64];
-    probation_begin(&probation, SDL_GetTicks(), code);
+    probation_begin(&probation, ticks_ms(), code);
     probation_device = device;
     snprintf(probation_command, sizeof(probation_command), "%s", command);
     pickers_key_name(device, code, name, sizeof(name));
@@ -478,7 +479,7 @@ static void revert(const char *why)
 // (probation_press() has no clock of its own).
 static void run_clocks(void)
 {
-    unsigned int now = SDL_GetTicks();
+    unsigned int now = ticks_ms();
     clock_now = now;
     if (capture_expired(&capture, now)) {
         end_capture(-1);
@@ -519,7 +520,7 @@ bool pickers_raw_key(int code, bool repeat)
     run_clocks();
     key_held = code;   // A repeat is of the key last pressed, which is this one already
     if (capture_device == BINDINGS_KEYBOARD) {
-        if (capture_press(&capture, SDL_GetTicks(), code, repeat))
+        if (capture_press(&capture, ticks_ms(), code, repeat))
             captured(code);
         return true;
     }
@@ -551,23 +552,29 @@ void pickers_raw_release(int code)
 }
 
 #ifdef STREAMFLEX_TEST_HOOKS
-// A function only the headless harness builds: it counts the frames on which settings take one held pad
-// control for one reason (`taken`; TAKEN_NONE when not taken), and logs when the count reaches the
-// repeat's delay, the frame the control would have repeated on had the launcher's controls had it
+// A function only the headless harness builds: it times how long settings take one held pad control for
+// one reason (`taken`; TAKEN_NONE when not taken), from the first frame they took it, and logs once that
+// reaches the repeat's delay, when the control would have repeated had the launcher's controls had it
 enum { TAKEN_NONE, TAKEN_CAPTURE, TAKEN_SWALLOWED };
 static void test_pad_taken(int label, int taken)
 {
     static const char *const reasons[] = { "", "the capture", "waiting to be let go" };
     static int last_label = -1;
     static int last_taken = TAKEN_NONE;
-    static Uint32 frames = 0;
-    if (taken == TAKEN_NONE || label < 0 || label != last_label || taken != last_taken)
-        frames = 0;
+    static Uint32 since = 0;
+    static bool said = false;
+    Uint32 now = ticks_ms();
+    if (taken == TAKEN_NONE || label < 0 || label != last_label || taken != last_taken) {
+        since = now;
+        said = false;
+    }
     last_label = label;
     last_taken = taken;
-    if (taken != TAKEN_NONE && label >= 0 && ++frames == test_pad_repeat_delay())
-        log_debug("Test hook: pad %s held while settings took it (%s): %u frames, the repeat's delay",
-            bindings_label(label), reasons[taken], (unsigned int) frames);
+    if (taken != TAKEN_NONE && label >= 0 && !said && now - since >= GAMEPAD_REPEAT_DELAY) {
+        said = true;
+        log_debug("Test hook: pad %s held while settings took it (%s): %u ms, the repeat's delay",
+            bindings_label(label), reasons[taken], (unsigned int) (now - since));
+    }
 }
 #else
 #define test_pad_taken(label, taken)
@@ -587,7 +594,7 @@ bool pickers_raw_pad(int label)
         // caught on its first frame
         if (was >= 0 && was != label)
             capture_release(&capture, was);
-        if (label >= 0 && capture_press(&capture, SDL_GetTicks(), label, false))
+        if (label >= 0 && capture_press(&capture, ticks_ms(), label, false))
             captured(label);
         test_pad_taken(label, TAKEN_CAPTURE);
         return true;
@@ -604,15 +611,15 @@ bool pickers_raw_pad(int label)
 // A function to rebuild the launcher's hotkeys and gamepad controls from the bindings, as they now are:
 // the exit hotkey let go and taken again on Windows (the first :exit on a key it can register, as the
 // model's floor assumes), the gamepad's defaults added again. A control held as they are rebuilt keeps
-// its count, so it does not press again.
+// its press and its next repeat, so it does not press again.
 void apply_bindings(const Bindings *bindings)
 {
-    Uint32 repeats[BINDINGS_LABELS];
-    memset(repeats, 0, sizeof(repeats));
+    ControlHold holds[BINDINGS_LABELS];
+    memset(holds, 0, sizeof(holds));
     for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
         int label = bindings_label_index(control->label);
-        if (label >= 0 && control->repeat > repeats[label])
-            repeats[label] = control->repeat;
+        if (label >= 0 && control->hold.held && !holds[label].held)
+            holds[label] = control->hold;
     }
 #ifdef _WIN32
     clear_exit_hotkey();
@@ -644,7 +651,7 @@ void apply_bindings(const Bindings *bindings)
     for (GamepadControl *control = gamepad_controls; control != NULL; control = control->next) {
         int label = bindings_label_index(control->label);
         if (label >= 0)
-            control->repeat = repeats[label];
+            control->hold = holds[label];
     }
 #ifdef _WIN32
     if (has_exit_hotkey())
@@ -866,6 +873,16 @@ void pickers_command(const char *command)
         color_command(command);
 }
 
+// A function to close the picker on show as Back closes it at its top, the color picker putting its
+// color back first; settings stay open on the page it opened from. A new screen size does this: the
+// picker was measured when it opened.
+void pickers_cancel(void)
+{
+    if (kind == PICKER_COLOR)
+        put_color_back();
+    close_picker();
+}
+
 // A function to draw a list row: in the font picker, a family's name in its own face over an empty
 // row's highlight (the Custom row, and a face that would not draw, in the settings' font); returns
 // the height it took
@@ -886,7 +903,7 @@ static int draw_list_row(const ListPickRow *row, bool highlighted, int x, int y)
         int room = host.column_width - host.margin;
         SDL_Rect rect = { x + host.margin / 2, y + (drawn - h) / 2, w < room ? w : room, h };
         SDL_Rect from = { 0, 0, rect.w, h };
-        SDL_RenderCopy(renderer, sample, &from, &rect);
+        draw_texture(renderer, sample, &from, &rect);
     }
     return drawn;
 }
@@ -942,18 +959,18 @@ static void draw_color(int x, int top, int bottom)
         SDL_Rect box = { x + pad + (i % COLORPICK_COLUMNS) * cell + 3, top + (i / COLORPICK_COLUMNS) * cell + 3,
                          cell - 6, cell - 6 };
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 0xFF);
-        SDL_RenderFillRect(renderer, &box);
+        fill_rect(renderer, &box);
         if (i == current) {
             SDL_Rect mark = { box.x + box.w / 3, box.y + box.h / 3, box.w / 3, box.h / 3 };
             SDL_SetRenderDrawColor(renderer, (Uint8) (0xFF - c.r), (Uint8) (0xFF - c.g), (Uint8) (0xFF - c.b), 0xFF);
-            SDL_RenderFillRect(renderer, &mark);
+            fill_rect(renderer, &mark);
         }
         if (i == color_pick.cursor) {
             SDL_Rect outline = { box.x - 3, box.y - 3, box.w + 6, box.h + 6 };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
-            SDL_RenderDrawRect(renderer, &outline);
+            outline_rect(renderer, &outline);
             SDL_Rect inner = { outline.x + 1, outline.y + 1, outline.w - 2, outline.h - 2 };
-            SDL_RenderDrawRect(renderer, &inner);
+            outline_rect(renderer, &inner);
         }
     }
     int y = top + COLORPICK_ROWS * cell + pad;
@@ -977,7 +994,7 @@ static void draw_color(int x, int top, int bottom)
     snprintf(digits, sizeof(digits), "%02X%02X%02X", color_pick.hex.r, color_pick.hex.g, color_pick.hex.b);
     int w = 0;
     int h = 0;
-    TTF_SizeUTF8(host.font_row, "W", &w, &h);
+    TTF_GetStringSize(host.font_row, "W", 0, &w, &h);
     int step = w + pad;
     host.text(host.font_row, "#", x + pad, y, step, 255, false);
     for (int i = 0; i < 6; i++) {
@@ -987,7 +1004,7 @@ static void draw_color(int x, int top, int bottom)
         if (i == color_pick.digit) {
             SDL_Rect box = { cx - pad / 2, y, step, h };
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
-            SDL_RenderDrawRect(renderer, &box);
+            outline_rect(renderer, &box);
         }
     }
 }

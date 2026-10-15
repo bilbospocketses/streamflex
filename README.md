@@ -54,7 +54,7 @@ Binary packages for APT and pacman based distributions are available from the [l
 v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex needs SDL3, and with it Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10, or newer; on Debian bookworm, Ubuntu 24.04 LTS or older, stay on [v0.4.1](https://github.com/bilbospocketses/streamflex/releases/tag/v0.4.1).
 
 #### APT-based x86-64 Distributions (Debian, Ubuntu, etc.)
-This package is compatible with Debian 12 (Bookworm) and later, Ubuntu 22.04 and later.
+This package needs Debian trixie, Ubuntu 25.10, or newer.
 ```bash
 sudo apt install ./streamflex_*_amd64.deb
 ```
@@ -63,7 +63,7 @@ sudo apt install ./streamflex_*_amd64.deb
 sudo pacman -U streamflex-*-x86_64.pkg.tar.zst
 ```
 #### Raspberry Pi
-This package is compatible with Raspberry Pi OS 12 (Bookworm) and later, 64 bit only.
+This package needs Raspberry Pi OS trixie or newer, 64 bit only.
 ```bash
 sudo apt install ./streamflex_*_arm64.deb
 ```

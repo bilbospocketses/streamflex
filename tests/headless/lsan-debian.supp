@@ -1,0 +1,39 @@
+# LeakSanitizer suppressions for the Debian image's leak pass only (its Dockerfile names this file in
+# LEAK_SUPPRESSIONS; Fedora's names lsan-fedora.supp). Each entry names one function in a library's
+# own code, never a whole library; the image installs those libraries' debug symbols so the function
+# has a name. Spec section 9 and CONTRIBUTING.md list both, with these reasons.
+
+# SDL 3.2.10 (libsdl3-0 3.2.10+ds-1), the OpenGL fallback runs (gl-*): 10,600 bytes in 1 object.
+#   SDL_calloc <- VULKAN_CreateRenderer (SDL_render_vulkan.c:4252)
+#   <- SDL_CreateRendererWithProperties (SDL_render.c:1025) <- create_renderer (launcher.c)
+# SDL's loop over the names in the renderer list skips SDL_DestroyRendererWithoutFreeing after a
+# backend fails, so the Vulkan renderer's data, made before Vulkan failed to start, is never freed.
+# Fixed upstream in libsdl-org/SDL 5622eef5a (2025-09-27), in 3.4.0 and later and in no 3.2.x release.
+leak:VULKAN_CreateRenderer
+
+# Mesa 25.0.7 (libglx-mesa0 25.0.7-2+deb13u1) with SDL 3.2.10, every OpenGL run: about 108 KB.
+#   GL_CreateRenderer -> SDL_RecreateWindow -> SDL_GL_LoadLibrary -> X11_GL_LoadLibrary
+#   -> X11_GL_GetVisual (x11opengl.c:688) -> glXChooseVisual -> __glXInitialize
+#   -> AllocAndFetchScreenConfigs / driswCreateScreen / glx_screen_init (__glXQueryServerString,
+#   glx_config_create_list)
+# Mesa's GLX state for the X display, made once and not freed at exit with this pair; Fedora's SDL
+# 3.4.18 and Mesa 26.2.4 are clean. No upstream report exists.
+leak:__glXInitialize
+
+# fontconfig 2.15.0 (libfontconfig1 2.15.0-2.3), every run that builds the fallback candidates from the
+# image's own fontconfig setup (f72-real, f59-symbols): 320 bytes in 3 objects, once a run.
+#   malloc <- FcPatternObjectInsertElt (fcpat.c:525) <- FcPatternObjectAddWithBinding (fcpat.c:711)
+#   <- FcPatternAppend (fcpat.c:1258) <- FcParsePattern (fcxml.c:3112, inlined into FcEndElement)
+#   <- expat <- FcConfigParseAndLoadFromMemoryInternal <- _FcConfigParse <- FcParseInclude (fcxml.c:2606)
+#   <- ... <- FcInitLoadOwnConfig (fcinit.c:89) <- FcInitLoadConfigAndFonts <- FcConfigReference
+#   <- FcConfigSubstituteWithPat <- add_fontconfig (fontcand.c)
+# fontconfig loses the <pattern> it parses inside <selectfont><rejectfont> (a 256-byte element array, and
+# the two values it points to). Debian enables a file holding one, 70-no-bitmaps-except-emoji.conf
+# (outline and scalable false). With that file alone in a config, the parse leaks the same 320 bytes on
+# Debian's 2.15.0 and on Fedora's 2.17.0 (measured, t116a/light/leak-name.sh and leak-fedora.sh). Fedora
+# does not enable the file, so its leak pass is clean. No upstream report was looked for.
+# The entry names the parser of that element. StreamFlex's code never runs under FcParsePattern, which
+# fontconfig runs only while it reads its configuration, so the entry cannot hide a leak of StreamFlex's
+# own: a font set left open in the same run, after fontconfig read its configuration, is still reported
+# (measured, t116a/light/leak-probe.c's ownleak mode).
+leak:FcParsePattern

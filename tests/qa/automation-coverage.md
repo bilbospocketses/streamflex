@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 470 |
-| Row halves | 890 |
-| Verdicts per release (row x desktop) | 2123 |
+| Rows | 586 |
+| Row halves | 1027 |
+| Verdicts per release (row x desktop) | 2405 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 255 (1020 verdicts) |
-| `qa-harness` halves | 161 (161 verdicts) |
-| `manual` halves | 474 (942 verdicts) |
-| **Automated today** | 416 of 890 halves; 1181 of 2123 verdicts (55 %) |
+| `streamflex-headless` halves | 277 (1108 verdicts) |
+| `qa-harness` halves | 160 (160 verdicts) |
+| `manual` halves | 590 (1137 verdicts) |
+| **Automated today** | 437 of 1027 halves; 1268 of 2405 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -39,7 +39,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.4 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.5 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.6 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
-| 1.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
+| 1.7a | `[Ubuntu]` | manual | qa-harness item 75, planned |
 | 1.8 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.9 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.10 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m01-install |
@@ -96,6 +96,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.29 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.30 | `[Win]` | qa-harness | five-desktop lane, arc m01-install |
 | 1.31 | `[Linux]` | streamflex-headless | `20-refresh.sh` run `f22-refresh` |
+| 1.32 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-icons` |
+| 1.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.33 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-icons` |
+| 1.33 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.34 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-slides` |
+| 1.34 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.35 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-icons` |
+| 1.35 | `[Win]` | manual | qa-harness item 75, planned |
 | 2.1 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
 | 2.1 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.2 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
@@ -125,9 +133,9 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 2.7 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.7 | `[Fedora]` | manual | qa-harness item 75, planned |
 | 2.7 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
-| 2.8 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
+| 2.8 | `[Linux]` | streamflex-headless | `50-settings-timing.sh` run `f50-menus` |
 | 2.8 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
-| 2.9 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-menus` |
+| 2.9 | `[Linux]` | streamflex-headless | `50-settings-timing.sh` run `f50-menus` |
 | 2.9 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.10 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.10 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m02-home |
@@ -232,6 +240,13 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 2.35 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.35 | `[Fedora]` | manual | qa-harness item 75, planned |
 | 2.35 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 2.36 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-selected` |
+| 2.36 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.37 | `[All]` | manual | qa-harness item 75, planned |
+| 2.38 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-brokensvg` |
+| 2.38 | `[Win]` | manual | qa-harness item 75, planned |
+| 2.39 | `[Linux]` | streamflex-headless | `45-shadows.sh` run `f45-blank` |
+| 2.39 | `[Win]` | manual | qa-harness item 75, planned |
 | 3.1 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.1 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
@@ -257,7 +272,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 3.5 | `[Kubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.5 | `[Fedora]` | manual | qa-harness item 75, planned |
 | 3.5 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
-| 3.6 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-launch` |
+| 3.6 | `[Linux]` | streamflex-headless | `50-settings-timing.sh` run `f50-launch` |
 | 3.6 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.7 | `[Win]` | qa-harness | five-desktop lane, arc m03-launch |
 | 3.7 | `[Ubuntu]` | qa-harness | five-desktop lane, arc m03-launch |
@@ -313,7 +328,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 4.18 | `[Win]` | manual | qa-harness item 75, planned |
 | 4.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-pad-taken` |
 | 4.19 | `[Win]` | manual | qa-harness item 75, planned |
-| 4.20 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-heldhotkey` |
+| 4.20 | `[Linux]` | streamflex-headless | `50-settings-timing.sh` run `f50-heldhotkey` |
 | 4.20 | `[Win]` | manual | qa-harness item 75, planned |
 | 4.21 | `[All]` | manual | qa-harness item 75, planned |
 | 5.1 | `[All]` | manual | qa-harness item 75, planned |
@@ -355,7 +370,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.29 | `[All]` | manual | qa-harness item 75, planned |
 | 5.30 | `[All]` | manual | qa-harness item 75, planned |
 | 5.31 | `[All]` | manual | qa-harness item 75, planned |
-| 5.32 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slideshow` |
+| 5.32 | `[Linux]` | streamflex-headless | `60-settings-background-timing.sh` run `f60-slideshow` |
 | 5.32 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.33 | `[All]` | manual | qa-harness item 75, planned |
 | 5.34 | `[All]` | manual | qa-harness item 75, planned |
@@ -363,7 +378,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.35 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.36 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-image` |
 | 5.36 | `[Win]` | manual | qa-harness item 75, planned |
-| 5.37 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slideshow` |
+| 5.37 | `[Linux]` | streamflex-headless | `60-settings-background-timing.sh` run `f60-slideshow` |
 | 5.37 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.38 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-incomplete` |
 | 5.38 | `[Win]` | manual | qa-harness item 75, planned |
@@ -373,15 +388,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.40 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.41 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-broken` |
 | 5.41 | `[Win]` | manual | qa-harness item 75, planned |
-| 5.42 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-running` |
+| 5.42 | `[Linux]` | streamflex-headless | `60-settings-background-timing.sh` run `f60-running` |
 | 5.42 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.43 | `[All]` | manual | qa-harness item 75, planned |
 | 5.44 | `[All]` | manual | qa-harness item 75, planned |
 | 5.45 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.46 | `[GNOME]` | manual | qa-harness item 75, planned |
 | 5.47 | `[KDE]` | manual | qa-harness item 75, planned |
-| 5.48 | `[Linux]` | streamflex-headless | `70-chroma.sh` run `f70-chroma` |
-| 5.48 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.48a | `[Linux]` | streamflex-headless | `70-chroma.sh` run `f70-chroma` |
 | 5.49 | `[All]` | manual | qa-harness item 75, planned |
 | 5.50 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-image` |
 | 5.50 | `[Win]` | manual | qa-harness item 75, planned |
@@ -409,8 +423,45 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.61 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.62 | `[Linux]` | streamflex-headless | `30-backgrounds.sh` run `f30-nodir`, `60-settings-background.sh` run `f60-nofolder` |
 | 5.62 | `[Win]` | manual | qa-harness item 75, planned |
-| 5.63 | `[Linux]` | streamflex-headless | `60-settings-background.sh` run `f60-slowdecode` |
+| 5.63 | `[Linux]` | streamflex-headless | `60-settings-background-timing.sh` run `f60-slowdecode` |
 | 5.63 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.64 | `[Win]` | manual | needs an NVIDIA GPU driving the display; checked by hand on the user's Windows machine |
+| 5.65 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.66 | `[Win]` | manual | needs a GPU driving the display, and a judgment of pixels against the desktop |
+| 5.67 | `[Win]` | manual | needs a GPU driving the display, and a judgment by eye of soft edges |
+| 5.68 | `[Win]` | manual | needs a GPU driving the display, and the real taskbar |
+| 5.69 | `[Win]` | manual | needs a GPU driving the display, and the real taskbar |
+| 5.70 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.71 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.72 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.73 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.74 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.75 | `[Win]` | manual | needs a GPU driving the display, and a real change of display mode |
+| 5.76 | `[Win]` | manual | needs a GPU driving the display, and a second display |
+| 5.77 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.78 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.79 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.80 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.81 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.82 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.83 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.84 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.85 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.86 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.87 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.88 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.89 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.90 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.91 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.92 | `[Win]` | manual | needs a GPU driving the display, and a real change of display mode |
+| 5.93 | `[Win]` | manual | needs a GPU driving the display, and a game that runs in a display mode of its own |
+| 5.94 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.95 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.96 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 5.97 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.98 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.99 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.100 | `[Win]` | manual | needs a GPU driving the display, and a real loss of the device |
 | 6.1 | `[All]` | manual | qa-harness item 75, planned |
 | 6.2 | `[All]` | manual | qa-harness item 75, planned |
 | 6.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -525,7 +576,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 7.34 | `[All]` | manual | qa-harness item 75, planned |
 | 7.35 | `[All]` | manual | qa-harness item 75, planned |
 | 7.36 | `[All]` | manual | qa-harness item 75, planned |
-| 7.37 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-clock` |
+| 7.37 | `[Linux]` | streamflex-headless | `55-settings-pages-timing.sh` run `f55-clock` |
 | 7.37 | `[Win]` | manual | qa-harness item 75, planned |
 | 7.38 | `[Linux]` | streamflex-headless | `55-settings-pages.sh` run `f55-dim` |
 | 7.38 | `[Win]` | manual | qa-harness item 75, planned |
@@ -537,10 +588,18 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 7.41 | `[Win]` | manual | qa-harness item 75, planned |
 | 7.42 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-longrow` |
 | 7.42 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.43 | `[Linux]` | streamflex-headless | `49-fade-wall-time.sh` run `f49-slowfade` |
+| 7.43 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.44 | `[All]` | manual | qa-harness item 75, planned |
+| 7.45 | `[Linux]` | streamflex-headless | `49-fade-wall-time.sh` run `f49-slowdim` |
+| 7.45 | `[Win]` | manual | qa-harness item 75, planned |
+| 7.46 | `[Win]` | manual | needs a GPU driving the display, whose refresh the display delivers |
+| 7.47 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
+| 7.48 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.1 | `[All]` | manual | qa-harness item 75, planned |
-| 8.2 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-loading` |
+| 8.2 | `[Linux]` | streamflex-headless | `59-settings-fonts-timing.sh` run `f59-loading` |
 | 8.2 | `[Win]` | manual | qa-harness item 75, planned |
-| 8.3 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-loading` |
+| 8.3 | `[Linux]` | streamflex-headless | `59-settings-fonts-timing.sh` run `f59-loading` |
 | 8.3 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.4 | `[Linux]` | streamflex-headless | `59-settings-fonts.sh` run `f59-fonts` |
 | 8.4 | `[Win]` | manual | qa-harness item 75, planned |
@@ -664,26 +723,26 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 8.72 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.73 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-overlay` |
 | 8.73 | `[Win]` | manual | qa-harness item 75, planned |
-| 8.74 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-slide` |
+| 8.74 | `[Linux]` | streamflex-headless | `58-settings-pickers-timing.sh` run `f58-slide` |
 | 8.74 | `[Win]` | manual | qa-harness item 75, planned |
 | 8.75 | `[Linux]` | streamflex-headless | `58-settings-pickers.sh` run `f58-fade` |
 | 8.75 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.1 | `[All]` | manual | qa-harness item 75, planned |
 | 9.2 | `[All]` | manual | qa-harness item 75, planned |
 | 9.3 | `[All]` | manual | qa-harness item 75, planned |
-| 9.4 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.4 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind` |
 | 9.4 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.5 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.5 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind` |
 | 9.5 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.6 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.6 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind` |
 | 9.6 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.7 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.7 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind` |
 | 9.7 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.8 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind` |
+| 9.8 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind` |
 | 9.8 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.9 | `[All]` | manual | qa-harness item 75, planned |
 | 9.10 | `[All]` | manual | qa-harness item 75, planned |
-| 9.11 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-bind`, with `62-settings-bindings.sh` run `f62-confirm` |
+| 9.11 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-bind`, with `62-settings-bindings.sh` run `f62-confirm` |
 | 9.11 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.12 | `[All]` | manual | qa-harness item 75, planned |
 | 9.13 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-pad` |
@@ -704,37 +763,37 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.25 | `[All]` | manual | qa-harness item 75, planned |
 | 9.26 | `[All]` | manual | qa-harness item 75, planned |
 | 9.27 | `[All]` | manual | qa-harness item 75, planned |
-| 9.28 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-held` |
+| 9.28 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-held` |
 | 9.28 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.29 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.29 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capture` |
 | 9.29 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.30 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert`, with `62-settings-bindings.sh` run `f62-norepeat`, with `62-settings-bindings.sh` run `f62-capture`, with `62-settings-bindings.sh` run `f62-holdok` |
+| 9.30 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-revert`, with `62-settings-bindings-timing.sh` run `f62-norepeat`, with `62-settings-bindings-timing.sh` run `f62-capture`, with `62-settings-bindings-timing.sh` run `f62-holdok` |
 | 9.30 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.31 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.31 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capture` |
 | 9.31 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.32 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padholdkey` |
 | 9.32 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.33 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-keyholdpad` |
+| 9.33 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-keyholdpad` |
 | 9.33 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.34 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capture` |
+| 9.34 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capture` |
 | 9.34 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.35 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padheld` |
+| 9.35 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padheld` |
 | 9.35 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.36 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-hotkeyok` |
 | 9.36 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.37 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-holdok` |
+| 9.37 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-holdok` |
 | 9.37 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.38 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.38 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-revert` |
 | 9.38 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.39 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.39 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-revert` |
 | 9.39 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.40 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-revert` |
+| 9.40 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-revert` |
 | 9.40 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.41 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-confirm` |
 | 9.41 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.42 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-norepeat` |
+| 9.42 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-norepeat` |
 | 9.42 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.43 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-norepeat` |
+| 9.43 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-norepeat` |
 | 9.43 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.44 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-live` |
 | 9.44 | `[Win]` | manual | qa-harness item 75, planned |
@@ -748,21 +807,21 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.48 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.49 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padlive` |
 | 9.49 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.50 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padok` |
+| 9.50 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padok` |
 | 9.50 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.51 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-gpon` |
 | 9.51 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.52 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padstart` |
+| 9.52 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padstart` |
 | 9.52 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.53 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padstart` |
+| 9.53 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padstart` |
 | 9.53 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.54 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padkey` |
+| 9.54 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padkey` |
 | 9.54 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.55 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padaxis` |
 | 9.55 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.56 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-padtap` |
+| 9.56 | `[Linux]` | streamflex-headless | `62-settings-bindings-pad-timing.sh` run `f62-padtap` |
 | 9.56 | `[Win]` | manual | qa-harness item 75, planned |
-| 9.57 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-capheld` |
+| 9.57 | `[Linux]` | streamflex-headless | `62-settings-bindings-timing.sh` run `f62-capheld` |
 | 9.57 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.58 | `[Linux]` | streamflex-headless | `63-settings-mappings.sh` run `f63-mappings` |
 | 9.58 | `[Win]` | manual | qa-harness item 75, planned |
@@ -785,6 +844,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.67 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.68 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-mixnote` |
 | 9.68 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.69 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-media` |
+| 9.69 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.70 | `[Linux]` | streamflex-headless | `62-settings-bindings.sh` run `f62-mediabind` |
+| 9.70 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.71 | `[All]` | manual | qa-harness item 75, planned |
+| 9.72 | `[All]` | manual | qa-harness item 75, planned |
+| 9.73 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.74 | `[Win]` | manual | qa-harness item 75, planned |
 | 10.1 | `[All]` | manual | qa-harness item 75, planned |
 | 10.2 | `[All]` | manual | qa-harness item 75, planned |
 | 10.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -846,6 +913,8 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 11.18 | `[Win]` | manual | qa-harness item 75, planned |
 | 11.19 | `[Win]` | manual | qa-harness item 75, planned |
 | 11.20 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 11.22 | `[Win]` | manual | qa-harness item 75, planned |
 | 12.1 | `[Linux]` | streamflex-headless | `64-settings-restart.sh` run `f64-yes` |
 | 12.1 | `[Win]` | qa-harness | five-desktop lane, arc m12-quit |
 | 12.2 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-hotkey` |
@@ -893,6 +962,18 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 13.13 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.14 | `[Linux]` | manual | qa-harness item 75, planned |
 | 13.15 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.16 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.17 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.18 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.19 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.20 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.21 | `[GNOME]` | manual | qa-harness item 75, planned |
+| 13.22 | `[KDE]` | manual | qa-harness item 75, planned |
+| 13.23 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.24 | `[Linux]` | manual | qa-harness item 75, planned |
+| 13.25 | `[Win]` | manual | qa-harness item 75, planned |
+| 13.26 | `[Win]` | manual | qa-harness item 75, planned |
+| 13.27 | `[Win]` | manual | needs a GPU driving the display; checked by hand on the user's Windows machine |
 | 14.1 | `[All]` | manual | qa-harness item 75, planned |
 | 14.2 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-fps10` |
 | 14.2 | `[Win]` | manual | qa-harness item 75, planned |
@@ -923,5 +1004,61 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 14.17 | `[Win]` | manual | qa-harness item 75, planned |
 | 14.18 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-padswap` |
 | 14.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.2 | `[Linux]` | manual | qa-harness item 75, planned |
+| 15.3 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 15.4 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 15.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.6 | `[Linux]` | manual | qa-harness item 75, planned |
+| 15.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.8 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.9 | `[Linux]` | streamflex-headless | `72-fallback-fonts.sh` run `f72-empty` |
+| 15.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.10 | `[Linux]` | streamflex-headless | `72-fallback-fonts.sh` run `f72-settings` |
+| 15.10 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.11 | `[Linux]` | streamflex-headless | `72-fallback-fonts.sh` run `f72-shrink` |
+| 15.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 15.12 | `[Linux]` | manual | qa-harness item 75, planned |
+| 15.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.3 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.6 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.7 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.8 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.9 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.10 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.11 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-resize` |
+| 16.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.12 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-appwait` |
+| 16.12 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.13 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-settings` |
+| 16.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.14 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-picker` |
+| 16.14 | `[Win]` | manual | qa-harness item 75, planned |
+| 16.14b | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-browser` |
+| 16.14b | `[Win]` | manual | qa-harness item 75, planned |
+| 16.15 | `[All]` | manual | needs a second display, of another size than the first |
+| 16.16 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.17 | `[Linux]` | manual | qa-harness item 75, planned |
+| 16.18 | `[Linux]` | streamflex-headless | `47-screen.sh` run `f47-mode` |
+| 16.18 | `[Win]` | manual | needs a GPU driving the display, and a real change of display mode |
+| 17.1 | `[Linux]` | streamflex-headless | `66-pad-power.sh` run `f66-power` |
+| 17.2 | `[Win]` | manual | needs a real Xbox Wireless Controller on low batteries; no virtual pad reports a battery |
+| 17.3 | `[Win]` | manual | needs a real Xbox Wireless Controller and its cable |
+| 17.4 | `[Win]` | manual | needs a real Xbox Wireless Controller and the Xbox Wireless Adapter |
+| 17.5 | `[Win]` | manual | needs a real Xbox Wireless Controller over Bluetooth |
+| 17.6 | `[Win]` | manual | needs a real DualSense or DualShock 4 and its cable |
+| 17.7 | `[Win]` | manual | needs a real DualSense or DualShock 4 and its cable |
+| 17.8 | `[Win]` | manual | needs a real DualSense over Bluetooth, low on battery |
+| 17.9 | `[Win]` | manual | needs a real DualSense, and a judgment of a DirectInput app's test page |
+| 17.10 | `[Win]` | manual | needs a real Switch Pro Controller over Bluetooth |
+| 17.11 | `[Win]` | manual | needs a real pad that reports a low battery |
+| 17.12 | `[Linux]` | streamflex-headless | `66-pad-power.sh` run `f66-power`, `66-pad-power.sh` run `f66-right` |
+| 17.12 | `[Win]` | manual | needs a real pad that reports a low battery |
+| 17.13 | `[Linux]` | manual | needs a real pad passed into a Linux guest, with no udev rule for its hidraw node |
+| 17.14 | `[Linux]` | manual | needs a real pad passed into a Linux guest, with no udev rule for its hidraw node |
 
 ## Findings

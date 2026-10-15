@@ -1,6 +1,6 @@
 # Smoke results
 
-One file per release, `vX.Y.Z.md`, committed in the release PR before the tag. The release PR also sets the smoke doc's **Smoke target** to the version. It records the verdict of every row of [`../smoke-test.md`](../smoke-test.md) on every desktop the row's tag covers. The first file is the next release's; v0.3.x and v0.4.x are not back-filled.
+One file per release, `vX.Y.Z.md`, committed in the release PR before the tag. The release PR also sets the smoke doc's **Smoke target** to the version. It records the verdict of every row of [`../smoke-test.md`](../smoke-test.md) on every desktop the row's tag covers. The first file is v0.6.0's, filled by qa-harness. v0.5.0 has none, by the user's ruling of 2026-10-15: the verdicts wait for v0.6.0's pass, where qa-harness runs every row but the Windows rows that need a real GPU, which the user runs, so v0.5.0's release PR commits no results file and leaves the **Smoke target** as it is: the target moves with the results file, from v0.6.0's release PR on. v0.3.x, v0.4.x and v0.5.0 are not back-filled.
 
 ## The file
 

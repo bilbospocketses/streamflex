@@ -80,7 +80,7 @@ facts() {
     echo "== SDL libraries StreamFlex loads"
     if [ -x /usr/bin/streamflex ]; then
         ldd /usr/bin/streamflex | grep -E 'SDL|inih|not found'
-        for lib in $(ldd /usr/bin/streamflex | awk '/SDL2/ {print $3}'); do
+        for lib in $(ldd /usr/bin/streamflex | awk '/SDL[23]/ {print $3}'); do
             echo "$lib -> $(readlink -f "$lib") ($(dpkg -S "$(readlink -f "$lib")" 2>/dev/null | cut -d: -f1))"
         done
     else

@@ -30,10 +30,10 @@ if (WIN32)
   set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${EXECUTABLE_TITLE})
 endif ()
 
-# Minimum library versions for Linux
-set(MIN_SDL_VERSION "2.0.18")
-set(MIN_SDL_IMAGE_VERSION "2.0.5")
-set(MIN_SDL_TTF_VERSION "2.0.15")
+# Minimum library versions: Debian trixie's, the oldest platform supported (spec section 2)
+set(MIN_SDL_VERSION "3.2.10")
+set(MIN_SDL_IMAGE_VERSION "3.2.4")
+set(MIN_SDL_TTF_VERSION "3.2.2")
 
 # Generate PKGBUILD script for Arch packages
 if (PACKAGE STREQUAL "ARCH")
@@ -44,21 +44,16 @@ endif ()
 # Import settings
 include(${PROJECT_SOURCE_DIR}/config/config_settings.cmake)
 
-# Find dependencies - Linux
+# Find dependencies - Linux: inih through pkg-config, and fontconfig, which finds the fallback fonts
 if (UNIX)
   find_package(PkgConfig MODULE REQUIRED)
-  pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2>=${MIN_SDL_VERSION})
-  pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image>=${MIN_SDL_IMAGE_VERSION})
-  pkg_check_modules(SDL2_TTF REQUIRED IMPORTED_TARGET SDL2_ttf>=${MIN_SDL_TTF_VERSION})
   pkg_check_modules(INIH REQUIRED IMPORTED_TARGET inih)
+  find_package(Fontconfig REQUIRED)
 endif ()
 
 # Find dependencies - Windows
 if (WIN32)
-  find_package(SDL2 CONFIG REQUIRED)
-  find_package(sdl2_image CONFIG REQUIRED)
-  find_package(SDL2_ttf CONFIG REQUIRED)
-  
+
   # A function to find a vcpkg library once per configuration, so each configuration links its own.
   # A multi-config generator has no build type, so vcpkg searches its debug folder first, and a
   # plain find_library() gave the Release link the debug library and its debug C runtime (LIBCMTD)
@@ -80,6 +75,16 @@ if (WIN32)
   find_path(GETOPT_INCLUDE_DIR "getopt.h" REQUIRED)
   find_vcpkg_library(GETOPT getopt)
 
+  # A static SDL3_ttf finds HarfBuzz through its own Findharfbuzz.cmake, whose harfbuzz::harfbuzz is
+  # one find_library() path: the debug library, for the reason above, so the Release link took the
+  # debug C runtime (LNK2001 _CrtDbgReport). That module makes the target only when none exists, so
+  # this one, with each configuration's own library, is made first, before find_package(SDL3_ttf).
+  # The module still runs, so Configure still prints "Found harfbuzz: .../debug/lib/harfbuzz.lib";
+  # that is its unused search, not the bug back: the target linked is this per-configuration one
+  find_vcpkg_library(HARFBUZZ harfbuzz)
+  add_library(harfbuzz::harfbuzz INTERFACE IMPORTED)
+  target_link_libraries(harfbuzz::harfbuzz INTERFACE ${HARFBUZZ})
+
   # A static triplet's libraries are built against the static C runtime (/MT), so build ours the
   # same way; the default /MD made the link search both MSVCRT and LIBCMT. A runtime given on the
   # command line (-DCMAKE_MSVC_RUNTIME_LIBRARY=...) still wins
@@ -87,6 +92,12 @@ if (WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   endif ()
 endif ()
+
+# Find dependencies: SDL3 and its libraries ship CMake config files on every platform, Debian's -dev
+# packages and vcpkg's ports alike. After the Windows block, whose harfbuzz::harfbuzz SDL3_ttf links
+find_package(SDL3 ${MIN_SDL_VERSION} CONFIG REQUIRED)
+find_package(SDL3_image ${MIN_SDL_IMAGE_VERSION} CONFIG REQUIRED)
+find_package(SDL3_ttf ${MIN_SDL_TTF_VERSION} CONFIG REQUIRED)
 
 # Build configuration - Linux
 if (UNIX)
@@ -189,11 +200,14 @@ if (UNIX)
     # the docs download page match on.
     set(CPACK_DEBIAN_FILE_NAME "${CPACK_DEBIAN_PACKAGE_NAME}_${CMAKE_PROJECT_VERSION}_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}.deb")
     # dpkg-shlibdeps derives every dependency and its minimum version (glibc
-    # included) from the built binary. No explicit CPACK_DEBIAN_PACKAGE_DEPENDS:
-    # CPack appends shlibdeps' list to it without merging, so each library
-    # would appear twice. SDL2's floor comes from its symbols file:
-    # SDL_RenderSetVSync (2.0.18) makes the package depend on libsdl2-2.0-0
-    # (>= 2.0.18), matching MIN_SDL_VERSION above.
+    # included) from the built binary. No symbol sets SDL3's floor: Debian's
+    # symbols files date every SDL3 symbol the launcher uses 3.2.0, and they
+    # see API, not the fixes StreamFlex is built and tested with. So the
+    # package also depends on the tested versions, MIN_*_VERSION above (Debian
+    # trixie's). CPack appends shlibdeps' list to these without merging, so
+    # each SDL3 library is listed twice, at its tested floor and at 3.2.0;
+    # dpkg requires both, so the tested floor is the one that holds.
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl3-0 (>= ${MIN_SDL_VERSION}), libsdl3-image0 (>= ${MIN_SDL_IMAGE_VERSION}), libsdl3-ttf0 (>= ${MIN_SDL_TTF_VERSION})")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "bilbospocketses <104535858+bilbospocketses@users.noreply.github.com>")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE ${CMAKE_PROJECT_HOMEPAGE_URL})

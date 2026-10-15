@@ -1,3 +1,6 @@
+#include "fontset.h"
+#include "iconload.h"
+
 // Dynamic SVG generation for highlight
 #define HIGHLIGHT_OUTLINE_FORMAT " stroke-width=\"%i\" stroke=\"#%02X%02X%02X\" stroke-opacity=\"%.2f\""
 #define HIGHLIGHT_FORMAT "<svg viewBox=\"0 0 %i %i\"><rect x=\"0\" width=\"%i\" height=\"%i\" rx=\"%i\" fill=\"#%02X%02X%02X\" fill-opacity=\"%.2f\"%s/></svg>"
@@ -10,6 +13,7 @@
 
 typedef struct {
     TTF_Font *font;
+    FontSet *set;          // Titles: the set font belongs to, its fallbacks attached; NULL for the clock's one font
     int font_size;
     char *font_path;       // The file the font was opened from (owned): the configured one, or the bundled fallback
     int font_face;         // The face within it
@@ -23,23 +27,36 @@ typedef struct {
 
 int init_svg(void);
 char *find_default_font(const char *font);
-TTF_Font *open_font_file(const char *path, int size, int face);   // TTF_OpenFontIndex, refusing what is not a regular file
-int load_font(TextInfo *info, const char *configured, int face, const char *default_font);
+TTF_Font *open_font_file(const char *path, int size, int face);   // open_font_face(), refusing what is not a regular file
+int load_font(TextInfo *info, const char *configured, int face, const char *default_font, const char *role);   // role: a set ("titles"); NULL: one font
 bool font_file_found(const char *configured);   // There, as given or beside the executable, as load_font() looks
 void quit_svg(void);
 int render_scroll_indicators(Scroll *scroll, int height, Geometry *geo);
-SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition);
+SDL_Surface *load_next_slideshow_background(Slideshow *slideshow, bool transition, Uint64 *read, Uint64 *decode);
 int load_next_slideshow_background_async(void *data);
 SDL_Texture *load_texture(SDL_Surface *surface);
 SDL_Texture *load_texture_from_file(const char *path);
 SDL_Texture *load_texture_measured(const char *path, double *luminance);
 double surface_luminance(SDL_Surface *surface);   // -1 when it cannot be read
 SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect);
-SDL_Texture *rasterize_svg_from_file(const char *path, int w, int h, SDL_Rect *rect);
-SDL_Texture *load_icon(const char *path, int size);
+void decode_icon_job(IconJob *job, void *rasterizer);   // The IconWork for icons: read, decode or rasterize, chroma pass
+void *icon_worker_start(void);                          // nsvgCreateRasterizer()
+void icon_worker_end(void *rasterizer);                 // nsvgDeleteRasterizer()
+extern Uint64 timing_read, timing_decode, timing_texture;   // render_buttons' icons, in counter counts; main thread only
+unsigned timing_ms(Uint64 counts);                           // Whole milliseconds, rounded
+void prime_image_formats(void);                              // Main thread, before any thread that decodes; makes the decode lock
+void quit_image_formats(void);                               // At quit, after every thread that decodes has ended
+SDL_Surface *load_image_file(const char *path);              // Any thread: read and decode, other formats one at a time
 SDL_Texture *render_highlight(int width, int height, SDL_Rect *rect);
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
 SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
-TTF_Font *title_font(int size);
+FontSet *title_font(int size);
 void title_fonts_free(void);
 void title_fonts_keep(const int *sizes, int count);
+SDL_Texture *surface_texture(SDL_Surface *surface);   // Linear scaling set on every texture (no SDL3 hint does it)
+TTF_Font *open_font_face(const char *path, int size, int face);
+void draw_texture(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *src, const SDL_Rect *dst);
+void draw_texture_rotated(SDL_Renderer *r, SDL_Texture *texture, const SDL_Rect *dst, double angle, SDL_FlipMode flip);
+void fill_rect(SDL_Renderer *r, const SDL_Rect *rect);
+void outline_rect(SDL_Renderer *r, const SDL_Rect *rect);
+void draw_line(SDL_Renderer *r, int x1, int y1, int x2, int y2);
