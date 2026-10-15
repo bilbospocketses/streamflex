@@ -19,11 +19,14 @@
 # turn. Without the lock (STREAMFLEX_TEST_FAIL=decodelock) they wait on a spin lock instead, as cleanly.
 # The image formats are primed on the main thread before anything decodes (SDL_image sets each
 # format up on its first load, unsynchronized), and a priming that fails says so.
+# An icon that is a text file named .svg, which nanosvg parses to an empty image, 0 x 0, logs the SVG
+# reason, and its menu still renders, with nothing scaled by a zero size (Task 1.17).
 # Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s by the clock as a key's frame is
 rm -rf "$TESTER_HOME/t60"
 mkdir -p "$TESTER_HOME/t60"
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/icon.png" 0,200,200 rgba
 printf 'not a picture\n' > "$TESTER_HOME/t60/broken.png"
+printf 'not a picture\n' > "$TESTER_HOME/t60/broken.svg"
 python3 "$HERE/make_images.py" --xpm "$TESTER_HOME/t60/icon.xpm" 512
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/sel.png" 200,40,40 rgb
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/sel_selected.png" 40,200,40 rgb
@@ -114,6 +117,18 @@ reason=$(grep -A1 -xF 'Could not load image /home/tester/t60/broken.png' "$log" 
     && grep -qE "^Menu 'More': rendered its buttons at [0-9]+ px\$" "$log" && ok=0
 result "timing: an icon that is not an image logs SDL_image's reason, and the menu still renders" $ok
 echo "      ${reason:-no reason logged}"
+
+# A menu of one icon that is a text file named .svg: nanosvg parses it to an empty image, 0 x 0, which
+# the rasterizer refuses with the SVG reason before it scales by its size
+UNTIL="Timing: menu 'Main': " run_keys f60-brokensvg
+ok=1
+svg_reason=$(grep -A1 -xF 'Could not load image /home/tester/t60/broken.svg' "$out/f60-brokensvg.log" | sed -n 2p)
+[ "$svg_reason" = 'could not open SVG image.' ] \
+    && grep -qE "^Menu 'Main': rendered its buttons at [0-9]+ px\$" "$out/f60-brokensvg.log" \
+    && ran_clean f60-brokensvg && ok=0
+result "icons: an icon that is a text file named .svg logs the SVG reason, and the menu still renders (exit $(cat "$out/f60-brokensvg.code"))" $ok
+echo "      ${svg_reason:-no reason logged}"
+grep -m3 -E 'AddressSanitizer|runtime error' "$out/f60-brokensvg.err" | sed 's/^/      /'
 
 # The slideshow's first image, loaded on the main thread
 CFG=$FX/f30-slideshow.ini run_quick f60-slides
