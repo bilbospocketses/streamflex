@@ -105,7 +105,7 @@ static char logged_hint[160];                 // The key hint last logged
 static Menu *preview_wanted = NULL;           // The menu the preview switches to once the cursor rests...
 static Uint32 preview_asked = 0;              // ...since when it has rested
 static bool kind_waiting = false;             // Mode changed: the window may need another kind...
-static Uint32 kind_asked = 0;                 // ...once Mode's cursor has rested since this step
+static Uint32 kind_asked = 0;                 // ...once Mode's cursor has rested since this step, on Mode
 static int shown_first = -1;                  // The rows last on show, for the log
 static int shown_last = -1;
 static int shown_count = -1;
@@ -375,8 +375,9 @@ static void run_refresh(SettingRefresh refresh)
 // A function to put a setting's value into the running launcher, then refresh what it affects.
 // The clock is stopped before one of its settings is written. That is defense in depth, not a need:
 // the clock's thread reads only its own snapshot (clk), never config, so a render in flight could
-// not see the write; reload_clock() would stop it anyway. Two settings act beyond any group: the OS
-// screensaver block, and the menu :home goes to.
+// not see the write; reload_clock() would stop it anyway. Three settings act beyond any group: the OS
+// screensaver block, the menu :home goes to, and Mode, any value but Transparent letting a Transparent
+// that failed be tried again, whether or not the cursor rests on it (the window follows on the rest).
 static void apply_slot(const SettingSlot *slot, bool refresh)
 {
     if (slot->def->refresh == SET_REFRESH_CLOCK)
@@ -387,6 +388,8 @@ static void apply_slot(const SettingSlot *slot, bool refresh)
         apply_os_screensaver();
     else if (slot->def->id == SET_ID_DEFAULT_MENU)
         apply_default_menu();
+    else if (slot->def->id == SET_ID_BACKGROUND_MODE)
+        window_mode_chosen();
     if (refresh)
         run_refresh(slot->def->refresh);
 }
@@ -1168,6 +1171,29 @@ static void log_path(void)
     }
 }
 
+// A function to tell whether the cursor is on the page's Mode row
+static bool cursor_on_mode(void)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = min_int(settings_rows(model, rows, SETTINGS_MAX_ROWS), SETTINGS_MAX_ROWS);
+    int cursor = settings_cursor(model);
+    return cursor >= 0 && cursor < count && rows[cursor].slot != NULL &&
+           rows[cursor].slot->def->id == SET_ID_BACKGROUND_MODE;
+}
+
+// A function to give up the Mode row's rest once a key has taken the cursor off the row: the
+// recreation the rest may bring reflows the screen, which closes an open picker or the folder browser.
+// Every picker and the browser open from a row other than Mode, so none can open before the rest is
+// given up. The window then follows Mode when settings close, when Discard puts Mode back, or at the
+// rest after Mode's next step.
+static void follow_mode_rest(void)
+{
+    if (!kind_waiting || cursor_on_mode())
+        return;
+    kind_waiting = false;
+    log_debug("Settings: the cursor left Mode before it rested, so the window keeps its kind for now");
+}
+
 // A function to act on a key while settings are open: the remote's keys move through them (or
 // through a picker, while one is open), and every other command waits until they close
 static void handle_command(const char *command)
@@ -1192,6 +1218,7 @@ static void handle_command(const char *command)
     handle_event(&event);
     if (model == NULL)
         return;
+    follow_mode_rest();
     if (before != SETTINGS_PAGE_BACKGROUND && settings_page(model) == SETTINGS_PAGE_BACKGROUND)
         counted_folder[0] = '\0';   // The Background page opened: count the Folder's images again
     log_path();

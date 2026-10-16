@@ -1,6 +1,7 @@
 // Unit test 14 (spec section 9): the window a background needs and the renderers that may draw it.
 // winplan.c is pure, so this links it alone, as test_layout links layout.c.
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include "check.h"
 #include "winplan.h"
@@ -162,6 +163,40 @@ static void test_present_failures(void)
     CHECK_INT(failures, 0);
 }
 
+// A function to test the count of lost renderers: it counts on one window, and starts again at 1 for a
+// loss on another, as a new window starts with none; a window it has never seen (0 to start) is
+// another window too
+static void test_renderer_loss_count(void)
+{
+    int losses = 0;
+    uint32_t seen = 0;
+    renderer_loss_count(&losses, &seen, 7);
+    CHECK_INT(losses, 1);
+    CHECK_INT((int) seen, 7);
+    renderer_loss_count(&losses, &seen, 7);
+    renderer_loss_count(&losses, &seen, 7);
+    CHECK_INT(losses, 3);
+    renderer_loss_count(&losses, &seen, 8);
+    CHECK_INT(losses, 1);
+    CHECK_INT((int) seen, 8);
+    renderer_loss_count(&losses, &seen, 8);
+    CHECK_INT(losses, 2);
+}
+
+// A function to test when lost renderers give a window up: a Transparent window at the third loss and
+// after, never before, and an opaque window never, however many
+static void test_renderer_losses_spent(void)
+{
+    CHECK_INT(RENDERER_LOSSES_TRANSPARENT, 3);
+    CHECK(!renderer_losses_spent(WINDOW_TRANSPARENT_SHORT, 0));
+    CHECK(!renderer_losses_spent(WINDOW_TRANSPARENT_SHORT, 1));
+    CHECK(!renderer_losses_spent(WINDOW_TRANSPARENT_SHORT, 2));
+    CHECK(renderer_losses_spent(WINDOW_TRANSPARENT_SHORT, 3));
+    CHECK(renderer_losses_spent(WINDOW_TRANSPARENT_SHORT, 4));
+    for (int losses = 0; losses <= 10; losses++)
+        CHECK(!renderer_losses_spent(WINDOW_FULLSCREEN, losses));
+}
+
 int main(void)
 {
     test_transparent_on_windows();
@@ -173,5 +208,7 @@ int main(void)
     test_window_short_rect();
     test_window_must_change();
     test_present_failures();
+    test_renderer_loss_count();
+    test_renderer_losses_spent();
     return check_report();
 }

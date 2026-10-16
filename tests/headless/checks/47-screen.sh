@@ -280,3 +280,32 @@ ok=1
     && ! grep -qE '^Reload: done at |; reloading$' "$log" && ran_clean f47-mode && ok=0
 result "screen: a display-mode change to another refresh rate works the frame timing out again and watches VSync afresh (exit $(cat "$out/f47-mode.code"))" $ok
 grep -E '^(Screen|Frame timing):|reports no refresh rate' "$log" | sed 's/^/      /'
+
+# A Transparent window under the Windows plan is fitted to its display again on a mode change of that
+# display only: the mode hook (STREAMFLEX_TEST_DISPLAY_MODE_EVENT) pushes one for a display Xvfb does
+# not have, which fits nothing, then, once that is logged, one for the window's own display, which
+# fits it one row short. Each push is handled in the pass it is made in, so a fit for the other
+# display would be logged before the second push. Read from the first push on, in case SDL sends a
+# display event of its own as it makes the window.
+S47_MODE=/tmp/s47-mode
+s47_mode_send() { printf '%s\n' "$1" > "$S47_MODE.new" && mv -f "$S47_MODE.new" "$S47_MODE"; }
+s47_modes() {
+    wait_line 'Begin program loop' "$2" || return 1
+    s47_mode_send other && wait_line 'Test hook: pushed a mode change of another display' "$2" \
+        && s47_mode_send own && wait_line 'Video: fitting the transparent window to display ' "$2"
+}
+rm -f "$S47_MODE" "$S47_MODE.new"
+echo 1920x1079 > "$out/f47-winmode.display"   # 95-every-run.sh: this run's screen is one row short
+CFG=$FX/f48-transparent.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 STREAMFLEX_TEST_DISPLAY_MODE_EVENT=$S47_MODE \
+    run_keys f47-winmode +s47_modes
+log=$out/f47-winmode.log
+ok=1
+precedes "$log" 'Test hook: pushed a mode change of another display' "Test hook: pushed a mode change of the window's display" \
+    && ! in_range "$log" 'Test hook: pushed a mode change of another display' "Test hook: pushed a mode change of the window's display" \
+        'Video: fitting the transparent window' \
+    && [ "$(sed -n '/^Test hook: pushed a mode change of another display$/,$p' "$log" | grep -c '^Video: fitting the transparent window')" = 1 ] \
+    && sed -n "/^Test hook: pushed a mode change of the window's display\$/,\$p" "$log" \
+        | grep -qE '^Video: fitting the transparent window to display [0-9]+, 1920x1079 at 0,0$' \
+    && ran_clean f47-winmode && ok=0
+result "screen: a Transparent window is fitted again on a mode change of its own display, never another's (exit $(cat "$out/f47-winmode.code"))" $ok
+grep -E '^(Video: fitting|Test hook: pushed a mode change)' "$log" | sed 's/^/      /'

@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #define RENDER_LIST_WINDOWS "vulkan,direct3d12,direct3d11,opengl"
 #define RENDER_LIST_UNIX "vulkan,opengl"
@@ -51,6 +52,20 @@ bool window_must_change(WindowKind now, WindowKind wanted, bool transparent_fail
 // Transparent window, and the count then starts again. A present that worked, or any present on
 // another window, sets the count to 0.
 bool present_failed_lost(int *failures, bool presented, bool transparent);
+
+// Lost renderers on one Transparent window before an opaque one takes its place: a driver that makes
+// the renderer again and again but fails its presents each time would otherwise cycle for good, three
+// frames, a lost device and a full reload over and over (spec section 3)
+#define RENDERER_LOSSES_TRANSPARENT 3
+
+// Counts one lost renderer into *losses for the window it was lost on (window, an SDL window ID):
+// *window_seen names the window the count is for, and a loss on another window starts the count
+// again at 1, so a new window starts with none
+void renderer_loss_count(int *losses, uint32_t *window_seen, uint32_t window);
+
+// Whether the window in force (`kind`), having lost `losses` renderers, gets no new one: only a
+// Transparent window, once it has lost RENDERER_LOSSES_TRANSPARENT. An opaque window always gets one.
+bool renderer_losses_spent(WindowKind kind, int losses);
 
 // The log's Renderer: line for the renderer SDL chose from render_list (NULL: SDL_RENDER_DRIVER chose);
 // chosen must not be NULL: it is SDL_GetRendererName's result for a valid renderer
