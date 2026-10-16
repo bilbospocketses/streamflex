@@ -91,6 +91,37 @@ ok=1
 result "settings: under the Windows plan, a rest on Transparent recreates the window one row short, and a rest back on Slideshow fullscreen (exit $(cat "$out/f60-winrest.code"))" $ok
 grep -E "^(Video: recreating|Renderer: dropped |Reload: done|Titles: opened |Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
 
+# A key that takes the cursor off Mode before it rests gives the rest up, so no recreation closes a
+# picker opened meanwhile. Under the Windows plan, Right (Slideshow to Transparent), Down to See-through
+# color and OK on it are sent while the launcher is stopped, so it handles all three in one pass, well
+# inside the 300 ms rest; the color picker opens, and 1 s later, past the rest, it is still open and no
+# window was made. Back closes it, and Back twice saves Mode and closes settings, which recreates the
+# window, once. The 1 s is a floor: a correct run makes no window however long it waits.
+f60_mode_then_pick() {
+    kill -STOP "$2"
+    frame_nowait=yes xdotool key Right Down Return
+    kill -CONT "$2"
+    wait_line 'Settings: opened the picker for [Background] ChromaKeyColor' "$2" && sleep 1
+}
+cfg=$(writable_config f60-color)
+CFG=$cfg STREAMFLEX_TEST_WINDOWS_PLAN=1 UNTIL='Reload: done at 1920x1079 px, for ' \
+    run_keys f60-winpicker Menu Down Return Right Right +f60_mode_then_pick BackSpace BackSpace BackSpace
+log=$out/f60-winpicker.log
+ok=1
+precedes "$log" 'Settings: [Background] Mode Slideshow -> Transparent' 'Settings: the cursor left Mode before it rested, so the window keeps its kind for now' \
+    && precedes "$log" 'Settings: the cursor left Mode before it rested' 'Settings: opened the picker for [Background] ChromaKeyColor' \
+    && in_range "$log" 'Settings: opened the picker for [Background] ChromaKeyColor' 'Settings closed' \
+        'Settings: closed the picker for [Background] ChromaKeyColor' \
+    && ! in_range "$log" 'Settings: opened the picker for [Background] ChromaKeyColor' 'Settings: closed the picker for ' 'Video: recreating' \
+    && ! grep -q "^Test hook: the Mode row's cursor rested on Transparent" "$log" \
+    && ! grep -q '^Settings: re-measured for ' "$log" \
+    && precedes "$log" 'Settings closed' 'Video: recreating the window for a transparent background' \
+    && [ "$(grep -c '^Video: recreating' "$log")" = 1 ] \
+    && grep -qE '^Reload: done at 1920x1079 px, for .*a new window$' "$log" \
+    && grep -qx 'Mode=Transparent' "$cfg" && ran_clean f60-winpicker && ok=0
+result "settings: under the Windows plan, a picker opened before Mode's rest stays open, and the window follows Mode as settings close (exit $(cat "$out/f60-winpicker.code"))" $ok
+grep -E "^(Video: recreating|Reload: done|Settings: (opened|closed) the picker|Settings: the cursor left Mode|Settings: \[Background\] Mode |Test hook: the Mode row's cursor rested on )" "$log" | sed 's/^/      /'
+
 # A config whose own Mode names an image or folder it never gives is a config problem: at startup
 # that still says so as an error, on stderr. The slideshow's case runs f30-nodir's config here,
 # under a name of its own, so this check reads only what it ran.

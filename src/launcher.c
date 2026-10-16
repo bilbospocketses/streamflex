@@ -71,6 +71,7 @@ static void test_pad_stop(void);
 static void test_app_update(void);
 static void test_pixel_size_update(void);
 static void test_display_event_update(void);
+static void test_display_mode_event_update(void);
 static void test_render_event_update(void);
 static void test_list_without(const char *list, const char *name, char *out, size_t size);
 static bool test_pixel_size(int *width, int *height);
@@ -259,6 +260,8 @@ static VsyncWatch vsync_watch;   // Whether a renderer that reports VSync presen
 static bool renderer_owed = false;       // The device was lost: a new renderer is owed
 static int renderer_attempt = 0;         // The attempts made at it so far; 0 at startup
 static Uint64 renderer_next_try = 0;     // When the next one is due (SDL_GetTicks)
+static int renderer_losses = 0;              // Renderers lost on the window renderer_lost_window names...
+static SDL_WindowID renderer_lost_window = 0; // ...which a loss on a new window starts again (winplan.h)
 static SDL_WindowID window_id = 0;                  // The window's ID: a window event naming another is a replaced window's
 static WindowKind window_kind = WINDOW_FULLSCREEN;  // The window in force: fullscreen, or Transparent one row short
 static bool transparent_failed = false;             // No renderer could draw a transparent window since Transparent was chosen
@@ -721,6 +724,15 @@ static void fall_back_to_opaque(const char *reason)
         quit(EXIT_FAILURE);   // create_renderer() logged SDL's reason, as log_fatal would
 }
 
+// A function to hear that the Mode setting took a new value in settings: any Mode but Transparent lets
+// a Transparent that failed be tried again once it is chosen again (spec section 3), whether or not
+// the Mode row's cursor rested on that Mode. When the window follows is window_follow_background()'s.
+void window_mode_chosen(void)
+{
+    if (config.background_mode != BACKGROUND_TRANSPARENT)
+        transparent_failed = false;
+}
+
 // A function to give the window the kind the Mode setting needs. Closing settings, Discard and the
 // Mode row's rest ask for it (Task 1.9a); the recreation itself runs in the main loop, between the
 // drain and the reload, once no app is in front and a renderer exists. An override outside the
@@ -729,8 +741,6 @@ static void fall_back_to_opaque(const char *reason)
 // (STREAMFLEX_TEST_WINDOWS_PLAN).
 void window_follow_background(void)
 {
-    if (config.background_mode != BACKGROUND_TRANSPARENT)
-        transparent_failed = false;   // Chosen again, Transparent is tried again
     WindowPlan plan = plan_for((int) config.background_mode);
     if (plan.refused) {
         if (!transparent_failed)
@@ -776,6 +786,8 @@ static void refit_transparent_window(void)
         return;
     }
     WindowRect rect = window_short_rect((WindowRect) { bounds.x, bounds.y, bounds.w, bounds.h });
+    log_debug("Video: fitting the transparent window to display %u, %ix%i at %i,%i", (unsigned int) display,
+              rect.w, rect.h, rect.x, rect.y);
     SDL_SetWindowPosition(window, rect.x, rect.y);
     SDL_SetWindowSize(window, rect.w, rect.h);
 }
@@ -2728,6 +2740,43 @@ static void test_display_event_update()
         log_error("Test hook: the display event was not pushed\n%s", SDL_GetError());
 }
 
+// A function only the headless harness builds: with STREAMFLEX_TEST_DISPLAY_MODE_EVENT set, each time
+// what the file it names holds changes, SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED is pushed for each word
+// in it, in its order: "own" for the window's display, "other" for a display ID one past it, which
+// Xvfb's one display never has, as a mode change on another monitor would send
+static void test_display_mode_event_update()
+{
+    static char last[64] = "";
+    const char *path = getenv("STREAMFLEX_TEST_DISPLAY_MODE_EVENT");
+    if (path == NULL)
+        return;
+    size_t length = 0;
+    char *text = fileio_read_all(path, &length);
+    char now[64] = "";
+    if (text != NULL)
+        copy_string(now, text, sizeof(now));
+    alloc_free(text);
+    if (strcmp(now, last) == 0)
+        return;
+    copy_string(last, now, sizeof(last));
+    SDL_DisplayID own = SDL_GetDisplayForWindow(window);
+    char *rest = NULL;
+    for (char *word = strtok_r(now, " \n", &rest); word != NULL; word = strtok_r(NULL, " \n", &rest)) {
+        bool other = strcmp(word, "other") == 0;
+        if (!other && strcmp(word, "own") != 0) {
+            log_error("Test hook: '%s' names no display", word);
+            continue;
+        }
+        SDL_Event changed;
+        SDL_zero(changed);
+        changed.type = SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED;
+        changed.display.displayID = other ? own + 1 : own;
+        log_debug("Test hook: pushed a mode change of %s", other ? "another display" : "the window's display");
+        if (!SDL_PushEvent(&changed))
+            log_error("Test hook: the display mode event was not pushed\n%s", SDL_GetError());
+    }
+}
+
 // A function only the headless harness builds: with STREAMFLEX_TEST_RENDER_EVENT set, each time what
 // the file it names holds changes, the render events it names are pushed in one batch, in its order:
 // "targets" (SDL_EVENT_RENDER_TARGETS_RESET), "reset" (SDL_EVENT_RENDER_DEVICE_RESET) and "lost"
@@ -3315,12 +3364,15 @@ static void display_changed(void)
 }
 
 // A function to mark the reload a new mode of the window's display needs (SDL's current and desktop
-// mode-change events): a TV switching from 4K at 60 Hz to 1080p at 120 Hz changes the refresh rate
-// the frame timing and the VSync watch go by. Another display's mode is not the window's.
+// mode-change events), and to fit a Transparent window to it again: a TV switching from 4K at 60 Hz to
+// 1080p at 120 Hz changes the refresh rate the frame timing and the VSync watch go by. Another
+// display's mode is not the window's, and changes neither.
 static void display_mode_changed(SDL_DisplayID display)
 {
-    if (display == SDL_GetDisplayForWindow(window))
-        reload_mark(RELOAD_DISPLAY);
+    if (display != SDL_GetDisplayForWindow(window))
+        return;
+    reload_mark(RELOAD_DISPLAY);
+    refit_transparent_window();
 }
 
 // A function to log a change of the OS's scale (SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED), which is
@@ -3393,7 +3445,9 @@ static int drop_textures(void)
 // already tried once, and the renderer is unusable): every texture first, then the renderer. A new
 // one is owed, at once, or once a launched app is done: a GPU reset is often the launched game's own,
 // a renderer made under it would likely fail the same way, and nothing is drawn while it runs.
-// A second loss in the same batch finds no renderer, and does nothing.
+// A second loss in the same batch finds no renderer, and does nothing. Each loss is counted for the
+// window it happened on: a Transparent window's RENDERER_LOSSES_TRANSPARENT-th gets an opaque window in
+// its place instead of a new renderer (renderer_retry()).
 static void renderer_lost(void)
 {
     if (renderer == NULL)
@@ -3401,8 +3455,13 @@ static void renderer_lost(void)
     int dropped = drop_textures();
     SDL_DestroyRenderer(renderer);
     renderer = NULL;
+    renderer_loss_count(&renderer_losses, &renderer_lost_window, window_id);
     log_debug("Renderer: dropped %i textures before the renderer went", dropped);
-    log_debug("Renderer: device lost and not recovered; creating a new renderer");
+    if (renderer_losses_spent(window_kind, renderer_losses))
+        log_debug("Renderer: device lost and not recovered, %i times on this transparent window; an opaque window takes its place",
+                  renderer_losses);
+    else
+        log_debug("Renderer: device lost and not recovered; creating a new renderer");
     renderer_owed = true;
     renderer_attempt = 0;
     renderer_next_try = SDL_GetTicks();
@@ -3413,11 +3472,21 @@ static void renderer_lost(void)
 // section 3). It is called once a pass of the main loop, so events are pumped between the attempts:
 // the window never stops answering, and every quit path stays live. The new renderer is made as at
 // startup, for the window in force; on Windows its handle is read again. The last attempt's failure
-// takes the startup error path, but on a Transparent window, which falls back to an opaque one.
+// takes the startup error path, but on a Transparent window, which falls back to an opaque one. A
+// Transparent window that has lost RENDERER_LOSSES_TRANSPARENT renderers falls back the same way, with
+// no attempt: a driver that makes its renderer again and again and fails its presents each time would
+// otherwise cycle for good.
 static void renderer_retry(void)
 {
     if (!renderer_owed || app_in_front() || SDL_GetTicks() < renderer_next_try)
         return;
+    if (renderer_losses_spent(window_kind, renderer_losses)) {
+        // The opaque window's renderer ends the schedule, as after the last attempt's failure
+        char why[128];
+        snprintf(why, sizeof(why), "the renderer was lost %i times on this window", renderer_losses);
+        fall_back_to_opaque(why);
+        return;
+    }
     renderer_attempt++;
     log_debug("Renderer: creating a new renderer, attempt %i of %i", renderer_attempt, RENDERER_RETRIES);
     // The window's kind picks the list, never the Mode setting, which may have moved on while
@@ -3705,6 +3774,7 @@ int main(int argc, char *argv[])
         test_app_update();
         test_pixel_size_update();
         test_display_event_update();
+        test_display_mode_event_update();
         test_render_event_update();
 #endif
         while (SDL_PollEvent(&event)) {
@@ -3812,7 +3882,6 @@ int main(int argc, char *argv[])
                 case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
                 case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
                     display_mode_changed(event.display.displayID);
-                    refit_transparent_window();
                     break;
 
                 case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:

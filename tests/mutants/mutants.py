@@ -16,12 +16,21 @@ entry's expectations cannot show that the launcher reached the site, as one fail
 site, or just past it on the path the mutated form takes, or just before it when nothing at or past it
 is printed; never a line only the success path the old form skips prints. A mutant that stops the
 launcher before then is NOT-RUN, never caught. One that sets no wait is wrong, and not run.
-Each verdict is followed by every expectation, and whether it held."""
+Each verdict is followed by every expectation, and whether it held.
+
+A key is an X key name, pressed a second before the next. Words with spaces between them ("Left Right")
+are pressed in one xdotool call, as fast as it sends them. A key starting with + is a step instead,
+followed by no second's wait: "+write PATH TEXT" puts TEXT and a newline in PATH in one step (a rename),
+for a hook's file; "+wait LINE" waits up to 30 s for LINE in the log, and a LINE that never comes ends
+the keys and makes the run NOT-RUN, so a +wait names only a line a correct run and its mutant both
+print; "+stop" and "+cont" stop the launcher and let it go on, so the keys between reach it in one
+pass of its loop; "+sleep S" waits S seconds."""
 import json
 import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -58,6 +67,30 @@ def log_text():
     return open(LOG, encoding="utf-8", errors="replace").read() if os.path.exists(LOG) else ""
 
 
+def step(key, process):
+    """Runs a + step of a key list (see above); False when a +wait's line never came"""
+    verb, _, rest = key[1:].partition(" ")
+    if verb == "write":
+        path, _, text = rest.partition(" ")
+        with open(f"{path}.new", "w", encoding="utf-8", newline="\n") as hook:
+            hook.write(text + "\n")
+        os.replace(f"{path}.new", path)
+    elif verb == "wait":
+        end = time.time() + 30
+        while time.time() < end and process.poll() is None and rest not in log_text():
+            time.sleep(0.2)
+        return rest in log_text()
+    elif verb == "stop":
+        process.send_signal(signal.SIGSTOP)
+    elif verb == "cont":
+        process.send_signal(signal.SIGCONT)
+    elif verb == "sleep":
+        time.sleep(float(rest))
+    else:
+        raise ValueError(f"unknown step {key!r}")
+    return True
+
+
 def launch(entry, env):
     """Runs the entry; returns its exit code and whether the line its keys wait for came (True with no keys)"""
     fixture = entry["fixture"]
@@ -78,11 +111,18 @@ def launch(entry, env):
         for key in keys if pressed else []:
             if process.poll() is not None:
                 break
+            if key.startswith("+"):
+                if not step(key, process):
+                    pressed = False
+                    break
+                continue
             if re.fullmatch(r"F\d+", key):
                 subprocess.run(["python3", f"{WORK}/tests/headless/key.py", "key", key], env=env)
             else:
-                subprocess.run(["xdotool", "key", key], env=env)
+                subprocess.run(["xdotool", "key", *key.split()], env=env)
             time.sleep(1)
+        if process.poll() is None:
+            process.send_signal(signal.SIGCONT)   # A run left stopped would never read its TERM
         time.sleep(2)
         if process.poll() is None:
             process.terminate()

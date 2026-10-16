@@ -8,8 +8,10 @@
 # renderer, and a new renderer is made from the window's plan, at once or once a launched app is
 # done, then the one reload; a failed attempt is tried again 2 s later, and the fifth failure ends
 # StreamFlex as a failed start does, but on a Transparent window (the Windows plan, forced), which
-# falls back to an opaque one. The cases that race the attempts' 2 s are in 48-device-loss-timing.sh.
-# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup and f48-wingiveup wait for are paced 2 s apart in wall time and end inside the 20 s line wait, f48-wingiveup's 3 s sleep is a floor too (a correct run makes no sixth attempt, however long; one that does makes it in the pass after the fallback's reload) and its display step is a bounded poll for a log line, and no case races a deadline
+# falls back to an opaque one, as its third lost renderer does too; Transparent is then tried again
+# once another Mode is chosen in settings, though the cursor never rests on it. The cases that race the
+# attempts' 2 s are in 48-device-loss-timing.sh.
+# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup and f48-wingiveup wait for are paced 2 s apart in wall time and end inside the 20 s line wait, f48-wingiveup's 3 s sleep is a floor too (a correct run makes no sixth attempt, however long; one that does makes it in the pass after the fallback's reload) and its display step is a bounded poll for a log line, f48-winchosen's two steps of Mode are sent while the launcher is stopped, so it handles both in one pass however loaded the box is, and the three losses of f48-wincap and f48-lostthrice are each sent once the one before has reloaded, and no case races a deadline
 D48_EVENT=/tmp/d48-event D48_SIZE=/tmp/d48-size D48_APP=/tmp/d48-app
 # A function to put the render events WORDS in the hook's file in one step (a rename), so the hook
 # never reads half of them
@@ -390,3 +392,82 @@ grep -qx 'Renderer: creating a new renderer, attempt 5 of 5' "$log" && ! grep -q
 result "device: a Transparent window whose five attempts fail falls back to an opaque one and runs on (exit $(cat "$out/f48-wingiveup.code"))" $ok
 grep -E '^(Renderer|Video|Reload|Could not initialize|Background set up)|^Screen: now on display |^Test hook: the window moved' "$log" | sed 's/^/      /'
 sed 's/^/      /' "$out/f48-wingiveup.seen" 2> /dev/null
+
+# After that fallback, Transparent is tried again once another Mode is chosen and then Transparent
+# again (spec section 3), even when the cursor never rests on the other Mode: on the Background page,
+# Left (Transparent to Slideshow) and Right (back to Transparent) are sent while the launcher is
+# stopped, so it handles both in one pass of its loop, and Mode's rest comes once, on Transparent. The
+# window is then recreated one row short, and Transparent is set up; nothing is saved.
+d48_mode_back() {
+    kill -STOP "$2"
+    frame_nowait=yes xdotool key Left Right
+    kill -CONT "$2"
+    wait_line 'Video: recreating the window for a transparent background' "$2" && wait_line 'Reload: done at 1920x1079 px, for ' "$2"
+}
+d48_reset_runs f48-winchosen
+echo 1920x1079 > "$out/f48-winchosen.display"   # 95-every-run.sh: this run's screen starts one row short
+CFG=$FX/f48-transparent.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT STREAMFLEX_TEST_RENDERER_FAIL=5 \
+    STREAMFLEX_TEST_NO_MESSAGE_BOX=1 run_keys f48-winchosen +d48_lost +d48_given_up Menu Down Return +d48_mode_back BackSpace BackSpace
+log=$out/f48-winchosen.log
+ok=1
+grep -qx 'Video: no renderer can draw a transparent window (5 attempts at a new renderer failed: Test hook: attempt 5 fails); using an opaque background' "$log" \
+    && precedes "$log" 'Video: no renderer can draw a transparent window (' 'Settings: [Background] Mode Transparent -> Slideshow' \
+    && precedes "$log" 'Settings: [Background] Mode Slideshow -> Transparent' 'Video: recreating the window for a transparent background' \
+    && ! grep -q "^Test hook: the Mode row's cursor rested on Slideshow" "$log" \
+    && grep -q "^Test hook: the Mode row's cursor rested on Transparent" "$log" \
+    && [ "$(grep -cx 'Video: recreating the window for a transparent background' "$log")" = 1 ] \
+    && grep -qE '^Reload: done at 1920x1079 px, for .*a new window$' "$log" \
+    && [ "$(grep '^Background set up: ' "$log" | tail -1)" = 'Background set up: Transparent' ] \
+    && grep -q 'Settings: nothing changed' "$log" && ran_clean f48-winchosen && ok=0
+result "device: after a Transparent window falls back, choosing another Mode and Transparent again tries it again, with no rest between (exit $(cat "$out/f48-winchosen.code"))" $ok
+grep -E "^(Video|Reload|Background set up):|^Settings: \[Background\] Mode |^Test hook: the Mode row's cursor rested on " "$log" | sed 's/^/      /'
+
+# A Transparent window that loses its renderer three times (RENDERER_LOSSES_TRANSPARENT) gets no fourth:
+# the first two losses get a new renderer and the reload, the third an opaque window in its place, with
+# the reason in the log, and StreamFlex runs on with the Color background. Each loss is sent once the
+# one before has reloaded; the hook pushes when what its file holds changes, so the second is "lost "
+d48_lose_thrice() {
+    local reload=$3
+    wait_line 'Begin program loop' "$2" || return 1
+    d48_send lost && d48_more "$reload" "$2" 0 \
+        && d48_send 'lost ' && d48_more "$reload" "$2" 1 \
+        && d48_send lost
+}
+d48_wincap() {
+    d48_lose_thrice "$1" "$2" 'Reload: done at 1920x1079 px, for a device reset or loss' \
+        && wait_line 'Video: no renderer can draw a transparent window (' "$2" && wait_line 'Reload: done at 1920x1080 px, for ' "$2"
+}
+d48_reset_runs f48-wincap
+echo 1920x1079 > "$out/f48-wincap.display"   # 95-every-run.sh: this run's screen starts one row short
+CFG=$FX/f48-transparent.ini STREAMFLEX_TEST_WINDOWS_PLAN=1 STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-wincap +d48_wincap
+log=$out/f48-wincap.log
+ok=1
+[ "$(grep -cx "Test hook: pushed the render event 'lost'" "$log")" = 3 ] \
+    && [ "$(grep -cx 'Renderer: device lost and not recovered; creating a new renderer' "$log")" = 2 ] \
+    && [ "$(grep -cx 'Renderer: creating a new renderer, attempt 1 of 5' "$log")" = 2 ] \
+    && [ "$(grep -cx 'Reload: done at 1920x1079 px, for a device reset or loss' "$log")" = 2 ] \
+    && grep -qx 'Renderer: device lost and not recovered, 3 times on this transparent window; an opaque window takes its place' "$log" \
+    && grep -qx 'Video: no renderer can draw a transparent window (the renderer was lost 3 times on this window); using an opaque background' "$log" \
+    && grep -qE '^Reload: done at 1920x1080 px, for .*a new window$' "$log" \
+    && [ "$(grep '^Background set up: ' "$log" | tail -1)" = 'Background set up: Color' ] \
+    && ran_clean f48-wincap && ok=0
+result "device: a Transparent window that loses its renderer three times falls back to an opaque one and runs on (exit $(cat "$out/f48-wincap.code"))" $ok
+grep -E '^(Renderer|Video|Reload|Background set up):' "$log" | sed 's/^/      /'
+
+# An opaque window keeps getting a new renderer however often it loses one: three losses, three new
+# renderers and three reloads, and no fallback
+d48_lostthrice() {
+    d48_lose_thrice "$1" "$2" 'Reload: done at 1920x1080 px, for a device reset or loss' \
+        && d48_more 'Reload: done at 1920x1080 px, for a device reset or loss' "$2" 2
+}
+d48_reset_runs f48-lostthrice
+CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-lostthrice +d48_lostthrice
+log=$out/f48-lostthrice.log
+ok=1
+[ "$(grep -cx 'Renderer: device lost and not recovered; creating a new renderer' "$log")" = 3 ] \
+    && [ "$(grep -cx 'Renderer: creating a new renderer, attempt 1 of 5' "$log")" = 3 ] \
+    && [ "$(grep -cx 'Reload: done at 1920x1080 px, for a device reset or loss' "$log")" = 3 ] \
+    && [ "$(grep -cx 'Renderer: vulkan' "$log")" = 4 ] \
+    && ! grep -q '^Video: no renderer can draw' "$log" && ran_clean f48-lostthrice && ok=0
+result "device: an opaque window that loses its renderer three times gets a new one each time (exit $(cat "$out/f48-lostthrice.code"))" $ok
+grep -E '^(Renderer|Video|Reload):' "$log" | sed 's/^/      /'

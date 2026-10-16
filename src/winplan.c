@@ -97,6 +97,22 @@ bool present_failed_lost(int *failures, bool presented, bool transparent)
     return true;
 }
 
+// A function to count one lost renderer for the window it was lost on
+void renderer_loss_count(int *losses, uint32_t *window_seen, uint32_t window)
+{
+    if (*window_seen != window) {
+        *window_seen = window;
+        *losses = 0;
+    }
+    ++*losses;
+}
+
+// A function to tell whether a window's lost renderers give it up for an opaque one
+bool renderer_losses_spent(WindowKind kind, int losses)
+{
+    return kind == WINDOW_TRANSPARENT_SHORT && losses >= RENDERER_LOSSES_TRANSPARENT;
+}
+
 // A function to word the log's Renderer: line: the renderer SDL chose, and the list's first entry
 // named as unavailable when it was not that one, or SDL_RENDER_DRIVER named when it chose (no list)
 void winplan_renderer_line(const char *render_list, const char *chosen, char *out, size_t size)

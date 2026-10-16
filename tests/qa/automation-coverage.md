@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 586 |
-| Row halves | 1027 |
-| Verdicts per release (row x desktop) | 2405 |
+| Rows | 589 |
+| Row halves | 1030 |
+| Verdicts per release (row x desktop) | 2408 |
 | `streamflex-ctest` halves | 0 (0 verdicts) |
 | `streamflex-headless` halves | 277 (1108 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 590 (1137 verdicts) |
-| **Automated today** | 437 of 1027 halves; 1268 of 2405 verdicts (52 %) |
+| `manual` halves | 593 (1140 verdicts) |
+| **Automated today** | 437 of 1030 halves; 1268 of 2408 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -462,6 +462,9 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 5.98 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.99 | `[Win]` | manual | qa-harness item 75, planned |
 | 5.100 | `[Win]` | manual | needs a GPU driving the display, and a real loss of the device |
+| 5.101 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.102 | `[Win]` | manual | qa-harness item 75, planned |
+| 5.103 | `[Win]` | manual | needs a GPU driving the display, and three real losses of the device |
 | 6.1 | `[All]` | manual | qa-harness item 75, planned |
 | 6.2 | `[All]` | manual | qa-harness item 75, planned |
 | 6.3 | `[All]` | manual | qa-harness item 75, planned |
