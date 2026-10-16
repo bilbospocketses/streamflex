@@ -15,6 +15,7 @@
 #include "listpick.h"
 #include "fontlist.h"
 #include "bindings.h"
+#include "menuedit.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -818,6 +819,148 @@ static void prove_config_save_with(void)
     report("saving through a document callback");
 }
 
+static const char *const MENUS_TEXT =
+    "[General]\nDefaultMenu=Main\n[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n"
+    "Entry3=Steam;steam;steam\n[Games]\nEntry1=Retro;retro;retroarch\n[Empty]\n";
+
+// A function to load the menus model from MENUS_TEXT, with the document gone again
+static MenuEdit *load_menus(void)
+{
+    IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+    MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+    inidoc_free(doc);
+    return edit;
+}
+
+// A function to describe a menus model, for telling whether an operation that failed left it as it was
+static void describe_menus(const MenuEdit *edit, char *out, size_t size)
+{
+    size_t used = 0;
+    out[0] = '\0';
+    for (int m = 0; m < menuedit_count(edit) && used < size; m++) {
+        const MenuEditMenu *menu = menuedit_menu(edit, m);
+        used += (size_t) snprintf(out + used, size - used, "[%s<%s]", menu->name,
+                                  menu->original_name != NULL ? menu->original_name : "");
+        for (int t = 0; t < menu->count && used < size; t++) {
+            const MenuTile *tile = &menu->tiles[t];
+            used += (size_t) snprintf(out + used, size - used, "%s=%s;%s;%s<%s|", tile->key != NULL ? tile->key : "",
+                                      tile->title, tile->icon, tile->command, tile->original != NULL ? tile->original : "");
+        }
+    }
+    if (used < size)
+        snprintf(out + used, size - used, "default=%s", menuedit_default(edit) != NULL ? menuedit_default(edit) : "");
+}
+
+// A function to prove that loading and copying the menus fail cleanly: NULL, and nothing left allocated
+static void prove_menuedit_load(void)
+{
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+        arm(n);
+        MenuEdit *edit = menuedit_load(doc, "Main");
+        MenuEdit *copy = edit != NULL ? menuedit_copy(edit) : NULL;
+        disarm();
+        CHECK_RUN(failed ? copy == NULL : (copy != NULL && menuedit_count(copy) == 3 && !menuedit_changed(copy)), n);
+        menuedit_free(copy);
+        menuedit_free(edit);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("loading and copying the menus");
+}
+
+#define MENU_EDIT_STEPS 5
+
+// A function to make one of the menu edits the proof runs, in order; the reason it refused, or NULL
+static const char *menu_edit_step(MenuEdit *edit, int step)
+{
+    switch (step) {
+    case 0:
+        return menuedit_add(edit, 0, 0, "Plex", "plex", "plex");
+    case 1:
+        return menuedit_set(edit, 0, 0, "Kodi 21", "kodi", "kodi");
+    case 2:
+        return menuedit_add_submenu(edit, 0, -1, "Kids", "kids");
+    case 3:
+        return menuedit_rename_menu(edit, 1, "Play");
+    default:
+        return menuedit_move_to_menu(edit, 0, 1, 1);
+    }
+}
+
+// A function to prove that the menu edits fail cleanly: "Out of memory", with the model as it was before
+// the edit that failed, and nothing left allocated once it is freed; or each done, as without a failure
+static void prove_menuedit_edits(void)
+{
+    static char before[4096];
+    static char after[4096];
+    static char expected[4096];
+    MenuEdit *edit = load_menus();
+    for (int step = 0; step < MENU_EDIT_STEPS; step++)
+        CHECK(menu_edit_step(edit, step) == NULL);
+    describe_menus(edit, expected, sizeof(expected));
+    menuedit_free(edit);
+    for (int n = 1;; n++) {
+        edit = load_menus();
+        arm(n);
+        const char *why = NULL;
+        for (int step = 0; why == NULL && step < MENU_EDIT_STEPS; step++) {
+            describe_menus(edit, before, sizeof(before));
+            why = menu_edit_step(edit, step);
+        }
+        disarm();
+        describe_menus(edit, after, sizeof(after));
+        if (why == NULL)
+            CHECK_RUN(!failed && strcmp(after, expected) == 0, n);
+        else {
+            CHECK_RUN(failed && strcmp(why, "Out of memory") == 0, n);
+            CHECK_RUN(strcmp(after, before) == 0, n);
+        }
+        menuedit_free(edit);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("editing the menus");
+}
+
+// A function to prove that writing the menus into a document fails cleanly: false, with memory's reason;
+// or done, giving the file expected
+static void prove_menuedit_apply(void)
+{
+    static const char *const expected =
+        "[General]\nDefaultMenu=Home\n[Home]\nRows=2\nEntry3=Steam;steam;steam\nEntry4=Plex;plex;plex\n"
+        "Entry2=Play;games;:submenu Play\nEntry5=Kids;kids;:submenu Kids\n[Play]\nEntry1=Retro;retro;retroarch\n[Empty]\n"
+        "\n[Kids]\nEntry1=Paint;paint;mspaint\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+        MenuEdit *edit = menuedit_load(doc, "Main");
+        CHECK(menuedit_rename_menu(edit, 0, "Home") == NULL && menuedit_rename_menu(edit, 1, "Play") == NULL &&
+              menuedit_remove(edit, 0, 0) == NULL && menuedit_move(edit, 0, 1, 0) == NULL &&
+              menuedit_add(edit, 0, 0, "Plex", "plex", "plex") == NULL && menuedit_add_submenu(edit, 0, -1, "Kids", "kids") == NULL &&
+              menuedit_add(edit, 3, -1, "Paint", "paint", "mspaint") == NULL);
+        ConfigSaveResult result;
+        memset(&result, 0, sizeof(result));
+        arm(n);
+        bool ok = menuedit_apply(edit, doc, &result);
+        disarm();
+        char *out = text_of(doc);
+        if (ok)
+            CHECK_RUN(!failed && out != NULL && strcmp(out, expected) == 0, n);
+        else
+            CHECK_RUN(failed && strstr(result.why, "out of memory") != NULL, n);
+        alloc_free(out);
+        menuedit_free(edit);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("writing the menus");
+}
+
 // A function to prove that loading and changing bindings fails cleanly: a list that could not be
 // loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
 // nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
@@ -964,6 +1107,9 @@ int main(void)
     prove_list_mode();
     prove_config_save_lists();
     prove_config_save_with();
+    prove_menuedit_load();
+    prove_menuedit_edits();
+    prove_menuedit_apply();
     prove_bindings();
     prove_bindings_reload();
     prove_section_edits();
