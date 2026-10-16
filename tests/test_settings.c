@@ -2155,6 +2155,90 @@ static void test_remodel_slot_edit_follows_rename(void)
     fileio_remove(REMODEL_CONFIG ".bak");
 }
 
+// A function to test the save after a menu is removed or renamed with unsaved changes pending, Games'
+// Rows (3 -> 2) and the Default menu row: a removed menu's own settings go with it (settings_remodel()
+// makes no slots for it), so the save writes nothing for it and notes nothing, and a Default menu row
+// naming it goes back to its entry; a Default menu row naming a renamed menu, or the file's DefaultMenu
+// naming one (which the menus model's save rewrites), names the new name. Every save names a menu that
+// exists, with no note.
+static void test_remodel_save_after_remove_and_rename(void)
+{
+    static const char *const text =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=3\nEntry1=Retro;retro;retroarch\n";
+    static const struct {
+        const char *what;            // "remove Games", "rename Games", "rename Main"
+        const char *pending_default; // The Default menu row's unsaved value; NULL: unchanged
+        const char *saved;
+    } cases[] = {
+        { "remove Games", "Games", "[General]\nDefaultMenu=Main\n\n[Main]\n" },
+        { "rename Games", "Games",
+          "[General]\nDefaultMenu=Play\n\n[Main]\nEntry1=Play;games;:submenu Play\n\n[Play]\nRows=2\nEntry1=Retro;retro;retroarch\n" },
+        { "rename Main", NULL,
+          "[General]\nDefaultMenu=Home\n\n[Home]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=2\nEntry1=Retro;retro;retroarch\n" },
+    };
+    static const char *const names[] = { "Main", "Games" };
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        reset_remodel_config(text);
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+        inidoc_free(doc);
+        SettingsState *old = settings_create(names, 2);
+        CHECK(edit != NULL && old != NULL);
+        if (edit == NULL || old == NULL) {
+            menuedit_free(edit);
+            settings_free(old);
+            return;
+        }
+        SettingValue rows = parsed(SET_ID_MENU_ROWS, "3");
+        settings_set_entry(old, SET_ID_MENU_ROWS, 1, &rows);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");   // Games: 3 -> 2, unsaved
+        entry(old, SET_ID_DEFAULT_MENU, "Main");
+        if (cases[c].pending_default != NULL) {
+            SettingSlot *slot = settings_slot(old, SET_ID_DEFAULT_MENU, -1);
+            snprintf(slot->value.text, sizeof(slot->value.text), "%s", cases[c].pending_default);
+        }
+
+        // The change to the menus model, then the settings model made again over it, as
+        // settings_menus_changed() makes it: each menu's name now, and the name it had
+        const char *why = strcmp(cases[c].what, "remove Games") == 0 ? menuedit_remove_menu(edit, 0, 0, true)
+                        : strcmp(cases[c].what, "rename Games") == 0 ? menuedit_rename_menu(edit, 1, "Play")
+                        : menuedit_rename_menu(edit, 0, "Home");
+        CHECK(why == NULL);
+        int count = menuedit_count(edit);
+        const char *now[2] = { NULL, NULL };
+        const char *was[2] = { NULL, NULL };
+        for (int m = 0; m < count && m < 2; m++) {
+            const MenuEditMenu *menu = menuedit_menu(edit, m);
+            now[m] = menu->name;
+            was[m] = menu->original_name;
+        }
+        SettingsState *state = settings_remodel(old, now, was, count);
+        settings_free(old);
+        CHECK(state != NULL);
+        if (state == NULL) {
+            menuedit_free(edit);
+            return;
+        }
+        CHECK_INT(settings_slot_count(state), SET_ID_GLOBAL_COUNT + count * SET_ID_PER_MENU_COUNT);
+        if (strcmp(cases[c].what, "remove Games") == 0) {
+            CHECK(!settings_any_changed(state));   // Games' Rows went with Games; the Default menu row went back
+            CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->value.text, "Main");
+        }
+
+        ConfigSaveResult result;
+        CHECK(save_over_menus(state, now, edit, &result));
+        CHECK_INT(result.note_count, 0);
+        CHECK_STR(result.notes, "");
+        char *written = fileio_read_all(REMODEL_CONFIG, NULL);
+        CHECK_STR(written != NULL ? written : "", cases[c].saved);
+        alloc_free(written);
+        settings_free(state);
+        menuedit_free(edit);
+    }
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+}
+
 int main(void)
 {
     test_add_binding();
@@ -2194,6 +2278,7 @@ int main(void)
     test_restart_page();
     test_remodel();
     test_remodel_slot_edit_follows_rename();
+    test_remodel_save_after_remove_and_rename();
     return check_report();
 }
 
