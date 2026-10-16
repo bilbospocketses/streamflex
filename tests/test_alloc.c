@@ -775,6 +775,46 @@ static void prove_config_save_lists(void)
     report("saving list edits");
 }
 
+// The document callback the save proof uses: a section added, as menuedit_apply() adds one
+static bool add_kids(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    (void) context;
+    if (inidoc_add_section(doc, "Kids"))
+        return true;
+    snprintf(result->why, sizeof(result->why), "%s", inidoc_why(doc));
+    return false;
+}
+
+// A function to prove that a save through a document callback fails cleanly: refused with memory's
+// reason and the config as it was, or done in full
+static void prove_config_save_with(void)
+{
+    static const char *const before = "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    static const char *const after = "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Kids]\nRows=3\n";
+    ConfigEdit edit = { "Kids", "Rows", NULL, "3", INIDOC_UNDER_HEADER };
+    CHECK(fileio_make_dirs(DIR));
+    for (int n = 1;; n++) {
+        fileio_remove(CONFIG ".tmp");
+        fileio_remove(CONFIG ".bak.tmp");
+        CHECK(fileio_write_all(CONFIG, before, strlen(before)));
+        ConfigSaveResult result;
+        arm(n);
+        bool ok = config_save_with(CONFIG, NULL, NULL, &edit, 1, NULL, 0, add_kids, NULL, &result);
+        disarm();
+        if (ok)
+            CHECK_RUN(holds(CONFIG, after), n);
+        else {
+            CHECK_RUN(failed && holds(CONFIG, before), n);
+            CHECK_RUN(strstr(result.why, "out of memory") != NULL, n);
+        }
+        CHECK_RUN(!fileio_exists(CONFIG ".tmp"), n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("saving through a document callback");
+}
+
 // A function to prove that loading and changing bindings fails cleanly: a list that could not be
 // loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
 // nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
@@ -918,6 +958,7 @@ int main(void)
     prove_fontlist_finish();
     prove_list_mode();
     prove_config_save_lists();
+    prove_config_save_with();
     prove_bindings();
     prove_bindings_reload();
     prove_section_edits();

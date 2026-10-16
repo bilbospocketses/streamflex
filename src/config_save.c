@@ -25,12 +25,20 @@ static void cut_to_folder(char *path)
 
 // A function to apply the edits to a config's text; false (with the reason) when one cannot be written.
 // A key and its older alias never both survive an edit: the alias alone is edited in its place,
-// and beside the key it is removed, so the file never holds two lines for one setting.
+// and beside the key it is removed, so the file never holds two lines for one setting. A menu's own
+// setting (placed under its header) whose section a hand edit renamed or removed meanwhile is skipped,
+// with a note: setting it would make the section again, which the launcher shows as an empty menu.
 static bool apply_edits(IniDoc *doc, const ConfigEdit *edits, int count, ConfigSaveResult *result)
 {
     for (int i = 0; i < count; i++) {
         const ConfigEdit *edit = &edits[i];
         const char *key = edit->key;
+        if (edit->value != NULL && edit->placement == INIDOC_UNDER_HEADER && !inidoc_has_section(doc, edit->section)) {
+            char note[CONFIG_SAVE_NOTES_SIZE];
+            snprintf(note, sizeof(note), "[%s] is not there any more, so its %s change is skipped", edit->section, key);
+            config_save_note(result, CONFIG_NOTE_SECTION_GONE, note);
+            continue;
+        }
         if (edit->alias != NULL && inidoc_get(doc, edit->section, edit->alias) != NULL) {
             if (inidoc_get(doc, edit->section, key) == NULL && edit->value != NULL)
                 key = edit->alias;
@@ -107,24 +115,34 @@ static bool keep_backup(ConfigSaveResult *result)
     return true;
 }
 
-// The notes a save gathers, each line with its kind; they reach the result only when it succeeds
-typedef struct {
-    char text[CONFIG_SAVE_NOTES_SIZE];
-    ConfigNoteKind kinds[CONFIG_SAVE_NOTES_SIZE / 2];
-    int count;
-} SaveNotes;
-
-// A function to add a note of a kind to the notes, one per line; one that does not fit is cut short,
-// and one with no room left at all adds no line, and so no kind
-static void add_note(SaveNotes *notes, ConfigNoteKind kind, const char *format, const char *line)
+// A function to add a note of a kind to a save's notes, one per line; one that does not fit is cut
+// short, and one with no room left at all adds no line, and so no kind
+static void add_note(ConfigSaveResult *result, ConfigNoteKind kind, const char *format, const char *line)
 {
-    size_t size = sizeof(notes->text);
-    size_t used = strlen(notes->text);
+    size_t size = sizeof(result->notes);
+    size_t used = strlen(result->notes);
     if (used > 0 && used + 1 < size)
-        notes->text[used++] = '\n';
+        result->notes[used++] = '\n';
     if (used + 1 < size)
-        notes->kinds[notes->count++] = kind;
-    snprintf(notes->text + used, size - used, format, line);
+        result->note_kinds[result->note_count++] = kind;
+    snprintf(result->notes + used, size - used, format, line);
+}
+
+// A function to add one note line of a kind, in the words a document callback chooses. An empty one
+// adds nothing: each line then takes two bytes at least with its break, as `note_kinds` is sized for.
+void config_save_note(ConfigSaveResult *result, ConfigNoteKind kind, const char *text)
+{
+    if (text[0] == '\0')
+        return;
+    add_note(result, kind, "%s", text);
+}
+
+// A function to take back a failed save's notes: it made nothing, so nothing was skipped
+static void drop_notes(ConfigSaveResult *result)
+{
+    result->notes[0] = '\0';
+    memset(result->note_kinds, 0, sizeof(result->note_kinds));
+    result->note_count = 0;
 }
 
 // A function to list a section's key lines into new memory (caller frees); NULL when out of memory.
@@ -138,11 +156,12 @@ static IniDocItem *list_items(const IniDoc *doc, const char *section, int *count
     return items;
 }
 
-// A function to number a key one above the highest <stem>N the section holds (Hotkey1 and Hotkey4
-// give Hotkey5), into `out`; false (with the reason) when out of memory, or when the highest number
-// is too large to go one above (a hand edit's Hotkey99999999999999999999), which would wrap round
-static bool next_key(const IniDoc *doc, const char *section, const char *stem, char *out, size_t size,
-                     ConfigSaveResult *result)
+// A function to number a key one above the highest <stem>N the section holds (Hotkey1 and Hotkey4 give
+// Hotkey5; menuedit.c's Entry1 and Entry4 give Entry5), into `out`; false (with the reason) when out of
+// memory, or when the highest number is too large to go one above (a hand edit's
+// Hotkey99999999999999999999), which would wrap round
+bool config_save_next_key(const IniDoc *doc, const char *section, const char *stem, char *out, size_t size,
+                          ConfigSaveResult *result)
 {
     int count = 0;
     IniDocItem *items = list_items(doc, section, &count);
@@ -198,7 +217,7 @@ static bool add_list_line(IniDoc *doc, const ConfigListEdit *edit, ConfigSaveRes
     char key[INIDOC_MAX_LINE + 1];
     if (!edit->numbered)
         snprintf(key, sizeof(key), "%s", edit->key);
-    else if (!next_key(doc, edit->section, edit->key, key, sizeof(key), result))
+    else if (!config_save_next_key(doc, edit->section, edit->key, key, sizeof(key), result))
         return false;
     if (inidoc_list_add(doc, edit->section, key, edit->value))
         return true;
@@ -208,11 +227,10 @@ static bool add_list_line(IniDoc *doc, const ConfigListEdit *edit, ConfigSaveRes
 
 // A function to apply the list edits to the fresh file: changes and removals first, found by the line
 // each had when settings opened, then the additions. A line a hand edit changed or removed meanwhile
-// takes its change as a new line, and its removal is skipped; both say so in `notes`. A removal
-// inidoc refuses (a key with an empty name) fails the save with its reason, as a line that cannot be
-// written does.
-static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count, SaveNotes *notes,
-                             ConfigSaveResult *result)
+// takes its change as a new line, and its removal is skipped; both say so in the result's notes. A
+// removal inidoc refuses (a key with an empty name) fails the save with its reason, as a line that cannot
+// be written does.
+static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count, ConfigSaveResult *result)
 {
     for (int i = 0; i < count; i++) {
         const ConfigListEdit *edit = &lists[i];
@@ -221,7 +239,7 @@ static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count
         int line = inidoc_find_line(doc, edit->section, edit->original);
         if (edit->op == CONFIG_LIST_REMOVE) {
             if (line < 0)
-                add_note(notes, CONFIG_NOTE_REMOVAL_SKIPPED, "'%s' is not there any more, so its removal is skipped",
+                add_note(result, CONFIG_NOTE_REMOVAL_SKIPPED, "'%s' is not there any more, so its removal is skipped",
                          edit->original);
             else if (!inidoc_list_remove(doc, line)) {
                 snprintf(result->why, sizeof(result->why), "the line '%s' in [%s] cannot be removed: %s", edit->original,
@@ -231,7 +249,7 @@ static bool apply_list_edits(IniDoc *doc, const ConfigListEdit *lists, int count
             continue;
         }
         if (line < 0) {
-            add_note(notes, CONFIG_NOTE_CHANGED_MEANWHILE, "'%s' changed meanwhile, so its change is written as a new line",
+            add_note(result, CONFIG_NOTE_CHANGED_MEANWHILE, "'%s' changed meanwhile, so its change is written as a new line",
                      edit->original);
             if (!add_list_line(doc, edit, result))
                 return false;
@@ -265,19 +283,26 @@ bool config_save(const char *loaded, const char *system_prefix, const char *user
     return config_save_all(loaded, system_prefix, user_config, edits, count, NULL, 0, result);
 }
 
-// A function to save the settings screen's changes. `loaded` is the file the launcher read.
-// When it cannot be written but lies under `system_prefix` (the packaged copy on Linux), the
-// save goes to `user_config` instead, which the launcher searches first; pass NULL for both
-// where there is no such fallback (Windows). The list edits follow the single-key edits; what they
-// could not make as asked reaches `result->notes` only when the save succeeds, since a save that
-// fails makes nothing.
+// A function to save the settings screen's changes and list edits, with no document callback
 bool config_save_all(const char *loaded, const char *system_prefix, const char *user_config,
                      const ConfigEdit *edits, int count, const ConfigListEdit *lists, int list_count,
                      ConfigSaveResult *result)
 {
+    return config_save_with(loaded, system_prefix, user_config, edits, count, lists, list_count, NULL, NULL, result);
+}
+
+// A function to save the settings screen's changes. `loaded` is the file the launcher read.
+// When it cannot be written but lies under `system_prefix` (the packaged copy on Linux), the
+// save goes to `user_config` instead, which the launcher searches first; pass NULL for both
+// where there is no such fallback (Windows). On the fresh read, `doc_edit` (NULL for none) makes its
+// changes first (menuedit_apply() writes the menus so, and a menu's settings then find its section by
+// its new name), then the single-key edits, then the list edits. What they could not make as asked
+// reaches `result->notes`, which a save that fails leaves empty, since it makes nothing.
+bool config_save_with(const char *loaded, const char *system_prefix, const char *user_config,
+                      const ConfigEdit *edits, int count, const ConfigListEdit *lists, int list_count,
+                      ConfigDocEdit doc_edit, void *context, ConfigSaveResult *result)
+{
     memset(result, 0, sizeof(*result));
-    SaveNotes notes;
-    memset(&notes, 0, sizeof(notes));
     char source[CONFIG_SAVE_PATH_MAX];
     if (!fileio_real_path(loaded, source, sizeof(source))) {
         snprintf(result->path, sizeof(result->path), "%s", loaded);
@@ -308,15 +333,17 @@ bool config_save_all(const char *loaded, const char *system_prefix, const char *
         snprintf(result->why, sizeof(result->why), "out of memory");
         return false;
     }
-    if (!apply_edits(doc, edits, count, result) ||
-        !apply_list_edits(doc, lists, list_count, &notes, result)) {
+    if ((doc_edit != NULL && !doc_edit(doc, context, result)) || !apply_edits(doc, edits, count, result) ||
+        !apply_list_edits(doc, lists, list_count, result)) {
         inidoc_free(doc);
+        drop_notes(result);
         return false;
     }
     char *output = inidoc_serialize(doc, &length);
     inidoc_free(doc);
     if (output == NULL) {
         snprintf(result->why, sizeof(result->why), "out of memory");
+        drop_notes(result);
         return false;
     }
 
@@ -340,14 +367,12 @@ bool config_save_all(const char *loaded, const char *system_prefix, const char *
         snprintf(result->why, sizeof(result->why), "could not replace the file: %s", fileio_last_error());
         ok = false;
     }
-    if (!ok)
+    if (!ok) {
         fileio_remove(temporary);
-    else {
-        snprintf(result->warning, sizeof(result->warning), "%s", fileio_last_warning());
-        snprintf(result->notes, sizeof(result->notes), "%s", notes.text);
-        memcpy(result->note_kinds, notes.kinds, sizeof(result->note_kinds));
-        result->note_count = notes.count;
+        drop_notes(result);
     }
+    else
+        snprintf(result->warning, sizeof(result->warning), "%s", fileio_last_warning());
     alloc_free(output);
     return ok;
 }
