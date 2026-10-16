@@ -25,7 +25,7 @@ concurrency:
 jobs:
   smoke-coverage:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # No time limit; a step that stops making progress is stall-watch.sh's to stop (see build.yml)
     steps:
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,13 +39,13 @@ jobs:
 
       # Standard library only: no pip install
       - name: Test the checker
-        run: python -m unittest discover -s tests/qa -p "test_*.py" -v
+        run: bash .github/scripts/stall-watch.sh --name "Test the checker" -- python -m unittest discover -s tests/qa -p "test_*.py" -v
 
       - name: Lint the smoke doc, the register and the results files
-        run: python tests/qa/check-smoke.py lint
+        run: bash .github/scripts/stall-watch.sh --name Lint -- python tests/qa/check-smoke.py lint
 
       - name: The PR rule
-        run: python tests/qa/check-smoke.py gate
+        run: bash .github/scripts/stall-watch.sh --name "The PR rule" -- python tests/qa/check-smoke.py gate
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

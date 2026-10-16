@@ -8,6 +8,9 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+### Changed
+- CI no longer stops a job for taking long. A slow Fedora mirror made a headless shard's test image take 29 minutes to build, and the job's 60-minute limit then killed the shard five seconds after its last passing check. No job has a time limit now. In the Build and Smoke coverage workflows, every step that builds, installs, downloads or tests, on Linux and on Windows, runs under a watchdog that stops it only when, for 20 minutes, it has printed no line and shown no other sign of work: on Linux, the runner receiving 4 MiB; on Windows, where the runner's own background traffic would hide a hang, the step's processes using 60 s of CPU or doing 4 MiB of I/O. It then prints what was running, its last output and the process tree. Each step's duration is reported as a notice.
+
 ## [0.5.1] - 2026-10-16
 
 v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SDL3 and needs Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10 (or a newer release of each), Arch Linux, or Windows. Debian bookworm, Ubuntu 24.04 LTS and older releases package no SDL3, so users there stay on v0.4.1, which stays downloadable; there is no backport.
