@@ -880,16 +880,18 @@ static void prove_bindings_reload(void)
 
 // A function to prove that the section edits fail cleanly: refused, saying "out of memory", with the
 // document as it was before the call that failed; or done. Moving a line, removing a section and
-// listing the sections allocate nothing, so they cannot fail for want of memory.
+// listing the sections allocate nothing, so they cannot fail for want of memory. Games has two headers,
+// so a rename can fail on the second after making the first, which it frees.
 static void prove_section_edits(void)
 {
-    static const char *const text = "[Main]\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n[Games] ; mine\nEntry1=C;apps;:quit\n";
+    static const char *const text = "[Main]\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n[Games] ; mine\nEntry1=C;apps;:quit\n"
+                                    "[Games]\nEntry2=D;apps;:quit\n";
     static const char *const after_insert = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
-                                            "[Games] ; mine\nEntry1=C;apps;:quit\n";
+                                            "[Games] ; mine\nEntry1=C;apps;:quit\n[Games]\nEntry2=D;apps;:quit\n";
     static const char *const after_rename = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
-                                            "[Play] ; mine\nEntry1=C;apps;:quit\n";
+                                            "[Play] ; mine\nEntry1=C;apps;:quit\n[Play]\nEntry2=D;apps;:quit\n";
     static const char *const done = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
-                                    "[Play] ; mine\nEntry1=C;apps;:quit\n\n[Kids]\n";
+                                    "[Play] ; mine\nEntry1=C;apps;:quit\n[Play]\nEntry2=D;apps;:quit\n\n[Kids]\n";
     for (int n = 1;; n++) {
         IniDoc *doc = inidoc_parse(text, strlen(text));
         arm(n);

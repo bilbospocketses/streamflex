@@ -32,7 +32,7 @@ struct IniDoc {
     int capacity;
     bool bom;            // The file started with a UTF-8 byte order mark
     const char *eol;     // The ending new lines get: the file's first one, else "\n"
-    const char *why;     // Why the last set, add or list-mode remove failed; "" after one that succeeded
+    const char *why;     // Why the last set, add, list-mode or section edit failed; "" after one that succeeded
 };
 
 static const char *const EOL_LF = "\n";
@@ -641,7 +641,7 @@ bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *v
     return ok;
 }
 
-// A function to say why the last set, add or list-mode remove failed; "" when it succeeded
+// A function to say why the last set, add, list-mode or section edit failed; "" when it succeeded
 const char *inidoc_why(const IniDoc *doc)
 {
     return doc->why;
@@ -1101,8 +1101,10 @@ bool inidoc_rename_section(IniDoc *doc, const char *old_name, const char *new_na
 }
 
 // A function to remove a section: each of its headers and every line after one up to the next header,
-// its comments and blank lines included. When that runs to the end of the file, the blank lines before
-// the header go too, so a section added at the end and removed again leaves the file as it was. It
+// its comments and blank lines included. When that runs to the end of the file, the empty lines before
+// the header go too. So a section added at the end and removed again leaves the file as it was when its
+// last line was not empty (the add put one empty line before the header, and the remove takes it); when
+// it was, the add put none, and the remove takes every empty line at the file's end, the file's own. It
 // allocates nothing.
 bool inidoc_remove_section(IniDoc *doc, const char *section)
 {

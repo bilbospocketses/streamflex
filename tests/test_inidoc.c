@@ -900,9 +900,10 @@ static void test_list_move(void)
 }
 
 // A function to test whole sections: listed once each in the order first read; added at the end
-// after a blank line; renamed at every header, the comment after one kept; removed with every line up
-// to the next header (at the end of the file, the blank line before it too, so adding and removing
-// gives the file back); and the names refused, by the rule that "[name]" must read back as that name
+// after a blank line; renamed at every header, its spacing and the comment after one kept; removed with
+// every line up to the next header (at the end of the file, the empty lines before it too, so adding and
+// removing gives the file back unless the file ended with an empty line, which goes); and the names
+// refused, by the rule that "[name]" must read back as that name
 static void test_sections(void)
 {
     IniDoc *doc = parse("; my launcher\n[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=A;apps;:submenu Games\n\n"
@@ -977,6 +978,29 @@ static void test_sections(void)
     CHECK_INT(inidoc_sections(doc, names, 8), 2);
     CHECK(inidoc_remove_section(doc, names[0]));
     CHECK_STR(written(doc), "[Games]\n");
+    inidoc_free(doc);
+
+    // A file ending with an empty line gets no second one before an added section, and removing that
+    // section takes every empty line before it: the file comes back without its own empty lines at the end
+    doc = parse("[Main]\nEntry1=A;apps;:quit\n\n");
+    CHECK(inidoc_add_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit\n\n[Games]\n");
+    CHECK(inidoc_remove_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit\n");
+    inidoc_free(doc);
+    doc = parse("[Main]\nEntry1=A;apps;:quit\n\n\n");
+    CHECK(inidoc_add_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit\n\n\n[Games]\n");
+    CHECK(inidoc_remove_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit\n");
+    inidoc_free(doc);
+
+    // An indented header (a header to inih after a header) keeps its spacing and its comment
+    doc = parse("[Main]\n  [Games] ; mine\nEntry1=B;apps;:quit\n");
+    CHECK(inidoc_rename_section(doc, "Games", "Play"));
+    CHECK_STR(written(doc), "[Main]\n  [Play] ; mine\nEntry1=B;apps;:quit\n");
+    CHECK(inidoc_has_section(doc, "Play"));
+    CHECK(!inidoc_has_section(doc, "Games"));
     inidoc_free(doc);
 
     // 49 bytes is the longest name inih keeps whole; a header's comment counts toward its line
