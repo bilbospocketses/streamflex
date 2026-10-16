@@ -16,6 +16,7 @@
 #include "fontlist.h"
 #include "bindings.h"
 #include "menuedit.h"
+#include "osk.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -1030,6 +1031,31 @@ static void prove_settings_remodel(void)
     report("making the settings model again over new menus");
 }
 
+// A function to prove that making the on-screen keyboard fails cleanly: NULL, and nothing left
+// allocated; or made, and then typing and moving in it allocate nothing
+static void prove_osk(void)
+{
+    for (int n = 1;; n++) {
+        arm(n);
+        Osk *osk = osk_create("Title for Kodi", "Kodi", 64, NULL, NULL, OSK_QWERTY);
+        disarm();
+        bool made_failed = failed;
+        CHECK_RUN(made_failed ? osk == NULL : osk != NULL, n);
+        if (osk != NULL) {
+            arm(1);
+            bool edited = osk_insert(osk, "\xC3\xA9") == OSK_CHANGED && osk_command(osk, OSK_BACKSPACE) == OSK_CHANGED &&
+                          osk_command(osk, OSK_DOWN) == OSK_MOVED && osk_command(osk, OSK_OK) == OSK_CHANGED;
+            disarm();
+            CHECK_RUN(edited && calls == 0 && strcmp(osk_text(osk), "Kodia") == 0, n);
+        }
+        osk_free(osk);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !made_failed)
+            break;
+    }
+    report("making the on-screen keyboard");
+}
+
 // A function to prove that loading and changing bindings fails cleanly: a list that could not be
 // loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
 // nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
@@ -1181,6 +1207,7 @@ int main(void)
     prove_menuedit_copy_moves();
     prove_menuedit_apply();
     prove_settings_remodel();
+    prove_osk();
     prove_bindings();
     prove_bindings_reload();
     prove_section_edits();

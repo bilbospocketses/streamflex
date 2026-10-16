@@ -66,6 +66,15 @@ target_include_directories(test_menuedit PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_menuedit)
 add_test(NAME menuedit COMMAND test_menuedit)
 
+# Unit tests for the on-screen keyboard's model (pure): its layouts, moves, Shift, UTF-8 editing and the
+# real-keyboard rule; the fields' validators come from menuedit.c, as the settings pages give them
+add_executable(test_osk test_osk.c "${PROJECT_SOURCE_DIR}/src/osk.c" "${PROJECT_SOURCE_DIR}/src/menuedit.c"
+  "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_osk PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_osk)
+add_test(NAME osk COMMAND test_osk)
+
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
 # sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
 # through bindings.c's model (whose lines the tests parse with inidoc.c), and names a color through
@@ -126,7 +135,7 @@ add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PR
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
   "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c"
-  "${PROJECT_SOURCE_DIR}/src/menuedit.c")
+  "${PROJECT_SOURCE_DIR}/src/menuedit.c" "${PROJECT_SOURCE_DIR}/src/osk.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
 if (UNIX)
