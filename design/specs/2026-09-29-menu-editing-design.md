@@ -1,13 +1,14 @@
 # Editing menus from the remote (3c): design
 
 **Date:** 2026-09-29
-**Status:** approved in brainstorming, awaiting spec review
+**Status:** approved in brainstorming, awaiting spec review. **Amended 2026-10-15** for SDL3 (the port shipped in v0.5.0): real-keyboard typing comes from key events, and no OS keyboard may ever appear (see **No OS keyboard, ever**).
 **Covers:** sub-project 3c of the overhaul (todo item 7): adding, removing, reordering and renaming the user's tiles and submenus, their icons, and the on-screen keyboard.
+**Ships as:** v0.6.0, built on SDL3 (floor 3.2.10).
 **Builds on:**
 - `design/specs/2026-09-27-settings-screen-design.md` (3a);
 - `design/specs/2026-09-29-settings-all-settings-design.md` (3b), whose list picker, `inidoc` list mode and `settings_pickers.c` 3c reuses.
 
-**The implementation plan is written after 3b is built.**
+**The implementation plan is written after the SDL3 port (v0.5.0)**, against SDL3.
 
 ## Context
 
@@ -29,6 +30,8 @@ A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;com
 | Back tiles | **New submenus get none:** Back and the pad's B button already go back. Existing Back tiles are untouched. |
 | Removing a submenu tile | **A confirm page:** *Remove Games and its N tiles*, or *Remove only this tile*. The second option appears only when another menu also opens Games. |
 | Keyboard layout | **QWERTY by default, with an ABC grid one press away.** The choice is remembered. |
+| OS on-screen keyboards | **Never.** StreamFlex's keyboard is the only one that appears, on every OS and desktop. StreamFlex never starts SDL text input. |
+| Real-keyboard typing | **From key events only** (user, 2026-10-15). Layout, Shift, Caps Lock and AltGr work; dead-key accents and CJK input methods do not compose. The *àé* page covers European accents. |
 | Architecture | **3b's list picker and `inidoc` list mode, plus new pure models:** `osk.c`, `applist.c`, `iconmatch.c` and `menuedit.c`. The platform scans run on background threads. |
 
 ## Pages and flows
@@ -76,7 +79,12 @@ A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;com
 - **Shortcuts:**
   - The pad's X is backspace, Y is space, and Start is Done.
   - Back cancels. With no change it cancels at once; after a change, the first Back shows *Back again to discard*.
-- **A real keyboard types into the field:** text input inserts, Enter is Done, Esc cancels and Backspace deletes. The arrows keep moving the on-screen highlight, because remotes send the same arrow keys.
+- **A real keyboard types into the field, from key events:** a printing key inserts its character, Enter is Done, Esc cancels and Backspace deletes. The arrows keep moving the on-screen highlight, because remotes send the same arrow keys.
+  - The character is `SDL_GetKeyFromScancode(event.key.scancode, event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS | SDL_KMOD_MODE), false)`: the layout's own character with Shift, Caps Lock and AltGr applied. `event.key.key` is not used for this, because SDL3 gives it unshifted.
+  - A keycode with `SDLK_SCANCODE_MASK` set, a control character below U+0020, U+007F, or U+FFFD (what SDL gives on Windows for a key that types several code points) inserts nothing.
+  - Key repeat inserts again, as a held key does in any text field.
+  - **Limits:** a dead key types its own character and does not combine with the next letter, and a CJK input method is bypassed, so a Japanese or Chinese layout types Latin letters. The *àé* page covers European accents. Non-Latin layouts that need no input method (Greek, Cyrillic) type their own letters.
+- **The field's text** is drawn as titles are, one texture re-rendered on each change, not with SDL3_ttf's text engine (`TTF_CreateRendererTextEngine`): typing changes it at most a few times a second.
 - **The text** is UTF-8, with the cursor on character boundaries.
   - Each field has a maximum length and a validator, and the caption says why *Done* is disabled.
   - A title cannot contain `;`, which would break `title;icon;command`.
@@ -87,6 +95,17 @@ A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;com
   - the *Type…* row for commands.
 
   Once 3c lands, 3b's command picker and path rows gain a *Type…* row as well.
+
+### No OS keyboard, ever
+
+A TV launcher driven by a remote must never have the system's own on-screen keyboard cover it. **The rule: StreamFlex never calls `SDL_StartTextInput` or `SDL_StartTextInputWithProperties`, anywhere.** It has no `SDL_EVENT_TEXT_INPUT` or `SDL_EVENT_TEXT_EDITING` handler, since neither event arrives without them.
+
+Why only that works, from SDL 3.2.10's and 3.4.18's sources (research, 2026-10-15):
+- **SDL3 never starts text input by itself** (SDL2 did on desktop). The only callers are `SDL_StartTextInput*`, and the restart on keyboard focus runs only while text input is already active.
+- **Wayland:** starting text input always calls `zwp_text_input_v3_enable`, which is what makes GNOME's and KDE's screen keyboards appear. No hint gates it.
+- **`SDL_HINT_ENABLE_SCREEN_KEYBOARD=0` does not help:** it only skips SDL's own show and hide, which Windows and Wayland do not have, so it cannot stop the compositor's keyboard. No `SDL_PROP_TEXTINPUT_*` property suppresses one either.
+- **Windows:** starting text input associates an IMM context with the window. SDL 3.4.18 detaches it right after creating the window (`SDL_windowswindow.c`, "Ensure that the IME isn't active on the new window until explicitly requested"); 3.2.10 does not. The Windows zip is built with vcpkg's SDL 3.4.18, but a build against 3.2.x would keep Windows' default context, and whether the touch keyboard then shows is OS behavior the source cannot settle. So **`make_window()` calls `SDL_StopTextInput()` on each window it creates**, on every platform. `make_window()` makes every window, including the ones `recreate_window()` rebuilds: on 3.4 it repeats what SDL did, and on 3.2 it detaches the context.
+- **Key events arrive without text input** on Windows, X11 and Wayland, which is what real-keyboard typing reads. StreamFlex does not set `SDL_HINT_WINDOWS_RAW_KEYBOARD`.
 
 ## Installed apps (`src/applist.c`, with platform scans)
 
@@ -162,6 +181,7 @@ With no match and no icon of its own, an app gets the library's generic `apps` i
   - nearest-key movement between rows of different widths;
   - one-shot shift and caps lock;
   - UTF-8 insert and delete at the cursor;
+  - inserting a key's character: printing keys insert, and scancode-masked keys, control characters, U+007F and U+FFFD insert nothing;
   - each field's validator.
 - **`test_applist`:**
   - `.desktop` parsing: NoDisplay, Hidden, Type, localized names;
@@ -183,20 +203,26 @@ With no match and no icon of its own, an app gets the library's generic `apps` i
 
 A fixture applications folder holds fake `.desktop` files and icons. With xdotool, the harness checks:
 - adding an app;
-- typing a title;
+- typing a title on the on-screen keyboard, and on a real keyboard with Shift (`xdotool type` with mixed case and symbols);
 - moving a tile, and moving one to another menu;
 - creating and renaming a submenu;
 - removing a submenu with its tiles;
 - the hold-OK shortcut (`keydown Return`, a 1 s wait, `keyup`);
 - *Discard*.
 
-`config.ini` is checked line by line after each save, and everything runs under ASan and the leak pass.
+`config.ini` is checked line by line after each save, and everything runs under ASan and the leak pass. A source check fails the build if `SDL_StartTextInput` appears anywhere under `src/`.
 
 ### Hands-on (qa-harness, before the 3c merge)
 
 - **Windows:** add Calculator (a Store app) and Edge.
 - **Ubuntu:** add Firefox and a Flatpak app.
 - **Both:** rename one app with the on-screen keyboard and one with a real keyboard; make a submenu and move tiles into it; restart, and confirm.
+- **No OS keyboard, one row per OS,** each with the system's keyboard forced on: open a title field, type, and confirm only StreamFlex's keyboard appears.
+  - Windows: the touch keyboard set to show when no keyboard is attached, in tablet posture.
+  - Ubuntu GNOME (Wayland): the screen keyboard turned on in Accessibility.
+  - KDE Plasma (Wayland): a virtual keyboard (Maliit) selected.
+
+All of this runs in qa-harness, never by hand.
 
 ## Documentation
 
