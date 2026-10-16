@@ -47,6 +47,13 @@ permissions:
   security-events: none
   statuses: read
 
+# No job has a time limit (GitHub's own ceiling is 6 hours). A slow runner makes a step slow, not
+# wrong: on 2026-10-16 a 60-minute limit killed a Fedora headless shard five seconds after its last
+# PASS line, because a slow mirror had made its image build take 29 minutes. Every step that
+# builds, installs, downloads or tests runs under .github/scripts/stall-watch.sh (stall-watch.ps1
+# on Windows) instead, which stops a step only when it has printed no line and received under
+# 4 MiB for 20 minutes, prints a hang record when it does, and reports every step's duration as a
+# notice. Checkouts, uploads and downloads of artifacts are GitHub's own actions and are not wrapped.
 jobs:
   # Decides whether this run may promote the tests its PR already passed instead of running them
   # again. The master ruleset makes a PR be up to date with master before it merges, so the
@@ -61,7 +68,6 @@ jobs:
   promote:
     name: Promote
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
@@ -76,7 +82,7 @@ jobs:
 
       - name: Check whether the PR's tests can be promoted
         id: check
-        run: bash .github/scripts/promote-check.sh
+        run: bash .github/scripts/stall-watch.sh --name Promote -- bash .github/scripts/promote-check.sh
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -106,11 +112,15 @@ jobs:
 
       # EXTRA_WARNINGS is /W4 /WX, so a new MSVC warning fails the build. It reaches only our own
       # targets: vcpkg builds its ports in a process of its own, with the triplet's flags
+      # vcpkg builds every port here, in the configure. The long steps run under stall-watch.ps1,
+      # stall-watch.sh's Windows twin (see the note above `jobs:`)
       - name: Configure
-        run: cmake -B build -G "${{env.CMAKE_GENERATOR}}" -D "CMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{env.VCPKG_TRIPLET}} -DEXTRA_WARNINGS=ON
+        shell: pwsh
+        run: pwsh -NoProfile -File .github/scripts/stall-watch.ps1 Configure cmake -B build -G "${{env.CMAKE_GENERATOR}}" -D "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{env.VCPKG_TRIPLET}} -DEXTRA_WARNINGS=ON
 
       - name: Build
-        run: cmake --build build --target package --config ${{ env.CMAKE_BUILD_TYPE }}
+        shell: pwsh
+        run: pwsh -NoProfile -File .github/scripts/stall-watch.ps1 Build cmake --build build --target package --config ${{ env.CMAKE_BUILD_TYPE }}
 
       # The zip and the exe it holds, by size: the release notes state what HarfBuzz costs the zip
       # (spec section 2), measured against a build without it (plan Task 1.2b)
@@ -120,7 +130,8 @@ jobs:
           Get-ChildItem build/*.zip, build/Release/streamflex.exe | ForEach-Object { '{0}: {1:N0} bytes' -f $_.Name, $_.Length }
 
       - name: Unit tests
-        run: ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
+        shell: pwsh
+        run: pwsh -NoProfile -File .github/scripts/stall-watch.ps1 "Unit tests" ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
 
       # Unit test 11's built half (spec section 9): the manifest the exe carries asks for per-monitor
       # v2. CMake merges config/streamflex.manifest.in into the exe as resource 1; mt.exe reads it back.
@@ -187,15 +198,18 @@ jobs:
       - name: "Install dependencies"
         run: |
           if [[ "${{matrix.config.name}}" == "Debian" ]]; then
-            apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
+            bash .github/scripts/stall-watch.sh --name "apt update" -- apt update
+            bash .github/scripts/stall-watch.sh --name "apt install" -- \
+              apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
           fi
 
       - name: Build
         run: |
           if [[ "${{matrix.config.name}}" == "Debian" ]]; then
-            cmake -B build -DCMAKE_BUILD_TYPE=${{env.CMAKE_BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr -DPACKAGE=DEB -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=amd64
-            cmake --build build --target package --config ${{env.CMAKE_BUILD_TYPE}}
-            ctest --test-dir build --output-on-failure
+            bash .github/scripts/stall-watch.sh --name Configure -- \
+              cmake -B build -DCMAKE_BUILD_TYPE=${{env.CMAKE_BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr -DPACKAGE=DEB -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=amd64
+            bash .github/scripts/stall-watch.sh --name Build -- cmake --build build --target package --config ${{env.CMAKE_BUILD_TYPE}}
+            bash .github/scripts/stall-watch.sh --name "Unit tests" -- ctest --test-dir build --output-on-failure
           fi
 
       - name: Show package metadata
@@ -247,13 +261,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
-        run: apt update && apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
+        run: |
+          bash .github/scripts/stall-watch.sh --name "apt update" -- apt update
+          bash .github/scripts/stall-watch.sh --name "apt install" -- \
+            apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
 
       - name: Build
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=${{env.CMAKE_BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr -DPACKAGE=DEB -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 -DRPI=1
-          cmake --build build --target package --config ${{env.CMAKE_BUILD_TYPE}}
-          ctest --test-dir build --output-on-failure
+          bash .github/scripts/stall-watch.sh --name Configure -- \
+            cmake -B build -DCMAKE_BUILD_TYPE=${{env.CMAKE_BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr -DPACKAGE=DEB -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 -DRPI=1
+          bash .github/scripts/stall-watch.sh --name Build -- cmake --build build --target package --config ${{env.CMAKE_BUILD_TYPE}}
+          bash .github/scripts/stall-watch.sh --name "Unit tests" -- ctest --test-dir build --output-on-failure
 
       - name: Show package metadata
         run: |
@@ -298,8 +316,19 @@ jobs:
       image: mirror.gcr.io/library/archlinux:latest
 
     steps:
+      # The image has no git yet, so this copy comes through the API, without .git: it is here only
+      # for stall-watch.sh, which the install below runs under. The real checkout after the install
+      # clones with git into a clean workspace, which `git archive` needs
+      - name: Fetch the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .ci-scripts
+          persist-credentials: false
+
       - name: Install dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih
+        run: |
+          bash .ci-scripts/.github/scripts/stall-watch.sh --name "pacman -Syu" -- \
+            pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih
 
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -307,11 +336,11 @@ jobs:
       - name: Build package
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cmake -B build -DPACKAGE=ARCH
+          bash .github/scripts/stall-watch.sh --name Configure -- cmake -B build -DPACKAGE=ARCH
           git archive --format=tar.gz --prefix=streamflex/ -o build/streamflex.tar.gz HEAD
           useradd --create-home builder
           chown -R builder build
-          su builder -c "cd '$GITHUB_WORKSPACE/build' && makepkg"
+          bash .github/scripts/stall-watch.sh --name makepkg -- su builder -c "cd '$GITHUB_WORKSPACE/build' && makepkg"
 
       - name: Show package metadata
         run: pacman -Qip build/*.pkg.tar.zst
@@ -342,9 +371,11 @@ jobs:
       - name: Check the icon library
         run: |
           python -m venv .venv
-          .venv/bin/pip install --quiet --require-hashes -r branding/library/requirements.txt
-          .venv/bin/python -m unittest discover -s branding/library -p "test_*.py" -v
-          .venv/bin/python branding/library/check-library.py
+          bash .github/scripts/stall-watch.sh --name "pip install" -- \
+            .venv/bin/pip install --quiet --require-hashes -r branding/library/requirements.txt
+          bash .github/scripts/stall-watch.sh --name "Library tests" -- \
+            .venv/bin/python -m unittest discover -s branding/library -p "test_*.py" -v
+          bash .github/scripts/stall-watch.sh --name "Check the library" -- .venv/bin/python branding/library/check-library.py
 
   # The lines a change adds and its commit messages use American spelling, as every repo's CI
   # checks with the central gate (bilbospocketses/american-spelling), pinned by commit. Its
@@ -362,7 +393,7 @@ jobs:
           persist-credentials: false
 
       - name: Fetch the base branch
-        run: git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
+        run: bash .github/scripts/stall-watch.sh --name "git fetch" -- git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
         env:
           BASE: ${{ github.base_ref || github.event.repository.default_branch }}
 
@@ -393,7 +424,6 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [promote]
     if: ${{ !cancelled() && needs.promote.outputs.promoted != 'true' }} # GitHub's function name; spelling: allow
-    timeout-minutes: 30
     steps:
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -401,14 +431,17 @@ jobs:
           persist-credentials: false
 
       - name: Build the test image
-        run: docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
+        run: |
+          bash .github/scripts/stall-watch.sh --name "Build the test image" -- \
+            docker build -t streamflex-test-debian -f tests/headless/Dockerfile tests/headless
 
       # tests/unit.sh is the one recipe, the same file a local run uses (CONTRIBUTING.md): it builds
       # a copy of the read-only /src and prints CONFIGURE FAILED, BUILD FAILED or WARNINGS OUTSIDE
       # src/external when a step before ctest fails
       - name: Build and run the unit tests
         run: |
-          docker run --rm --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+          bash .github/scripts/stall-watch.sh --name "Build and run the unit tests" -- \
+            docker run --rm --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
             streamflex-test-debian bash /src/tests/unit.sh
 
   # What only a running launcher shows: the settings screen, key handling and startup paths,
@@ -429,12 +462,8 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [promote]
     if: ${{ !cancelled() && needs.promote.outputs.promoted != 'true' }} # GitHub's function name; spelling: allow
-    # A backstop for a hang the harness helpers' own timeouts miss (GitHub's default is 6 hours).
-    # A shard took 25 to 28 minutes locally on 3 CPUs (2026-10-08), with its own build. On GitHub
-    # (run 37801014279) the plain shards took about 26 minutes and the leak shards about 27 to 30,
-    # all in parallel, image build and scrollfail included; 60 minutes is about twice the measured
-    # GitHub shard
-    timeout-minutes: 60
+    # A hang the harness helpers' own timeouts miss is stall-watch.sh's to catch, never a time limit:
+    # see the note above `jobs:`
     strategy:
       fail-fast: false
       matrix:
@@ -464,7 +493,9 @@ jobs:
 
       - name: Build the test image
         id: build_image
-        run: docker build -t "$IMAGE" -f "tests/headless/$DOCKERFILE" tests/headless
+        run: |
+          bash .github/scripts/stall-watch.sh --name "Build the test image" -- \
+            docker build -t "$IMAGE" -f "tests/headless/$DOCKERFILE" tests/headless
 
       # The console is kept under a name of its own, which the merge reads: the SHARD lines in it
       # are how merge.py knows the two shards make one complete run
@@ -473,10 +504,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/headless" "$RUNNER_TEMP/console"
           mode=()
           if [ "$PASS" = leaks ]; then mode=(leaks); fi
-          docker run --rm --security-opt seccomp=unconfined \
+          bash .github/scripts/stall-watch.sh --name "Run the shard" \
+            --log "$RUNNER_TEMP/console/$LABEL.console.log" -- \
+            docker run --rm --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2" 2>&1 \
-            | tee "$RUNNER_TEMP/console/$LABEL.console.log"
+            "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2"
 
       # Item 11's injected fault, a run of its own with no shards. It runs even when the shard
       # failed, so one run shows every failure, but not without an image to run in
@@ -484,7 +516,8 @@ jobs:
         if: (success() || failure()) && steps.build_image.outcome == 'success' && matrix.pass == 'plain' && matrix.shard == 1
         run: |
           mkdir -p "$RUNNER_TEMP/headless"
-          docker run --rm --security-opt seccomp=unconfined \
+          bash .github/scripts/stall-watch.sh --name "Run scrollfail" -- \
+            docker run --rm --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
             "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail
 
@@ -513,7 +546,6 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [promote, headless]
     if: ${{ always() && needs.promote.outputs.promoted != 'true' }}
-    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -545,7 +577,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/console"
           mapfile -t consoles < <(find "$RUNNER_TEMP/console" -type f -name '*.console.log' | sort)
           echo "Shard consoles: ${consoles[*]:-none}"
-          python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
+          bash .github/scripts/stall-watch.sh --name "Merge the shards" -- \
+            python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
 
   # Single required status check for the master branch ruleset. It passes only when promote,
   # every platform build, the icon library check, the spelling check, the sanitized unit tests,
