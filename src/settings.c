@@ -1625,6 +1625,53 @@ static void follow_default_menu(SettingsState *state, const char *const *old_nam
         slot->value = slot->entry;
 }
 
+// A function to find where a menu of the old model is in the new one, by the name it had (old_names as
+// settings_remodel() takes them); -1 when it is gone
+static int menu_now(const char *const *old_names, int count, const char *name)
+{
+    for (int m = 0; m < count; m++) {
+        if (old_names[m] != NULL && strcmp(old_names[m], name) == 0)
+            return m;
+    }
+    return -1;
+}
+
+// A function to list the rows of the page at `level` of the stack, as settings_rows() lists the page on show
+static int rows_at(SettingsState *state, int level, SettingsRow *rows, int max)
+{
+    int depth = state->depth;
+    state->depth = level;
+    int count = settings_rows(state, rows, max);
+    state->depth = depth;
+    return count;
+}
+
+// A function to find the menu the cursor of the Menus page at `level` of the stack rests on; -1 for none
+// (All menus, a note, or a page that is not the Menus page)
+static int menus_page_menu(SettingsState *state, int level)
+{
+    if (state->stack[level].page != SETTINGS_PAGE_MENUS)
+        return -1;
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = rows_at(state, level, rows, SETTINGS_MAX_ROWS);
+    int cursor = state->stack[level].cursor;
+    return cursor >= 0 && cursor < count && rows[cursor].kind == SETTINGS_ROW_LINK ? rows[cursor].menu : -1;
+}
+
+// A function to put the cursor of the Menus page at `level` of the stack on a menu's row, when it has one
+// (a menu past the page's room has none)
+static void menus_page_cursor(SettingsState *state, int level, int menu)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = rows_at(state, level, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        if (rows[i].kind == SETTINGS_ROW_LINK && rows[i].target == SETTINGS_PAGE_MENU && rows[i].menu == menu) {
+            state->stack[level].cursor = i;
+            return;
+        }
+    }
+}
+
 // A function to make the model again over a new list of menus, after one came, went, was renamed or
 // moved (plan ruling 5). Everything `old` holds is carried across: the pages, the bindings and how keys
 // are named, the pads, the notes, every value and its entry, and the menus model. A menu's own settings
@@ -1641,6 +1688,11 @@ SettingsState *settings_remodel(const SettingsState *old, const char *const *nam
     char **made = state->names;
     int slot_count = state->slot_count;
     *state = *old;
+
+    // The menu each Menus page's cursor rests on, read while the copy still lists the old menus
+    int highlighted[SETTINGS_MAX_DEPTH];
+    for (int i = 0; i <= state->depth; i++)
+        highlighted[i] = menus_page_menu(state, i);
     state->slots = slots;
     state->names = made;
     state->slot_count = slot_count;
@@ -1668,16 +1720,20 @@ SettingsState *settings_remodel(const SettingsState *old, const char *const *nam
         PageRef *page = &state->stack[i];
         if (page->menu < 0)
             continue;
-        int to = -1;
-        for (int m = 0; m < count && to < 0; m++) {
-            if (old_names[m] != NULL && strcmp(old_names[m], old->names[page->menu]) == 0)
-                to = m;
-        }
+        int to = menu_now(old_names, count, old->names[page->menu]);
         if (to < 0) {
             state->depth = i - 1;
             break;
         }
         page->menu = to;
+    }
+
+    // The Menus page's cursor follows the menu it rested on, so Back from that menu's page lands on it, and
+    // the preview shows it; one whose menu is gone keeps its row, the nearest one now
+    for (int i = 0; i <= state->depth; i++) {
+        int to = highlighted[i] >= 0 ? menu_now(old_names, count, old->names[highlighted[i]]) : -1;
+        if (to >= 0)
+            menus_page_cursor(state, i, to);
     }
     fix_cursor(state);
     return state;

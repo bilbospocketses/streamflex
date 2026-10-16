@@ -1,8 +1,9 @@
 # The menus as 3c shows and rebuilds them (plan rulings 2 and 5): a section with no lines is a menu of
 # its own, shown empty with a note, and the launcher's menus follow the settings' menus model as it
 # changes. The Tiles pages that change the model come later; STREAMFLEX_TEST_MENU_EDIT makes one change
-# as settings open, so the rebuild is watched now. Nothing here saves: the menus model is written only by
-# the Tiles pages' save, so each config that opens settings must come back unchanged.
+# as settings open, so the rebuild is watched now. Nothing here saves the menus model: it is written only
+# by the Tiles pages' save, so each config that opens settings must come back unchanged, but for the one
+# run that saves a menu's grid (f80-hand-grid).
 # Not timing-sensitive: every key waits for its frame, and every result is read from the log's lines and their order, never from a clock
 
 # A header alone ([Kids]) and a section of only a comment ([Notes]) are menus, listed where their sections
@@ -110,6 +111,22 @@ grep -q "Menus: config.ini's menus are not the launcher's" "$log" \
     && sed -n '/^Settings closed/,$p' "$log" | grep -qx 'Title: Bye' && ran_clean f80-caught-up && ok=0
 result "menus live: a menu read by settings open is kept by the next change, not made again (exit $(cat "$out/f80-caught-up.code"))" $ok
 grep -E "Menus:|Test hook: the menu edit|Settings (opened|closed)|^Title:" "$log" | sed 's/^/      /'
+
+# A menu config.ini gained by hand with a grid of its own (Rows=2): the catch-up reads its grid from its
+# section as StreamFlex reads it at start, so the preview shows it 2 rows high, and its Rows row starts
+# at 2, so stepping it down to All menus is a change the save writes (the line goes)
+f80_hand_grid() { printf '\n[Kids]\nRows=2\nEntry1=Cartoons;apps;:home\n' >> "$cfg"; }
+cfg=$(writable_config f80-hand-grid)
+CFG=$cfg run_keys f80-hand-grid +f80_hand_grid Menu Down Down Return Down Down Return Left Left BackSpace BackSpace BackSpace
+ok=1
+log=$out/f80-hand-grid.log
+grep -q "^Menus: 'Kids' is new$" "$log" \
+    && grep -qE "^Menu 'Kids': [0-9]+ x 2 grid" "$log" \
+    && grep -q 'Settings: \[Kids\] Rows 2 -> 1' "$log" \
+    && sed -n '/^\[Kids\]/,$p' "$cfg" | grep -qx 'Entry1=Cartoons;apps;:home' \
+    && ! sed -n '/^\[Kids\]/,$p' "$cfg" | grep -q '^Rows=' && ran_clean f80-hand-grid && ok=0
+result "menus live: a menu read by settings open has its section's grid, and its grid's change saves (exit $(cat "$out/f80-hand-grid.code"))" $ok
+grep -E "Menus:|^Menu 'Kids': |Settings: \[Kids\]|Settings (opened|closed)" "$log" | sed 's/^/      /'
 
 # Every menu removed from config.ini by hand while StreamFlex runs: the launcher cannot show no menu, so
 # settings open says so and keeps the launcher's menus (no catch-up, no rebuild), and Main's tile still runs

@@ -294,6 +294,48 @@ void add_empty_menus(const char *config_text, size_t length)
     inidoc_free(doc);
 }
 
+// A function to tell whether a menu's key names one of its own layout settings
+static bool layout_key(const char *name)
+{
+    return MATCH(name, SETTING_ROWS) || MATCH(name, SETTING_COLUMNS) || MATCH(name, SETTING_ICON_SIZE);
+}
+
+// A function to read one key line of a menu's section as one of the menu's own layout settings (Rows,
+// Columns, IconSize) into `target`. They count only when the value holds no ';', so an existing entry
+// that happens to be keyed Rows, Columns or IconSize still parses as an entry. True when the line was
+// one: stored, or said in the log to be invalid and ignored.
+static bool menu_layout_line(Menu *target, const char *section, const char *name, const char *value)
+{
+    if (!layout_key(name) || strchr(value, ';') != NULL)
+        return false;
+    SettingId id = MATCH(name, SETTING_ROWS) ? SET_ID_MENU_ROWS
+                 : MATCH(name, SETTING_COLUMNS) ? SET_ID_MENU_COLUMNS : SET_ID_MENU_ICON_SIZE;
+    SettingValue parsed;
+    if (!setting_parse(setting_def(id), value, &parsed))
+        log_error("Invalid %s value '%s' in menu '%s', ignoring it", name, value, section);
+    else
+        config_store(id, target, &parsed);
+    return true;
+}
+
+// A function to give a menu made after load its own layout settings from its section in `doc`, config.ini
+// as it is now, each key line read as the parser reads it at start (menu_layout_line()), so the last one
+// counts. The live rebuild (menus_apply()) calls it for a menu it makes from a section: one the hand-edit
+// catch-up reads, or one Discard puts back. A section `doc` lacks leaves the menu following [Layout].
+void read_menu_layout(Menu *target, const IniDoc *doc, const char *section)
+{
+    int count = inidoc_list(doc, section, NULL, NULL, 0);
+    if (count == 0)
+        return;
+    IniDocItem *items = calloc((size_t) count, sizeof(IniDocItem));
+    if (items == NULL)
+        log_fatal("Could not allocate the menu '%s'", target->name);
+    inidoc_list(doc, section, NULL, items, count);
+    for (int i = 0; i < count; i++)
+        menu_layout_line(target, section, items[i].key, items[i].value);
+    free(items);
+}
+
 // A function to handle config file parsing: every setting through the settings table, the hotkeys
 // and gamepad controls into their lists, and every other section as a menu
 int config_handler(void *user, const char *section, const char *name, const char *value)
@@ -360,21 +402,10 @@ int config_handler(void *user, const char *section, const char *name, const char
                 entry = entry->next;
         }
 
-        // Per-menu layout settings. They count only when the value is a number, so an
-        // existing entry that happens to be keyed Rows, Columns or IconSize still parses.
-        bool layout_key = MATCH(name, SETTING_ROWS) || MATCH(name, SETTING_COLUMNS) ||
-                          MATCH(name, SETTING_ICON_SIZE);
-        if (layout_key && strchr(value, ';') == NULL) {
-            SettingId id = MATCH(name, SETTING_ROWS) ? SET_ID_MENU_ROWS
-                         : MATCH(name, SETTING_COLUMNS) ? SET_ID_MENU_COLUMNS : SET_ID_MENU_ICON_SIZE;
-            SettingValue parsed;
-            if (!setting_parse(setting_def(id), value, &parsed))
-                log_error("Invalid %s value '%s' in menu '%s', ignoring it", name, value, section);
-            else
-                config_store(id, menu, &parsed);
+        // Per-menu layout settings (menu_layout_line())
+        if (menu_layout_line(menu, section, name, value))
             return 0;
-        }
-        if (layout_key)
+        if (layout_key(name))
             log_error("Menu '%s': '%s' holds an entry, so it is read as an entry", section, name);
 
         // Parse entry line for title, icon path, command

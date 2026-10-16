@@ -2038,6 +2038,53 @@ static void test_remodel(void)
     settings_free(renamed);
 }
 
+// A function to test that the Menus list's cursor stays on its menu when the menus change: Back from a
+// page about a menu that moved lands on that menu's row, so the preview shows the same menu; a cursor
+// on the list itself follows its menu by name, through a rename; and one whose menu is gone keeps its
+// row, now the nearest menu's
+static void test_remodel_menus_cursor(void)
+{
+    // Games' page: Menus, then down past All menus and Main to Games, row 3
+    SettingsState *old = open_model();
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+
+    // Kids new between Main and Games: Back lands on Games, a row lower, not on Kids
+    static const char *const kids[] = { "Main", "Kids", "Games" };
+    static const char *const kids_was[] = { "Main", NULL, "Games" };
+    SettingsState *state = settings_remodel(old, kids, kids_was, 3);
+    CHECK(state != NULL);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    CHECK_INT(settings_cursor(state), 4);
+    CHECK_INT(settings_preview_menu(state), 2);
+    settings_free(old);
+
+    // On the list itself, Games renamed Play and moved to the front: the cursor follows it to row 2
+    static const char *const play[] = { "Play", "Main", "Kids" };
+    static const char *const play_was[] = { "Games", "Main", "Kids" };
+    SettingsState *renamed = settings_remodel(state, play, play_was, 3);
+    CHECK(renamed != NULL);
+    CHECK_INT(settings_cursor(renamed), 2);
+    CHECK_INT(settings_preview_menu(renamed), 0);
+    settings_free(state);
+
+    // Main highlighted (row 3) and removed: the cursor keeps its row, Kids' now, the menu after it
+    settings_command(renamed, SETTINGS_DOWN);
+    CHECK_INT(settings_cursor(renamed), 3);
+    static const char *const fewer[] = { "Play", "Kids" };
+    SettingsState *after = settings_remodel(renamed, fewer, fewer, 2);
+    CHECK(after != NULL);
+    CHECK_INT(settings_cursor(after), 3);
+    CHECK_INT(settings_preview_menu(after), 1);
+    settings_free(renamed);
+    settings_free(after);
+}
+
 #define REMODEL_DIR "settings-remodel-fixture"
 #define REMODEL_CONFIG REMODEL_DIR "/config.ini"
 
@@ -2277,6 +2324,7 @@ int main(void)
     test_restart_tracking();
     test_restart_page();
     test_remodel();
+    test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
     test_remodel_save_after_remove_and_rename();
     return check_report();

@@ -53,6 +53,7 @@ void build_menu_items(void);
 void resolve_library_icons(void);
 void resolve_entry_icon(Entry *entry, const char *menu_name);   // One entry's library name to its file; menu_name for the log line (30-backgrounds.sh:116 reads it)
 void add_empty_menus(const char *config_text, size_t length);   // At load: a Menu for each non-reserved section the parser made none for
+void read_menu_layout(Menu *target, const IniDoc *doc, const char *section);   // A menu made after load: its section's Rows, Columns, IconSize
 void add_default_gamepad_controls(void);
 void read_file(const char *path, char **buffer);
 void sprintf_alloc(char **buffer, const char *format, ...);

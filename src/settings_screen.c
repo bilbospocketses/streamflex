@@ -1713,12 +1713,20 @@ static void load_bindings(const IniDoc *doc)
 // section of its name, as config.ini reads after any save (menu_for()). Menus that cannot be read leave
 // the menus model out, and say so. So does a config.ini whose every menu was removed by hand since
 // StreamFlex started: the launcher cannot show no menu (menus_apply() would leave current_menu with none to
-// draw), so it keeps its own, and the hand-edit catch-up does not run.
+// draw), so it keeps its own, and the hand-edit catch-up does not run. Out of memory for a live menu's
+// section, the menus model is left out too: menu_for() would find that menu by no name, and the next
+// change would make it again, losing its place.
 static void load_menus(const IniDoc *doc)
 {
+    bool named = true;
     for (int m = 0; m < menu_count; m++) {
         free(menus[m]->section);
         menus[m]->section = strdup(menus[m]->name);
+        named = named && menus[m]->section != NULL;
+    }
+    if (!named) {
+        log_error("Settings: out of memory, so the menus cannot be edited");
+        return;
     }
     menu_edit = doc != NULL ? menuedit_load(doc, config.default_menu) : NULL;
     if (menu_edit == NULL) {
@@ -1818,6 +1826,12 @@ bool settings_menus_changed(void)
         return false;
     }
 
+    // From here on only whether each menu was in the settings model is read from old_names: the live
+    // names they point at may go with menus_apply()'s renames
+    for (int m = 0; m < count; m++) {
+        if (old_names[m] != NULL)
+            old_names[m] = "";
+    }
     menus_apply(menu_edit);
     if (remade != NULL) {
         int m = 0;
@@ -1829,6 +1843,15 @@ bool settings_menus_changed(void)
         menus = now;
         now = NULL;
         menu_count = count;
+        // A menu new to the settings starts where its live menu is: one made from a config.ini section (the
+        // hand-edit catch-up, Discard) at the section's own grid, as read for it, so a change back to All
+        // menus is a change; one made in settings follows All menus, as settings_remodel() left it
+        for (int n = 0; n < count; n++) {
+            for (int id = SET_ID_MENU_ROWS; old_names[n] == NULL && id < SET_ID_COUNT; id++) {
+                SettingValue value = read_value((SettingId) id, n);
+                settings_set_entry(model, (SettingId) id, n, &value);
+            }
+        }
         origin = origin_at >= 0 ? menus[origin_at] : default_menu;
         preview_wanted = NULL;
         begin_pickers();

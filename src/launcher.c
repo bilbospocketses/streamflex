@@ -1522,11 +1522,12 @@ static void drop_empty_note(void)
 
 // A function to draw the note an empty menu shows in place of its buttons: centered across the area the
 // buttons may use, at its vertical center, in the titles' fixed font and color (it is rendered once for
-// the area's width, and again only when that or the titles change)
+// the area's width, and again only when that or the titles change; a render that failed is not tried
+// again, nor logged again, each frame, but only on such a change, as drop_empty_note() then forgets it)
 static void draw_empty_note(void)
 {
     int width = layout_area.w - 2 * geo.screen_margin;
-    if (empty_note == NULL || empty_note_width != width) {
+    if (empty_note_width != width) {
         drop_empty_note();
         TextInfo info = title_info;
         info.set = fixed_title_font;
@@ -1537,6 +1538,8 @@ static void draw_empty_note(void)
         empty_note_width = width;
         log_debug("Empty menu note: rendered %i x %i px", empty_note_rect.w, empty_note_rect.h);
     }
+    if (empty_note == NULL)
+        return;
     empty_note_rect.x = layout_area.x + (layout_area.w - empty_note_rect.w) / 2;
     empty_note_rect.y = layout_area.vcenter - empty_note_rect.h / 2;
     draw_texture(renderer, empty_note, NULL, &empty_note_rect);
@@ -1974,14 +1977,33 @@ static void free_menu(Menu *menu, bool textures)
 // the one the model read it from: a menu Discard puts back, or one the hand-edit catch-up reads from
 // config.ini, is then found by menu_for() at the next change, not made again (losing its place). A menu
 // made in settings was read from none, so it has none, and menu_for() finds it by its name; a section
-// of its name would let a new menu named as a renamed one was take that menu's Menu.
-static Menu *make_menu(const MenuEditMenu *from)
+// of its name would let a new menu named as a renamed one was take that menu's Menu. A menu made from a
+// section has that section's own grid in `doc` (config.ini as it is now; NULL when it could not be read),
+// as StreamFlex read it at start, so the settings' grid rows start where the file is; one made in settings
+// follows [Layout].
+static Menu *make_menu(const MenuEditMenu *from, const IniDoc *doc)
 {
     Menu *menu = calloc(1, sizeof(Menu));
     if (menu == NULL || (menu->name = strdup(from->name)) == NULL ||
         (from->original_name != NULL && (menu->section = strdup(from->original_name)) == NULL))
         log_fatal("Could not allocate the menu '%s'", from->name);
+    if (from->original_name != NULL && doc != NULL)
+        read_menu_layout(menu, doc, from->original_name);
     return menu;
+}
+
+// A function to read config.ini as it is now, for the grids of the menus menus_apply() makes from its
+// sections; NULL, said in the log, when it cannot be read (those menus then follow [Layout])
+static IniDoc *read_config_now(void)
+{
+    size_t length = 0;
+    char *text = fileio_read_all(config.config_path, &length);
+    IniDoc *doc = text != NULL ? inidoc_parse(text, length) : NULL;
+    alloc_free(text);
+    if (doc == NULL)
+        log_error("Menus: %s could not be read again, so the menus made from its sections follow [Layout]'s grid",
+            config.config_path);
+    return doc;
 }
 
 // A function to give a menu the entries of a menus model's menu, as the parser makes them from its
@@ -2034,10 +2056,11 @@ Menu *menu_for(const MenuEditMenu *from)
 // A function to rebuild the launcher's menus from the menus model after a change to it (spec "Saving and
 // applying"): each live menu the model still has is kept, renamed when it was, with its grid settings,
 // its place and its back link; one the model has no more goes, every pointer to it first; one the model
-// made is made. Every menu's entries are made again from the model's tiles, as the parser makes them,
-// and its textures are marked stale; the menu on show (while settings are open, the preview's) is laid
-// out again at once, and the others when next shown. The default menu follows its menu through a rename;
-// were that menu gone, the model's default (the file's DefaultMenu, through its renames) takes its place.
+// made is made, with its section's own grid when it is made from one. Every menu's entries are made again
+// from the model's tiles, as the parser makes them, and its textures are marked stale; the menu on show
+// (while settings are open, the preview's) is laid out again at once, and the others when next shown. The
+// default menu follows its menu through a rename; were that menu gone, the model's default (the file's
+// DefaultMenu, through its renames) takes its place.
 void menus_apply(const MenuEdit *edit)
 {
     int count = menuedit_count(edit);
@@ -2075,11 +2098,17 @@ void menus_apply(const MenuEdit *edit)
         menu = next;
     }
 
+    // config.ini as it is now, when a menu is to be made from one of its sections, for that menu's grid
+    bool from_file = false;
+    for (int m = 0; m < count; m++)
+        from_file = from_file || (list[m] == NULL && menuedit_menu(edit, m)->original_name != NULL);
+    IniDoc *doc = from_file ? read_config_now() : NULL;
+
     // The model's menus, in its order: made, renamed, and given their entries again
     for (int m = 0; m < count; m++) {
         const MenuEditMenu *from = menuedit_menu(edit, m);
         if (list[m] == NULL) {
-            list[m] = make_menu(from);
+            list[m] = make_menu(from, doc);
             log_debug("Menus: '%s' is new", from->name);
         }
         else if (!MATCH(list[m]->name, from->name)) {
@@ -2097,6 +2126,7 @@ void menus_apply(const MenuEdit *edit)
         if (m > 0)
             list[m - 1]->next = list[m];
     }
+    inidoc_free(doc);
     config.first_menu = count > 0 ? list[0] : NULL;
     config.num_menus = (size_t) count;
 
