@@ -8,15 +8,18 @@
 # Unlike stall-watch.sh it keeps no log file: no Windows step needs one.
 #
 # Progress is a new line of output, or the command's own process tree doing at least
-# STALL_IO_MIB MiB of I/O (default 4) or using at least STALL_CPU_S seconds of CPU (default 1)
+# STALL_IO_MIB MiB of I/O (default 4) or using at least STALL_CPU_S seconds of CPU (default 60)
 # since the last line or the last such crossing. Unlike stall-watch.sh it does not count the
 # runner's received bytes: a Windows runner receives about 40 KiB/s in the background (PR #64's
 # Build step: 1.4 MiB in 35 s, downloading nothing), which would make a hang look like progress.
 # A download still counts, as the bytes it writes: curl saving a file at 1 MB/s showed 1.2 MB of
-# writes a second and almost no CPU. With none of the three for
-# STALL_MIN minutes (default 20), the step has stalled: it prints a hang record (what was running,
-# how long, when the last line came, the last lines and the process tree), kills the command's
-# process tree and exits 124. Otherwise it exits with the command's own exit code. After the
+# writes a second and almost no CPU. The bars sit far above what an idle process left in the
+# tree accrues: an idle pwsh measured 0.17 s of CPU and 9.5 KiB of I/O in 120 s, so 1.7 s and
+# 0.1 MiB in a 20-minute window, while any real compile passes 60 CPU-seconds in about a minute.
+# A process that starts and ends between two polls is not seen; its parent's work still is.
+# With none of the three for STALL_MIN minutes (default 20), the step has stalled: it prints a
+# hang record (what was running, how long, when the last line came, the last lines and the
+# process tree), kills the command's process tree and exits 124. Otherwise it exits with the command's own exit code. After the
 # command exits, a process it left holding its output open with nothing new for STALL_DRAIN_S
 # seconds (default 30) is named and killed. Either way it reports how long the step took and how
 # CPU and I/O its processes used, and what the runner received, as a notice. For this script's
@@ -36,7 +39,7 @@ $pollS = [double]($env:STALL_POLL_S ?? 5)
 $drainS = [double]($env:STALL_DRAIN_S ?? 30)
 $ioMib = [double]($env:STALL_IO_MIB ?? 4)
 $ioStep = [long]($ioMib * 1MB)
-$cpuStep = [double]($env:STALL_CPU_S ?? 1)
+$cpuStep = [double]($env:STALL_CPU_S ?? 60)
 
 # What the runner received, for the notice only
 function Get-RxBytes {
@@ -197,9 +200,13 @@ while (($readers | Where-Object { -not $_.Done }).Count -gt 0) {
     if (Read-Lines) { $drained = [DateTime]::UtcNow }
     if (([DateTime]::UtcNow - $drained).TotalSeconds -ge $drainS) {
         Write-Line "::notice title=$Name leftovers::the command ended, but these kept its output open for $($drainS)s with nothing new; killed them"
-        $left = @(Get-Tree $proc.Id | Where-Object { $_.ProcessId -ne $proc.Id })
-        Show-Tree $proc.Id
-        foreach ($p in $left) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+        try {
+            $left = @(Get-Tree $proc.Id | Where-Object { $_.ProcessId -ne $proc.Id })
+            Show-Tree $proc.Id
+            foreach ($p in $left) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+        } catch {
+            Write-Line "(the process list could not be read, so the leftovers were not killed: $($_.Exception.Message))"
+        }
         break
     }
     Start-Sleep -Milliseconds 100

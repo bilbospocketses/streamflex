@@ -9,7 +9,7 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 ## [Unreleased]
 
 ### Changed
-- CI no longer stops a job for taking long. A slow Fedora mirror made a headless shard's test image take 29 minutes to build, and the job's 60-minute limit then killed the shard five seconds after its last passing check. No job has a time limit now. In the Build and Smoke coverage workflows, every step that builds, installs, downloads or tests, on Linux and on Windows, runs under a watchdog that stops it only when, for 20 minutes, it has printed no line and shown no other sign of work: on Linux, the runner receiving 4 MiB; on Windows, where the runner's own background traffic would hide a hang, the step's processes using 1 s of CPU or doing 4 MiB of I/O. It then prints what was running, its last output and the process tree. Each step's duration is reported as a notice.
+- CI no longer stops a job for taking long. A slow Fedora mirror made a headless shard's test image take 29 minutes to build, and the job's 60-minute limit then killed the shard five seconds after its last passing check. No job has a time limit now. In the Build and Smoke coverage workflows, every step that builds, installs, downloads or tests, on Linux and on Windows, runs under a watchdog that stops it only when, for 20 minutes, it has printed no line and shown no other sign of work: on Linux, the runner receiving 4 MiB; on Windows, where the runner's own background traffic would hide a hang, the step's processes using 60 s of CPU or doing 4 MiB of I/O. It then prints what was running, its last output and the process tree. Each step's duration is reported as a notice.
 
 ## [0.5.1] - 2026-10-16
 
