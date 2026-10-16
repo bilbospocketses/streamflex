@@ -786,12 +786,14 @@ static bool add_kids(IniDoc *doc, void *context, ConfigSaveResult *result)
 }
 
 // A function to prove that a save through a document callback fails cleanly: refused with memory's
-// reason and the config as it was, or done in full
+// reason, the config as it was and no notes, or done in full with its one note (a removal of a line
+// that is not there)
 static void prove_config_save_with(void)
 {
     static const char *const before = "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
     static const char *const after = "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Kids]\nRows=3\n";
     ConfigEdit edit = { "Kids", "Rows", NULL, "3", INIDOC_UNDER_HEADER };
+    ConfigListEdit gone = { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey2=#4000003B;:home", NULL, false, NULL };
     CHECK(fileio_make_dirs(DIR));
     for (int n = 1;; n++) {
         fileio_remove(CONFIG ".tmp");
@@ -799,13 +801,14 @@ static void prove_config_save_with(void)
         CHECK(fileio_write_all(CONFIG, before, strlen(before)));
         ConfigSaveResult result;
         arm(n);
-        bool ok = config_save_with(CONFIG, NULL, NULL, &edit, 1, NULL, 0, add_kids, NULL, &result);
+        bool ok = config_save_with(CONFIG, NULL, NULL, &edit, 1, &gone, 1, add_kids, NULL, &result);
         disarm();
         if (ok)
-            CHECK_RUN(holds(CONFIG, after), n);
+            CHECK_RUN(holds(CONFIG, after) && result.note_count == 1, n);
         else {
             CHECK_RUN(failed && holds(CONFIG, before), n);
             CHECK_RUN(strstr(result.why, "out of memory") != NULL, n);
+            CHECK_RUN(result.notes[0] == '\0' && result.note_count == 0, n);
         }
         CHECK_RUN(!fileio_exists(CONFIG ".tmp"), n);
         runs = n;

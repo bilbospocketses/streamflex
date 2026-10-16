@@ -1663,7 +1663,7 @@ static bool step_device(SettingsState *state, const SettingSlot *slot, int direc
     return true;
 }
 
-// A function to read a [Hotkeys] key's number as the save numbers new lines (next_key() in
+// A function to read a [Hotkeys] key's number as the save numbers new lines (config_save_next_key() in
 // config_save.c): "Hotkey12" is 12; 0 for any other key, or one too long to add to
 static long long hotkey_number(const char *key)
 {
