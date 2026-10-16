@@ -871,7 +871,7 @@ static void prove_menuedit_load(void)
     report("loading and copying the menus");
 }
 
-#define MENU_EDIT_STEPS 5
+#define MENU_EDIT_STEPS 6
 
 // A function to make one of the menu edits the proof runs, in order; the reason it refused, or NULL
 static const char *menu_edit_step(MenuEdit *edit, int step)
@@ -885,8 +885,10 @@ static const char *menu_edit_step(MenuEdit *edit, int step)
         return menuedit_add_submenu(edit, 0, -1, "Kids", "kids");
     case 3:
         return menuedit_rename_menu(edit, 1, "Play");
-    default:
+    case 4:
         return menuedit_move_to_menu(edit, 0, 1, 1);
+    default:
+        return menuedit_move_to_menu(edit, 0, 2, 2);   // Steam, read from the file, to Empty: a move is kept
     }
 }
 
@@ -924,6 +926,40 @@ static void prove_menuedit_edits(void)
             break;
     }
     report("editing the menus");
+}
+
+// A function to prove that copying a model that keeps a move fails cleanly: NULL, and nothing left allocated;
+// or a copy whose save keeps the moved tile's line when the menu it went to is gone, as the model's does
+static void prove_menuedit_copy_moves(void)
+{
+    static const char *const no_empty =
+        "[General]\nDefaultMenu=Main\n[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n"
+        "Entry3=Steam;steam;steam\n[Games]\nEntry1=Retro;retro;retroarch\n";
+    for (int n = 1;; n++) {
+        MenuEdit *edit = load_menus();
+        CHECK(edit != NULL && menuedit_move_to_menu(edit, 0, 2, 2) == NULL);   // Steam to Empty
+        arm(n);
+        MenuEdit *copy = menuedit_copy(edit);
+        disarm();
+        if (copy == NULL)
+            CHECK_RUN(failed, n);
+        else {
+            IniDoc *doc = inidoc_parse(no_empty, strlen(no_empty));
+            ConfigSaveResult result;
+            memset(&result, 0, sizeof(result));
+            bool ok = doc != NULL && menuedit_apply(copy, doc, &result);
+            char *out = ok ? text_of(doc) : NULL;
+            CHECK_RUN(!failed && out != NULL && strcmp(out, no_empty) == 0 && result.note_count == 2, n);
+            alloc_free(out);
+            inidoc_free(doc);
+        }
+        menuedit_free(copy);
+        menuedit_free(edit);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("copying the menus with a move");
 }
 
 // A function to prove that writing the menus into a document fails cleanly: false, with memory's reason;
@@ -1142,6 +1178,7 @@ int main(void)
     prove_config_save_with();
     prove_menuedit_load();
     prove_menuedit_edits();
+    prove_menuedit_copy_moves();
     prove_menuedit_apply();
     prove_settings_remodel();
     prove_bindings();

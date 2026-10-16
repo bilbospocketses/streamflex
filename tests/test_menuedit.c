@@ -663,6 +663,164 @@ static void test_apply_after_hand_edits(void)
     menuedit_free(edit);
 }
 
+// A function to test a tile moved to a menu whose changes are skipped at the save (spec "Saving"): the move
+// is skipped, so its line stays in the menu it was read in, with a note. Where it was moved on to a menu
+// that is written, or removed, its line goes as before; the model keeps track of it through every edit.
+static void test_apply_skipped_moves(void)
+{
+    static const char *const no_games =
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n\n"
+        "[System]\nColumns=4\nEntry1=Shutdown;power;:shutdown\nEntry2=All games;games;:submenu Games\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    static const char *const games_note = "[Games] is not there any more, so the changes to that menu are skipped";
+    ConfigSaveResult result;
+    bool ok = false;
+
+    // Kodi moved to Games, which a hand edit removed meanwhile: Kodi's line stays in Main, and a copy of
+    // the model (Discard's snapshot) knows it too
+    MenuEdit *edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_move_to_menu(edit, 0, 0, 1) == NULL);
+    MenuEdit *copy = menuedit_copy(edit);
+    CHECK(copy != NULL);
+    for (int pass = 0; pass < 2; pass++) {
+        CHECK_STR(applied(pass == 0 ? edit : copy, no_games, &ok, &result), no_games);
+        CHECK(ok);
+        CHECK_INT(result.note_count, 2);
+        CHECK_INT(result.note_kinds[0], CONFIG_NOTE_SECTION_GONE);
+        CHECK_INT(result.note_kinds[1], CONFIG_NOTE_SECTION_GONE);
+        CHECK_STR(result.notes,
+            "[Games] is not there any more, so the changes to that menu are skipped\n"
+            "'Entry1=Kodi;kodi;kodi' is not moved to [Games], since the changes to that menu are skipped");
+    }
+    menuedit_free(copy);
+    menuedit_free(edit);
+
+    // Kodi moved to Games, which then has tiles added before it, one taken out and Kodi moved to its front,
+    // then moved on to System: System is written, so Kodi's line leaves Main for a new one there. Kids, a new
+    // submenu opened only from Games, is skipped with it (the next test).
+    edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_move_to_menu(edit, 0, 0, 1) == NULL);         // Games: Retro, Back, Kodi
+    CHECK(menuedit_add(edit, 1, 0, "Chess", "chess", "chess") == NULL);   // Retro, Chess, Back, Kodi
+    CHECK(menuedit_add_submenu(edit, 1, 0, "Kids", "kids") == NULL);      // Retro, Kids, Chess, Back, Kodi
+    CHECK(menuedit_remove(edit, 1, 0) == NULL);                  // Kids, Chess, Back, Kodi
+    CHECK(menuedit_move(edit, 1, 3, 0) == NULL);                 // Kodi, Kids, Chess, Back
+    CHECK_STR(menuedit_menu(edit, 1)->tiles[0].title, "Kodi");
+    CHECK(menuedit_move_to_menu(edit, 1, 0, 2) == NULL);         // Kodi to System
+    CHECK_STR(applied(edit, no_games, &ok, &result),
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n\n"
+        "[System]\nColumns=4\nEntry1=Shutdown;power;:shutdown\nEntry2=All games;games;:submenu Games\n"
+        "Entry3=Kodi;kodi;kodi\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    CHECK(ok);
+    CHECK_INT(result.note_count, 2);
+    CHECK_STR(result.notes,
+        "[Games] is not there any more, so the changes to that menu are skipped\n"
+        "[Kids] is opened only from menus whose changes are skipped, so it is not added");
+    menuedit_free(edit);
+
+    // Kodi and Steam moved to Games, which puts its tiles in another order around them, then each moved on
+    // to System, Steam first: both lines leave Main for new ones there
+    edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_move_to_menu(edit, 0, 0, 1) == NULL);         // Games: Retro, Back, Kodi
+    CHECK(menuedit_move_to_menu(edit, 0, 1, 1) == NULL);         // Retro, Back, Kodi, Steam
+    CHECK(menuedit_move(edit, 1, 0, 3) == NULL);                 // Back, Kodi, Steam, Retro
+    CHECK(menuedit_move(edit, 1, 2, 0) == NULL);                 // Steam, Back, Kodi, Retro
+    CHECK(menuedit_move_to_menu(edit, 1, 0, 2) == NULL);         // Steam to System: Back, Kodi, Retro
+    CHECK_STR(menuedit_menu(edit, 1)->tiles[1].title, "Kodi");
+    CHECK(menuedit_move_to_menu(edit, 1, 1, 2) == NULL);         // Kodi to System
+    CHECK_STR(applied(edit, no_games, &ok, &result),
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry2=Games;games;:submenu Games ; my games\n\n"
+        "[System]\nColumns=4\nEntry1=Shutdown;power;:shutdown\nEntry2=All games;games;:submenu Games\n"
+        "Entry3=Steam;steam;steam\nEntry4=Kodi;kodi;kodi\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    CHECK(ok);
+    CHECK_INT(result.note_count, 1);
+    CHECK_STR(result.notes, games_note);
+    menuedit_free(edit);
+
+    // Kodi moved to Games and removed from there, after a tile before it: removed, its line goes from Main
+    edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_move_to_menu(edit, 0, 0, 1) == NULL);         // Games: Retro, Back, Kodi
+    CHECK(menuedit_remove(edit, 1, 0) == NULL);                  // Back, Kodi
+    CHECK(menuedit_remove(edit, 1, 1) == NULL);                  // Back
+    CHECK_STR(applied(edit, no_games, &ok, &result),
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n\n"
+        "[System]\nColumns=4\nEntry1=Shutdown;power;:shutdown\nEntry2=All games;games;:submenu Games\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    CHECK(ok);
+    CHECK_INT(result.note_count, 1);
+    CHECK_STR(result.notes, games_note);
+    menuedit_free(edit);
+
+    // Kodi moved to System and Steam to Games, then Games removed with its tiles, Steam among them, which
+    // moves System up a place: a hand edit removed System meanwhile, so Kodi's line stays in Main, and
+    // Steam's goes with Games
+    static const char *const no_system =
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n\n"
+        "[Games]\nEntry1=Retro;retro;retroarch\nEntry4=Back;back;:back\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_move_to_menu(edit, 0, 0, 2) == NULL);         // Main: Games, Steam; System: ..., Kodi
+    CHECK(menuedit_move_to_menu(edit, 0, 1, 1) == NULL);         // Main: Games; Games: ..., Steam
+    CHECK(menuedit_remove_menu(edit, 0, 0, true) == NULL);       // System, now menu 1: Shutdown, Kodi
+    CHECK_STR(menuedit_menu(edit, 1)->name, "System");
+    CHECK_STR(applied(edit, no_system, &ok, &result),
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n");
+    CHECK(ok);
+    CHECK_INT(result.note_count, 2);
+    CHECK_STR(result.notes,
+        "[System] is not there any more, so the changes to that menu are skipped\n"
+        "'Entry1=Kodi;kodi;kodi' is not moved to [System], since the changes to that menu are skipped");
+    menuedit_free(edit);
+}
+
+// A function to test a new submenu opened only from menus whose changes are skipped at the save: it is not
+// added, nor is one opened only from it, wherever it comes in the model's order, and a tile moved into it
+// stays in its menu. A new menu nothing opens is added, as before.
+static void test_apply_skipped_new_menus(void)
+{
+    MenuEdit *edit = load(CONFIG_TEXT, "Main");
+    CHECK(menuedit_add_submenu(edit, 0, -1, "Kids", "kids") == NULL);         // Kids, menu 3, opened from Main
+    CHECK(menuedit_add_submenu(edit, 2, -1, "Toddlers", "toys") == NULL);     // Toddlers, menu 4, from System
+    CHECK(menuedit_move_to_menu(edit, 0, 3, 4) == NULL);                      // Kids now opened from Toddlers
+    CHECK(menuedit_add(edit, 3, -1, "Paint", "paint", "mspaint") == NULL);
+    CHECK(menuedit_move_to_menu(edit, 0, 2, 3) == NULL);                      // Steam to Kids
+    CHECK(menuedit_add_submenu(edit, 0, -1, "Spare", "apps") == NULL);        // Spare, menu 5...
+    CHECK(menuedit_set(edit, 0, 2, "Spare", "apps", "spare") == NULL);        // ...which nothing opens now
+    CHECK_INT(menuedit_openers(edit, "Spare"), 0);
+    static const char *const no_system =
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n\n"
+        "[Games]\nEntry1=Retro;retro;retroarch\nEntry4=Back;back;:back\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    ConfigSaveResult result;
+    bool ok = false;
+    CHECK_STR(applied(edit, no_system, &ok, &result),
+        "; my launcher\n[General]\nDefaultMenu=Main\n\n"
+        "[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games ; my games\nEntry3=Steam;steam;steam\n"
+        "Entry4=Spare;apps;spare\n\n"
+        "[Games]\nEntry1=Retro;retro;retroarch\nEntry4=Back;back;:back\n\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n"
+        "[Spare]\n");
+    CHECK(ok);
+    CHECK_INT(result.note_count, 4);
+    for (int n = 0; n < 4; n++)
+        CHECK_INT(result.note_kinds[n], CONFIG_NOTE_SECTION_GONE);
+    CHECK_STR(result.notes,
+        "[System] is not there any more, so the changes to that menu are skipped\n"
+        "[Toddlers] is opened only from menus whose changes are skipped, so it is not added\n"
+        "[Kids] is opened only from menus whose changes are skipped, so it is not added\n"
+        "'Entry3=Steam;steam;steam' is not moved to [Kids], since the changes to that menu are skipped");
+    menuedit_free(edit);
+}
+
 // A function to test renames that meet (two menus swapping names through a third, past a section that
 // already has the first renaming name), and renames a line has no room for, which fail the save
 static void test_apply_renames(void)
@@ -783,6 +941,8 @@ int main(void)
     test_copy();
     test_apply();
     test_apply_after_hand_edits();
+    test_apply_skipped_moves();
+    test_apply_skipped_new_menus();
     test_apply_renames();
     test_apply_order();
     return check_report();

@@ -31,12 +31,23 @@ static const char *const NO_KEY = "Its line in config.ini has no key, so it can'
 static const char *const KEYLESS_MENU = "A line in this menu has no key in config.ini, so its tiles can't be moved";
 static const char *const KEYLESS_OPENER = "A tile that opens it has no key in config.ini, so it can't be removed";
 
+// A tile read from the file that was moved to another menu: where it is now, and the line it was read from,
+// which stays where it is when the save skips the changes to the menu it was moved to
+typedef struct {
+    int menu;          // Where the tile is now
+    int tile;
+    int read;          // The menu it was read in, in `read`
+    char *original;    // Its line as read, which the tile gave up when it moved
+} MenuMove;
+
 struct MenuEdit {
     MenuEditMenu *menus;   // The menus now, in the file's order, new ones at the end
     int count;
     char *default_menu;    // The default menu's name now (a rename carries it); NULL when none was given
     MenuEditMenu *read;    // The menus as read, which menuedit_changed() and menuedit_apply() weigh the model against
     int read_count;
+    MenuMove *moves;       // The tiles moved from the menu they were read in, kept in step with every edit
+    int move_count;
 };
 
 // A function to tell whitespace as inih does (isspace in the C locale)
@@ -172,6 +183,30 @@ static MenuEditMenu *copy_menus(const MenuEditMenu *menus, int count)
     return copy;
 }
 
+// A function to free a list of moves
+static void free_moves(MenuMove *moves, int count)
+{
+    for (int k = 0; k < count; k++)
+        alloc_free(moves[k].original);
+    alloc_free(moves);
+}
+
+// A function to copy a list of moves; NULL when out of memory, with nothing left allocated
+static MenuMove *copy_moves(const MenuMove *moves, int count)
+{
+    MenuMove *copy = alloc_calloc((size_t) count, sizeof(MenuMove));
+    for (int k = 0; copy != NULL && k < count; k++) {
+        bool ok = true;
+        copy[k] = moves[k];
+        copy[k].original = copy_text(moves[k].original, &ok);
+        if (!ok) {
+            free_moves(copy, k);
+            return NULL;
+        }
+    }
+    return copy;
+}
+
 // A function to tell whether a key line is one of a menu's own settings: Rows, Columns or IconSize with
 // a value holding no ';', as the parser reads them (util.c's config_handler); one holding a ';' is an entry
 static bool is_setting_line(const IniDocItem *item)
@@ -282,7 +317,9 @@ MenuEdit *menuedit_copy(const MenuEdit *edit)
     copy->count = copy->menus != NULL ? edit->count : 0;
     copy->read = copy_menus(edit->read, edit->read_count);
     copy->read_count = copy->read != NULL ? edit->read_count : 0;
-    if (!ok || copy->menus == NULL || copy->read == NULL) {
+    copy->moves = copy_moves(edit->moves, edit->move_count);
+    copy->move_count = copy->moves != NULL ? edit->move_count : 0;
+    if (!ok || copy->menus == NULL || copy->read == NULL || copy->moves == NULL) {
         menuedit_free(copy);
         return NULL;
     }
@@ -296,6 +333,7 @@ void menuedit_free(MenuEdit *edit)
         return;
     free_menus(edit->menus, edit->count);
     free_menus(edit->read, edit->read_count);
+    free_moves(edit->moves, edit->move_count);
     alloc_free(edit->default_menu);
     alloc_free(edit);
 }
@@ -612,6 +650,54 @@ static void take_tile(MenuEditMenu *menu, int t)
     menu->count--;
 }
 
+// A function to find the move that brought a tile where it is; -1 for one that was not moved from the menu it
+// was read in
+static int find_move(const MenuEdit *edit, int m, int t)
+{
+    for (int k = 0; k < edit->move_count; k++) {
+        if (edit->moves[k].menu == m && edit->moves[k].tile == t)
+            return k;
+    }
+    return -1;
+}
+
+// A function to forget a move: its tile went from the model
+static void forget_move(MenuEdit *edit, int k)
+{
+    alloc_free(edit->moves[k].original);
+    memmove(&edit->moves[k], &edit->moves[k + 1], (size_t) (edit->move_count - k - 1) * sizeof(MenuMove));
+    edit->move_count--;
+}
+
+// A function to keep the moves in step with the tiles of menu m from index `from` on, which moved `by` places
+static void shift_moves(MenuEdit *edit, int m, int from, int by)
+{
+    for (int k = 0; k < edit->move_count; k++) {
+        if (edit->moves[k].menu == m && edit->moves[k].tile >= from)
+            edit->moves[k].tile += by;
+    }
+}
+
+// A function to put a tile into menu m at an index, as insert_tile() does, with the moves kept in step
+static bool put_tile(MenuEdit *edit, int m, int at, const MenuTile *tile)
+{
+    if (!insert_tile(&edit->menus[m], at, tile))
+        return false;
+    shift_moves(edit, m, at, 1);
+    return true;
+}
+
+// A function to remove tile t of menu m and free it, with the moves kept in step: its own is forgotten
+static void drop_tile(MenuEdit *edit, int m, int t)
+{
+    int k = find_move(edit, m, t);
+    if (k >= 0)
+        forget_move(edit, k);
+    free_tile(&edit->menus[m].tiles[t]);
+    take_tile(&edit->menus[m], t);
+    shift_moves(edit, m, t + 1, -1);
+}
+
 // A function to add a tile after the tile `after`, or at the end when it is -1; it has no key or line
 // until the save numbers and writes it
 const char *menuedit_add(MenuEdit *edit, int m, int after, const char *title, const char *icon, const char *command)
@@ -631,7 +717,7 @@ const char *menuedit_add(MenuEdit *edit, int m, int after, const char *title, co
     tile.title = copy_text(title, &ok);
     tile.icon = copy_text(icon, &ok);
     tile.command = copy_text(command, &ok);
-    if (!ok || !insert_tile(&edit->menus[m], after < 0 ? edit->menus[m].count : after + 1, &tile)) {
+    if (!ok || !put_tile(edit, m, after < 0 ? edit->menus[m].count : after + 1, &tile)) {
         free_tile(&tile);
         return OUT_OF_MEMORY;
     }
@@ -680,8 +766,7 @@ const char *menuedit_remove(MenuEdit *edit, int m, int t)
     const char *submenu = menuedit_submenu_of(&edit->menus[m].tiles[t]);
     if (submenu != NULL && menuedit_find(edit, submenu) >= 0)
         return "It opens a submenu";
-    free_tile(&edit->menus[m].tiles[t]);
-    take_tile(&edit->menus[m], t);
+    drop_tile(edit, m, t);
     return NULL;
 }
 
@@ -695,15 +780,22 @@ const char *menuedit_move(MenuEdit *edit, int m, int from, int to)
         return KEYLESS_MENU;
     MenuEditMenu *menu = &edit->menus[m];
     MenuTile tile = menu->tiles[from];
+    int k = find_move(edit, m, from);
     take_tile(menu, from);
     memmove(&menu->tiles[to + 1], &menu->tiles[to], (size_t) (menu->count - to) * sizeof(MenuTile));
     menu->tiles[to] = tile;
     menu->count++;
+    shift_moves(edit, m, from + 1, -1);
+    shift_moves(edit, m, to, 1);
+    if (k >= 0)
+        edit->moves[k].tile = to;
     return NULL;
 }
 
 // A function to move a tile to the end of another menu. It is a new line there (its key and its line as
-// read go), so its line is weighed with a new tile's key.
+// read go), so its line is weighed with a new tile's key. A tile read from the file keeps its line as read
+// in a move, which follows it from menu to menu, for the save to keep in the menu it was read in when the
+// changes to the menu it is in are skipped.
 const char *menuedit_move_to_menu(MenuEdit *edit, int m, int t, int to_menu)
 {
     if (!has_tile(edit, m, t))
@@ -726,14 +818,31 @@ const char *menuedit_move_to_menu(MenuEdit *edit, int m, int t, int to_menu)
     MenuTile *tiles = alloc_realloc(target->tiles, (size_t) (target->count + 1) * sizeof(MenuTile));
     if (tiles == NULL)
         return OUT_OF_MEMORY;
-    target->tiles = tiles;
+    target->tiles = tiles;   // Room for one more; the count says whether it is used
+    int k = find_move(edit, m, t);
+    const MenuEditMenu *read = read_menu(edit, edit->menus[m].original_name);
+    if (k < 0 && tile->original != NULL && read != NULL) {
+        MenuMove *moves = alloc_realloc(edit->moves, (size_t) (edit->move_count + 1) * sizeof(MenuMove));
+        if (moves == NULL)
+            return OUT_OF_MEMORY;
+        edit->moves = moves;
+        k = edit->move_count++;
+        edit->moves[k].read = (int) (read - edit->read);
+        edit->moves[k].original = tile->original;   // The move takes the line as read over from the tile
+        tile->original = NULL;
+    }
     MenuTile moving = *tile;
     alloc_free(moving.key);
     alloc_free(moving.original);
     moving.key = NULL;
     moving.original = NULL;
     take_tile(&edit->menus[m], t);
+    shift_moves(edit, m, t + 1, -1);
     target->tiles[target->count++] = moving;
+    if (k >= 0) {
+        edit->moves[k].menu = to_menu;
+        edit->moves[k].tile = target->count - 1;
+    }
     return NULL;
 }
 
@@ -769,7 +878,7 @@ const char *menuedit_add_submenu(MenuEdit *edit, int m, int after, const char *n
                         ? alloc_realloc(edit->menus, (size_t) (edit->count + 1) * sizeof(MenuEditMenu)) : NULL;
     if (menus != NULL)
         edit->menus = menus;   // Room for one more; the count says whether it is used
-    if (menus == NULL || !insert_tile(&edit->menus[m], after < 0 ? edit->menus[m].count : after + 1, &tile)) {
+    if (menus == NULL || !put_tile(edit, m, after < 0 ? edit->menus[m].count : after + 1, &tile)) {
         free_menu(&menu);
         free_tile(&tile);
         return OUT_OF_MEMORY;
@@ -880,8 +989,7 @@ const char *menuedit_remove_menu(MenuEdit *edit, int m, int t, bool with_tiles)
     if (!with_tiles) {
         if (menuedit_openers(edit, submenu) < 2)
             return "No other tile opens that menu";
-        free_tile(&edit->menus[m].tiles[t]);
-        take_tile(&edit->menus[m], t);
+        drop_tile(edit, m, t);
         return NULL;
     }
     if (edit->default_menu != NULL && strcmp(edit->default_menu, submenu) == 0)
@@ -897,15 +1005,19 @@ const char *menuedit_remove_menu(MenuEdit *edit, int m, int t, bool with_tiles)
     for (int k = 0; k < edit->count; k++) {
         MenuEditMenu *menu = &edit->menus[k];
         for (int i = menu->count - 1; i >= 0; i--) {
-            if (k != s && opens(&menu->tiles[i], edit->menus[s].name)) {
-                free_tile(&menu->tiles[i]);
-                take_tile(menu, i);
-            }
+            if (k != s && opens(&menu->tiles[i], edit->menus[s].name))
+                drop_tile(edit, k, i);
         }
     }
     free_menu(&edit->menus[s]);
     memmove(&edit->menus[s], &edit->menus[s + 1], (size_t) (edit->count - s - 1) * sizeof(MenuEditMenu));
     edit->count--;
+    for (int k = edit->move_count - 1; k >= 0; k--) {   // The moves of its tiles go with it; those after it move up
+        if (edit->moves[k].menu == s)
+            forget_move(edit, k);
+        else if (edit->moves[k].menu > s)
+            edit->moves[k].menu--;
+    }
     return NULL;
 }
 
@@ -988,13 +1100,35 @@ static void mark_held(const MenuEditMenu *menu, const MenuEditMenu *read, bool *
     }
 }
 
-// A function to remove the lines of the tiles the model no longer holds, found by their text as read. One a
-// hand edit removed or changed meanwhile is not there: its removal is skipped, with a note, as 3b's are.
-static bool remove_tiles(IniDoc *doc, const MenuEditMenu *menu, const MenuEditMenu *read, const bool *held,
+// A function to mark, in `kept` (the tiles held, to begin with), the line of each tile moved from this menu
+// as read to a menu whose changes are skipped: the move is skipped, so its line stays, with a note
+static void keep_moved(const MenuEdit *edit, const MenuEditMenu *read, const bool *skipped, bool *kept,
+                       ConfigSaveResult *result)
+{
+    for (int k = 0; read != NULL && k < edit->move_count; k++) {
+        const MenuMove *move = &edit->moves[k];
+        if (&edit->read[move->read] != read || !skipped[move->menu])
+            continue;
+        int r = 0;
+        while (r < read->count && (kept[r] || strcmp(read->tiles[r].original, move->original) != 0))
+            r++;
+        if (r < read->count)
+            kept[r] = true;
+        char line[CONFIG_SAVE_NOTES_SIZE];
+        snprintf(line, sizeof(line), "'%s' is not moved to [%s], since the changes to that menu are skipped", move->original,
+                 edit->menus[move->menu].name);
+        config_save_note(result, CONFIG_NOTE_SECTION_GONE, line);
+    }
+}
+
+// A function to remove the lines of the tiles as read that are not kept (held by a tile, or kept by a skipped
+// move), found by their text as read. One a hand edit removed or changed meanwhile is not there: its removal
+// is skipped, with a note, as 3b's are.
+static bool remove_tiles(IniDoc *doc, const MenuEditMenu *menu, const MenuEditMenu *read, const bool *kept,
                          ConfigSaveResult *result)
 {
     for (int r = 0; read != NULL && r < read->count; r++) {
-        if (held[r])
+        if (kept[r])
             continue;
         const char *original = read->tiles[r].original;
         int line = inidoc_find_line(doc, menu->name, original);
@@ -1126,12 +1260,14 @@ static bool insert_tiles(IniDoc *doc, const MenuEditMenu *menu, int *owner, int 
 
 // A function to make a changed menu's section match the model (plan ruling 4): the lines of removed tiles
 // go, changed tiles are written into their own lines, the tiles are put in the model's order when it moved
-// any, and new tiles are written where the model has them. Lines a hand edit added meanwhile, and the
-// menu's Rows, Columns and IconSize, stay as they are.
-static bool reconcile(const MenuEdit *edit, IniDoc *doc, const MenuEditMenu *menu, ConfigSaveResult *result)
+// any, and new tiles are written where the model has them. Lines a hand edit added meanwhile, the lines of
+// tiles moved to a menu whose changes are skipped, and the menu's Rows, Columns and IconSize, stay as they are.
+static bool reconcile(const MenuEdit *edit, IniDoc *doc, const MenuEditMenu *menu, const bool *skipped,
+                      ConfigSaveResult *result)
 {
     const MenuEditMenu *read = read_menu(edit, menu->original_name);
-    bool *held = alloc_calloc((size_t) (read != NULL ? read->count : 0), sizeof(bool));
+    int read_count = read != NULL ? read->count : 0;
+    bool *held = alloc_calloc((size_t) read_count * 2, sizeof(bool));   // Held by a tile, then kept: held or a skipped move's
     bool *gone = alloc_calloc((size_t) menu->count, sizeof(bool));
     if (held == NULL || gone == NULL) {
         alloc_free(held);
@@ -1139,7 +1275,10 @@ static bool reconcile(const MenuEdit *edit, IniDoc *doc, const MenuEditMenu *men
         return fail(result, "out of memory");
     }
     mark_held(menu, read, held);
-    bool ok = remove_tiles(doc, menu, read, held, result);
+    bool *kept = held + read_count;
+    memcpy(kept, held, (size_t) read_count * sizeof(bool));
+    keep_moved(edit, read, skipped, kept, result);
+    bool ok = remove_tiles(doc, menu, read, kept, result);
     int count = 0;
     IniDocItem *items = ok ? entry_items(doc, menu->name, &count) : NULL;
     int *owner = items != NULL ? alloc_calloc((size_t) (count + menu->count), sizeof(int)) : NULL;
@@ -1193,6 +1332,37 @@ static bool find_gone(const MenuEdit *edit, const IniDoc *doc, bool *skipped, Co
                  menu->original_name);
     }
     return true;
+}
+
+// A function to skip the new menus opened only from menus whose changes are skipped, which no section would
+// open, with a note: until no more are found, since a new menu skipped can be the only one opening another,
+// earlier or later in the model's order. A new menu nothing opens is not skipped: it is added, as asked.
+static void skip_unopened(const MenuEdit *edit, bool *skipped, ConfigSaveResult *result)
+{
+    bool found = true;
+    while (found) {
+        found = false;
+        for (int m = 0; m < edit->count; m++) {
+            if (skipped[m] || edit->menus[m].original_name != NULL)
+                continue;
+            int openers = 0;
+            int written = 0;
+            for (int k = 0; k < edit->count; k++) {
+                for (int t = 0; t < edit->menus[k].count; t++) {
+                    if (opens(&edit->menus[k].tiles[t], edit->menus[m].name)) {
+                        openers++;
+                        written += skipped[k] ? 0 : 1;
+                    }
+                }
+            }
+            if (openers > 0 && written == 0) {
+                skipped[m] = true;
+                found = true;
+                note(result, CONFIG_NOTE_SECTION_GONE, "[%s] is opened only from menus whose changes are skipped, so it is not added",
+                     edit->menus[m].name);
+            }
+        }
+    }
 }
 
 // A function to refuse a name a hand edit gave a section meanwhile: a menu renamed or added under it would
@@ -1250,12 +1420,12 @@ static bool rename_menus(const MenuEdit *edit, IniDoc *doc, const bool *skipped,
     return ok;
 }
 
-// A function to add the sections of new menus at the end of the file
-static bool add_menus(const MenuEdit *edit, IniDoc *doc, ConfigSaveResult *result)
+// A function to add the sections of new menus at the end of the file, but for those skipped
+static bool add_menus(const MenuEdit *edit, IniDoc *doc, const bool *skipped, ConfigSaveResult *result)
 {
     for (int m = 0; m < edit->count; m++) {
         const MenuEditMenu *menu = &edit->menus[m];
-        if (menu->original_name == NULL && !inidoc_add_section(doc, menu->name))
+        if (menu->original_name == NULL && !skipped[m] && !inidoc_add_section(doc, menu->name))
             return fail(result, "the menu %s cannot be added: %s", menu->name, inidoc_why(doc));
     }
     return true;
@@ -1278,19 +1448,23 @@ static bool rename_default(const MenuEdit *edit, IniDoc *doc, const bool *skippe
 
 // A function to make a fresh read of the file match the model, as config_save_with()'s document callback:
 // removed menus' sections go, menus a hand edit renamed or removed meanwhile are skipped (one the model
-// renamed too fails the save), renamed menus' sections are renamed and new ones added, each changed menu's
-// section is reconciled, and DefaultMenu follows a rename. False, with the reason, fails the save; what could not be made as asked is noted.
+// renamed too fails the save), and so are new menus opened only from skipped ones, renamed menus' sections
+// are renamed and new ones added, each changed menu's section is reconciled (a tile moved to a skipped menu
+// stays where it was), and DefaultMenu follows a rename. False, with the reason, fails the save; what could not be made as asked is noted.
 bool menuedit_apply(const MenuEdit *edit, IniDoc *doc, ConfigSaveResult *result)
 {
     bool *skipped = alloc_calloc((size_t) edit->count, sizeof(bool));
     if (skipped == NULL)
         return fail(result, "out of memory");
     remove_menus(edit, doc, result);
-    bool ok = find_gone(edit, doc, skipped, result) && check_clashes(edit, doc, skipped, result) &&
-              rename_menus(edit, doc, skipped, result) && add_menus(edit, doc, result);
+    bool ok = find_gone(edit, doc, skipped, result);
+    if (ok)
+        skip_unopened(edit, skipped, result);
+    ok = ok && check_clashes(edit, doc, skipped, result) && rename_menus(edit, doc, skipped, result) &&
+         add_menus(edit, doc, skipped, result);
     for (int m = 0; ok && m < edit->count; m++) {
         if (!skipped[m] && menu_changed(edit, &edit->menus[m]))
-            ok = reconcile(edit, doc, &edit->menus[m], result);
+            ok = reconcile(edit, doc, &edit->menus[m], skipped, result);
     }
     ok = ok && rename_default(edit, doc, skipped, result);
     alloc_free(skipped);
