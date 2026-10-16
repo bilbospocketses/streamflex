@@ -7,16 +7,20 @@
 # (cmake's -B, -G, -D...) to this script's parameters. Every argument arrives untouched in $args.
 # Unlike stall-watch.sh it keeps no log file: no Windows step needs one.
 #
-# Progress is a new line of output, or the runner receiving at least STALL_RX_MIB MiB (default 4)
-# on its non-loopback interfaces since the last line or the last such crossing. With neither for
+# Progress is a new line of output, or the command's own process tree doing at least
+# STALL_IO_MIB MiB of I/O (default 4) or using at least STALL_CPU_S seconds of CPU (default 1)
+# since the last line or the last such crossing. Unlike stall-watch.sh it does not count the
+# runner's received bytes: a Windows runner receives about 40 KiB/s in the background (PR #64's
+# Build step: 1.4 MiB in 35 s, downloading nothing), which would make a hang look like progress.
+# A download still counts, as the bytes it writes: curl saving a file at 1 MB/s showed 1.2 MB of
+# writes a second and almost no CPU. With none of the three for
 # STALL_MIN minutes (default 20), the step has stalled: it prints a hang record (what was running,
 # how long, when the last line came, the last lines and the process tree), kills the command's
 # process tree and exits 124. Otherwise it exits with the command's own exit code. After the
 # command exits, a process it left holding its output open with nothing new for STALL_DRAIN_S
 # seconds (default 30) is named and killed. Either way it reports how long the step took and how
-# much the runner received, as a notice. For this script's own tests, STALL_S overrides STALL_MIN
-# in seconds, STALL_POLL_S sets the poll interval, and STALL_RX_FILE names a file holding a byte
-# count read in place of the interfaces.
+# CPU and I/O its processes used, and what the runner received, as a notice. For this script's
+# own tests, STALL_S overrides STALL_MIN in seconds and STALL_POLL_S sets the poll interval.
 $ErrorActionPreference = 'Stop'
 
 $Name = if ($args.Count -gt 0) { "$($args[0])" } else { 'step' }
@@ -30,13 +34,12 @@ if ($Command.Count -eq 0) {
 $stallS = if ($env:STALL_S) { [double]$env:STALL_S } else { 60 * [double]($env:STALL_MIN ?? 20) }
 $pollS = [double]($env:STALL_POLL_S ?? 5)
 $drainS = [double]($env:STALL_DRAIN_S ?? 30)
-$rxMib = [double]($env:STALL_RX_MIB ?? 4)
-$rxStep = [long]($rxMib * 1MB)
+$ioMib = [double]($env:STALL_IO_MIB ?? 4)
+$ioStep = [long]($ioMib * 1MB)
+$cpuStep = [double]($env:STALL_CPU_S ?? 1)
 
+# What the runner received, for the notice only
 function Get-RxBytes {
-    if ($env:STALL_RX_FILE) {
-        try { return [long]((Get-Content -Raw -LiteralPath $env:STALL_RX_FILE).Trim()) } catch { return 0L }
-    }
     $sum = 0L
     foreach ($nic in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
         if ($nic.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback) { continue }
@@ -50,7 +53,8 @@ function Write-Line([string]$s) { [Console]::Out.WriteLine($s) }
 # The command's process and every process under it, by parent id, which Windows keeps after the
 # parent has exited
 function Get-Tree([int]$root) {
-    $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine)
+    $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine,
+        KernelModeTime, UserModeTime, ReadTransferCount, WriteTransferCount, OtherTransferCount)
     $ids = [System.Collections.Generic.HashSet[int]]::new()
     [void]$ids.Add($root)
     do {
@@ -88,7 +92,13 @@ $script:lastLine = [DateTime]::UtcNow
 $start = [DateTime]::UtcNow
 $rxPrev = Get-RxBytes
 $rxTotal = 0L
-$rxSince = 0L
+# The tree's CPU seconds and I/O bytes, per process id, at the last poll
+$seen = @{}
+$cpuSince = 0.0
+$ioSince = 0L
+$cpuTotal = 0.0
+$ioTotal = 0L
+$probeFailed = $false
 $proc = [System.Diagnostics.Process]::Start($psi)
 $readers = @(
     @{ Stream = $proc.StandardOutput; Task = $proc.StandardOutput.ReadLineAsync(); Done = $false },
@@ -116,8 +126,27 @@ function Update-Rx {
     $delta = $now - $script:rxPrev
     $script:rxPrev = $now
     # Only increases: an adapter that goes away takes its count out of the sum
-    if ($delta -gt 0) { $script:rxTotal += $delta; $script:rxSince += $delta }
+    if ($delta -gt 0) { $script:rxTotal += $delta }
 }
+# Adds what each process in the command's tree did since the last poll (all of it, for a process
+# seen for the first time). Says false when the process list could not be read: a probe that
+# fails must never let a step be stopped, so the caller counts that poll as progress
+function Update-Tree {
+    try { $tree = @(Get-Tree $proc.Id) } catch { $script:probeFailed = $true; return $false }
+    foreach ($p in $tree) {
+        $id = [int]$p.ProcessId
+        $cpu = ([double]$p.KernelModeTime + [double]$p.UserModeTime) / 1e7
+        $io = [long]$p.ReadTransferCount + [long]$p.WriteTransferCount + [long]$p.OtherTransferCount
+        $prev = $script:seen[$id]
+        $dc = if ($prev) { $cpu - $prev[0] } else { $cpu }
+        $di = if ($prev) { $io - $prev[1] } else { $io }
+        if ($dc -gt 0) { $script:cpuSince += $dc; $script:cpuTotal += $dc }
+        if ($di -gt 0) { $script:ioSince += $di; $script:ioTotal += $di }
+        $script:seen[$id] = @($cpu, $io)
+    }
+    $true
+}
+function Format-Activity([double]$cpu, [long]$io) { '{0:0.0} s of CPU and {1}' -f $cpu, (Format-Mib $io) }
 
 $progress = $start
 $nextPoll = $start.AddSeconds($pollS)
@@ -128,23 +157,26 @@ while (-not $proc.HasExited) {
     if ($now -ge $nextPoll) {
         $nextPoll = $now.AddSeconds($pollS)
         Update-Rx
+        $probed = Update-Tree
         if ($script:lastLine -gt $progress) {
             $progress = $script:lastLine
-            $rxSince = 0L
-        } elseif ($rxSince -ge $rxStep) {
+            $cpuSince = 0.0
+            $ioSince = 0L
+        } elseif (-not $probed -or $cpuSince -ge $cpuStep -or $ioSince -ge $ioStep) {
             $progress = $now
-            $rxSince = 0L
+            $cpuSince = 0.0
+            $ioSince = 0L
         }
         $quiet = ($now - $progress).TotalSeconds
         if ($quiet -ge $stallS -and -not $proc.HasExited) {
             $stalled = $true
             $elapsed = ($now - $start).TotalSeconds
-            Write-Line "::error title=$Name stalled::no output and under $rxMib MiB received for $(Format-Span $quiet), after $(Format-Span $elapsed); stopped it. The hang record is in the step's log."
+            Write-Line "::error title=$Name stalled::no output, and its processes used under $cpuStep s of CPU and $ioMib MiB of I/O, for $(Format-Span $quiet), after $(Format-Span $elapsed); stopped it. The hang record is in the step's log."
             Write-Line "===== HANG RECORD: $Name ====="
             Write-Line "running:     $($Command -join ' ')"
             Write-Line "elapsed:     $(Format-Span $elapsed)"
             Write-Line "last output: $(Format-Span ($now - $script:lastLine).TotalSeconds) ago, at $($script:lastLine.ToString('HH:mm:ss'))Z"
-            Write-Line "received:    $(Format-Mib $rxSince) since the last progress, $(Format-Mib $rxTotal) in all"
+            Write-Line "activity:    $(Format-Activity $cpuSince $ioSince) since the last progress; $(Format-Activity $cpuTotal $ioTotal) in all"
             Write-Line '----- last 40 lines -----'
             foreach ($l in $tail) { Write-Line $l }
             Write-Line '----- process tree -----'
@@ -175,10 +207,12 @@ while (($readers | Where-Object { -not $_.Done }).Count -gt 0) {
 Update-Rx
 
 $took = Format-Span ([DateTime]::UtcNow - $start).TotalSeconds
+$used = "its processes used $(Format-Activity $cpuTotal $ioTotal); the runner received $(Format-Mib $rxTotal)"
+if ($probeFailed) { $used += '; the process list could not always be read, and those polls counted as progress' }
 if ($stalled) {
-    Write-Line "::notice title=$Name duration::$Name stalled and was stopped after $took; the runner received $(Format-Mib $rxTotal)"
+    Write-Line "::notice title=$Name duration::$Name stalled and was stopped after $took; $used"
     exit 124
 }
 $code = $proc.ExitCode
-Write-Line "::notice title=$Name duration::$Name took $took (exit $code); the runner received $(Format-Mib $rxTotal)"
+Write-Line "::notice title=$Name duration::$Name took $took (exit $code); $used"
 exit $code

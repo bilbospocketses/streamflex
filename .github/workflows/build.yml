@@ -51,9 +51,10 @@ permissions:
 # wrong: on 2026-10-16 a 60-minute limit killed a Fedora headless shard five seconds after its last
 # PASS line, because a slow mirror had made its image build take 29 minutes. Every step that
 # builds, installs, downloads or tests runs under .github/scripts/stall-watch.sh (stall-watch.ps1
-# on Windows) instead, which stops a step only when it has printed no line and received under
-# 4 MiB for 20 minutes, prints a hang record when it does, and reports every step's duration as a
-# notice. Checkouts, uploads and downloads of artifacts are GitHub's own actions and are not wrapped.
+# on Windows) instead, which stops a step only when, for 20 minutes, it has printed no line and
+# shown no other sign of work (Linux: the runner receiving 4 MiB; Windows, whose runners receive
+# about 40 KiB/s in the background: the step's own processes using 1 s of CPU or doing 4 MiB of
+# I/O), prints a hang record when it does, and reports every step's duration as a notice. Checkouts, uploads and downloads of artifacts are GitHub's own actions and are not wrapped.
 jobs:
   # Decides whether this run may promote the tests its PR already passed instead of running them
   # again. The master ruleset makes a PR be up to date with master before it merges, so the
