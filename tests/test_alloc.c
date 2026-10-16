@@ -838,6 +838,52 @@ static void prove_bindings_reload(void)
     report("loading the bindings again");
 }
 
+// A function to prove that the section edits fail cleanly: refused, saying "out of memory", with the
+// document as it was before the call that failed; or done. Moving a line, removing a section and
+// listing the sections allocate nothing, so they cannot fail for want of memory.
+static void prove_section_edits(void)
+{
+    static const char *const text = "[Main]\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n[Games] ; mine\nEntry1=C;apps;:quit\n";
+    static const char *const after_insert = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                            "[Games] ; mine\nEntry1=C;apps;:quit\n";
+    static const char *const after_rename = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                            "[Play] ; mine\nEntry1=C;apps;:quit\n";
+    static const char *const done = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                    "[Play] ; mine\nEntry1=C;apps;:quit\n\n[Kids]\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        arm(n);
+        bool inserted = inidoc_list_insert(doc, "Main", 1, "Entry3", "N;apps;:home");
+        bool renamed = inserted && inidoc_rename_section(doc, "Games", "Play");
+        bool added = renamed && inidoc_add_section(doc, "Kids");
+        disarm();
+        char *out = text_of(doc);
+        if (!failed)
+            CHECK_RUN(added && out != NULL && strcmp(out, done) == 0, n);
+        else {
+            CHECK_RUN(strcmp(inidoc_why(doc), "out of memory") == 0, n);
+            CHECK_RUN(out != NULL && strcmp(out, renamed ? after_rename : inserted ? after_insert : text) == 0, n);
+        }
+        alloc_free(out);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the section edits");
+
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    const char *names[4];
+    arm(1);
+    bool moved = inidoc_list_move(doc, 2, 1);
+    bool removed = inidoc_remove_section(doc, "Games");
+    int count = inidoc_sections(doc, names, 4);
+    disarm();
+    CHECK(moved && removed && count == 1 && !failed && calls == 0);
+    inidoc_free(doc);
+    no_leak(__LINE__, 1);
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -874,6 +920,7 @@ int main(void)
     prove_config_save_lists();
     prove_bindings();
     prove_bindings_reload();
+    prove_section_edits();
     alloc_set_hooks(NULL);
     return check_report();
 }

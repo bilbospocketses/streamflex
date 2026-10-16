@@ -770,6 +770,244 @@ static void test_key_line_break(void)
     inidoc_free(doc);
 }
 
+// A function to test inserting a line at a place in a list section: directly before the line asked
+// for (a comment above that line ends up above the new one), or after the section's last key; refused
+// for a line that is not one of the section's keys, a section that is not there, a value config.ini
+// cannot hold, and a place where the new line would change how another line reads
+static void test_list_insert(void)
+{
+    IniDoc *doc = parse("[Main]\nRows=2\nEntry1=A;apps;:quit\n; about B\nEntry2=B;apps;:quit\n\n"
+                        "[Games]\nEntry1=C;apps;:quit\n");
+    IniDocItem items[4];
+    CHECK_INT(inidoc_list(doc, "Main", NULL, items, 4), 3);
+    CHECK(inidoc_list_insert(doc, "Main", items[2].line, "Entry3", "N;apps;:home"));
+    CHECK_STR(written(doc), "[Main]\nRows=2\nEntry1=A;apps;:quit\n; about B\nEntry3=N;apps;:home\nEntry2=B;apps;:quit\n\n"
+                            "[Games]\nEntry1=C;apps;:quit\n");
+    CHECK(inidoc_list_insert(doc, "Main", -1, "Entry4", "M;apps;:back"));
+    static const char *const inserted = "[Main]\nRows=2\nEntry1=A;apps;:quit\n; about B\nEntry3=N;apps;:home\n"
+                                        "Entry2=B;apps;:quit\nEntry4=M;apps;:back\n\n[Games]\nEntry1=C;apps;:quit\n";
+    CHECK_STR(written(doc), inserted);
+    CHECK_STR(inidoc_why(doc), "");
+
+    CHECK(!inidoc_list_insert(doc, "Main", 3, "Entry5", "X;apps;:quit"));        // The comment
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_insert(doc, "Main", -2, "Entry5", "X;apps;:quit"));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_insert(doc, "Main", 99, "Entry5", "X;apps;:quit"));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    int games = inidoc_find_line(doc, "Games", "Entry1=C;apps;:quit");
+    CHECK(!inidoc_list_insert(doc, "Main", games, "Entry5", "X;apps;:quit"));
+    CHECK_STR(inidoc_why(doc), "the line is not in that section");
+    CHECK(!inidoc_list_insert(doc, "Nowhere", -1, "Entry1", "X;apps;:quit"));   // inidoc_list_add() would make it
+    CHECK_STR(inidoc_why(doc), "the section is not there");
+    CHECK(!inidoc_list_insert(doc, "Main", items[1].line, "Entry5", "X ;apps"));
+    CHECK_STR(inidoc_why(doc), inidoc_check("Entry5", "X ;apps"));
+    CHECK_STR(written(doc), inserted);
+    inidoc_free(doc);
+
+    // Before an indented key that follows a key with an empty name (a key of its own to inih), the new
+    // line would take it as its continuation: refused, and the file is as it was
+    doc = parse("[Main]\n=x\n  Entry1=A;apps;:quit\n");
+    CHECK(!inidoc_list_insert(doc, "Main", 2, "Entry2", "B;apps;:quit"));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), "[Main]\n=x\n  Entry1=A;apps;:quit\n");
+    inidoc_free(doc);
+
+    // A new first line in a file with no final newline: the file still has none
+    doc = parse("[Main]\nEntry1=A;apps;:quit");
+    CHECK(inidoc_list_insert(doc, "Main", 1, "Entry0", "Z;apps;:quit"));
+    CHECK_STR(written(doc), "[Main]\nEntry0=Z;apps;:quit\nEntry1=A;apps;:quit");
+    inidoc_free(doc);
+}
+
+// A function to test moving a line within its section: up before a line, down to after the section's
+// last key, comments and blank lines staying where they were; a line already in its place not moving;
+// the refusals; a move taken back when it would change how a line reads; and the file's last line
+// keeping its missing line ending, whichever line ends up last
+static void test_list_move(void)
+{
+    IniDoc *doc = parse("[Main]\nRows=2\nEntry1=A;apps;:quit\n; about B\nEntry2=B;apps;:quit\nEntry3=C;apps;:quit\n\n"
+                        "[Games]\nEntry1=D;apps;:quit\n");
+    CHECK(inidoc_list_move(doc, inidoc_find_line(doc, "Main", "Entry3=C;apps;:quit"),
+                           inidoc_find_line(doc, "Main", "Entry1=A;apps;:quit")));
+    CHECK_STR(written(doc), "[Main]\nRows=2\nEntry3=C;apps;:quit\nEntry1=A;apps;:quit\n; about B\nEntry2=B;apps;:quit\n\n"
+                            "[Games]\nEntry1=D;apps;:quit\n");
+    CHECK(inidoc_list_move(doc, inidoc_find_line(doc, "Main", "Entry1=A;apps;:quit"), -1));
+    static const char *const moved = "[Main]\nRows=2\nEntry3=C;apps;:quit\n; about B\nEntry2=B;apps;:quit\n"
+                                     "Entry1=A;apps;:quit\n\n[Games]\nEntry1=D;apps;:quit\n";
+    CHECK_STR(written(doc), moved);
+
+    // Already in place: before the next key though a comment lies between; after the last key (the next
+    // key is another section's); before itself
+    int c = inidoc_find_line(doc, "Main", "Entry3=C;apps;:quit");
+    int b = inidoc_find_line(doc, "Main", "Entry2=B;apps;:quit");
+    int a = inidoc_find_line(doc, "Main", "Entry1=A;apps;:quit");
+    CHECK(inidoc_list_move(doc, c, b));
+    CHECK(inidoc_list_move(doc, a, -1));
+    CHECK(inidoc_list_move(doc, a, a));
+    CHECK_STR(written(doc), moved);
+    CHECK_STR(inidoc_why(doc), "");
+
+    // Down, before a later line
+    CHECK(inidoc_list_move(doc, c, a));
+    CHECK_STR(written(doc), "[Main]\nRows=2\n; about B\nEntry2=B;apps;:quit\nEntry3=C;apps;:quit\nEntry1=A;apps;:quit\n\n"
+                            "[Games]\nEntry1=D;apps;:quit\n");
+    inidoc_free(doc);
+
+    // Refused: not a key line; a place in another section; a key with continuation lines (they would have
+    // to move past the lines among them); a key with an empty name (the indented key after it would join
+    // the key before it); and a place where the moved key would take the indented key after it as its
+    // continuation, which is taken back. The file is as it was.
+    static const char *const tangled = "[Main]\nEntry1=A;apps;:quit\n  more\nEntry2=B;apps;:quit\n=x\n"
+                                       "  Entry3=C;apps;:quit\n[Games]\nEntry1=D;apps;:quit\n";
+    doc = parse(tangled);
+    CHECK(!inidoc_list_move(doc, 2, -1));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_move(doc, 99, -1));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_move(doc, 1, 99));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_move(doc, 3, -5));
+    CHECK_STR(inidoc_why(doc), "the line is not a key");
+    CHECK(!inidoc_list_move(doc, 3, 7));
+    CHECK_STR(inidoc_why(doc), "the line is not in that section");
+    CHECK(!inidoc_list_move(doc, 1, -1));
+    CHECK_STR(inidoc_why(doc), "the line has indented lines after it, which config.ini reads with it");
+    CHECK(!inidoc_list_move(doc, 4, 1));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK(!inidoc_list_move(doc, 3, 5));
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), tangled);
+    inidoc_free(doc);
+
+    // The file's last line keeps having no line ending, whichever line ends up last
+    doc = parse("[Main]\r\nEntry1=A;apps;:quit\r\nEntry2=B;apps;:quit");
+    CHECK(inidoc_list_move(doc, 2, 1));
+    CHECK_STR(written(doc), "[Main]\r\nEntry2=B;apps;:quit\r\nEntry1=A;apps;:quit");
+    CHECK(inidoc_list_move(doc, 1, -1));
+    CHECK_STR(written(doc), "[Main]\r\nEntry1=A;apps;:quit\r\nEntry2=B;apps;:quit");
+    inidoc_free(doc);
+
+    // And a move taken back from the end, or to it, leaves the endings as they were
+    static const char *const open_end = "[Main]\n=x\n  Entry1=A;apps;:quit\nEntry2=B;apps;:quit";
+    doc = parse(open_end);
+    CHECK(!inidoc_list_move(doc, 3, 2));                       // From the end: Entry1 would continue Entry2
+    CHECK_STR(written(doc), open_end);
+    CHECK(!inidoc_list_move(doc, 2, -1));                      // To the end: Entry1 would continue Entry2
+    CHECK_STR(inidoc_why(doc), "it would change how other lines read");
+    CHECK_STR(written(doc), open_end);
+    inidoc_free(doc);
+}
+
+// A function to test whole sections: listed once each in the order first read; added at the end
+// after a blank line; renamed at every header, the comment after one kept; removed with every line up
+// to the next header (at the end of the file, the blank line before it too, so adding and removing
+// gives the file back); and the names refused, by the rule that "[name]" must read back as that name
+static void test_sections(void)
+{
+    IniDoc *doc = parse("; my launcher\n[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=A;apps;:submenu Games\n\n"
+                        "[Games] ; mine\nEntry1=B;apps;:quit\n[Main]\nEntry2=C;apps;:quit\n");
+    const char *names[8];
+    CHECK_INT(inidoc_sections(doc, names, 8), 3);
+    CHECK_STR(names[0], "General");
+    CHECK_STR(names[1], "Main");
+    CHECK_STR(names[2], "Games");
+    CHECK_INT(inidoc_sections(doc, names, 1), 3);              // The count, though only one fits
+    CHECK_INT(inidoc_sections(doc, NULL, 0), 3);
+    CHECK(inidoc_has_section(doc, "Games"));
+    CHECK(!inidoc_has_section(doc, "games"));                  // Names match exactly, case included
+
+    CHECK(inidoc_add_section(doc, "Kids"));
+    static const char *const added = "; my launcher\n[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=A;apps;:submenu Games\n\n"
+                                     "[Games] ; mine\nEntry1=B;apps;:quit\n[Main]\nEntry2=C;apps;:quit\n\n[Kids]\n";
+    CHECK_STR(written(doc), added);
+    CHECK(!inidoc_add_section(doc, "Kids"));
+    CHECK_STR(inidoc_why(doc), "a section of that name is there already");
+    CHECK(!inidoc_add_section(doc, "a]b"));
+    CHECK_STR(inidoc_why(doc), "config.ini would not read it back as that section's name");
+    CHECK(!inidoc_add_section(doc, "a ;b"));                   // inih ends the header at a ';' after a space
+    CHECK_STR(inidoc_why(doc), "config.ini would not read it back as that section's name");
+    CHECK(!inidoc_add_section(doc, ""));
+    CHECK_STR(inidoc_why(doc), "config.ini would not read it back as that section's name");
+    CHECK(!inidoc_add_section(doc, "a\nb"));
+    CHECK_STR(inidoc_why(doc), "config.ini would not read it back as that section's name");
+    CHECK_STR(written(doc), added);
+
+    CHECK(inidoc_rename_section(doc, "Main", "Home"));
+    CHECK(inidoc_rename_section(doc, "Games", "Play"));
+    CHECK(inidoc_rename_section(doc, "Play", "play"));          // Another case is another name to inih
+    CHECK(!inidoc_rename_section(doc, "play", "Home"));
+    CHECK_STR(inidoc_why(doc), "a section of that name is there already");
+    CHECK(!inidoc_rename_section(doc, "Nowhere", "Kids2"));
+    CHECK_STR(inidoc_why(doc), "the section is not there");
+    CHECK(!inidoc_rename_section(doc, "play", "a]b"));
+    CHECK_STR(inidoc_why(doc), "config.ini would not read it back as that section's name");
+    CHECK_STR(written(doc), "; my launcher\n[General]\nDefaultMenu=Main\n\n[Home]\nEntry1=A;apps;:submenu Games\n\n"
+                            "[play] ; mine\nEntry1=B;apps;:quit\n[Home]\nEntry2=C;apps;:quit\n\n[Kids]\n");
+    CHECK_INT(inidoc_sections(doc, names, 8), 4);
+    CHECK_STR(names[1], "Home");
+    CHECK_STR(names[2], "play");
+
+    CHECK(inidoc_remove_section(doc, "Kids"));
+    CHECK_STR(written(doc), "; my launcher\n[General]\nDefaultMenu=Main\n\n[Home]\nEntry1=A;apps;:submenu Games\n\n"
+                            "[play] ; mine\nEntry1=B;apps;:quit\n[Home]\nEntry2=C;apps;:quit\n");
+    CHECK(inidoc_remove_section(doc, "Home"));
+    CHECK_STR(written(doc), "; my launcher\n[General]\nDefaultMenu=Main\n\n[play] ; mine\nEntry1=B;apps;:quit\n");
+    CHECK(!inidoc_remove_section(doc, "Home"));
+    CHECK_STR(inidoc_why(doc), "the section is not there");
+    inidoc_free(doc);
+
+    // A file without a final newline keeps having none; a name may point into the document, as
+    // inidoc_sections() gives it (the header it names goes, and ASan would see the name read after)
+    doc = parse("[Main]\nEntry1=A;apps;:quit");
+    CHECK(inidoc_add_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit\n\n[Games]");
+    CHECK(inidoc_remove_section(doc, "Games"));
+    CHECK_STR(written(doc), "[Main]\nEntry1=A;apps;:quit");
+    CHECK_INT(inidoc_sections(doc, names, 8), 1);
+    CHECK(inidoc_rename_section(doc, names[0], "Home"));
+    CHECK_STR(written(doc), "[Home]\nEntry1=A;apps;:quit");
+    CHECK_INT(inidoc_sections(doc, names, 8), 1);
+    CHECK(inidoc_remove_section(doc, names[0]));
+    CHECK_STR(written(doc), "");
+    inidoc_free(doc);
+    // The same with a header left after the one removed, so the search for the next header runs and
+    // reads the name (the case above empties the file, so nothing would read it)
+    doc = parse("[Home]\nEntry1=A;apps;:quit\n[Games]\n");
+    CHECK_INT(inidoc_sections(doc, names, 8), 2);
+    CHECK(inidoc_remove_section(doc, names[0]));
+    CHECK_STR(written(doc), "[Games]\n");
+    inidoc_free(doc);
+
+    // 49 bytes is the longest name inih keeps whole; a header's comment counts toward its line
+    char name[64];
+    char other[64];
+    memset(name, 'M', INIDOC_MAX_SECTION);
+    name[INIDOC_MAX_SECTION] = '\0';
+    memset(other, 'N', INIDOC_MAX_SECTION);
+    other[INIDOC_MAX_SECTION] = '\0';
+    char text[256];
+    char comment[160];
+    memset(comment, 'c', 150);
+    comment[150] = '\0';
+    snprintf(text, sizeof(text), "[G] ;%s\n", comment);         // 155 bytes
+    doc = parse(text);
+    CHECK(inidoc_add_section(doc, name));
+    CHECK(!inidoc_rename_section(doc, "G", other));             // 1 + 49 + 1 + 152 = 203
+    CHECK_STR(inidoc_why(doc), "the section's name is too long for one line of config.ini (199 bytes at most)");
+    CHECK(inidoc_rename_section(doc, "G", "Games"));
+    name[INIDOC_MAX_SECTION] = 'M';
+    name[INIDOC_MAX_SECTION + 1] = '\0';
+    CHECK(!inidoc_add_section(doc, name));
+    CHECK_STR(inidoc_why(doc), "the section's name is too long for config.ini (49 bytes at most)");
+    CHECK(!inidoc_rename_section(doc, "Games", name));
+    CHECK_STR(inidoc_why(doc), "the section's name is too long for config.ini (49 bytes at most)");
+    name[INIDOC_MAX_SECTION] = '\0';
+    snprintf(text, sizeof(text), "[Games] ;%s\n\n[%s]\n", comment, name);
+    CHECK_STR(written(doc), text);
+    inidoc_free(doc);
+}
+
 int main(void)
 {
     test_round_trip_is_identical();
@@ -796,5 +1034,8 @@ int main(void)
     test_list_add_edges();
     test_list_remove_edges();
     test_key_line_break();
+    test_list_insert();
+    test_list_move();
+    test_sections();
     return check_report();
 }
