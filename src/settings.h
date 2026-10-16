@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "bindings.h"
+#include "menuedit.h"
 
 #define SETTING_TEXT_MAX 1024  // Longest path a setting holds
 #define SETTINGS_MAX_ROWS 64   // Most rows one page shows; Menus counts the rest in a note
@@ -314,6 +315,12 @@ SettingSlot *settings_slot(SettingsState *state, SettingId id, int menu);
 int settings_slot_count(const SettingsState *state);
 SettingSlot *settings_slot_at(SettingsState *state, int index);
 void settings_set_entry(SettingsState *state, SettingId id, int menu, const SettingValue *value);
+// The model made again over the menus as they are now, after one came, went, was renamed or moved:
+// old_names[i] is the name menu i had in `old` (NULL for a new one), by which its settings and their
+// entries are carried across. NULL when out of memory, `old` untouched; the caller frees `old`.
+SettingsState *settings_remodel(const SettingsState *old, const char *const *names, const char *const *old_names, int count);
+void settings_set_menus(SettingsState *state, MenuEdit *menus);   // Borrowed: the screen owns the menus model
+MenuEdit *settings_menus(const SettingsState *state);             // NULL when the screen has none
 bool settings_changed(const SettingSlot *slot);
 bool settings_any_changed(const SettingsState *state);
 int settings_rows(SettingsState *state, SettingsRow *rows, int max);

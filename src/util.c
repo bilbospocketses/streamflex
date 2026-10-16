@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "alloc.h"
 #include "bindings.h"
+#include "inidoc.h"
 #include "platform/platform.h"
 #include <ini.h>
 
@@ -145,7 +146,53 @@ void handle_arguments(int argc, char *argv[], char **config_file_path)
     }
 }
 
-// A function to parse the config file and store the settings into the config struct
+// A function to let go of the menu the parser made of keys in no section: those before the first header,
+// and those under an empty [] header, both a section named "" to inih. No tile could open a menu with no
+// name, and the settings' menus model reads none (menuedit_load()), so it is no menu; the log says so
+// once. It is freshly parsed: its entries hold their text and no textures, and nothing points at it but
+// the list and the parser's cursors. inih finds a section's menu by name, so there is one at most.
+static void drop_nameless_menu(void)
+{
+    Menu *before = NULL;
+    Menu *m = config.first_menu;
+    while (m != NULL && !MATCH(m->name, "")) {
+        before = m;
+        m = m->next;
+    }
+    if (m == NULL)
+        return;
+    if (before == NULL)
+        config.first_menu = m->next;
+    else
+        before->next = m->next;
+    config.num_menus--;
+    if (menu == m) {
+        menu = NULL;   // The parser's cursors: a later parse must not go on in the freed menu
+        entry = NULL;
+    }
+    unsigned int entries = 0;
+    Entry *e = m->first_entry;
+    while (e != NULL) {
+        Entry *next = e->next;
+        free(e->title);
+        free(e->icon_path);
+        free(e->icon_selected_path);
+        free(e->cmd);
+        free(e);
+        entries++;
+        e = next;
+    }
+    log_error("Config: %u entry line(s) before the first [section] or under an empty [] are in no menu, so they are ignored",
+        entries);
+    free(m->items);
+    free(m->name);
+    free(m->section);
+    free(m);
+}
+
+// A function to parse the config file and store the settings into the config struct, then give each
+// section with no lines a menu of its own (add_empty_menus()), as inih calls nothing for one; keys in no
+// section make no menu (drop_nameless_menu())
 void parse_config_file(const char *config_file_path)
 {
     FILE *file = fileio_open(config_file_path, "r");
@@ -153,9 +200,20 @@ void parse_config_file(const char *config_file_path)
         log_fatal("Could not open config file %s: %s", config_file_path, fileio_last_error());
     int error = ini_parse_file(file, config_handler, NULL);
     fclose(file);
-    
+
     if (error < 0)
         log_fatal("Could not parse config file");
+    drop_nameless_menu();
+
+    size_t length = 0;
+    char *text = fileio_read_all(config_file_path, &length);
+    if (text == NULL)
+        log_error("Could not read config file %s again for its menus with no lines, so they are left out: %s",
+            config_file_path, fileio_last_error());
+    else {
+        add_empty_menus(text, length);
+        alloc_free(text);
+    }
 }
 
 // A function to tell whether a section holds settings rather than a menu's entries
@@ -170,6 +228,70 @@ static bool settings_section(const char *section)
             return true;
     }
     return false;
+}
+
+// A function to tell whether a section holds settings or the hotkeys, never a menu; names match as the
+// parser matches them, exactly, so [general] is a menu
+static bool reserved_section(const char *section)
+{
+    return settings_section(section) || MATCH(section, "Hotkeys");
+}
+
+// A function to give every section that is not settings a menu (plan ruling 2): the parser makes one only
+// from a section's key lines, and Debian's system inih is built without INI_CALL_HANDLER_ON_NEW_SECTION,
+// so a header alone, or one with only comments under it, gets none. The config's text, read through
+// inidoc, names every section: each with no menu gets an empty one, and the menus are put in the order
+// their sections first appear, as the settings' menus model lists them. A section named "" (an empty []
+// header) gets none, as the parser's menu of it is gone already (drop_nameless_menu()). A menu the text
+// names no section for, which inih and inidoc reading headers alike leave none of, goes after them.
+void add_empty_menus(const char *config_text, size_t length)
+{
+    IniDoc *doc = inidoc_parse(config_text, length);
+    int count = doc != NULL ? inidoc_sections(doc, NULL, 0) : 0;
+    const char **names = doc != NULL ? calloc((size_t) (count > 0 ? count : 1), sizeof(char*)) : NULL;
+    if (names == NULL) {
+        log_error("Could not list the config's sections (out of memory), so menus with no lines are left out");
+        inidoc_free(doc);
+        return;
+    }
+    inidoc_sections(doc, names, count);
+
+    // Each section's menu, taken out of the list in the order the sections first appear (an empty one
+    // made for a section the parser saw no line of), then whatever is left in the list after them
+    Menu *first = NULL;
+    Menu *last = NULL;
+    for (int i = 0; i < count; i++) {
+        if (names[i][0] == '\0' || reserved_section(names[i]))
+            continue;
+        Menu *found = NULL;
+        Menu *before = NULL;
+        for (Menu *m = config.first_menu; m != NULL && found == NULL; m = m->next) {
+            if (MATCH(m->name, names[i]))
+                found = m;
+            else
+                before = m;
+        }
+        if (found == NULL) {
+            found = create_menu(names[i], &config.num_menus);
+            log_debug("Menu '%s' has no lines, so it is shown empty", found->name);
+        }
+        else if (before == NULL)
+            config.first_menu = found->next;
+        else
+            before->next = found->next;
+        found->next = NULL;
+        if (last == NULL)
+            first = found;
+        else
+            last->next = found;
+        last = found;
+    }
+    if (last != NULL) {
+        last->next = config.first_menu;
+        config.first_menu = first;
+    }
+    free(names);
+    inidoc_free(doc);
 }
 
 // A function to handle config file parsing: every setting through the settings table, the hotkeys
@@ -737,6 +859,7 @@ Menu *create_menu(const char *menu_name, size_t *num_menus)
         .rendered_size = 0
     };
     new_menu->name = strdup(menu_name);
+    new_menu->section = strdup(menu_name);   // Read from that section: settings find the menu by it (menu_for())
     (*num_menus)++;
 
     return new_menu;
@@ -763,10 +886,45 @@ static void library_warning(const char *message)
     log_error("%s", message);
 }
 
-// A function to point every entry that names a library icon at its file. It also rescues a missing
-// file, or a path to something that is not a regular file, that the library can stand in for (see
-// library_rescue): a path to one of the seven icons older versions shipped, or a name typed with
-// capitals or stray spaces. Both use the library icon and log a note.
+static bool library_loaded = false;   // The library was read: a name it lacks is an error worth a line
+
+// A function to point an entry's icon at its file: a library name at the library's file (the library's
+// fallback icon for a name it lacks), and a missing file, or a path to something that is not a regular
+// file, at the library icon it most likely meant (library_rescue()), with a note naming the entry and
+// its menu. resolve_library_icons() calls it for every entry at load, and the live rebuild
+// (menus_apply()) for each entry it makes, with the library read already.
+void resolve_entry_icon(Entry *e, const char *menu_name)
+{
+    if (e->icon_path == NULL)
+        return;
+    const char *path = NULL;
+    if (library_is_name(e->icon_path)) {
+        path = library_lookup(e->icon_path);
+        // Without a library every name misses; resolve_library_icons() already said why, once
+        if (path == NULL && library_loaded) {
+            log_error("Entry '%s' in menu '%s': no library icon named '%s'", e->title, menu_name, e->icon_path);
+            path = library_lookup(LIBRARY_FALLBACK_ICON);
+        }
+    }
+    // A path to something that is not a regular file (a pipe, say) is never opened, so it is rescued as
+    // a missing one is
+    else if (!file_exists(e->icon_path) || !fileio_is_file(e->icon_path)) {
+        const char *name = NULL;
+        path = library_rescue(e->icon_path, &name);
+        if (path != NULL)
+            log_error("Entry '%s' in menu '%s': '%s' is not a file; using the library icon '%s' "
+                "(write '%s' in the config to use it directly)", e->title, menu_name, e->icon_path, name, name);
+    }
+    if (path != NULL) {
+        free(e->icon_path);
+        e->icon_path = strdup(path);
+    }
+}
+
+// A function to read the icon library, then point every entry that names a library icon at its file. It
+// also rescues a missing file, or a path to something that is not a regular file, that the library can
+// stand in for (see library_rescue): a path to one of the seven icons older versions shipped, or a name
+// typed with capitals or stray spaces. Both use the library icon and log a note.
 void resolve_library_icons(void)
 {
     library_set_warn(library_warning);
@@ -786,45 +944,21 @@ void resolve_library_icons(void)
         if (roots[i] != NULL && file_exists(join_paths(manifest, sizeof(manifest), 2, roots[i], LIBRARY_MANIFEST)))
             root = roots[i];
     }
-    bool loaded = false;
+    library_loaded = false;
     if (root == NULL)
         log_error("Icon library not found; entries that name a library icon will have no image");
     else {
         int count = library_load(root);
-        loaded = count >= 0;
-        if (loaded)
+        library_loaded = count >= 0;
+        if (library_loaded)
             log_debug("Icon library: %s (%i icons)", root, count);
         else
             log_error("Icon library at %s could not be read; entries that name a library icon will have no image", root);
     }
 
     for (Menu *m = config.first_menu; m != NULL; m = m->next) {
-        for (Entry *e = m->first_entry; e != NULL; e = e->next) {
-            const char *path = NULL;
-            if (e->icon_path == NULL)
-                continue;
-            if (library_is_name(e->icon_path)) {
-                path = library_lookup(e->icon_path);
-                // Without a library every name misses; the line above already says why, once
-                if (path == NULL && loaded) {
-                    log_error("Entry '%s' in menu '%s': no library icon named '%s'", e->title, m->name, e->icon_path);
-                    path = library_lookup(LIBRARY_FALLBACK_ICON);
-                }
-            }
-            // A path to something that is not a regular file (a pipe, say) is never opened, so it is
-            // rescued as a missing one is
-            else if (!file_exists(e->icon_path) || !fileio_is_file(e->icon_path)) {
-                const char *name = NULL;
-                path = library_rescue(e->icon_path, &name);
-                if (path != NULL)
-                    log_error("Entry '%s' in menu '%s': '%s' is not a file; using the library icon '%s' "
-                        "(write '%s' in the config to use it directly)", e->title, m->name, e->icon_path, name, name);
-            }
-            if (path != NULL) {
-                free(e->icon_path);
-                e->icon_path = strdup(path);
-            }
-        }
+        for (Entry *e = m->first_entry; e != NULL; e = e->next)
+            resolve_entry_icon(e, m->name);
     }
 }
 

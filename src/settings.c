@@ -902,6 +902,7 @@ struct SettingsState {
     int pad_count;
     Bindings *bindings;          // The key and gamepad bindings, while settings are open; NULL: no binding rows
     SettingsKeyNamer namer;
+    MenuEdit *menus;             // The menus model while settings are open (borrowed: the screen owns it); NULL: none
     struct {                     // The binding the binding page edits
         int device;
         int index;               // -1: a new one, not yet in the list
@@ -1232,6 +1233,18 @@ void settings_set_bindings(SettingsState *state, Bindings *bindings, SettingsKey
 {
     state->bindings = bindings;
     state->namer = namer;
+}
+
+// A function to give the model the menus model, which the screen owns and frees after it
+void settings_set_menus(SettingsState *state, MenuEdit *menus)
+{
+    state->menus = menus;
+}
+
+// A function to get the menus model the screen gave; NULL when it gave none
+MenuEdit *settings_menus(const SettingsState *state)
+{
+    return state->menus;
 }
 
 // A function to name a key or button through the screen's namer
@@ -1581,6 +1594,93 @@ static void push_page(SettingsState *state, SettingsPage page, int menu)
     top->device = page == SETTINGS_PAGE_KEYBOARD ? BINDINGS_KEYBOARD
                 : page == SETTINGS_PAGE_GAMEPAD ? BINDINGS_GAMEPAD : state->stack[state->depth - 1].device;
     fix_cursor(state);
+}
+
+// A function to find a menu by its name; -1 when the model has none of that name
+static int menu_named(const SettingsState *state, const char *name)
+{
+    for (int m = 0; m < state->menu_count; m++) {
+        if (strcmp(state->names[m], name) == 0)
+            return m;
+    }
+    return -1;
+}
+
+// A function to keep the Default menu row naming a menu after the menus changed: its value and its entry
+// each follow a rename, and a value naming a menu now gone goes back to its entry, since saved it would
+// name no menu and StreamFlex would not start (old_names as settings_remodel() takes them)
+static void follow_default_menu(SettingsState *state, const char *const *old_names)
+{
+    SettingSlot *slot = &state->slots[SET_ID_DEFAULT_MENU];
+    char *texts[2] = { slot->entry.text, slot->value.text };
+    for (int i = 0; i < 2; i++) {
+        for (int m = 0; m < state->menu_count; m++) {
+            if (old_names[m] != NULL && strcmp(old_names[m], texts[i]) == 0) {
+                snprintf(texts[i], SETTING_TEXT_MAX, "%s", state->names[m]);
+                break;
+            }
+        }
+    }
+    if (slot->value.text[0] != '\0' && menu_named(state, slot->value.text) < 0)
+        slot->value = slot->entry;
+}
+
+// A function to make the model again over a new list of menus, after one came, went, was renamed or
+// moved (plan ruling 5). Everything `old` holds is carried across: the pages, the bindings and how keys
+// are named, the pads, the notes, every value and its entry, and the menus model. A menu's own settings
+// follow it by the name it had in `old` (old_names[i], NULL for a new menu, whose settings start
+// inherited and unchanged); a menu now gone takes its settings with it. A page about a menu follows it to
+// its new place, or closes with every page above it when the menu is gone. NULL when out of memory, with
+// `old` untouched; the caller frees `old`.
+SettingsState *settings_remodel(const SettingsState *old, const char *const *names, const char *const *old_names, int count)
+{
+    SettingsState *state = settings_create(names, count);
+    if (state == NULL)
+        return NULL;
+    SettingSlot *slots = state->slots;
+    char **made = state->names;
+    int slot_count = state->slot_count;
+    *state = *old;
+    state->slots = slots;
+    state->names = made;
+    state->slot_count = slot_count;
+    state->menu_count = count;
+
+    // The pads' names are the old model's to free, so they are copied; a copy that runs out of memory
+    // leaves the pad named "Pad N", as settings_set_pads() names it
+    for (int i = 0; i < old->pad_count; i++)
+        state->pads[i] = old->pads[i] != NULL ? alloc_strdup(old->pads[i]) : NULL;
+
+    for (int id = 0; id < SET_ID_GLOBAL_COUNT; id++)
+        state->slots[id] = old->slots[id];
+    for (int m = 0; m < count; m++) {
+        int from = old_names[m] != NULL ? menu_named(old, old_names[m]) : -1;
+        for (int k = 0; from >= 0 && k < SET_ID_PER_MENU_COUNT; k++) {
+            SettingSlot *slot = &state->slots[SET_ID_GLOBAL_COUNT + m * SET_ID_PER_MENU_COUNT + k];
+            *slot = old->slots[SET_ID_GLOBAL_COUNT + from * SET_ID_PER_MENU_COUNT + k];
+            slot->menu = m;
+        }
+    }
+    follow_default_menu(state, old_names);
+
+    // Each page about a menu follows it; one whose menu is gone closes, with every page above it
+    for (int i = 1; i <= state->depth; i++) {
+        PageRef *page = &state->stack[i];
+        if (page->menu < 0)
+            continue;
+        int to = -1;
+        for (int m = 0; m < count && to < 0; m++) {
+            if (old_names[m] != NULL && strcmp(old_names[m], old->names[page->menu]) == 0)
+                to = m;
+        }
+        if (to < 0) {
+            state->depth = i - 1;
+            break;
+        }
+        page->menu = to;
+    }
+    fix_cursor(state);
+    return state;
 }
 
 // A function to apply the incomplete-mode rule when the Background page is left: Image with no

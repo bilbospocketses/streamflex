@@ -180,14 +180,15 @@ precedes "$out/f50-screensaver.log" 'Screensaver on' 'Settings opened' \
 result "settings: a screensaver on when they open goes off as they open (exit $(cat "$out/f50-screensaver.code"))" $ok
 grep -E 'Screensaver o(n|ff)|Settings (opened|closed)' "$out/f50-screensaver.log" | sed 's/^/      /'
 
-# A menu with no entries cannot be previewed: the preview stays put, and its grid still saves
+# A menu with no entries shows in the preview with its note (plan ruling 2), and its grid still saves
 cfg=$(writable_config f50-empty)
 CFG=$cfg run_keys f50-empty Menu Down Down Return Down Down Return Right BackSpace BackSpace BackSpace
 ok=1
 ran_clean f50-empty && sed -n '/^\[Empty\]/,$p' "$cfg" | grep -qx 'Rows=3' \
     && grep -q 'Settings: \[Empty\] Rows 2 -> 3' "$out/f50-empty.log" \
-    && ! grep -q "Loading menu 'Empty'" "$out/f50-empty.log" && ok=0
-result "settings: a menu with no entries can have its grid changed (exit $(cat "$out/f50-empty.code"))" $ok
+    && grep -q "Settings: the preview shows menu 'Empty'" "$out/f50-empty.log" \
+    && grep -q "Menu 'Empty' is empty, so it shows the note: This menu is empty. Hold OK to add tiles." "$out/f50-empty.log" && ok=0
+result "settings: a menu with no entries shows in the preview with its note, and its grid changes (exit $(cat "$out/f50-empty.code"))" $ok
 
 # The gamepad's Start button opens settings when nothing else does, and keeps a mapping of its own
 run_quick f50-pad

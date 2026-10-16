@@ -30,6 +30,7 @@ extern Config config;
 extern Geometry geo;
 extern SDL_Renderer *renderer;
 extern Menu *current_menu;
+extern Menu *default_menu;
 extern LayoutGeometry layout;
 extern TextInfo title_info;
 
@@ -72,6 +73,7 @@ static Bindings *bindings = NULL;     // The key and gamepad bindings while sett
 static Menu **menus = NULL;           // The launcher's menus, in the model's order
 static int menu_count = 0;
 static Menu *origin = NULL;           // The menu settings opened over
+static MenuEdit *menu_edit = NULL;    // The menus model, read from config.ini as settings open; NULL: unread
 static bool go_home = false;          // Go to the default menu after closing (:home)
 static char restart_names[256];       // What the restart prompt offers to apply: "the mappings file"
 static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the renderer has no targets
@@ -564,16 +566,14 @@ static void show_preview(Menu *menu)
     log_debug("Settings: the preview shows menu '%s' (%u ms)", menu->name, ticks_ms() - start);
 }
 
-// A function to show in the preview the menu the page is about: a menu being edited or
-// highlighted, else the one settings opened over. A menu with no entries cannot be shown. In the
-// Menus list the preview waits for the cursor to rest (settings_draw() switches it), so moving
-// down the list never waits for the icons of every menu on the way.
+// A function to show in the preview the menu the page is about: a menu being edited or highlighted,
+// else the one settings opened over. An empty menu shows too, with its note (plan ruling 2). In the
+// Menus list the preview waits for the cursor to rest (settings_draw() switches it), so moving down the
+// list never waits for the icons of every menu on the way.
 static void follow_preview(void)
 {
     int index = settings_preview_menu(model);
     Menu *want = index >= 0 && index < menu_count ? menus[index] : origin;
-    if (want->num_entries == 0)
-        want = origin;
     preview_wanted = NULL;
     if (want == current_menu)
         return;
@@ -837,6 +837,8 @@ static void free_screen(void)
     close_fonts();
     settings_free(model);
     model = NULL;
+    menuedit_free(menu_edit);
+    menu_edit = NULL;
     bindings_free(bindings);
     bindings = NULL;
     free(menus);
@@ -1684,16 +1686,12 @@ static bool load_section(const IniDoc *doc, const char *section, const char *con
     return loaded;
 }
 
-// A function to load the bindings from config.ini as it is now, whose lines the save finds again by
-// their text. Bindings that cannot be read (the file gone, or out of memory) leave the binding pages
-// out, and say so.
-static void load_bindings(void)
+// A function to load the bindings from config.ini as it is now (`doc`; NULL when it could not be read),
+// whose lines the save finds again by their text. Bindings that cannot be read (the file gone, or out
+// of memory) leave the binding pages out, and say so.
+static void load_bindings(const IniDoc *doc)
 {
     static const char *const skip[] = { SETTING_GAMEPAD_ENABLED, SETTING_GAMEPAD_DEVICE, SETTING_GAMEPAD_MAPPINGS_FILE, NULL };
-    size_t length = 0;
-    char *text = fileio_read_all(config.config_path, &length);
-    IniDoc *doc = text != NULL ? inidoc_parse(text, length) : NULL;
-    alloc_free(text);
 #ifdef _WIN32
     bindings = bindings_create(true, gamepad_running());
 #else
@@ -1701,7 +1699,6 @@ static void load_bindings(void)
 #endif
     bool loaded = bindings != NULL && doc != NULL && load_section(doc, "Hotkeys", NULL, BINDINGS_KEYBOARD) &&
                   load_section(doc, "Gamepad", skip, BINDINGS_GAMEPAD);
-    inidoc_free(doc);
     if (!loaded) {
         log_error("Settings: the bindings could not be read from %s, so the binding pages are left out", config.config_path);
         bindings_free(bindings);
@@ -1709,6 +1706,47 @@ static void load_bindings(void)
         return;
     }
     settings_set_bindings(model, bindings, pickers_key_name);
+}
+
+// A function to load the menus model from config.ini as it is now (`doc`), as the bindings are: a live
+// Entry keeps neither its key nor its line (plan ruling 3). Each live menu is taken as read from the
+// section of its name, as config.ini reads after any save (menu_for()). Menus that cannot be read leave
+// the menus model out, and say so. So does a config.ini whose every menu was removed by hand since
+// StreamFlex started: the launcher cannot show no menu (menus_apply() would leave current_menu with none to
+// draw), so it keeps its own, and the hand-edit catch-up does not run.
+static void load_menus(const IniDoc *doc)
+{
+    for (int m = 0; m < menu_count; m++) {
+        free(menus[m]->section);
+        menus[m]->section = strdup(menus[m]->name);
+    }
+    menu_edit = doc != NULL ? menuedit_load(doc, config.default_menu) : NULL;
+    if (menu_edit == NULL) {
+        log_error("Settings: the menus could not be read from %s, so they cannot be edited", config.config_path);
+        return;
+    }
+    if (menuedit_count(menu_edit) == 0) {
+        log_error("Settings: %s has no menus now (edited by hand since StreamFlex started), so the launcher keeps "
+                  "its menus, and they cannot be edited", config.config_path);
+        menuedit_free(menu_edit);
+        menu_edit = NULL;
+        return;
+    }
+    settings_set_menus(model, menu_edit);
+    log_debug("Menus: read %i menu(s) from %s", menuedit_count(menu_edit), config.config_path);
+}
+
+// A function to tell whether the menus model and the launcher's menus are the same menus by name, in the
+// same order, as they are unless config.ini's menus were edited by hand since StreamFlex started
+static bool menus_in_step(void)
+{
+    if (menuedit_count(menu_edit) != menu_count)
+        return false;
+    for (int m = 0; m < menu_count; m++) {
+        if (strcmp(menuedit_menu(menu_edit, m)->name, menus[m]->name) != 0)
+            return false;
+    }
+    return true;
 }
 
 // A function to hand the pickers what they draw with: the model, the menus, the fonts, and the sizes
@@ -1722,6 +1760,151 @@ static void begin_pickers(void)
     };
     pickers_begin(&host);
 }
+
+// A function to put the menus model into the launcher after a change to it, and the settings with it
+// (plan ruling 5). The launcher's menus are rebuilt from it (menus_apply()). When a menu came, went, was
+// renamed or moved, the settings model is made again over the menus as they are now first, every unsaved
+// change carried across by the menu's name (settings_remodel()), and then the screen's list of menus, the
+// pickers' and the menu settings opened over follow: one now gone gives way to the default menu, which
+// closing settings then shows (Review Focus 3). A picker or the folder browser open on the old model's
+// slots closes first, as Back would close it. False, with nothing changed in the launcher, when out of
+// memory, or when the model holds no menu (the launcher cannot show none): the change stays in the menus
+// model alone.
+bool settings_menus_changed(void)
+{
+    if (model == NULL || menu_edit == NULL)
+        return false;
+    int count = menuedit_count(menu_edit);
+    if (count == 0) {
+        log_error("Settings: the menus model holds no menu, so the launcher keeps its menus");
+        return false;
+    }
+    size_t room = (size_t) (count > 0 ? count : 1);
+    const char **names = calloc(room, sizeof(char*));
+    const char **old_names = calloc(room, sizeof(char*));
+    Menu **now = calloc(room, sizeof(Menu*));
+
+    // Each menu of the model, the live menu it stands for, and that menu's place and name in the settings
+    // model: any menu new, gone, renamed or moved makes the settings model again
+    bool remake = count != menu_count;
+    int origin_at = -1;
+    for (int m = 0; names != NULL && old_names != NULL && m < count; m++) {
+        const MenuEditMenu *menu = menuedit_menu(menu_edit, m);
+        Menu *live = menu_for(menu);
+        int was = -1;
+        for (int k = 0; live != NULL && k < menu_count && was < 0; k++) {
+            if (menus[k] == live)
+                was = k;
+        }
+        names[m] = menu->name;
+        old_names[m] = was >= 0 ? menus[was]->name : NULL;
+        if (live != NULL && live == origin)
+            origin_at = m;
+        remake = remake || was != m || strcmp(old_names[m], names[m]) != 0;
+    }
+    SettingsState *remade = NULL;
+    if (names != NULL && old_names != NULL && now != NULL && remake) {
+        if (pickers_active())
+            pickers_cancel();
+        if (browser != NULL)
+            close_browser();
+        remade = settings_remodel(model, names, old_names, count);
+    }
+    if (names == NULL || old_names == NULL || now == NULL || (remake && remade == NULL)) {
+        free(names);
+        free(old_names);
+        free(now);
+        log_error("Settings: out of memory, so the menus cannot change");
+        return false;
+    }
+
+    menus_apply(menu_edit);
+    if (remade != NULL) {
+        int m = 0;
+        for (Menu *menu = config.first_menu; menu != NULL && m < count; menu = menu->next)
+            now[m++] = menu;
+        settings_free(model);
+        model = remade;
+        free(menus);
+        menus = now;
+        now = NULL;
+        menu_count = count;
+        origin = origin_at >= 0 ? menus[origin_at] : default_menu;
+        preview_wanted = NULL;
+        begin_pickers();
+        log_debug("Settings: the menus changed, so their settings were made again over %i menu(s)", count);
+    }
+    free(now);
+    free(names);
+    free(old_names);
+    return true;
+}
+
+#ifdef STREAMFLEX_TEST_HOOKS
+// A function only the headless harness builds: remove a submenu with its tiles, as its confirm page does,
+// through the first tile that opens it; the reason it could not, or NULL
+static const char *test_remove_menu(const char *name)
+{
+    for (int m = 0; m < menuedit_count(menu_edit); m++) {
+        const MenuEditMenu *menu = menuedit_menu(menu_edit, m);
+        for (int t = 0; t < menu->count; t++) {
+            const char *opens = menuedit_submenu_of(&menu->tiles[t]);
+            if (opens != NULL && strcmp(opens, name) == 0)
+                return menuedit_remove_menu(menu_edit, m, t, true);
+        }
+    }
+    return "No tile opens that menu";
+}
+
+// A function only the headless harness builds: add a tile, written title;icon;command, at a menu's end
+static const char *test_add_tile(const char *name, char *tile)
+{
+    int m = menuedit_find(menu_edit, name);
+    char *icon = strchr(tile, ';');
+    char *command = icon != NULL ? strchr(icon + 1, ';') : NULL;
+    if (m < 0)
+        return "No such menu";
+    if (command == NULL)
+        return "The tile is not title;icon;command";
+    *icon++ = '\0';
+    *command++ = '\0';
+    return menuedit_add(menu_edit, m, -1, tile, icon, command);
+}
+
+// A function only the headless harness builds: STREAMFLEX_TEST_MENU_EDIT makes one change to the menus
+// model as settings open, as the Tiles pages make one, and puts it into the launcher, so a check can
+// watch the live rebuild: "remove-menu <name>", "rename-menu <old>=<new>", or
+// "add-tile <menu>=<title>;<icon>;<command>"
+static void test_menu_edit(void)
+{
+    const char *given = getenv("STREAMFLEX_TEST_MENU_EDIT");
+    if (given == NULL || menu_edit == NULL)
+        return;
+    char text[256];
+    snprintf(text, sizeof(text), "%s", given);
+    char *name = strchr(text, ' ');
+    char *value = name != NULL ? strchr(name, '=') : NULL;
+    const char *why = "it is not an edit the hook knows";
+    if (name != NULL) {
+        *name++ = '\0';
+        if (value != NULL)
+            *value++ = '\0';
+        int m = menuedit_find(menu_edit, name);
+        if (strcmp(text, "remove-menu") == 0)
+            why = test_remove_menu(name);
+        else if (strcmp(text, "rename-menu") == 0 && value != NULL)
+            why = m < 0 ? "No such menu" : menuedit_rename_menu(menu_edit, m, value);
+        else if (strcmp(text, "add-tile") == 0 && value != NULL)
+            why = test_add_tile(name, value);
+    }
+    if (why == NULL && !settings_menus_changed())
+        why = "the settings could not follow it";
+    if (why == NULL)
+        log_debug("Test hook: the menu edit '%s' was made", given);
+    else
+        log_debug("Test hook: the menu edit '%s' was refused: %s", given, why);
+}
+#endif
 
 // A function to make the preview's texture at the screen's size, or none when the renderer has no render targets (the scene is then drawn behind the column)
 static void make_preview(void)
@@ -1777,7 +1960,14 @@ void settings_open(void)
         settings_set_entry(model, (SettingId) id, -1, &value);
     }
     list_pads();
-    load_bindings();
+    // config.ini as it is now, for the bindings and the menus: their saves find each line again by its text
+    size_t length = 0;
+    char *text = fileio_read_all(config.config_path, &length);
+    IniDoc *doc = text != NULL ? inidoc_parse(text, length) : NULL;
+    alloc_free(text);
+    load_bindings(doc);
+    load_menus(doc);
+    inidoc_free(doc);
     for (int m = 0; m < menu_count; m++) {
         for (int id = SET_ID_MENU_ROWS; id < SET_ID_COUNT; id++) {
             SettingValue value = read_value((SettingId) id, m);
@@ -1804,6 +1994,13 @@ void settings_open(void)
     begin_pickers();
     make_preview();
     log_debug("Settings opened over menu '%s'", origin->name);
+    if (menu_edit != NULL && !menus_in_step()) {
+        log_debug("Menus: config.ini's menus are not the launcher's (edited by hand since StreamFlex started), so the launcher takes config.ini's");
+        settings_menus_changed();
+    }
+#ifdef STREAMFLEX_TEST_HOOKS
+    test_menu_edit();
+#endif
 }
 
 // A function to let go of settings at quit, saving nothing

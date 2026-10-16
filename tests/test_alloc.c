@@ -961,6 +961,39 @@ static void prove_menuedit_apply(void)
     report("writing the menus");
 }
 
+// A function to prove that making the settings model again over new menus fails cleanly: NULL with the
+// old model as it was, and nothing left allocated; or made, a pad whose name could not be copied named
+// "Pad 0", as settings_set_pads() names it
+static void prove_settings_remodel(void)
+{
+    static const char *const names[] = { "Main", "Games" };
+    static const char *const now[] = { "Kids", "Play", "Main" };
+    static const char *const was[] = { NULL, "Games", "Main" };
+    static const char *const pads[] = { "Xbox Controller" };
+    for (int n = 1;; n++) {
+        SettingsState *old = settings_create(names, 2);
+        CHECK(old != NULL);
+        settings_set_pads(old, pads, 1);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number = 4;
+        arm(n);
+        SettingsState *state = settings_remodel(old, now, was, 3);
+        disarm();
+        if (state == NULL)
+            CHECK_RUN(failed, n);
+        else {
+            CHECK_RUN(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number == 4, n);
+            CHECK_RUN(strcmp(settings_pad_name(state, 0), failed ? "Pad 0" : "Xbox Controller") == 0, n);
+        }
+        CHECK_RUN(settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number == 4, n);
+        settings_free(state);
+        settings_free(old);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("making the settings model again over new menus");
+}
+
 // A function to prove that loading and changing bindings fails cleanly: a list that could not be
 // loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
 // nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
@@ -1110,6 +1143,7 @@ int main(void)
     prove_menuedit_load();
     prove_menuedit_edits();
     prove_menuedit_apply();
+    prove_settings_remodel();
     prove_bindings();
     prove_bindings_reload();
     prove_section_edits();

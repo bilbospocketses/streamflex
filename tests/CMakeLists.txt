@@ -69,10 +69,12 @@ add_test(NAME menuedit COMMAND test_menuedit)
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
 # sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
 # through bindings.c's model (whose lines the tests parse with inidoc.c), and names a color through
-# colorpick.c's swatches (whose contrast math needs libm)
+# colorpick.c's swatches (whose contrast math needs libm). The settings model made again over renamed
+# menus is saved through config_save.c with the menus model's own save (menuedit.c), as the screen saves.
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
-  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c" "${PROJECT_SOURCE_DIR}/src/menuedit.c"
+  "${PROJECT_SOURCE_DIR}/src/config_save.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_settings)
 if (UNIX)

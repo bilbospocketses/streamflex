@@ -96,6 +96,8 @@ static void handle_keypress(SDL_Keycode key, bool repeat);
 static bool hotkey_bound(SDL_Keycode keycode);
 static bool menu_key(SDL_Keycode keycode);
 static void execute_command(const char *command);
+static void drop_empty_note(void);
+static void free_menu(Menu *menu, bool textures);
 static void poll_gamepad(void);
 static void init_gamepad(Gamepad **gamepad, int device_index);
 static void connect_gamepad(int device_index, bool open, bool raise_error);
@@ -897,7 +899,8 @@ static void cleanup()
     taskbar_release();   // Before SDL_Quit(), while COM that SDL started still stands
 #endif
 
-    // Destroy renderer and window
+    // Destroy renderer and window; the empty menu's note first, while its renderer exists
+    drop_empty_note();
     if (renderer != NULL) {
         SDL_DestroyRenderer(renderer);
         renderer = NULL;
@@ -937,28 +940,15 @@ static void cleanup()
     free(config.quit_cmd);
     library_free();
 
-    // Free menu and entry linked lists
-    Entry *entry = NULL;
-    Entry *tmp_entry = NULL;
+    // Free the menus and their entries; the renderer, and every texture with it, is gone already
     Menu *menu = config.first_menu;
-    Menu *tmp_menu = NULL;
-    for (size_t i = 0; i < config.num_menus; i++) {
-        free(menu->name);
-        free(menu->items);
-        entry = menu->first_entry;
-        for(size_t j = 0; j < menu->num_entries; j++) {
-            free(entry->title);
-            free(entry->icon_path);
-            free(entry->icon_selected_path);
-            free(entry->cmd);
-            tmp_entry = entry;
-            entry = entry->next;
-            free(tmp_entry);
-        }
-        tmp_menu = menu;
-        menu = menu->next;
-        free(tmp_menu);
+    while (menu != NULL) {
+        Menu *next = menu->next;
+        free_menu(menu, false);
+        menu = next;
     }
+    config.first_menu = NULL;
+    config.num_menus = 0;
 
     // Free the hotkey and gamepad control linked lists
     clear_hotkeys();
@@ -980,6 +970,16 @@ static bool hotkey_bound(SDL_Keycode keycode)
 static bool menu_key(SDL_Keycode keycode)
 {
     return (keycode == SDLK_APPLICATION || keycode == SDLK_MENU) && !hotkey_bound(keycode);
+}
+
+// A function to tell whether the menu on show is empty, so OK, :select and a click have no tile to run;
+// it says so in the log
+static bool nothing_to_select(void)
+{
+    if (current_entry != NULL)
+        return false;
+    log_debug("Menu '%s' is empty: there is no tile to select", current_menu->name);
+    return true;
 }
 
 // A function to handle key presses from keyboard; `key` is the stored code (keycodes.h), SDL2's
@@ -1040,16 +1040,17 @@ static void handle_keypress(SDL_Keycode key, bool repeat)
     else if ((key == SDLK_UP || key == SDLK_DOWN) && !hotkey_bound(key))
         move_selection(key == SDLK_UP ? LAYOUT_UP : LAYOUT_DOWN);
     else if (key == SDLK_RETURN) {
-        log_debug("Selected Entry:\n"
-            "Title: %s\n"
-            "Icon Path: %s\n"
-            "Command: %s", 
-            current_entry->title, 
-            current_entry->icon_path, 
-            current_entry->cmd
-        );
-        
-        execute_command(current_entry->cmd);
+        if (!nothing_to_select()) {
+            log_debug("Selected Entry:\n"
+                "Title: %s\n"
+                "Icon Path: %s\n"
+                "Command: %s",
+                current_entry->title,
+                current_entry->icon_path,
+                current_entry->cmd
+            );
+            execute_command(current_entry->cmd);
+        }
     }
     else if (key == SDLK_BACKSPACE)
         load_back_menu(current_menu);
@@ -1503,18 +1504,51 @@ void reload_background()
     log_debug("Background set up: %s", get_mode_setting(MODE_SETTING_BACKGROUND, (int) background_shown));
 }
 
-// A function to load a menu
+#define EMPTY_MENU_NOTE "This menu is empty. Hold OK to add tiles."   // Holding OK opens its Tiles page
+
+static SDL_Texture *empty_note = NULL;   // The note an empty menu shows in place of its buttons...
+static SDL_Rect empty_note_rect;
+static int empty_note_width = 0;         // ...rendered to fit this width; 0 when it is not rendered
+
+// A function to let go of the empty menu's note, so the next empty menu renders it again: the titles'
+// font or color changed, the renderer is going, or StreamFlex is quitting
+static void drop_empty_note(void)
+{
+    if (empty_note != NULL)
+        SDL_DestroyTexture(empty_note);
+    empty_note = NULL;
+    empty_note_width = 0;
+}
+
+// A function to draw the note an empty menu shows in place of its buttons: centered across the area the
+// buttons may use, at its vertical center, in the titles' fixed font and color (it is rendered once for
+// the area's width, and again only when that or the titles change)
+static void draw_empty_note(void)
+{
+    int width = layout_area.w - 2 * geo.screen_margin;
+    if (empty_note == NULL || empty_note_width != width) {
+        drop_empty_note();
+        TextInfo info = title_info;
+        info.set = fixed_title_font;
+        info.font = fontset_font(fixed_title_font);
+        info.font_size = (int) config.title_font_size;
+        info.max_width = width;
+        empty_note = render_text_texture(EMPTY_MENU_NOTE, &info, &empty_note_rect, NULL);
+        empty_note_width = width;
+        log_debug("Empty menu note: rendered %i x %i px", empty_note_rect.w, empty_note_rect.h);
+    }
+    empty_note_rect.x = layout_area.x + (layout_area.w - empty_note_rect.w) / 2;
+    empty_note_rect.y = layout_area.vcenter - empty_note_rect.h / 2;
+    draw_texture(renderer, empty_note, NULL, &empty_note_rect);
+}
+
+// A function to load a menu. An empty one loads too (plan ruling 2): it shows a note in place of its
+// buttons, and OK has no tile to select there.
 static int load_menu(Menu *menu, bool set_back_menu, bool reset_position)
 {
     if (menu == NULL)
         return 1;
     log_debug("Loading menu '%s'", menu->name);
-
-    // Return error if the menu doesn't contain entries
-    if (menu->num_entries == 0) {
-        log_error("No valid entries found for Menu '%s'", menu->name);
-        return 1;
-    }
 
     Menu *previous_menu = current_menu;
     current_menu = menu;
@@ -1527,6 +1561,8 @@ static int load_menu(Menu *menu, bool set_back_menu, bool reset_position)
     // A menu opened from itself keeps its back link, or Back would return to the same menu
     if (set_back_menu && menu != previous_menu)
         current_menu->back = previous_menu;
+    if (menu->num_entries == 0)
+        log_debug("Menu '%s' is empty, so it shows the note: %s", menu->name, EMPTY_MENU_NOTE);
     return 0;
 }
 
@@ -1774,9 +1810,14 @@ static void render_buttons(Menu *menu, const LayoutGeometry *geometry)
         timing_ms(timing_texture), titles, timing_ms(titles_time));
 }
 
-// A function to position the visible buttons and the highlight for the current menu
+// A function to position the visible buttons and the highlight for the current menu; an empty menu has
+// neither, and no entry to select
 static void place_entries()
 {
+    if (current_menu->num_entries == 0) {
+        current_entry = NULL;
+        return;
+    }
     for (unsigned int i = 0; i < current_menu->num_entries; i++) {
         Entry *entry = current_menu->items[i];
         int x, y;
@@ -1824,6 +1865,7 @@ void reload_titles()
     title_info.shadow_color = config.title_shadows ? &title_shadow_color : NULL;
     title_info.oversize_mode = config.title_oversize_mode;
     geo.font_height = config.titles_enabled ? TTF_GetFontHeight(fontset_font(fixed_title_font)) : 0;
+    drop_empty_note();   // Drawn in the titles' font, color and shadow
 
     // A new size may open where the last one failed
     for (Menu *menu = config.first_menu; menu != NULL; menu = menu->next) {
@@ -1889,6 +1931,198 @@ int show_menu(Menu *menu)
 int show_home()
 {
     return load_menu(default_menu, false, true);
+}
+
+// A function to free a menu's entries: their textures, while the renderer that made them exists
+// (`textures`), their text, and the menu's index of them
+static void free_entries(Menu *menu, bool textures)
+{
+    Entry *entry = menu->first_entry;
+    while (entry != NULL) {
+        Entry *next = entry->next;
+        if (textures) {
+            if (entry->icon != NULL)
+                SDL_DestroyTexture(entry->icon);
+            if (entry->icon_selected != NULL)
+                SDL_DestroyTexture(entry->icon_selected);
+            if (entry->title_texture != NULL)
+                SDL_DestroyTexture(entry->title_texture);
+        }
+        free(entry->title);
+        free(entry->icon_path);
+        free(entry->icon_selected_path);
+        free(entry->cmd);
+        free(entry);
+        entry = next;
+    }
+    free(menu->items);
+    menu->first_entry = NULL;
+    menu->items = NULL;
+    menu->num_entries = 0;
+}
+
+// A function to free a menu: its entries (free_entries()), its names, and itself
+static void free_menu(Menu *menu, bool textures)
+{
+    free_entries(menu, textures);
+    free(menu->name);
+    free(menu->section);
+    free(menu);
+}
+
+// A function to make an empty menu for a menus model's menu the launcher has none for. Its section is
+// the one the model read it from: a menu Discard puts back, or one the hand-edit catch-up reads from
+// config.ini, is then found by menu_for() at the next change, not made again (losing its place). A menu
+// made in settings was read from none, so it has none, and menu_for() finds it by its name; a section
+// of its name would let a new menu named as a renamed one was take that menu's Menu.
+static Menu *make_menu(const MenuEditMenu *from)
+{
+    Menu *menu = calloc(1, sizeof(Menu));
+    if (menu == NULL || (menu->name = strdup(from->name)) == NULL ||
+        (from->original_name != NULL && (menu->section = strdup(from->original_name)) == NULL))
+        log_fatal("Could not allocate the menu '%s'", from->name);
+    return menu;
+}
+
+// A function to give a menu the entries of a menus model's menu, as the parser makes them from its
+// lines: the icon as written (quotes round a path taken off), its selected icon beside it when there is
+// one, then a library name pointed at its file
+static void make_entries(Menu *menu, const MenuEditMenu *from)
+{
+    Entry *previous = NULL;
+    for (int t = 0; t < from->count; t++) {
+        const MenuTile *tile = &from->tiles[t];
+        Entry *entry = calloc(1, sizeof(Entry));
+        if (entry == NULL || (entry->title = strdup(tile->title)) == NULL ||
+            (entry->icon_path = strdup(tile->icon)) == NULL || (entry->cmd = strdup(tile->command)) == NULL)
+            log_fatal("Could not allocate the entries of menu '%s'", from->name);
+        clean_path(entry->icon_path);
+        entry->icon_selected_path = selected_path(entry->icon_path);
+        resolve_entry_icon(entry, from->name);
+        entry->previous = previous;
+        if (previous == NULL)
+            menu->first_entry = entry;
+        else
+            previous->next = entry;
+        previous = entry;
+        menu->num_entries++;
+    }
+    if (menu->num_entries == 0)
+        return;
+    menu->items = malloc(menu->num_entries * sizeof(Entry*));
+    if (menu->items == NULL)
+        log_fatal("Could not allocate the entries of menu '%s'", from->name);
+    Entry *entry = menu->first_entry;
+    for (unsigned int i = 0; i < menu->num_entries; i++, entry = entry->next)
+        menu->items[i] = entry;
+}
+
+// A function to find the live menu a menus model's menu stands for: the one read from the section the
+// model read it from, or, for a menu made in settings (read from none), the one made for it under its
+// name. NULL when there is none: the model's menu is new to the launcher.
+Menu *menu_for(const MenuEditMenu *from)
+{
+    for (Menu *menu = config.first_menu; menu != NULL; menu = menu->next) {
+        bool same = from->original_name != NULL ? menu->section != NULL && MATCH(menu->section, from->original_name)
+                                                : menu->section == NULL && MATCH(menu->name, from->name);
+        if (same)
+            return menu;
+    }
+    return NULL;
+}
+
+// A function to rebuild the launcher's menus from the menus model after a change to it (spec "Saving and
+// applying"): each live menu the model still has is kept, renamed when it was, with its grid settings,
+// its place and its back link; one the model has no more goes, every pointer to it first; one the model
+// made is made. Every menu's entries are made again from the model's tiles, as the parser makes them,
+// and its textures are marked stale; the menu on show (while settings are open, the preview's) is laid
+// out again at once, and the others when next shown. The default menu follows its menu through a rename;
+// were that menu gone, the model's default (the file's DefaultMenu, through its renames) takes its place.
+void menus_apply(const MenuEdit *edit)
+{
+    int count = menuedit_count(edit);
+    Menu **list = calloc((size_t) (count > 0 ? count : 1), sizeof(Menu*));
+    if (list == NULL)
+        log_fatal("Could not allocate the menus");
+    int kept = 0;
+    for (int m = 0; m < count; m++) {
+        list[m] = menu_for(menuedit_menu(edit, m));
+        if (list[m] != NULL)
+            kept++;
+    }
+
+    // The menus the model has no more: every pointer to one let go of, then each freed with its textures
+    int gone = 0;
+    Menu *menu = config.first_menu;
+    while (menu != NULL) {
+        Menu *next = menu->next;
+        bool keep = false;
+        for (int m = 0; m < count && !keep; m++)
+            keep = list[m] == menu;
+        if (!keep) {
+            log_debug("Menus: '%s' is gone", menu->name);
+            for (int m = 0; m < count; m++) {
+                if (list[m] != NULL && list[m]->back == menu)
+                    list[m]->back = NULL;
+            }
+            if (current_menu == menu)
+                current_menu = NULL;
+            if (default_menu == menu)
+                default_menu = NULL;
+            free_menu(menu, true);
+            gone++;
+        }
+        menu = next;
+    }
+
+    // The model's menus, in its order: made, renamed, and given their entries again
+    for (int m = 0; m < count; m++) {
+        const MenuEditMenu *from = menuedit_menu(edit, m);
+        if (list[m] == NULL) {
+            list[m] = make_menu(from);
+            log_debug("Menus: '%s' is new", from->name);
+        }
+        else if (!MATCH(list[m]->name, from->name)) {
+            // Its section stays the one read: the model's original_name, which menu_for() matches it by
+            log_debug("Menus: '%s' is now '%s'", list[m]->name, from->name);
+            free(list[m]->name);
+            list[m]->name = strdup(from->name);
+            if (list[m]->name == NULL)
+                log_fatal("Could not allocate the menu '%s'", from->name);
+        }
+        free_entries(list[m], true);
+        make_entries(list[m], from);
+        list[m]->rendered_size = 0;
+        list[m]->next = NULL;
+        if (m > 0)
+            list[m - 1]->next = list[m];
+    }
+    config.first_menu = count > 0 ? list[0] : NULL;
+    config.num_menus = (size_t) count;
+
+    if (default_menu == NULL) {
+        const char *name = menuedit_default(edit);
+        for (int m = 0; m < count && default_menu == NULL; m++) {
+            if (name != NULL && MATCH(list[m]->name, name))
+                default_menu = list[m];
+        }
+        if (default_menu == NULL && count > 0)
+            default_menu = list[0];
+        if (default_menu != NULL)
+            log_error("Menus: the default menu is gone, so '%s' is the default menu now", default_menu->name);
+    }
+    if (default_menu != NULL && (config.default_menu == NULL || !MATCH(config.default_menu, default_menu->name))) {
+        free(config.default_menu);
+        config.default_menu = strdup(default_menu->name);
+    }
+    if (current_menu == NULL)
+        current_menu = default_menu;
+    current_entry = NULL;   // Its entry is gone; laying the menu out finds the new one
+    if (current_menu != NULL)
+        apply_layout(current_menu);
+    log_debug("Menus: the launcher's menus were made again from the menus model: %i menu(s), %i kept, %i new, %i gone",
+        count, kept, count - kept, gone);
+    free(list);
 }
 
 // A function to fill the screen with a gray checkerboard. In the settings preview it stands for a
@@ -2022,13 +2256,15 @@ void draw_scene(bool preview)
     if (!preview)
         draw_pad_battery();
 
-    // Draw highlight
-    if (highlight != NULL)
+    // Draw highlight; an empty menu has no button for it, and shows its note instead
+    if (highlight != NULL && current_menu->num_entries > 0)
         draw_texture(renderer,
             highlight->texture,
             NULL,
             &highlight->rect
         );
+    if (current_menu->num_entries == 0)
+        draw_empty_note();
 
     // Draw the visible buttons
     for (unsigned int i = 0; i < current_menu->num_entries; i++) {
@@ -2208,8 +2444,10 @@ static void execute_command(const char *command)
             move_selection(LAYOUT_UP);
         else if (!strcmp(special_command, SCMD_DOWN))
             move_selection(LAYOUT_DOWN);
-        else if (!strcmp(special_command, SCMD_SELECT))
-            execute_command(current_entry->cmd);
+        else if (!strcmp(special_command, SCMD_SELECT)) {
+            if (!nothing_to_select())
+                execute_command(current_entry->cmd);
+        }
         else if (!strcmp(special_command, SCMD_HOME))
             load_menu(default_menu, false, true);
         else if (!strcmp(special_command, SCMD_BACK))
@@ -3415,6 +3653,8 @@ static int drop_textures(void)
     int count = 0;
     destroy_texture(&background_texture, &count);
     destroy_texture(&background_overlay, &count);
+    destroy_texture(&empty_note, &count);
+    empty_note_width = 0;   // So the next empty menu renders it again
     if (slideshow != NULL)
         destroy_texture(&slideshow->transition_texture, &count);
     if (highlight != NULL) {
@@ -3552,7 +3792,7 @@ static inline void post_launch()
 
 #ifdef _WIN32
     listen_exit_hotkey(false);
-    if (background_shown == BACKGROUND_TRANSPARENT)
+    if (background_shown == BACKGROUND_TRANSPARENT && current_entry != NULL)   // An empty menu has no tile to put it on
         hide_cursor(current_entry);
 #endif
 }
@@ -3814,7 +4054,8 @@ int main(int argc, char *argv[])
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
                     if (renderer != NULL && config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
                         ticks.last_input = ticks.main;
-                        execute_command(current_entry->cmd);
+                        if (!nothing_to_select())
+                            execute_command(current_entry->cmd);
                     }
                     break;
 

@@ -32,6 +32,8 @@ set(SOURCES
   inidoc.h
   config_save.c
   config_save.h
+  menuedit.c
+  menuedit.h
   settings.c
   settings.h
   derive.c

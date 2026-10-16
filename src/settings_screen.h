@@ -18,5 +18,12 @@ void settings_remake_textures(void);      // On a reset or new renderer: drop, t
 bool settings_raw_key(int code, bool repeat);  // A key while settings are open: true when capture or the 10 s took it
 void settings_raw_release(int code);
 bool settings_raw_pad(int label);              // Each frame: the gamepad label held, -1 for none; true when taken
+// After a change to the menus model: the launcher's menus are rebuilt from it, and when a menu came, went,
+// was renamed or moved, the settings model, the screen's menus and the pickers' are made again over them.
+// False, with the launcher's menus untouched, when out of memory, or when the model holds no menu (the
+// launcher cannot show none): the change stays in the menus model alone. No keyboard is open for a menu's
+// coming, going, rename or move; a tile's change made with the keyboard open (a title) remakes nothing but
+// the menus, so the keyboard stays.
+bool settings_menus_changed(void);
 
 #endif

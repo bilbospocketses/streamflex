@@ -6,6 +6,9 @@
 #include "bindings.h"
 #include "inidoc.h"
 #include "alloc.h"
+#include "fileio.h"
+#include "config_save.h"
+#include "menuedit.h"
 
 #define ARROW " \xE2\x80\xBA "   // U+203A with a space either side, between pages in the page path
 #define TIMES "\xC3\x97"         // U+00D7, the multiplication sign
@@ -1943,6 +1946,215 @@ static void test_restart_page(void)
     settings_free(state);
 }
 
+// A function to test making the model again over menus that came, went, were renamed or moved (plan
+// ruling 5): a pending change to a menu's settings follows the menu by its old name, a new menu's
+// settings start unchanged, everything else is carried across, the Default menu row follows a rename
+// and goes back to its entry when the menu it named is gone, and a page about a menu follows it, or
+// closes when it is gone
+static void test_remodel(void)
+{
+    SettingsState *old = open_model();                       // Main, and Games with Rows 3 and Columns 6
+    int marker = 0;
+    settings_set_menus(old, (MenuEdit *) &marker);
+    static const char *const pads[] = { "Xbox Controller" };
+    settings_set_pads(old, pads, 1);
+    settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");          // Games: 3 -> 2
+    settings_slot(old, SET_ID_MENU_COLUMNS, 0)->value = parsed(SET_ID_MENU_COLUMNS, "5");    // Main: All menus -> 5
+    settings_slot(old, SET_ID_LAYOUT_ROWS, -1)->value = parsed(SET_ID_LAYOUT_ROWS, "2");     // [Layout]: 1 -> 2
+    SettingSlot *default_menu = settings_slot(old, SET_ID_DEFAULT_MENU, -1);
+    snprintf(default_menu->value.text, sizeof(default_menu->value.text), "Games");           // Main -> Games, unsaved
+
+    // Games' page: Menus, then down past All menus and Main
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    CHECK_INT(settings_preview_menu(old), 1);
+
+    // Kids new at the front, Games renamed Play, Main after it
+    static const char *const names[] = { "Kids", "Play", "Main" };
+    static const char *const old_names[] = { NULL, "Games", "Main" };
+    SettingsState *state = settings_remodel(old, names, old_names, 3);
+    CHECK(state != NULL);
+    CHECK_INT(settings_slot_count(state), SET_ID_GLOBAL_COUNT + 3 * SET_ID_PER_MENU_COUNT);
+    SettingSlot *rows = settings_slot(state, SET_ID_MENU_ROWS, 1);
+    CHECK_INT(rows->menu, 1);
+    CHECK_INT(rows->value.number, 2);
+    CHECK_INT(rows->entry.number, 3);
+    CHECK(settings_changed(rows));
+    CHECK_INT(settings_slot(state, SET_ID_MENU_COLUMNS, 1)->value.number, 6);
+    SettingSlot *columns = settings_slot(state, SET_ID_MENU_COLUMNS, 2);
+    CHECK_INT(columns->menu, 2);
+    CHECK_INT(columns->value.number, 5);
+    CHECK(columns->entry.inherit);
+    for (int id = SET_ID_MENU_ROWS; id < SET_ID_COUNT; id++) {
+        SettingSlot *slot = settings_slot(state, (SettingId) id, 0);   // Kids: new, following [Layout]
+        CHECK(slot->value.inherit && slot->entry.inherit && !settings_changed(slot));
+    }
+    CHECK_INT(settings_slot(state, SET_ID_LAYOUT_ROWS, -1)->value.number, 2);
+    CHECK(settings_changed(settings_slot(state, SET_ID_LAYOUT_ROWS, -1)));
+    CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->value.text, "Play");   // The unsaved Games follows its rename
+    CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->entry.text, "Main");
+    CHECK(settings_menus(state) == (MenuEdit *) &marker);
+    CHECK_STR(settings_pad_name(state, 0), "Xbox Controller");
+    CHECK(settings_any_changed(state));
+
+    // The page about Games is Play's now, at Play's place
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 1);
+    char path[256];
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Play");
+    SettingsRow shown[SETTINGS_MAX_ROWS];
+    settings_rows(state, shown, SETTINGS_MAX_ROWS);
+    CHECK_STR(shown[0].value, "2");
+
+    // The old model is as it was: the screen frees it once the new one is made
+    CHECK_INT(settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number, 2);
+    CHECK_STR(settings_slot(old, SET_ID_DEFAULT_MENU, -1)->value.text, "Games");
+    settings_free(old);
+
+    // Play removed while its page is open: the page closes, and the Default menu row, which named it,
+    // goes back to its entry; Main's own change stays, at Main's new place
+    static const char *const fewer[] = { "Kids", "Main" };
+    SettingsState *after = settings_remodel(state, fewer, fewer, 2);
+    CHECK(after != NULL);
+    CHECK_INT(settings_page(after), SETTINGS_PAGE_MENUS);
+    CHECK_STR(settings_slot(after, SET_ID_DEFAULT_MENU, -1)->value.text, "Main");
+    CHECK(!settings_changed(settings_slot(after, SET_ID_DEFAULT_MENU, -1)));
+    CHECK_INT(settings_slot(after, SET_ID_MENU_COLUMNS, 1)->value.number, 5);
+    settings_free(state);
+
+    // The default menu renamed: its value and its entry both follow, so there is nothing to save for it
+    static const char *const home[] = { "Kids", "Home" };
+    SettingsState *renamed = settings_remodel(after, home, fewer, 2);
+    CHECK(renamed != NULL);
+    CHECK_STR(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)->value.text, "Home");
+    CHECK_STR(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)->entry.text, "Home");
+    CHECK(!settings_changed(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)));
+    settings_free(after);
+    settings_free(renamed);
+}
+
+#define REMODEL_DIR "settings-remodel-fixture"
+#define REMODEL_CONFIG REMODEL_DIR "/config.ini"
+
+// A function to write the menus model into a save's fresh read, as the save's document callback
+static bool apply_menus(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    return menuedit_apply((const MenuEdit *) context, doc, result);
+}
+
+// A function to save a model's changed settings over the menus model, as the screen's save makes its
+// edits: each slot's section is its menu's name, `sections[slot->menu]` (the screen reads the live
+// menu's, which menus_apply() names as the menus model does), and a menu's own setting goes under its
+// header. True when the save succeeded; `result` says what it could not make as asked.
+static bool save_over_menus(SettingsState *state, const char *const *sections, MenuEdit *edit, ConfigSaveResult *result)
+{
+    ConfigEdit edits[4];
+    static char values[4][SETTING_TEXT_MAX];
+    int n = 0;
+    for (int i = 0; i < settings_slot_count(state); i++) {
+        SettingSlot *slot = settings_slot_at(state, i);
+        if (!settings_changed(slot))
+            continue;
+        CHECK(n < 4);
+        if (n >= 4)
+            break;
+        setting_format(slot->def, &slot->value, values[n], SETTING_TEXT_MAX);
+        edits[n].section = slot->def->section != NULL ? slot->def->section : sections[slot->menu];
+        edits[n].key = slot->def->key;
+        edits[n].alias = slot->def->alias;
+        edits[n].value = slot->value.inherit ? NULL : values[n];
+        edits[n].placement = slot->def->section != NULL ? INIDOC_AFTER_LAST_KEY : INIDOC_UNDER_HEADER;
+        n++;
+    }
+    memset(result, 0, sizeof(*result));
+    return config_save_with(REMODEL_CONFIG, NULL, NULL, edits, n, NULL, 0, apply_menus, edit, result);
+}
+
+// A function to start the remodel's save from a known file, with no backup lying about
+static void reset_remodel_config(const char *text)
+{
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+    CHECK(fileio_make_dirs(REMODEL_DIR));
+    CHECK(fileio_write_all(REMODEL_CONFIG, text, strlen(text)));
+}
+
+// A function to test that an unsaved change to a menu's own setting follows the menu through a rename
+// made in settings, to the save: the remodel carries it to the renamed menu, the save's edit names the
+// menu's new section, and the menus model's save (menuedit_apply(), the document callback, run before
+// the slot edits) renames the section first, so the change lands under the new header with no note.
+// Named by the old section instead, the edit would be skipped as a menu gone (the reason it must not be).
+static void test_remodel_slot_edit_follows_rename(void)
+{
+    static const char *const text =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=3\nEntry1=Retro;retro;retroarch\n";
+    static const char *const saved =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Play;games;:submenu Play\n\n[Play]\nRows=2\nEntry1=Retro;retro;retroarch\n";
+    static const char *const names[] = { "Main", "Games" };
+    for (int pass = 0; pass < 2; pass++) {
+        reset_remodel_config(text);
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+        inidoc_free(doc);
+        SettingsState *old = settings_create(names, 2);
+        CHECK(edit != NULL && old != NULL);
+        if (edit == NULL || old == NULL) {
+            menuedit_free(edit);
+            settings_free(old);
+            return;
+        }
+        SettingValue rows = parsed(SET_ID_MENU_ROWS, "3");
+        settings_set_entry(old, SET_ID_MENU_ROWS, 1, &rows);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");   // Games: 3 -> 2, unsaved
+
+        // Games renamed Play in the menus model, and the settings model made again over it, as
+        // settings_menus_changed() makes it: each menu's name now, and the name it had
+        CHECK(menuedit_rename_menu(edit, 1, "Play") == NULL);
+        const char *now[2];
+        for (int m = 0; m < 2; m++)
+            now[m] = menuedit_menu(edit, m)->name;
+        CHECK_STR(now[1], "Play");
+        SettingsState *state = settings_remodel(old, now, names, 2);
+        settings_free(old);
+        CHECK(state != NULL);
+        if (state == NULL) {
+            menuedit_free(edit);
+            return;
+        }
+        CHECK_INT(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number, 2);
+
+        ConfigSaveResult result;
+        char *written = NULL;
+        if (pass == 0) {
+            CHECK(save_over_menus(state, now, edit, &result));
+            CHECK_INT(result.note_count, 0);
+            CHECK_STR(result.notes, "");
+            written = fileio_read_all(REMODEL_CONFIG, NULL);
+            CHECK(written != NULL);
+            CHECK_STR(written != NULL ? written : "", saved);
+        }
+        else {
+            // The old section's name: the change is skipped, so Play keeps its Rows=3, and the note says
+            // the menu is gone
+            CHECK(save_over_menus(state, names, edit, &result));
+            CHECK_INT(result.note_count, 1);
+            CHECK_INT(result.note_kinds[0], CONFIG_NOTE_SECTION_GONE);
+            written = fileio_read_all(REMODEL_CONFIG, NULL);
+            CHECK(written != NULL && strstr(written, "\n[Play]\nRows=3\nEntry1=Retro;retro;retroarch\n") != NULL);
+        }
+        alloc_free(written);
+        settings_free(state);
+        menuedit_free(edit);
+    }
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+}
+
 int main(void)
 {
     test_add_binding();
@@ -1980,6 +2192,8 @@ int main(void)
     test_restart_words();
     test_restart_tracking();
     test_restart_page();
+    test_remodel();
+    test_remodel_slot_edit_follows_rename();
     return check_report();
 }
 
