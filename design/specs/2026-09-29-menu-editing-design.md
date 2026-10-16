@@ -1,7 +1,7 @@
 # Editing menus from the remote (3c): design
 
 **Date:** 2026-09-29
-**Status:** approved in brainstorming, awaiting spec review. **Amended 2026-10-15** for SDL3 (the port shipped in v0.5.0): real-keyboard typing comes from key events, and no OS keyboard may ever appear (see **No OS keyboard, ever**).
+**Status:** approved in brainstorming, awaiting spec review. **Amended 2026-10-15** for SDL3 (the port shipped in v0.5.0): real-keyboard typing comes from key events, and no OS keyboard may ever appear (see **No OS keyboard, ever**). **Amended 2026-10-16** by the implementation plan's rulings 7 and 8: Enter and Backspace in a field are the remote's OK and Back until a real keyboard types into it; the field's text is drawn as settings text is; values pass `inidoc_check_in()`. **Amended 2026-10-16** by the plan's review: a Linux app with `Terminal=true` is not listed; an AppsFolder ID with a space or a comma is quoted; a save fails, rather than skipping, a menu renamed in settings whose section a hand edit renamed or removed; *Add ›* on the Tiles page adds at the end and a tile's page has *Add after this tile ›*; Move follows the launcher's highlight, stopping at a row's ends; a typed path is looked for at Done, not as it is typed; a new app's tile gets its own icon, plated, as it is added when the library has no match; a tile already showing its own icon's file keeps it; settings opened another way during a hold of OK cancel it.
 **Covers:** sub-project 3c of the overhaul (todo item 7): adding, removing, reordering and renaming the user's tiles and submenus, their icons, and the on-screen keyboard.
 **Ships as:** v0.6.0, built on SDL3 (floor 3.2.10).
 **Builds on:**
@@ -36,27 +36,29 @@ A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;com
 
 ## Pages and flows
 
-**Settings › Menus › *<menu>*** gains **Tiles ›** under 3a's grid rows. The Tiles page has **Add ›** at the top, then one row per tile in menu order (a submenu tile shows ›).
+**Settings › Menus › *<menu>*** gains **Tiles ›** under 3a's grid rows. The Tiles page has **Add ›** at the top, then one row per tile in menu order (a submenu tile shows ›). A menu of more than 62 tiles lists 61 of them; a note counts the rest, which hold-OK on the tile in the menu opens.
 
 - **Add ›** offers:
   - ***App ›*:** the installed-apps list, alphabetical. Up from the top row, or typing on a real keyboard, opens the on-screen keyboard to filter it.
   - ***Browse for a program ›*:** 3a's folder browser, showing `.exe` and `.lnk` on Windows, and executables, `.desktop` files and scripts on Linux. The title starts as the file's name without its extension.
   - ***Submenu ›*:** a name through the keyboard. This creates `[Name]` and a tile that runs `:submenu Name`, with no Back tile.
   - ***Special ›*:** Home, Back, Settings, Sleep, Restart, Shut down and Quit, each with its library icon.
-  - A new tile goes after the highlighted tile, or at the end.
+  - *Add ›* on the Tiles page puts a new tile at the end; *Add after this tile ›* on a tile's page puts it right after that tile.
 - **A tile's page:**
   - *Title*: OK opens the keyboard.
   - *Icon ›*: see **Icons**.
   - *Command ›*: the app list, a browse, the special commands, or *Type…* (the keyboard) for a `:fork` line or a path. `:select` is never offered, because the parser forbids it in entries.
   - *Move*
   - *Move to menu ›*
+  - *Add after this tile ›*: the Add page, whose new tile goes right after this one
   - *Remove*
-- **Move:** OK picks the tile up. The preview outlines it, the arrows move it through the grid while the preview re-lays the menu live, OK drops it, and Back cancels.
+- **Move:** OK picks the tile up. The preview outlines it, the arrows move it through the grid as they move the highlight in a menu (Left and Right along its row, stopping at the row's ends; Up and Down a row, keeping the column) while the preview re-lays the menu live, OK drops it, and Back cancels.
 - **Remove:** a normal tile goes at once; *Discard changes* is the undo, as everywhere in settings. A submenu tile gets the confirm page (see **Decisions**).
 - **Renaming a submenu tile renames the submenu:** the `[Section]`, every entry whose command is exactly `:submenu <Old>`, and `DefaultMenu` when it names it. A name that clashes with another section is refused with a reason.
 - **The hold-OK shortcut:**
   - In the normal launcher, holding OK (Return, or the pad's A) on a tile for 0.8 s opens settings at that tile's page. This fires on the first press only, and never on key repeat.
   - Back from that page goes to the Tiles page, then up through settings as usual. Closing settings lands on that tile.
+  - Settings opened another way while OK is held (Menu, or a `:settings` hotkey or button) cancel the hold: it never fires, and letting go does nothing.
 - **Guard rails:**
   - The default menu cannot be removed.
   - A menu's last tile can be removed; an empty menu shows *Empty: Add ›*.
@@ -79,16 +81,16 @@ A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;com
 - **Shortcuts:**
   - The pad's X is backspace, Y is space, and Start is Done.
   - Back cancels. With no change it cancels at once; after a change, the first Back shows *Back again to discard*.
-- **A real keyboard types into the field, from key events:** a printing key inserts its character, Enter is Done, Esc cancels and Backspace deletes. The arrows keep moving the on-screen highlight, because remotes send the same arrow keys.
+- **A real keyboard types into the field, from key events:** a printing key inserts its character, and Esc is Back (with no change it cancels at once; after one it asks first). Many remotes send Enter for OK and Backspace for Back, so in a field Enter types the highlighted key and Backspace backs out, as everywhere else in settings, until a printing character from a real keyboard has been typed into that field; from then on, in that field, Enter is Done and Backspace deletes. The keypad's Enter is always Done. The arrows keep moving the on-screen highlight, because remotes send the same arrow keys.
   - The character is `SDL_GetKeyFromScancode(event.key.scancode, event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS | SDL_KMOD_MODE), false)`: the layout's own character with Shift, Caps Lock and AltGr applied. `event.key.key` is not used for this, because SDL3 gives it unshifted.
   - A keycode with `SDLK_SCANCODE_MASK` set, a control character below U+0020, U+007F, or U+FFFD (what SDL gives on Windows for a key that types several code points) inserts nothing.
   - Key repeat inserts again, as a held key does in any text field.
   - **Limits:** a dead key types its own character and does not combine with the next letter, and a CJK input method is bypassed, so a Japanese or Chinese layout types Latin letters. The *àé* page covers European accents. Non-Latin layouts that need no input method (Greek, Cyrillic) type their own letters.
-- **The field's text** is drawn as titles are, one texture re-rendered on each change, not with SDL3_ttf's text engine (`TTF_CreateRendererTextEngine`): typing changes it at most a few times a second.
+- **The field's text** is drawn as settings text is (`draw_text()`'s cached texture), re-rendered on each change, not with SDL3_ttf's text engine (`TTF_CreateRendererTextEngine`): typing changes it at most a few times a second.
 - **The text** is UTF-8, with the cursor on character boundaries.
-  - Each field has a maximum length and a validator, and the caption says why *Done* is disabled.
+  - Each field has a maximum length and a validator, and the caption says why *Done* is disabled. A typed path's validator never reads the disk; that it names a file (a folder, or an image that opens) is checked at Done, which reopens the keyboard on it with the reason.
   - A title cannot contain `;`, which would break `title;icon;command`.
-  - Every value must pass `inidoc_value_ok()`.
+  - Every value must pass `inidoc_check_in()`.
 - **Uses:**
   - tile titles and submenu names;
   - filtering the app list and the icon grid;
@@ -113,10 +115,10 @@ Why only that works, from SDL 3.2.10's and 3.4.18's sources (research, 2026-10-1
 
 - **Windows:** the shell's **AppsFolder** (COM, `FOLDERID_AppsFolder`), which lists what the Start menu shows, both desktop and Store apps.
   - Each app gives its display name and its app ID.
-  - The command written is `explorer.exe shell:AppsFolder\<app ID>`, which launches both kinds.
+  - The command written is `explorer.exe shell:AppsFolder\<app ID>`, which launches both kinds; when the ID holds a space or a comma the argument is in double quotes, `explorer.exe "shell:AppsFolder\<app ID>"`, so Explorer reads it as one.
   - Uninstallers, and help or readme shortcuts, are filtered out.
 - **Linux:** the `.desktop` files in every `$XDG_DATA_DIRS/applications`, in `~/.local/share/applications`, in the Flatpak exports (`/var/lib/flatpak/exports/share/applications` and `~/.local/share/flatpak/exports/share/applications`), and in `/var/lib/snapd/desktop/applications`.
-  - Files with `NoDisplay=true`, `Hidden=true`, or a `Type` other than `Application` are skipped.
+  - Files with `NoDisplay=true`, `Hidden=true`, `Terminal=true` (StreamFlex runs an app with no terminal, so it would show nothing), or a `Type` other than `Application` are skipped.
   - The title is `Name[<locale>]` from `LANG`, falling back to `Name`.
   - The command written is the `.desktop` path, which StreamFlex already launches.
 
@@ -130,13 +132,13 @@ Why only that works, from SDL 3.2.10's and 3.4.18's sources (research, 2026-10-1
    - The manifest gains optional `match =` aliases (for example, `edge` gets "microsoft edge"). They are generated by `branding/library/build-library.py` from its tables, since the manifest itself is never hand-edited.
 2. **The app's own icon, on a plate.**
    - **Windows:** `IShellItemImageFactory::GetImage` at 256 px, for any AppsFolder item.
-   - **Linux:** the `.desktop` `Icon=` key. An absolute path is used as it is. A name is looked up in the hicolor theme (the largest PNG, or the scalable SVG), then `/usr/share/pixmaps`, then the Flatpak export icon folders.
-   - The icon is centered on the library's standard square plate and saved as a PNG in an `icons/` folder beside `config.ini` (on Linux, `~/.config/streamflex/icons/`), named from the app's name. The tile's icon is that path.
+   - **Linux:** the `.desktop` `Icon=` key. An absolute path is used as it is. A name is looked up in the hicolor theme (the largest PNG, or the scalable SVG), then `/usr/share/pixmaps`, then the Flatpak export icon folders. The file's `Icon=` is read whatever its `NoDisplay` or `Hidden` say, since a tile may run a file the app list leaves out.
+   - The icon is centered on the library's standard square plate and saved as a PNG in an `icons/` folder beside `config.ini` (on Linux, `~/.config/streamflex/icons/`), named from the app's name. The tile's icon is that path. A tile whose icon is already that icon's file (the same plated picture, written as it was added or chosen before) keeps it when *Its own icon* is chosen again: no second file is written.
    - StreamFlex only ever writes these files. A file is deleted only by *Discard* in the visit that created it, when nothing uses it.
 3. **The library grid:** every icon with its title, grouped by the manifest's `group` and filtered by typing.
 4. ***Browse for an image ›*:** 3a's folder browser.
 
-With no match and no icon of its own, an app gets the library's generic `apps` icon. The preview shows each highlighted icon on the tile.
+With no match and no icon of its own, an app gets the library's generic `apps` icon. A new tile gets the first that applies as it is added: the library match, else its own icon, plated and written then (*Discard* deletes it), else `apps`. The preview shows each highlighted icon on the tile.
 
 ## Saving and applying (`src/menuedit.c`, pure)
 
@@ -156,7 +158,7 @@ With no match and no icon of its own, an app gets the library's generic `apps` i
 - **Saving** keeps 3a's and 3b's rule of reading the file fresh.
   - A line edit finds its line by its original text, as 3b's bindings do.
   - A section operation matches by the section's name.
-  - When a hand edit has removed or renamed the target meanwhile, that operation is skipped with a log line, and the save still succeeds.
+  - When a hand edit has removed or renamed the target meanwhile, that operation is skipped with a log line, and the save still succeeds. The one exception is a menu renamed in settings whose section a hand edit renamed or removed: the entries that open it already carry its new name, which no section would have, so the save fails with the reason, as it does when a hand edit gave a section the name a menu is taking.
 - **Leaving settings:**
   - When the menu settings were opened from has been removed, closing goes to the default menu.
   - The hold-OK shortcut returns to its tile.
@@ -165,7 +167,7 @@ With no match and no icon of its own, an app gets the library's generic `apps` i
 
 - An app scan that fails or finds nothing leaves *Browse for a program ›* and the other Add options working, and the caption says why.
 - An icon that cannot be extracted or plated falls back to the library match, or else to `apps`.
-- A plated icon that cannot be written (for example, a read-only folder) keeps the tile's previous icon, and the caption says why.
+- A plated icon that cannot be written (for example, a read-only folder) keeps the tile's previous icon on the Icon page, and the caption says why; as a tile is added, it gets the generic `apps` icon, and the log says why.
 - **Debug output (`-d`):**
   - every menu edit;
   - the scans' counts and times;
