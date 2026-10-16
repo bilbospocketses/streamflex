@@ -8,6 +8,10 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+
+v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SDL3 and needs Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10 (or a newer release of each), Arch Linux, or Windows. Debian bookworm, Ubuntu 24.04 LTS and older releases package no SDL3, so users there stay on v0.4.1, which stays downloadable; there is no backport.
+
 ### Fixed
 - On Windows, after a Transparent window fell back to the Color background (no renderer could draw it), stepping *Mode* to another mode and back to *Transparent* within 300 ms tries Transparent again, as stepping slowly does. Before, the quick step left the row reading *Transparent* on an opaque window, and logged nothing.
 - On Windows, a picker or folder browser opened within 300 ms of stepping *Mode* to or from *Transparent* stays open. Before, the window was recreated 300 ms after the step wherever the cursor had gone, and the recreation closed the picker (a color picker put its color back). Leaving the *Mode* row before that now leaves the window as it is until settings close, or until *Mode* is stepped and rests again.
