@@ -127,9 +127,15 @@ static void test_layouts_and_pages(void)
     CHECK_STR(row_text(osk, 0, false), "1234567890");
     CHECK_STR(row_text(osk, 1, false), "!@#$%^&*()");
     CHECK_STR(row_text(osk, 2, false), "-_=+[]{};:");
-    CHECK_STR(row_text(osk, 3, false), "'\",./?\\|~<>");
-    CHECK_STR(row_text(osk, 3, true), "'\",./?\\|~<>");
+    CHECK_STR(row_text(osk, 3, false), "'\",./?\\|~<>`");
+    CHECK_STR(row_text(osk, 3, true), "'\",./?\\|~<>`");
     CHECK_STR(row_labels(osk, BOTTOM), "ABC|abc|" ACCENTS "|Shift|Space|" ERASE "|" LEFT "|" RIGHT "|Done");
+
+    // The backtick, the row's last key, types itself: with it the page has every printable ASCII character
+    CHECK(go(osk, 3, 11));
+    CHECK_INT(osk_command(osk, OSK_OK), OSK_CHANGED);
+    CHECK_STR(osk_text(osk), "`");
+    CHECK(go(osk, BOTTOM, 1));
     CHECK_INT(osk_command(osk, OSK_OK), OSK_MOVED);
     CHECK_INT(osk_page(osk), OSK_PAGE_LETTERS);
     CHECK_STR(osk_key(osk, BOTTOM, 1)->label, "?123");

@@ -43,7 +43,7 @@ static const OskKey SYMBOLS_1[] = { KEY("!", NULL), KEY("@", NULL), KEY("#", NUL
 static const OskKey SYMBOLS_2[] = { KEY("-", NULL), KEY("_", NULL), KEY("=", NULL), KEY("+", NULL), KEY("[", NULL),
     KEY("]", NULL), KEY("{", NULL), KEY("}", NULL), KEY(";", NULL), KEY(":", NULL) };
 static const OskKey SYMBOLS_3[] = { KEY("'", NULL), KEY("\"", NULL), KEY(",", NULL), KEY(".", NULL), KEY("/", NULL),
-    KEY("?", NULL), KEY("\\", NULL), KEY("|", NULL), KEY("~", NULL), KEY("<", NULL), KEY(">", NULL) };
+    KEY("?", NULL), KEY("\\", NULL), KEY("|", NULL), KEY("~", NULL), KEY("<", NULL), KEY(">", NULL), KEY("`", NULL) };
 
 // The accents page (spec): the a's and c cedilla; the e's and i's; n tilde, the o's and the oe ligature;
 // the u's, the y's and sharp s, which has no capital
