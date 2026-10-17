@@ -289,6 +289,7 @@ typedef struct {
     bool inhibit_os_screensaver;
     char *startup_cmd;
     char *quit_cmd;
+    int keyboard_layout;                // [General] KeyboardLayout: 0 QWERTY, 1 ABC (osk.h's OskLayout)
     ModeOnLaunch on_launch;
     bool screensaver_enabled;
     Uint32 screensaver_idle_time;

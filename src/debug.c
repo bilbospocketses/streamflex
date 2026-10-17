@@ -161,6 +161,7 @@ void debug_settings()
     DEBUG_BOOL(SETTING_INHIBIT_OS_SCREENSAVER, config.inhibit_os_screensaver);
     DEBUG_STR(SETTING_STARTUP_CMD, config.startup_cmd);
     DEBUG_STR(SETTING_QUIT_CMD, config.quit_cmd);
+    DEBUG_STR(SETTING_KEYBOARD_LAYOUT, debug_setting(SET_ID_KEYBOARD_LAYOUT, text, sizeof(text)));
     log_debug("");
 
     log_debug("===================== Background =======================\n");

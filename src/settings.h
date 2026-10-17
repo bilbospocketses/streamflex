@@ -76,6 +76,7 @@ typedef enum {
     SET_ID_APPLICATION_TIMEOUT,
     SET_ID_STARTUP_CMD,
     SET_ID_QUIT_CMD,
+    SET_ID_KEYBOARD_LAYOUT,      // 3c: the on-screen keyboard's layout, QWERTY or ABC
     // [Background], beyond 3a's
     SET_ID_CHROMA_KEY_COLOR,
     SET_ID_OVERLAY,

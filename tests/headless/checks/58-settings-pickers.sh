@@ -19,14 +19,14 @@ grep -q 'Settings: previewing #33383D' "$out/f58-colorback.log" && grep -q 'Sett
     && ran_clean f58-colorback && ok=0
 result "pickers: Back in the color picker puts the color back (exit $(cat "$out/f58-colorback.code"))" $ok
 
-# General > Startup command: the command picker lists None, the special commands, the submenus and
-# the entries' commands; Quit StreamFlex is the tenth row. General > Default menu: Games from its list.
+# General > Startup command: the command picker lists None, the special commands, the submenus, the
+# entries' commands and Type...; Quit StreamFlex is the tenth row. General > Default menu: Games from its list.
 cfg=$(writable_config f58-pickers)
 CFG=$cfg run_keys f58-command Menu Return Down Down Down Down Down Down Down Down Down Return \
     Down Down Down Down Down Down Down Down Down Return Up Up Up Up Up Up Up Up Up Return Down Return BackSpace BackSpace
 ok=1
 grep -qx 'StartupCmd=:quit' "$cfg" && grep -qx 'DefaultMenu=Games' "$cfg" \
-    && grep -q 'Settings: the command picker lists 16 rows' "$out/f58-command.log" \
+    && grep -q 'Settings: the command picker lists 17 rows' "$out/f58-command.log" \
     && ran_clean f58-command && ok=0
 result "pickers: a command and a default menu chosen from their lists save (exit $(cat "$out/f58-command.code"))" $ok
 grep -E 'Settings: (the command picker|\[General\])' "$out/f58-command.log" | sed 's/^/      /'
@@ -224,22 +224,22 @@ grep -q "Settings: the list's cursor reads Custom: :fork true" "$log" \
 result "pickers: a custom command is kept, a hotkey ignored, Back chooses nothing, and Home goes home (exit $(cat "$out/f58-custom.code"))" $ok
 grep -E "Settings: (the list's cursor|ignoring|\[General\])|Loading menu" "$log" | sed 's/^/      /'
 
-# Left and Right page through a list: two Rights reach the last row (the entry Kodi's command, by its
-# title), two Lefts come back to the first. The rows on show follow the cursor down and back up.
+# Left and Right page through a list: two Rights reach the last row (Type...), one Up the entry Kodi's command,
+# by its title; two Lefts come back to the first. The rows on show follow the cursor down and back up.
 # Startup command takes Kodi's command, then None, which removes its key; Quit command takes :left.
 cfg=$(writable_config f58-pickers)
 # shellcheck disable=SC2046
-CFG=$cfg run_keys f58-page Menu Return $(p58_downs 9) Return Right Right Return Return Left Left Return \
+CFG=$cfg run_keys f58-page Menu Return $(p58_downs 9) Return Right Right Up Return Return Left Left Return \
     Down Return Right Right Left Left Down Return BackSpace BackSpace
 log=$out/f58-page.log
 shown=$(sed -n "/Settings: page Settings${ARROW}General${ARROW}Quit command/,\$p" "$log" \
-        | grep -o 'Settings: the list shows rows [0-9]* to [0-9]* of 16' | sed 's/.*rows //; s/ of 16//' | tr '\n' '|')
+        | grep -o 'Settings: the list shows rows [0-9]* to [0-9]* of 17' | sed 's/.*rows //; s/ of 17//' | tr '\n' '|')
 ok=1
 grep -q 'Settings: \[General\] StartupCmd (none) -> kodi --standalone' "$log" \
     && grep -q 'Settings: \[General\] StartupCmd kodi --standalone -> (none)' "$log" \
     && ! grep -q '^StartupCmd' "$cfg" && grep -qx 'QuitCmd=:left' "$cfg" \
     && grep -q "Settings: the list's cursor reads Kodi" "$log" \
-    && grep -qE '(^|\|)[1-9][0-9]* to 15\|' <<< "$shown" && grep -qE '\|0 to [0-9]+\|$' <<< "$shown" \
+    && grep -qE '(^|\|)[1-9][0-9]* to 16\|' <<< "$shown" && grep -qE '\|0 to [0-9]+\|$' <<< "$shown" \
     && grep -qF "Settings: the key hint reads Left and right page $P58_DOT OK chooses $P58_DOT Back cancels" "$log" \
     && grep -qF "Settings: page Settings${ARROW}General${ARROW}Quit command" "$log" \
     && ran_clean f58-page && ok=0

@@ -581,6 +581,33 @@ static void prove_browser(void)
     browser_free(browser);
     no_leak(__LINE__, runs);
     report("finding a folder's first image");
+
+    // Offering Type a path... (3c): out of memory, or with the folder's list failed, the rows stay as they
+    // were and nothing is offered, so a later offer still makes the Type row, with the cursor kept
+    for (int n = 1;; n++) {
+        Browser *offered = browser_open(BROWSER_IMAGE, "/home/me/Pictures/zebra.jpg", PLACES, 2, fake_list, NULL, NULL, NULL);
+        char before[2048];
+        char now[2048];
+        describe_browser(offered, before, sizeof(before));
+        int rows = browser_row_count(offered);
+        list_failed = false;
+        arm(n);
+        browser_offer_typing(offered);
+        disarm();
+        describe_browser(offered, now, sizeof(now));
+        if (failed) {
+            CHECK_RUN(strcmp(before, now) == 0, n);
+            browser_offer_typing(offered);   // Nothing was offered, so this offer makes the row
+        }
+        const BrowserRow *last = browser_row(offered, rows);
+        CHECK_RUN(browser_row_count(offered) == rows + 1 && last != NULL && last->kind == BROWSER_ROW_TYPE &&
+                  browser_cursor(offered) == 2, n);
+        browser_free(offered);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("offering Type a path");
 }
 
 // A function to prove that removing a key allocates nothing, so it cannot fail for want of memory

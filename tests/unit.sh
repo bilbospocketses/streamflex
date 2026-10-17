@@ -9,6 +9,8 @@
 # MUTANT_FILE and MUTANT_SED, when set, apply one sed program to that file in the copy only: a unit
 # mutant. A mutant that changes nothing, a configure or build that fails, or a warning outside
 # src/external stops the run before ctest (exit 2, or 1 for the warnings), so none counts as a kill.
+# It runs tests/check-no-text-input.sh on the copy first, which stops the run (exit 1) when src/ starts
+# SDL's text input.
 set -u
 rm -rf /work; mkdir -p /work
 tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclude=./.superpowers -cf - . | tar -C /work -xf -
@@ -17,6 +19,8 @@ if [ -n "${MUTANT_FILE:-}" ]; then
     cmp -s "/src/$MUTANT_FILE" "/work/$MUTANT_FILE" && { echo "MUTANT NOT APPLIED to $MUTANT_FILE"; exit 2; }
     echo "MUTANT applied to $MUTANT_FILE:"; diff "/src/$MUTANT_FILE" "/work/$MUTANT_FILE"
 fi
+# The no-OS-keyboard rule, on the copy (a mutant's change included): CI's unit job runs this file
+bash /work/tests/check-no-text-input.sh /work || exit 1
 chown -R tester /work
 flags="-fsanitize=address,undefined -fno-omit-frame-pointer"
 su tester -c "cmake -S /work -B /work/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS='$flags' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' -DEXTRA_WARNINGS=ON" > /tmp/configure.log 2>&1 \

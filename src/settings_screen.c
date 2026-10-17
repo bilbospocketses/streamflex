@@ -46,6 +46,7 @@ extern TextInfo title_info;
 #define TEXT_CACHE_SIZE 96
 #define NOTE_TEXT_MAX 1600         // Longest note a row shows: a failed save's path and reason
 #define PREVIEW_REST_MS 300        // How long a cursor rests before the screen follows it: the Menus list's preview, Mode's window
+#define KEYBOARD_TOP_RATIO 0.6F    // The on-screen keyboard covers the screen's bottom 40%, right of the column
 #define SLOW_KEY_MS 50             // A key that keeps the screen waiting this long is logged
 #define ALPHA_VALUE 180            // A row's value
 #define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
@@ -594,7 +595,7 @@ static void measure_layout(void)
         "Show titles", "Font", "Opacity", "Shadows", "Shadow color", "Too long", "Padding", "Show",
         "Fill color", "Fill opacity", "Outline size", "Outline color", "Outline opacity", "Corner radius",
         "Vertical padding", "Horizontal padding", "Show date", "Weekday", "Alignment", "Margin", "Time", "Date",
-        "On", "Idle time", "Dim level", "Pause slideshow", "Gamepad", "Device", "Mappings file"
+        "On", "Idle time", "Dim level", "Pause slideshow", "Gamepad", "Device", "Mappings file", "Keyboard layout"
     };
     static const char *const values[] = {
         LEFT_ARROW " Transparent " RIGHT_ARROW, LEFT_ARROW " Custom #000000 " RIGHT_ARROW,
@@ -839,6 +840,7 @@ static void open_browser(SettingSlot *slot)
         return;
     }
     browser_slot = slot;
+    browser_offer_typing(browser);   // 3c: every listing ends with Type a path...
     browser_mode = mode;
     browser_first = 0;
     browser_note[0] = '\0';
@@ -1152,6 +1154,97 @@ static bool to_settings_command(const char *command, SettingsCommand *out)
     return false;
 }
 
+static char path_why[320];                     // Why a typed path cannot be chosen, written for the keyboard's note
+static char path_refused[BROWSER_PATH_MAX];    // The typed path Done last refused, which the keyboard reopened on...
+static char path_refused_why[128];             // ...and why: its note says so until the text changes
+
+// A function to say why a typed path cannot be chosen for a path row, or NULL when it can, as it is typed: it
+// must not be empty, and config.ini must hold it, as the browser's rows are checked. It never reads the disk
+// (Fable review I6): it runs on every change, on the main thread, where a partial network path's server or
+// a hung mount could block for seconds; what the path names is checked at Done (path_typed()). The text
+// Done just refused keeps its reason here until it is changed.
+static const char *path_problem(const char *text, void *context)
+{
+    SettingSlot *slot = context;
+    if (text[0] == '\0')
+        return "Type a path";
+    const char *why = check_path(text, slot);
+    if (why != NULL) {
+        snprintf(path_why, sizeof(path_why), "config.ini can't hold this path: %s", why);
+        return path_why;
+    }
+    return path_refused[0] != '\0' && strcmp(text, path_refused) == 0 ? path_refused_why : NULL;
+}
+
+// A function to say why a typed path names nothing the row can choose, or NULL when it does: a file; a
+// folder of 2 images or more for Folder; for Image an image StreamFlex shows that opens, its decode asked
+// for and waited out as the browser's OK waits for the one highlighted (Fable review M10). At Done only.
+static const char *path_missing(const char *text, const SettingSlot *slot)
+{
+    if (slot->def->id == SET_ID_SLIDESHOW_DIRECTORY)
+        return !fileio_is_dir(text) ? "No folder is there" : count_images(text) < 2 ? "A slideshow needs 2 or more images" : NULL;
+    if (!fileio_is_file(text))
+        return "No file is there";
+    if (slot->def->id != SET_ID_BACKGROUND_IMAGE)
+        return NULL;
+    if (!browser_is_image(text))
+        return "That is not an image StreamFlex shows (.jpg, .jpeg, .png or .webp)";
+    want_preview_image(text);
+    if (decode_thread != NULL && strcmp(decode_path, text) != 0)
+        poll_decode(true);   // Another image's decode first; this one's starts as it ends
+    if (decode_thread != NULL && strcmp(decode_path, text) == 0) {
+        log_debug("Settings: Done waited for the decode of %s", text);
+        poll_decode(true);
+    }
+    return strcmp(text, broken_path) == 0 ? CANNOT_OPEN : NULL;
+}
+
+static void open_path_keyboard(SettingSlot *slot, const char *initial);
+
+// A function to take a typed path as the browser takes a chosen one, once it names what the row chooses;
+// else the keyboard reopens on the same text, its note saying why, over the browser still open
+static void path_typed(const char *text, void *context)
+{
+    SettingSlot *slot = context;
+    const char *why = path_missing(text, slot);
+    if (why != NULL) {
+        copy_string(path_refused, text, sizeof(path_refused));
+        copy_string(path_refused_why, why, sizeof(path_refused_why));
+        log_debug("Settings: the typed path %s is refused: %s", text, why);
+        open_path_keyboard(slot, text);
+        return;
+    }
+    path_refused[0] = '\0';
+    close_browser();
+    log_debug("Settings: chose %s", text);
+    SettingsEvent event = settings_choose(model, slot, text);
+    handle_event(&event);
+}
+
+// A function to open the keyboard on a path for a path row's setting, the browser staying open under it
+static void open_path_keyboard(SettingSlot *slot, const char *initial)
+{
+    char label[96];
+    snprintf(label, sizeof(label), "Path for %s", slot->def->label);
+    pickers_open_keyboard(label, initial, BROWSER_PATH_MAX - 1, path_problem, slot, path_typed);
+}
+
+// A function to open the keyboard on a path for the browser's setting (3c, "Type a path..."), starting as
+// the folder on show with a separator; the browser stays open under it until a path it takes
+static void type_path(void)
+{
+    const BrowserRow *row = browser_row(browser, browser_cursor(browser));
+    char initial[BROWSER_PATH_MAX] = "";
+    if (row != NULL && row->path[0] != '\0') {
+        size_t length = strlen(row->path);
+        bool backslash = strchr(row->path, '\\') != NULL && strchr(row->path, '/') == NULL;
+        bool ends = fileio_is_separator(row->path[length - 1]);
+        snprintf(initial, sizeof(initial), "%s%s", row->path, ends ? "" : backslash ? "\\" : "/");
+    }
+    path_refused[0] = '\0';
+    open_path_keyboard(browser_slot, initial);
+}
+
 // A function to act on a key while the folder browser is open: move, page, open, choose or go back
 static void handle_browser_command(const char *command)
 {
@@ -1189,6 +1282,11 @@ static void handle_browser_command(const char *command)
     if (result == BROWSER_CLOSED) {
         free(folder);
         close_browser();
+        return;
+    }
+    if (result == BROWSER_TYPE) {
+        free(folder);
+        type_path();
         return;
     }
     const char *now = browser_folder(browser);
@@ -1341,6 +1439,13 @@ void settings_raw_release(int code)
 bool settings_raw_pad(int label)
 {
     return model != NULL && pickers_raw_pad(label);
+}
+
+// A function to take a real keyboard's key before anything else while settings are open: the keyboard's
+// typing, or a printing key that opens it on a list's filter (settings_pickers.c); true when it was taken
+bool settings_text_key(SDL_Scancode scancode, SDL_Keymod mod, bool repeat)
+{
+    return model != NULL && pickers_text_key(scancode, mod, repeat);
 }
 
 // A function to tell how tall a paragraph wraps to a width
@@ -1593,7 +1698,7 @@ static void draw_column(SettingsRow *rows, int count)
               column_width, ALPHA_DIM, false);
     int top = (int) (ROWS_TOP_RATIO * (float) geo.screen_height);
     int hint_y = geo.screen_height - margin - TTF_GetFontHeight(font_small);
-    if (pickers_active())
+    if (pickers_owns_column())
         pickers_draw(x, top, hint_y - margin);
     else if (browser != NULL)
         draw_browser_rows(x, top, hint_y - margin);
@@ -1706,7 +1811,7 @@ void settings_draw(void)
     // one under the cursor is grayed, or warns of its low contrast. The browser and the pickers have
     // rows of their own.
     SettingsRow rows[SETTINGS_MAX_ROWS];
-    int count = browser == NULL && !pickers_active() ? settings_rows(model, rows, SETTINGS_MAX_ROWS) : 0;
+    int count = browser == NULL && !pickers_owns_column() ? settings_rows(model, rows, SETTINGS_MAX_ROWS) : 0;
     const char *row_note = cursor_why(rows, count);
     if (row_note[0] == '\0')
         row_note = row_warning(rows, count);
@@ -1736,6 +1841,12 @@ void settings_draw(void)
         draw_caption(row_note, strip.x + margin, strip.y + margin / 2, strip.w - 2 * margin);
     }
     draw_column(rows, count);
+    // The keyboard, over the bottom of the preview and its caption while it is open (spec "Where it appears")
+    if (pickers_keyboard_open()) {
+        int left = column_width + 2 * margin;
+        int top = (int) (KEYBOARD_TOP_RATIO * (float) geo.screen_height);
+        pickers_draw_keyboard(left, top, geo.screen_width - left - margin, geo.screen_height - top - margin);
+    }
     present_frame();
 }
 

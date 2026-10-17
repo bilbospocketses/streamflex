@@ -417,12 +417,21 @@ OskResult osk_insert(Osk *osk, const char *utf8)
 
 // A function to give the character a real keyboard's key types, as UTF-8 in `out` (spec, "A real keyboard
 // types into the field"): `keycode` is SDL_GetKeyFromScancode()'s, with Shift, Caps Lock and AltGr applied.
-// False, with `out` empty, for a key that types nothing: a keycode with SDLK_SCANCODE_MASK set, a control
-// character below U+0020, U+007F, U+FFFD (SDL's keycode for a key that types several code points), and
-// what is no character at all (a surrogate, or past U+10FFFF).
+// The keypad's digits, point and operators type their character as the top row's keys do (user ruling
+// 2026-10-16, "Type the digit"), though SDL masks their keycodes.
+// False, with `out` empty, for a key that types nothing: any other keycode with SDLK_SCANCODE_MASK set
+// (Keypad Enter among them), a control character below U+0020, U+007F, U+FFFD (SDL's keycode for a key that
+// types several code points), and what is no character at all (a surrogate, or past U+10FFFF).
 bool osk_key_char(unsigned int keycode, char out[5])
 {
+    // What each key from OSK_KEYPAD_FIRST to OSK_KEYPAD_LAST types, in SDL's order; Keypad Enter nothing
+    static const char KEYPAD[] = { '/', '*', '-', '+', '\0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.' };
     out[0] = '\0';
+    if (keycode >= OSK_KEYPAD_FIRST && keycode <= OSK_KEYPAD_LAST && KEYPAD[keycode - OSK_KEYPAD_FIRST] != '\0') {
+        out[0] = KEYPAD[keycode - OSK_KEYPAD_FIRST];
+        out[1] = '\0';
+        return true;
+    }
     if ((keycode & OSK_SCANCODE_MASK) != 0 || keycode < 0x20 || keycode == 0x7F || keycode == 0xFFFD ||
         (keycode >= 0xD800 && keycode <= 0xDFFF) || keycode > 0x10FFFF)
         return false;

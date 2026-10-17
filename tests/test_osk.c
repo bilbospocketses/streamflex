@@ -534,6 +534,43 @@ static void test_key_char(void)
     }
 }
 
+// A function to test the keypad's keys (user ruling 2026-10-16, "Type the digit"): its digits, its point and
+// its four operators type their character, as the top row's keys do, though SDL masks their keycodes;
+// Keypad Enter (Done, which the screen gives it), Keypad =, the keypad's comma and the keys either side of
+// the range type nothing
+static void test_keypad_char(void)
+{
+    static const struct {
+        unsigned int keycode;
+        const char *text;
+    } typed[] = {
+        { 0x40000062, "0" }, { 0x40000059, "1" }, { 0x4000005A, "2" }, { 0x4000005B, "3" }, { 0x4000005C, "4" },
+        { 0x4000005D, "5" }, { 0x4000005E, "6" }, { 0x4000005F, "7" }, { 0x40000060, "8" }, { 0x40000061, "9" },
+        { 0x40000063, "." },
+        { 0x40000054, "/" }, { 0x40000055, "*" }, { 0x40000056, "-" }, { 0x40000057, "+" }
+    };
+    char out[5];
+    for (size_t i = 0; i < sizeof(typed) / sizeof(typed[0]); i++) {
+        CHECK(osk_key_char(typed[i].keycode, out));
+        CHECK_STR(out, typed[i].text);
+    }
+
+    // Keypad Enter, Keypad =, the keypad's comma, Num Lock (just below the range) and the non-US backslash
+    // (just past it)
+    static const unsigned int nothing[] = { 0x40000058, 0x40000067, 0x40000085, 0x40000053, 0x40000064 };
+    for (size_t i = 0; i < sizeof(nothing) / sizeof(nothing[0]); i++) {
+        CHECK(!osk_key_char(nothing[i], out));
+        CHECK_STR(out, "");
+    }
+
+    // What a keypad digit types goes into the field as a top-row digit's does
+    Osk *osk = osk_create("Command", "", 8, NULL, NULL, OSK_QWERTY);
+    CHECK(osk_key_char(0x40000059, out));
+    CHECK_INT(osk_insert(osk, out), OSK_CHANGED);
+    CHECK_STR(osk_text(osk), "1");
+    osk_free(osk);
+}
+
 int main(void)
 {
     test_qwerty();
@@ -545,5 +582,6 @@ int main(void)
     test_validators();
     test_back();
     test_key_char();
+    test_keypad_char();
     return check_report();
 }

@@ -28,6 +28,7 @@ static const struct {
     { "/orphan/child", "a.png" },
     { "/nas", "far.png" },
     { "/home/me/pads", "old.txt|feed=|sub/|game.png=|a.txt" },
+    { "/home/me/pads/sub", "" },
     { "/home/me/piped", "a.png=|b.png" },
     { "/home/me/pipeonly", "a.png=" }
 };
@@ -564,6 +565,46 @@ static void test_images_are_regular_files(void)
     browser_free(browser);
 }
 
+// A function to test the Type a path... row (3c): offered, it ends every listing, a folder's with the
+// folder's path and the places' with none; OK on it answers BROWSER_TYPE; the cursor stays where it was,
+// and a row chosen before it is chosen as ever
+static void test_type_row(void)
+{
+    Browser *browser = browser_open(BROWSER_FILE, "/home/me/pads/old.txt", PLACES, 3, fake_list, NULL, NULL, NULL);
+    int before = browser_row_count(browser);
+    int cursor = browser_cursor(browser);
+    browser_offer_typing(browser);
+    CHECK_INT(browser_row_count(browser), before + 1);
+    CHECK_INT(browser_cursor(browser), cursor);
+    const BrowserRow *row = browser_row(browser, before);
+    CHECK_INT(row->kind, BROWSER_ROW_TYPE);
+    CHECK_STR(row->name, "Type a path\xE2\x80\xA6");
+    CHECK_STR(row->path, "/home/me/pads");
+    CHECK(row->enabled);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_CHOSEN);   // old.txt, where it opened
+    CHECK_STR(browser_chosen(browser), "/home/me/pads/old.txt");
+    for (int i = 0; i < 10; i++)
+        browser_command(browser, BROWSER_DOWN, 10);
+    CHECK_INT(browser_cursor(browser), before);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_TYPE);
+
+    // Into a folder and back out to the places: every listing ends with its own Type row
+    for (int i = 0; i < 10; i++)
+        browser_command(browser, BROWSER_UP, 10);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_MOVED);   // sub/
+    CHECK_STR(browser_folder(browser), "/home/me/pads/sub");
+    CHECK_INT(browser_row_count(browser), 1);
+    CHECK_INT(browser_row(browser, 0)->kind, BROWSER_ROW_TYPE);
+    while (browser_folder(browser) != NULL)
+        browser_command(browser, BROWSER_BACK, 10);
+    CHECK_INT(browser_row_count(browser), 4);
+    CHECK_INT(browser_row(browser, 3)->kind, BROWSER_ROW_TYPE);
+    CHECK_STR(browser_row(browser, 3)->path, "");
+    browser_offer_typing(browser);                                          // Twice is once
+    CHECK_INT(browser_row_count(browser), 4);
+    browser_free(browser);
+}
+
 int main(void)
 {
     test_rows_and_start();
@@ -588,5 +629,6 @@ int main(void)
     test_file_mode_refusals_and_row_kinds();
     test_file_mode_lists_only_regular_files();
     test_images_are_regular_files();
+    test_type_row();
     return check_report();
 }
