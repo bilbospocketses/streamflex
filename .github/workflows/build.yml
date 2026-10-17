@@ -134,6 +134,13 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File .github/scripts/stall-watch.ps1 "Unit tests" ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} --output-on-failure
 
+      # The AppsFolder test again, its output shown: --output-on-failure shows nothing of a test that
+      # passes, and this one's lines (how many apps the runner's AppsFolder lists, and whose image was
+      # read) are the record of what a real windows-2022 shell gave
+      - name: Show the AppsFolder test's output
+        shell: pwsh
+        run: pwsh -NoProfile -File .github/scripts/stall-watch.ps1 "AppsFolder test" ctest --test-dir build -C ${{ env.CMAKE_BUILD_TYPE }} -R '^appsfolder$' -V
+
       # Unit test 11's built half (spec section 9): the manifest the exe carries asks for per-monitor
       # v2. CMake merges config/streamflex.manifest.in into the exe as resource 1; mt.exe reads it back.
       - name: Check the built exe asks for per-monitor v2 DPI awareness
