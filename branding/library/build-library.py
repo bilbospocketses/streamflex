@@ -38,6 +38,10 @@ GENERIC = [
     ("back", "Back", "system", "arrow_back", None, 1.0),
     ("lock", "Lock", "system", "lock", None, 1.0),
     ("user", "Switch user", "system", "switch_account", None, 1.0),
+    ("security", "Security", "system", "shield", None, 1.0),
+    ("backup", "Backup", "system", "backup", None, 1.0),
+    ("tools", "Tools", "system", "build", None, 1.0),
+    ("accessibility", "Accessibility", "system", "accessibility_new", None, 1.0),
     ("movies", "Movies", "media", "movie", 0, 1.0),
     ("news", "News", "media", "newspaper", 1, 1.0),
     ("kids", "Kids", "media", "toys", 2, 1.0),
@@ -61,11 +65,26 @@ GENERIC = [
     ("download", "Downloads", "general", "download", None, 1.0),
     ("terminal", "Terminal", "general", "terminal", None, 1.0),
     ("desktop", "Desktop", "general", "desktop_windows", None, 1.0),
+    ("notes", "Notes", "general", "sticky_note_2", None, 1.0),
+    ("calculator", "Calculator", "general", "calculate", None, 1.0),
+    ("clock", "Clock", "general", "schedule", None, 1.0),
+    ("weather", "Weather", "general", "partly_cloudy_day", None, 1.0),
+    ("calendar", "Calendar", "general", "calendar_month", None, 1.0),
+    ("mail", "Mail", "general", "mail", None, 1.0),
+    ("chat", "Chat", "general", "chat", None, 1.0),
+    ("documents", "Documents", "general", "description", None, 1.0),
+    ("code", "Code", "general", "code", None, 1.0),
+    ("cloud", "Cloud", "general", "cloud", None, 1.0),
+    ("archive", "Archive", "general", "folder_zip", None, 1.0),
+    ("store", "Store", "general", "store", None, 1.0),
+    ("camera", "Camera", "general", "photo_camera", None, 1.0),
+    ("paint", "Paint", "general", "brush", None, 1.0),
     ("display", "Display", "devices", "display_settings", None, 1.0),
     ("audio", "Sound", "devices", "volume_up", None, 1.0),
     ("bluetooth", "Bluetooth", "devices", "bluetooth", None, 1.0),
     ("network", "Network", "devices", "wifi", None, 1.0),
     ("gamepad", "Controllers", "devices", "gamepad", None, 1.0),
+    ("remote", "Remote desktop", "devices", "screen_share", None, 1.0),
 ]
 
 # Other names an app goes by, which src/iconmatch.c compares an app's name with beside each icon's name and
@@ -75,8 +94,20 @@ GENERIC = [
 # (Google, Amazon, NVIDIA...) needs no alias: iconmatch.c drops it from the app's name.
 MATCH = {
     "settings": ("control panel", "system settings"),          # Windows' Control Panel, KDE's System Settings
+    "security": ("windows security", "defender"),               # Microsoft Defender, its vendor's name dropped
+    "backup": ("windows backup",),
+    "tools": ("windows tools",),                                # Windows 11's folder of administrative tools
+    "accessibility": ("magnifier", "narrator", "on screen keyboard", "voice access"),   # Windows' own
+    "movies": ("media player", "videos", "movies tv"),          # Windows' Media Player and Movies & TV, GNOME's Videos
     "folder": ("file explorer", "files"),                       # Windows' and GNOME's file managers
-    "terminal": ("windows terminal", "gnome terminal", "command prompt"),
+    "terminal": ("windows terminal", "gnome terminal", "command prompt", "windows powershell", "powershell",
+                 "git bash", "git cmd"),                        # Git for Windows' two shortcuts
+    "notes": ("notepad", "text editor", "sticky notes", "obsidian"),   # GNOME's Text Editor
+    "clock": ("clocks",),                                       # GNOME's Clocks
+    "mail": ("outlook", "thunderbird mail"),
+    "archive": ("winrar", "7 zip file manager"),                # 7-Zip's Start menu name
+    "paint": ("paint 3d",),
+    "remote": ("remote desktop", "windows app"),                # Windows App: Microsoft's Remote Desktop client since 2024
     "hbo-max": ("max",),                                        # The service's name from 2023 to 2025
     "prime-video": ("prime video for windows",),                # The Microsoft Store app's name
     "peacock": ("peacock tv",),

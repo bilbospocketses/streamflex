@@ -90,8 +90,8 @@ class ManifestGuards(unittest.TestCase):
 class Table(unittest.TestCase):
     def test_names_groups_and_slots(self):
         names = [row[0] for row in bl.GENERIC]
-        self.assertEqual(len(names), 36)
-        self.assertEqual(len(set(names)), 36)
+        self.assertEqual(len(names), 55)
+        self.assertEqual(len(set(names)), 55)
         for name, _title, group, _glyph, slot, trim in bl.GENERIC:
             self.assertRegex(name, r"^[a-z0-9-]{1,32}$")
             self.assertIn(group, bl.libtools.GENERIC_GROUPS)
@@ -144,6 +144,65 @@ class Aliases(unittest.TestCase):
             self.assertTrue(any("is already" in p for p in problems), (alias, problems))
         problems = bl.match_problems(icons, {"kodi": ("media",), "plex": ("media",)})
         self.assertTrue(any("'media' is already kodi's" in p for p in problems), problems)
+
+
+# The generic icons added for the apps people add (2026-10-17), and the names those apps go by
+ADDED = [
+    ("notes", "Notes", "general", "sticky_note_2"), ("calculator", "Calculator", "general", "calculate"),
+    ("clock", "Clock", "general", "schedule"), ("weather", "Weather", "general", "partly_cloudy_day"),
+    ("calendar", "Calendar", "general", "calendar_month"), ("mail", "Mail", "general", "mail"),
+    ("chat", "Chat", "general", "chat"), ("documents", "Documents", "general", "description"),
+    ("code", "Code", "general", "code"), ("cloud", "Cloud", "general", "cloud"),
+    ("archive", "Archive", "general", "folder_zip"), ("store", "Store", "general", "store"),
+    ("camera", "Camera", "general", "photo_camera"), ("paint", "Paint", "general", "brush"),
+    ("security", "Security", "system", "shield"), ("backup", "Backup", "system", "backup"),
+    ("tools", "Tools", "system", "build"), ("accessibility", "Accessibility", "system", "accessibility_new"),
+    ("remote", "Remote desktop", "devices", "screen_share"),
+]
+ADDED_ALIASES = {
+    "notes": ("notepad", "text editor", "sticky notes", "obsidian"),
+    "clock": ("clocks",),
+    "mail": ("outlook", "thunderbird mail"),
+    "archive": ("winrar", "7 zip file manager"),
+    "paint": ("paint 3d",),
+    "security": ("windows security", "defender"),
+    "backup": ("windows backup",),
+    "tools": ("windows tools",),
+    "accessibility": ("magnifier", "narrator", "on screen keyboard", "voice access"),
+    "remote": ("remote desktop", "windows app"),
+    "terminal": ("windows powershell", "powershell", "git bash", "git cmd"),
+    "movies": ("media player", "videos", "movies tv"),
+}
+
+
+class Added(unittest.TestCase):
+    """The 19 generic icons added on 2026-10-17 and the aliases that go with them. Media stays at 13 icons
+    (Palette pins its plates), so no plate color changes."""
+
+    def test_each_added_icon_has_its_title_group_and_glyph(self):
+        rows = {row[0]: row for row in bl.GENERIC}
+        for name, title, group, glyph in ADDED:
+            self.assertIn(name, rows)
+            self.assertEqual(rows[name][1:5], (title, group, glyph, None), name)
+
+    def test_each_added_icon_sits_with_its_group(self):
+        groups = [row[2] for row in bl.GENERIC]
+        for group in ("system", "media", "general", "devices"):
+            first, last = groups.index(group), len(groups) - 1 - groups[::-1].index(group)
+            self.assertEqual(set(groups[first:last + 1]), {group}, group)
+
+    def test_each_added_alias_lands_on_its_icon(self):
+        outputs, errors = bl.build_outputs()
+        self.assertEqual(errors, [])
+        aliases, section = {}, None
+        for line in outputs["icons.ini"].splitlines():
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+            elif line.startswith("match = "):
+                aliases[section] = line[len("match = "):].split(", ")
+        for name, added in ADDED_ALIASES.items():
+            for alias in added:
+                self.assertIn(alias, aliases.get(name, []), name)
 
 
 if __name__ == "__main__":
