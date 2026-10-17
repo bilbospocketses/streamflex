@@ -101,5 +101,46 @@ class Table(unittest.TestCase):
         self.assertEqual(slots, list(range(13)))
 
 
+class Aliases(unittest.TestCase):
+    """The match = aliases src/iconmatch.c compares an app's name with, beside each icon's name and title."""
+
+    def test_the_manifest_carries_them(self):
+        outputs, errors = bl.build_outputs()
+        self.assertEqual(errors, [])
+        manifest = outputs["icons.ini"]
+        self.assertIn("[folder]\ntitle = Folder\ngroup = general\nfile = generic/folder.svg\nmatch = file explorer, files\n",
+                      manifest)
+        self.assertIn("file = brands/kodi.png\nmatch = xbmc\nowner = Kodi Foundation\n", manifest)
+        self.assertIn("file = brands/netflix.png\nowner = Netflix, Inc.\n", manifest)   # No aliases, no line
+
+    def test_every_alias_is_written_as_iconmatch_compares_it(self):
+        for name, aliases in bl.MATCH.items():
+            for alias in aliases:
+                self.assertRegex(alias, bl.ALIAS_RE, name)
+                self.assertEqual(bl.normalized(alias), alias, name)
+
+    def test_the_real_aliases_raise_no_problem(self):
+        icons = [(row[0], row[1]) for row in bl.GENERIC]
+        icons += [(name, keys["title"]) for name, keys in bl.libtools.read_sections(bl.libtools.BRANDS_INI)]
+        self.assertEqual(bl.match_problems(icons), [])
+
+    def test_an_alias_for_no_icon_is_refused(self):
+        problems = bl.match_problems([("kodi", "Kodi")], {"nosuch": ("x",)})
+        self.assertTrue(any("'nosuch'" in p and "no icon has that name" in p for p in problems), problems)
+
+    def test_an_alias_not_written_as_compared_is_refused(self):
+        for alias in ("XBMC", "x-b", "two  spaces", " lead", ""):
+            problems = bl.match_problems([("kodi", "Kodi")], {"kodi": (alias,)})
+            self.assertTrue(any("is not lower case words" in p for p in problems), (alias, problems))
+
+    def test_an_alias_another_icon_has_is_refused(self):
+        icons = [("kodi", "Kodi"), ("plex", "Plex"), ("tv-shows", "TV shows")]
+        for alias in ("plex", "tv shows"):
+            problems = bl.match_problems(icons, {"kodi": (alias,)})
+            self.assertTrue(any("is already" in p for p in problems), (alias, problems))
+        problems = bl.match_problems(icons, {"kodi": ("media",), "plex": ("media",)})
+        self.assertTrue(any("'media' is already kodi's" in p for p in problems), problems)
+
+
 if __name__ == "__main__":
     unittest.main()

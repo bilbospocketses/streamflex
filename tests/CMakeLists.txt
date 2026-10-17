@@ -174,6 +174,16 @@ if (UNIX)
 endif ()
 add_test(NAME library_svg COMMAND test_library_svg)
 
+# Unit tests for matching an app's name to a library icon (pure), and the shipped manifest's aliases,
+# read through library.c, which reads it with inih
+add_executable(test_iconmatch test_iconmatch.c "${PROJECT_SOURCE_DIR}/src/iconmatch.c" "${PROJECT_SOURCE_DIR}/src/library.c"
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_iconmatch PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_iconmatch PRIVATE LIBRARY_ROOT="${PROJECT_SOURCE_DIR}/assets/icons/library")
+link_inih(test_iconmatch)
+link_fileio(test_iconmatch)
+add_test(NAME iconmatch COMMAND test_iconmatch)
+
 # Unit test 14: the window a background needs and the renderers that may draw it (pure, linked alone)
 add_executable(test_winplan test_winplan.c "${PROJECT_SOURCE_DIR}/src/winplan.c")
 target_include_directories(test_winplan PRIVATE "${PROJECT_SOURCE_DIR}/src")

@@ -14,6 +14,8 @@ The library itself is `assets/icons/library/`: `icons.ini` (the manifest), `gene
 
 **Add a generic icon:** add a row to `GENERIC` in `build-library.py`, run `fetch-glyphs.py` and then `build-library.py`.
 
+**Match an app to an icon by another name:** add the names to `MATCH` in `build-library.py`, in lower case (an old name, or the one an app installs under; a vendor's name in front needs none), then run `build-library.py`. It writes them into `icons.ini` as `match = ...`, and the launcher's icon matching (`src/iconmatch.c`) compares an app's name with each icon's name, title and these. An alias that is another icon's name, title or alias is refused.
+
 **Add a brand icon:**
 1. Download its art: the Play listing icon at `=s512`, or the owner's larger press-kit art.
 2. Run `import-brand.py`.

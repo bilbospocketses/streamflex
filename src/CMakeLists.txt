@@ -34,6 +34,8 @@ set(SOURCES
   config_save.h
   menuedit.c
   menuedit.h
+  iconmatch.c
+  iconmatch.h
   settings.c
   settings.h
   derive.c

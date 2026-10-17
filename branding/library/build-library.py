@@ -68,6 +68,64 @@ GENERIC = [
     ("gamepad", "Controllers", "devices", "gamepad", None, 1.0),
 ]
 
+# Other names an app goes by, which src/iconmatch.c compares an app's name with beside each icon's name and
+# title: old names, and the names the apps install under where those differ. Keyed by icon name, generic
+# and brand alike, so brands.ini (which import-brand.py rewrites) is left alone. Each is written as
+# iconmatch.c compares it: lower-case words of a-z and 0-9, one space apart. A vendor's name in front
+# (Google, Amazon, NVIDIA...) needs no alias: iconmatch.c drops it from the app's name.
+MATCH = {
+    "settings": ("control panel", "system settings"),          # Windows' Control Panel, KDE's System Settings
+    "folder": ("file explorer", "files"),                       # Windows' and GNOME's file managers
+    "terminal": ("windows terminal", "gnome terminal", "command prompt"),
+    "hbo-max": ("max",),                                        # The service's name from 2023 to 2025
+    "prime-video": ("prime video for windows",),                # The Microsoft Store app's name
+    "peacock": ("peacock tv",),
+    "tubi": ("tubi tv",),
+    "plex": ("plex htpc", "plex media player", "plex media server"),
+    "jellyfin": ("jellyfin media player",),
+    "kodi": ("xbmc",),                                          # Kodi's name until 2014
+    "vlc": ("vlc media player",),
+    "steam": ("steam runtime",),                                # Linux's "Steam (Runtime)" desktop entry
+    "es-de": ("emulationstation desktop edition", "emulationstation de"),
+    "moonlight": ("moonlight game streaming",),
+}
+ALIAS_RE = re.compile(r"^[a-z0-9]+( [a-z0-9]+)*$")
+
+
+def normalized(text):
+    """A name as src/iconmatch.c compares an icon's: lower case, apostrophes dropped, every other mark a break
+    between words (the library's names and titles are ASCII)."""
+    text = text.lower().replace("'", "").replace("’", "")
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text).split())
+
+
+def match_lines(name):
+    """The manifest's match = line for an icon, or none."""
+    return [f"match = {', '.join(MATCH[name])}"] if name in MATCH else []
+
+
+def match_problems(icons, match=None):
+    """icons: [(name, title)] in manifest order. Each MATCH key must name an icon, and each alias must be written
+    as iconmatch.c compares it and be no other icon's name, title or alias: iconmatch.c takes the first icon in
+    the manifest's order that has it, so the other icon would lose its apps."""
+    match = MATCH if match is None else match
+    problems, taken = [], {}
+    for name, title in icons:
+        for text in (name, title):
+            taken.setdefault(normalized(text), name)
+    names = {name for name, _title in icons}
+    for name, aliases in match.items():
+        if name not in names:
+            problems.append(f"MATCH '{name}': no icon has that name")
+        for alias in aliases:
+            if not ALIAS_RE.match(alias):
+                problems.append(f"MATCH '{name}': alias '{alias}' is not lower case words of a-z and 0-9, one space apart")
+            elif taken.get(alias, name) != name:
+                problems.append(f"MATCH '{name}': alias '{alias}' is already {taken[alias]}'s")
+            else:
+                taken[alias] = name
+    return problems
+
 XN, YN, ZN = 0.95047, 1.0, 1.08883   # D65 white
 
 
@@ -190,7 +248,7 @@ def manifest_problems(lines):
 
 def build_outputs(brands_ini=libtools.BRANDS_INI):
     """Return ({library-relative path: text}, [errors])."""
-    outputs, errors, names = {}, [], set()
+    outputs, errors, names, icons = {}, [], set(), []
     manifest = list(MANIFEST_HEAD)
     for name, title, group, glyph, slot, trim in GENERIC:
         if not libtools.NAME_RE.match(name) or name in names:
@@ -200,7 +258,8 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         if contrast_with_white(color) < MIN_CONTRAST:
             errors.append(f"generic '{name}': plate {color} gives white only {contrast_with_white(color):.2f}:1")
         outputs[f"generic/{name}.svg"] = generic_svg(color, glyph_paths(glyph), trim)
-        manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"]
+        manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"] + match_lines(name)
+        icons.append((name, title))
 
     rows = []
     for name, keys in libtools.read_sections(brands_ini):
@@ -219,12 +278,14 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         elif libtools.sha256_file(png) != keys["sha256"]:
             errors.append(f"brand '{name}': {png.name} does not match the sha256 in brands.ini; re-import it")
         manifest += ["", f"[{name}]", f"title = {keys['title']}", f"group = {keys['group']}",
-                     f"file = brands/{name}.png", f"owner = {keys['owner']}"]
+                     f"file = brands/{name}.png"] + match_lines(name) + [f"owner = {keys['owner']}"]
+        icons.append((name, keys["title"]))
         if keys.get("android"):
             manifest.append(f"android = {keys['android']}")
         manifest += [f"source = {keys['source']}", f"sha256 = {keys['sha256']}"]
         rows.append(f"| `{name}.png` | {keys['title']} | {keys['owner']} | {keys['source']} |")
 
+    errors += match_problems(icons)
     errors += manifest_problems(manifest)
     outputs["icons.ini"] = "\n".join(manifest) + "\n"
     outputs["brands/NOTICE.md"] = NOTICE_HEAD + ("\n".join(rows) + "\n" if rows else "| (none yet) | | | |\n")
