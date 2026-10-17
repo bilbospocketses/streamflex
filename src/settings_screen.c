@@ -25,6 +25,7 @@
 #include "debug.h"
 #include "test_hooks.h"
 #include "platform/platform.h"
+#include "appscan.h"
 
 extern Config config;
 extern Geometry geo;
@@ -118,6 +119,82 @@ static BrowserMode browser_mode = BROWSER_IMAGE;   // The mode it was opened in
 static int browser_first = 0;            // Its first row on show
 static int browser_page = 1;             // How many of its rows fit: Left and Right move this far
 static char browser_note[128] = "";      // Why the last OK did nothing, for the caption
+
+// The installed apps, listed on their own thread at most once per visit, from its first Add > App (spec
+// "Installed apps")
+static AppScan *app_scan = NULL;         // From settings_apps_start() until the list is taken
+static AppList *apps = NULL;             // The list, for Add > App; NULL before the start, while listing, or when there is none
+static int apps_found = 0;               // Apps listed so far, while the scan runs
+static char apps_why[1024] = "";         // Why there is no list, or it is empty
+static Uint32 apps_started = 0;          // When the scan started, for the log
+
+// A function to start listing the installed apps, unless this visit has started already: a scan under
+// way, a list, or a reason there is none (see settings_screen.h). One that cannot start leaves Add's other
+// choices working, and says why.
+void settings_apps_start(void)
+{
+    if (app_scan != NULL || apps != NULL || apps_why[0] != '\0')
+        return;
+    apps_found = 0;
+    apps_started = ticks_ms();
+    app_scan = appscan_start();
+    if (app_scan == NULL) {
+        snprintf(apps_why, sizeof(apps_why), "The apps could not be listed: out of memory, or no thread");
+        log_error("Apps: the apps cannot be listed: out of memory, or no thread");
+        return;
+    }
+    log_debug("Apps: listing the installed apps");
+}
+
+// A function to see each frame whether the scan is done, and once it is, take its list and say what it
+// found. The hook build lists each app, in the list's order.
+static void poll_apps(void)
+{
+    if (app_scan == NULL || !appscan_poll(app_scan, &apps_found))
+        return;
+    apps = appscan_take(app_scan);
+    const char *why = appscan_why(app_scan);
+    snprintf(apps_why, sizeof(apps_why), "%s", why != NULL ? why : "");
+    appscan_free(app_scan);
+    app_scan = NULL;
+    Uint32 took = ticks_ms() - apps_started;
+    if (apps == NULL)
+        log_error("Apps: none listed: %s (%u ms)", apps_why, took);
+    else if (applist_count(apps) == 0)
+        log_debug("Apps: none listed: %s (%u ms)", apps_why, took);
+    else
+        log_debug("Apps: found %i apps (%u ms)", applist_count(apps), took);
+#ifdef STREAMFLEX_TEST_HOOKS
+    // Only the headless harness builds this: each app, so a check can read the list
+    for (int i = 0; apps != NULL && i < applist_count(apps); i++)
+        log_debug("Test hook: app %i is %s, run by %s", i + 1, applist_item(apps, i)->name, applist_item(apps, i)->command);
+#endif
+}
+
+// A function to let go of the apps as settings close: a scan under way is stopped and waited for before
+// anything it fills is freed (appscan_free()), then the list goes
+static void stop_apps(void)
+{
+    if (app_scan != NULL) {
+        appscan_free(app_scan);
+        app_scan = NULL;
+        log_debug("Apps: stopped the app scan as settings closed (%u ms)", ticks_ms() - apps_started);
+    }
+    applist_free(apps);
+    apps = NULL;
+    apps_found = 0;
+    apps_why[0] = '\0';
+}
+
+// A function to give the installed apps this visit's scan listed (see settings_screen.h)
+const AppList *settings_apps(int *found, const char **why)
+{
+    if (found != NULL)
+        *found = apps_found;
+    if (why != NULL)
+        *why = apps_why[0] != '\0' ? apps_why : NULL;
+    return apps;
+}
 
 // The preview's image, decoded on its own thread so moving through a folder never stalls
 static SDL_Thread *decode_thread = NULL;
@@ -825,6 +902,7 @@ static void free_screen(void)
     measures = 0;
 #endif
     pickers_end();
+    stop_apps();
     if (browser != NULL)
         close_browser();
     stop_decoding();
@@ -1603,6 +1681,7 @@ void settings_draw(void)
         return;
     poll_decode(false);
     pickers_tick();
+    poll_apps();
     log_path();   // A capture's end or the 10 s's moves no key through handle_command()
 
     // The Menus list's cursor has rested: the preview follows it now

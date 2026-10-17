@@ -65,6 +65,10 @@ set(SOURCES
   keycodes.h
   browser.c
   browser.h
+  applist.c
+  applist.h
+  appscan.c
+  appscan.h
   settings_screen.c
   settings_screen.h
   settings_pickers.c

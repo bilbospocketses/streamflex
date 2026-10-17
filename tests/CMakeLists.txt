@@ -129,6 +129,14 @@ target_include_directories(test_browser PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
+# Unit tests for the installed apps' list: the .desktop reader, the rules that leave apps out, one app
+# found twice, the order, the filter and the data folders (pure; names compare through fileio.c's helpers)
+add_executable(test_applist test_applist.c "${PROJECT_SOURCE_DIR}/src/applist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_applist PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_applist)
+add_test(NAME applist COMMAND test_applist)
+
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
 # (colorpick.c allocates nothing; settings.c names colors through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
@@ -142,6 +150,7 @@ if (UNIX)
   target_link_libraries(test_alloc m)
 endif ()
 add_test(NAME alloc COMMAND test_alloc)
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/applist.c")   # 3c Task 7: the installed apps' list
 
 # A function to link inih the way the launcher does
 function(link_inih target)

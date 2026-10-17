@@ -17,6 +17,7 @@
 #include "bindings.h"
 #include "menuedit.h"
 #include "osk.h"
+#include "applist.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -1167,6 +1168,52 @@ static void prove_section_edits(void)
     no_leak(__LINE__, 1);
 }
 
+// A function to prove that the app list fails cleanly: a .desktop file read short of memory says so (-1,
+// never 0, which would read as a file that is no app) with nothing left allocated; an add short of memory
+// is refused, the list keeps the apps added before it and says it is short; or all is done, 71 apps, the
+// list growing past its first block
+static void prove_applist(void)
+{
+    static const char *const desktop = "[Desktop Entry]\nType=Application\nName=Kodi\nName[de]=Kodi DE\nIcon=kodi\nExec=kodi\n";
+    int short_reads = 0;
+    for (int n = 1;; n++) {
+        AppItem item = { NULL, NULL, NULL };
+        int added = 0;
+        arm(n);
+        AppList *list = applist_create();
+        int got = list != NULL ? applist_parse_desktop("/a/kodi.desktop", desktop, strlen(desktop), "de_DE", &item) : 0;
+        bool parsed = got == 1;
+        bool adding = parsed && applist_add(list, item.name, item.command, item.icon);
+        added += adding ? 1 : 0;
+        for (int i = 0; adding && i < 70; i++) {
+            char name[16];
+            snprintf(name, sizeof(name), "App %d", i);
+            adding = applist_add(list, name, "/a/x.desktop", NULL);
+            added += adding ? 1 : 0;
+        }
+        disarm();
+        if (!failed)
+            CHECK_RUN(added == 71 && applist_count(list) == 71 && !applist_failed(list) &&
+                      strcmp(applist_item(list, 0)->name, "Kodi DE") == 0, n);
+        else {
+            CHECK_RUN(added < 71, n);
+            CHECK_RUN(list == NULL || applist_count(list) == added, n);
+            CHECK_RUN(list == NULL || !parsed || applist_failed(list), n);
+            CHECK_RUN(list == NULL || got != 0, n);
+            CHECK_RUN(got != -1 || (item.name == NULL && item.command == NULL && item.icon == NULL), n);
+            short_reads += got == -1 ? 1 : 0;
+        }
+        if (parsed)
+            applist_item_clear(&item);
+        applist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    CHECK(short_reads > 0);   // An allocation of the read's own failed in some run, so the -1 was met
+    report("the app list");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -1211,6 +1258,7 @@ int main(void)
     prove_bindings();
     prove_bindings_reload();
     prove_section_edits();
+    prove_applist();
     alloc_set_hooks(NULL);
     return check_report();
 }
