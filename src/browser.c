@@ -194,6 +194,8 @@ static void select_path(Browser *browser, const char *path)
 // out of memory, with what was on show left as it was.
 static bool load_places(Browser *browser, const char *selected)
 {
+    // A row's room more than the places, for the Type row, which browser_offer_typing() puts there when the
+    // places were shown before it was offered
     BrowserRow *rows = alloc_calloc((size_t) browser->place_count + 1, sizeof(BrowserRow));
     int count = 0;
     bool ok = rows != NULL;
@@ -255,7 +257,9 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
     if (ok) {
         qsort(folders, (size_t) folder_count, sizeof(FileioEntry*), compare_entries);
         qsort(images, (size_t) image_count, sizeof(FileioEntry*), compare_entries);
-        rows = alloc_calloc((size_t) (folder_count + image_count + 2), sizeof(BrowserRow));   // Use this folder, Type
+        // A row's room for Use this folder and one for the Type row, which browser_offer_typing() puts there
+        // when the folder was shown before it was offered (the room is kept in every mode)
+        rows = alloc_calloc((size_t) (folder_count + image_count + 2), sizeof(BrowserRow));
         ok = rows != NULL;
     }
     if (ok && browser->mode == BROWSER_FOLDER) {
@@ -507,21 +511,12 @@ bool browser_first_image(const Browser *browser, const char *folder, char *out, 
 }
 
 // A function to end every listing with a "Type a path..." row from now on (3c: a path row's way to the
-// keyboard), the listing on show made again with it and the cursor kept. Out of memory, or with a folder
-// that can no longer be listed, nothing is offered and the rows stay as they were.
+// keyboard). The listing on show gets it in the room both loaders keep for it, so the folder is not listed
+// again, and the cursor stays. Out of memory, nothing is offered and the rows stay as they were.
 void browser_offer_typing(Browser *browser)
 {
     if (browser->typing)
         return;
-    browser->typing = true;
-    const BrowserRow *row = browser_row(browser, browser->cursor);
-    char *selected = row != NULL ? alloc_strdup(row->path) : NULL;
-    char *folder = browser->folder != NULL ? alloc_strdup(browser->folder) : NULL;
-    bool ok = (row == NULL || selected != NULL) && (browser->folder == NULL || folder != NULL);
-    if (ok)
-        ok = folder != NULL ? load_folder(browser, folder, selected) == LOAD_DONE : load_places(browser, selected);
-    if (!ok)
-        browser->typing = false;
-    alloc_free(selected);
-    alloc_free(folder);
+    browser->typing = add_row(browser->rows, &browser->row_count, BROWSER_ROW_TYPE, TYPE_LABEL,
+                              alloc_strdup(browser->folder != NULL ? browser->folder : ""), true, NULL);
 }

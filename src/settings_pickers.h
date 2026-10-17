@@ -59,7 +59,8 @@ void apply_bindings(const Bindings *bindings);
 void pickers_open_binding_command(void);
 
 // The on-screen keyboard (3c): opened on a field over the page or the list under it, which stays drawn;
-// it takes the remote's keys while open. `done` gets the text at Done, once it has closed.
+// it takes the remote's keys while open. `done` gets the text at Done, once it has closed; opened again from
+// `done` with the same `done` and `context`, it is the same field, and keeps a real keyboard's Enter and Backspace.
 void pickers_open_keyboard(const char *label, const char *initial, int max_bytes, OskCheck check, void *context,
                            void (*done)(const char *text, void *context));
 // The text followed as it changes: at once (rest_ms 0, a filter), or once it has rested (the preview); a

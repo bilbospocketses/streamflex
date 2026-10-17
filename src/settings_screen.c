@@ -1378,6 +1378,10 @@ static void handle_command(const char *command)
 {
     SettingsCommand key;
     if (pickers_active()) {
+        // Home or the settings key with the keyboard over the folder browser leaves the browser too, as the
+        // browser's own Home does, so a restart question or a failed save shows instead of its rows
+        if (browser != NULL && pickers_keyboard_open() && (MATCH(command, SCMD_HOME) || MATCH(command, SCMD_SETTINGS)))
+            close_browser();
         pickers_command(command);
         if (model != NULL)
             log_path();

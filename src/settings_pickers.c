@@ -110,11 +110,18 @@ static unsigned int keyboard_changed_at = 0;
 static bool keyboard_pending = false;             // A change the follower has not heard yet
 static bool keyboard_told = false;                // The follower heard a change
 static bool keyboard_typed = false;               // A real keyboard typed into this field: its Enter is Done, its Backspace deletes
+static void (*finishing_done)(const char *text, void *context) = NULL;   // The `done` Done is running, and its
+static void *finishing_context = NULL;            // context: a keyboard it opens with both is the same field again
+static bool finishing_typed = false;              // (a refused path), which keeps keyboard_typed as it was
 static const char *keyboard_why = NULL;           // Why Done is off for the text now (the validator's, kept per change)
 static bool keyboard_drawn = false;               // Where it is drawn was logged since it opened
 static char keyboard_logged[SETTING_TEXT_MAX + 32];   // What the log last said of the text...
 static char keyboard_key_logged[32];              // ...of the highlighted key...
 static char keyboard_note_logged[320];            // ...and of the note
+static char field_text[SETTING_TEXT_MAX];         // The field's text, cursor and room when draw_field() last
+static size_t field_cursor = 0;                   // found where to draw the text from (room -1: not since the
+static int field_room = -1;                       // keyboard opened, in whatever font it has then)...
+static size_t field_start = 0;                    // ...and that place
 static void (*typing_opens)(const char *first) = NULL;   // The open picker filters by typing; NULL: none
 
 // A command typed in place of the command picker's rows: for a setting, or the binding page's binding
@@ -847,6 +854,7 @@ static void close_keyboard(void)
     keyboard_logged[0] = '\0';
     keyboard_key_logged[0] = '\0';
     keyboard_note_logged[0] = '\0';
+    field_room = -1;
 }
 
 // A function to remember the layout the keyboard shows as KeyboardLayout (spec "The choice is remembered"):
@@ -873,18 +881,28 @@ static void tell_follower(void)
     keyboard_follower(osk_text(keyboard), keyboard_context);
 }
 
-// A function to hand the text on at Done: the keyboard closes first, so `done` may open what it likes
+// A function to hand the text on at Done: the keyboard closes first, so `done` may open what it likes. One
+// it reopens on its own field (a typed path refused) is still the field a real keyboard typed into, if one
+// had: its Enter stays Done and its Backspace stays delete.
 static void finish_keyboard(void)
 {
     char text[SETTING_TEXT_MAX];
     copy_string(text, osk_text(keyboard), sizeof(text));
     void (*done)(const char *text, void *context) = keyboard_done;
     void *context = keyboard_context;
+    bool typed = keyboard_typed;
     remember_layout();
     close_keyboard();
     log_debug("Settings: the keyboard finished with '%s'", text);
-    if (done != NULL)
-        done(text, context);
+    if (done == NULL)
+        return;
+    finishing_done = done;
+    finishing_context = context;
+    finishing_typed = typed;
+    done(text, context);
+    finishing_done = NULL;
+    finishing_context = NULL;
+    finishing_typed = false;
 }
 
 // A function to close the keyboard without its text: a follower that heard a change hears the text the
@@ -964,7 +982,8 @@ static void keyboard_command(const char *command)
 // Kodi"), `initial` is its text, `max_bytes` its limit, and `check` its validator, whose reason the note
 // gives while Done is off. It opens in the layout KeyboardLayout names, over the page or the list under it,
 // which stays open. `done` gets the text at Done, once the keyboard has closed; Back with no change, or
-// twice after one, closes it with nothing said. Out of memory it does not open, and says so: the keys stay
+// twice after one, closes it with nothing said. Opened from `done` with that `done` and `context`, it is the
+// same field again, so a real keyboard that typed into it keeps its Enter as Done and Backspace as delete. Out of memory it does not open, and says so: the keys stay
 // with what is under it. The harness can make it fail (STREAMFLEX_TEST_FAIL=keyboard).
 void pickers_open_keyboard(const char *label, const char *initial, int max_bytes, OskCheck check, void *context,
                            void (*done)(const char *text, void *context))
@@ -981,6 +1000,7 @@ void pickers_open_keyboard(const char *label, const char *initial, int max_bytes
     copy_string(keyboard_initial, initial != NULL ? initial : "", sizeof(keyboard_initial));
     keyboard_done = done;
     keyboard_context = context;
+    keyboard_typed = finishing_typed && done == finishing_done && context == finishing_context;
     keyboard_why = osk_why(keyboard);
     keyboard_drawn = false;
     log_debug("Settings: opened the keyboard for %s (%s)", label, layout == OSK_ABC ? "ABC" : "QWERTY");
@@ -1082,7 +1102,8 @@ static size_t next_character(const char *text, size_t at)
 }
 
 // A function to draw the field: its text through the settings' text cache (plan ruling 7), scrolled so the
-// cursor stays in view, and the cursor
+// cursor stays in view, and the cursor. Where the text is drawn from is found again only when the text, the
+// cursor or the room changes (finding it measures the text once a character, too much for every frame).
 static void draw_field(const SDL_Rect *field, int pad)
 {
     SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_FIELD);
@@ -1092,9 +1113,16 @@ static void draw_field(const SDL_Rect *field, int pad)
     const char *text = osk_text(keyboard);
     size_t cursor = (size_t) osk_cursor(keyboard);
     int room = field->w - 2 * pad;
-    size_t start = 0;
-    while (start < cursor && span_width(text + start, cursor - start) > room)
-        start = next_character(text, start);
+    if (room != field_room || cursor != field_cursor || strcmp(text, field_text) != 0) {
+        size_t from = 0;
+        while (from < cursor && span_width(text + from, cursor - from) > room)
+            from = next_character(text, from);
+        copy_string(field_text, text, sizeof(field_text));
+        field_cursor = cursor;
+        field_room = room;
+        field_start = from;
+    }
+    size_t start = field_start;
     int line = TTF_GetFontHeight(host.font_row);
     int text_y = field->y + (field->h - line) / 2;
     host.text(host.font_row, text + start, field->x + pad, text_y, room, 255, false);
@@ -1183,7 +1211,7 @@ static void draw_keys(int x, int y, int w, int h)
             left += key->width * unit;
             bool lit = r == lit_row && c == lit_column;
             bool shift = key->kind == OSK_KEY_SHIFT && (osk_shift(keyboard) || osk_caps(keyboard));
-            SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, lit || shift ? ALPHA_KEY_LIT : ALPHA_KEY);
+            SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, (Uint8) (lit || shift ? ALPHA_KEY_LIT : ALPHA_KEY));
             fill_rect(renderer, &box);
             if (lit || (key->kind == OSK_KEY_SHIFT && osk_caps(keyboard))) {
                 SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_EDGE);
