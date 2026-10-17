@@ -112,6 +112,8 @@ else ()
     ole32
     uuid
     advapi32
+    gdi32
+    user32
   )
   target_include_directories(${EXECUTABLE_TITLE} PUBLIC ${INIH_INCLUDE_DIR} ${GETOPT_INCLUDE_DIR})
 endif ()

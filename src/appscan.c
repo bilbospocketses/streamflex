@@ -8,6 +8,9 @@
 #include "fileio.h"
 #include "alloc.h"
 #include "test_hooks.h"
+#ifdef _WIN32
+#include "platform/appsfolder.h"
+#endif
 
 #define MAX_DEPTH 4               // An applications folder may hold folders (kde4/); no deeper than this
 #define MAX_FOLDERS 32            // The applications folders a scan reads
@@ -226,12 +229,13 @@ static void scan_folders(AppScan *scan)
 }
 #endif
 
-// A function to list the apps on the scan's thread, the platform's way. Windows' AppsFolder scan is
-// Task 8's; until it lands, a Windows build lists none and says so.
+// A function to list the apps on the scan's thread, the platform's way: Windows' AppsFolder, whose
+// failure comes as SDL's error on this thread; Linux's applications folders
 static void list_apps(AppScan *scan)
 {
 #ifdef _WIN32
-    snprintf(scan->why, sizeof(scan->why), "The apps could not be listed: this build does not list Windows apps yet");
+    if (!appsfolder_scan(scan->list, &scan->found, &scan->stop))
+        snprintf(scan->why, sizeof(scan->why), "The apps could not be listed: %s", SDL_GetError());
 #else
     scan_folders(scan);
 #endif

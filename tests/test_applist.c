@@ -269,6 +269,41 @@ static void test_data_dirs(void)
     CHECK_STR(dirs[0], "/usr/local/share");
 }
 
+// A function to test the command an AppsFolder app is launched by: explorer.exe opening
+// shell:AppsFolder\<app ID>, the ID quoted when it holds a space or a comma; the IDs refused (empty,
+// none, a quote, a ';', a control character); a command that does not fit; and a command made so passing
+// the list's own rules
+static void test_appsfolder_command(void)
+{
+    static const char *const firefox = "{6D809377-6AF0-444B-8957-A3773F02200E}\\Mozilla Firefox\\firefox.exe";
+    char command[256];
+    CHECK(applist_appsfolder_command("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", command, sizeof(command)));
+    CHECK_STR(command, "explorer.exe shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App");
+    CHECK(applist_appsfolder_command("MSEdge", command, sizeof(command)));
+    CHECK_STR(command, "explorer.exe shell:AppsFolder\\MSEdge");
+    CHECK(applist_appsfolder_command("{6D809377-6AF0-444B-8957-A3773F02200E}\\VideoLAN\\VLC\\vlc.exe", command, sizeof(command)));
+    CHECK_STR(command, "explorer.exe shell:AppsFolder\\{6D809377-6AF0-444B-8957-A3773F02200E}\\VideoLAN\\VLC\\vlc.exe");
+    CHECK(applist_appsfolder_command(firefox, command, sizeof(command)));
+    CHECK_STR(command, "explorer.exe \"shell:AppsFolder\\{6D809377-6AF0-444B-8957-A3773F02200E}\\Mozilla Firefox\\firefox.exe\"");
+    CHECK(applist_appsfolder_command("Vendor.App,1", command, sizeof(command)));
+    CHECK_STR(command, "explorer.exe \"shell:AppsFolder\\Vendor.App,1\"");
+
+    CHECK(!applist_appsfolder_command("", command, sizeof(command)));
+    CHECK(!applist_appsfolder_command(NULL, command, sizeof(command)));
+    CHECK(!applist_appsfolder_command("A\"B", command, sizeof(command)));
+    CHECK(!applist_appsfolder_command("A;B", command, sizeof(command)));
+    CHECK(!applist_appsfolder_command("A\tB", command, sizeof(command)));
+    CHECK(!applist_appsfolder_command("A\x1F" "B", command, sizeof(command)));   // The last control character
+    CHECK(!applist_appsfolder_command("MSEdge", command, 36));   // "explorer.exe shell:AppsFolder\MSEdge" is 36 bytes
+    CHECK(applist_appsfolder_command("MSEdge", command, 37));
+
+    AppList *list = applist_create();
+    CHECK(applist_appsfolder_command(firefox, command, sizeof(command)));
+    CHECK(applist_add(list, "Firefox", command, firefox));
+    CHECK_INT(applist_count(list), 1);
+    applist_free(list);
+}
+
 int main(void)
 {
     test_parse();
@@ -277,5 +312,6 @@ int main(void)
     test_list();
     test_filter();
     test_data_dirs();
+    test_appsfolder_command();
     return check_report();
 }

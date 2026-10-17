@@ -28,5 +28,8 @@ void applist_item_clear(AppItem *item);     // Frees what applist_parse_desktop(
 // are packed into `buffer`; fills at most `max` and returns how many it filled.
 int applist_data_dirs(const char *data_home, const char *data_dirs, const char *home, char *buffer, size_t size,
                       const char **dirs, int max);
+// The command that launches an AppsFolder app (Windows): explorer.exe opening shell:AppsFolder\<app ID>,
+// the ID quoted when it holds a space or a comma. False for an ID that cannot be written so.
+bool applist_appsfolder_command(const char *app_id, char *out, size_t size);
 
 #endif

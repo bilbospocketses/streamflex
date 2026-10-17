@@ -492,3 +492,24 @@ int applist_data_dirs(const char *data_home, const char *data_dirs, const char *
     add_data_dir(&list, SNAP, strlen(SNAP), "");
     return list.count;
 }
+
+// A function to write the command an AppsFolder app is launched by (spec "Installed apps"): explorer.exe
+// opening shell:AppsFolder\<app ID>, which starts desktop and Store apps alike. win32.c's
+// parse_command() ends the program at the command's first space and hands start_process() the rest as
+// written, which ShellExecuteExW() gives explorer.exe as its parameters. The ID is quoted when it holds a
+// space (a desktop app with no ID of its own has a path for one: "{GUID}\Mozilla Firefox\firefox.exe")
+// or a comma (explorer.exe separates its own parameters at commas). False for an ID that is empty or
+// holds a quote, a ';' (config.ini reads a ';' after a space as a comment) or a control character, and
+// for a command that does not fit.
+bool applist_appsfolder_command(const char *app_id, char *out, size_t size)
+{
+    if (app_id == NULL || app_id[0] == '\0' || strpbrk(app_id, "\";") != NULL)
+        return false;
+    for (const char *p = app_id; *p != '\0'; p++) {
+        if ((unsigned char) *p < 0x20)
+            return false;
+    }
+    int written = strpbrk(app_id, " ,") != NULL ? snprintf(out, size, "explorer.exe \"shell:AppsFolder\\%s\"", app_id)
+                                               : snprintf(out, size, "explorer.exe shell:AppsFolder\\%s", app_id);
+    return written > 0 && (size_t) written < size;
+}

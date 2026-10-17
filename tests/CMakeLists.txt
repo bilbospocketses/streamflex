@@ -217,6 +217,20 @@ if (WIN32)
   set_tests_properties(vulkan_fix_control PROPERTIES PASS_REGULAR_EXPRESSION "${missing_fix}")
 endif ()
 
+# The shell's AppsFolder on the runner (3c Task 8): the scan lists apps through COM, an app's image comes
+# at 256 px, and the scan's thread does the same with COM started on it. Windows only; it links the scan
+# and its list without the launcher (the shell and COM through link_fileio(); IShellItem2::GetString is a
+# COM method, so no propsys)
+if (WIN32)
+  add_executable(test_appsfolder test_appsfolder.c "${PROJECT_SOURCE_DIR}/src/platform/appsfolder_win32.c"
+    "${PROJECT_SOURCE_DIR}/src/appscan.c" "${PROJECT_SOURCE_DIR}/src/applist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+    "${PROJECT_SOURCE_DIR}/src/alloc.c")
+  target_include_directories(test_appsfolder PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(test_appsfolder SDL3::SDL3 gdi32 user32)
+  link_fileio(test_appsfolder)
+  add_test(NAME appsfolder COMMAND test_appsfolder)
+endif ()
+
 # Unit tests for the key codes config.ini stores (SDL2's numbering) against the codes keys send on SDL3 (pure)
 add_executable(test_keycodes test_keycodes.c "${PROJECT_SOURCE_DIR}/src/keycodes.c")
 target_include_directories(test_keycodes PRIVATE "${PROJECT_SOURCE_DIR}/src")
