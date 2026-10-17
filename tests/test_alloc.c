@@ -18,6 +18,7 @@
 #include "menuedit.h"
 #include "osk.h"
 #include "applist.h"
+#include "iconfind.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -1214,6 +1215,33 @@ static void prove_applist(void)
     report("the app list");
 }
 
+// A function to prove that the icon lookup fails cleanly: each folder listing that runs out of memory is
+// a folder with no icons, so the answer is the other folder's icon, or none; with no failure, the largest
+static void prove_iconfind(void)
+{
+    static const char *const dirs[] = { DIR "/icons/a", DIR "/icons/b" };
+    static const char *const small = DIR "/icons/a/icons/hicolor/48x48/apps/kodi.png";
+    static const char *const large = DIR "/icons/b/icons/hicolor/256x256/apps/kodi.png";
+    CHECK(fileio_make_dirs(DIR "/icons/a/icons/hicolor/48x48/apps"));
+    CHECK(fileio_make_dirs(DIR "/icons/b/icons/hicolor/256x256/apps"));
+    CHECK(fileio_write_all(small, "x", 1));
+    CHECK(fileio_write_all(large, "x", 1));
+    for (int n = 1;; n++) {
+        char out[256];
+        arm(n);
+        bool ok = iconfind_path("kodi", dirs, 2, out, sizeof(out));
+        disarm();
+        if (!failed)
+            CHECK_RUN(ok && strcmp(out, large) == 0, n);
+        else
+            CHECK_RUN(!ok || strcmp(out, small) == 0 || strcmp(out, large) == 0, n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("finding an app's icon");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -1259,6 +1287,7 @@ int main(void)
     prove_bindings_reload();
     prove_section_edits();
     prove_applist();
+    prove_iconfind();
     alloc_set_hooks(NULL);
     return check_report();
 }
