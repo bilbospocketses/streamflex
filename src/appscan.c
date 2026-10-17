@@ -135,17 +135,30 @@ static bool first_of_id(AppScan *scan, const char *id)
     return true;
 }
 
+// A function to note a folder that could not be listed, or a .desktop file that could not be read,
+// because memory ran out (fileio's own reason, as fileio.c tells it): the list is short, so finish() lets
+// it go, as it does for a file parsed short of memory. One that failed for another reason (no
+// permission) holds no apps, as a top folder that cannot be listed does while another can.
+static void note_unlisted(AppScan *scan)
+{
+    if (strcmp(fileio_last_error(), "out of memory") == 0)
+        scan->short_of_memory = true;
+}
+
 // A function to read one .desktop file into the list, unless an earlier file had its ID. A file that
-// cannot be read, or is no app (applist_parse_desktop()'s 0), adds nothing; one read short of memory
-// (its -1) marks the scan short, so finish() lets the list go, as it does for an add short of memory.
+// cannot be read, or is no app (applist_parse_desktop()'s 0), adds nothing; one whose read runs out of
+// memory (note_unlisted()), or whose parse does (its -1), marks the scan short, so finish() lets the
+// list go, as it does for an add short of memory.
 static void read_desktop_file(AppScan *scan, const char *path, const char *id)
 {
     if (!first_of_id(scan, id))
         return;
     size_t length = 0;
     char *text = fileio_read_all(path, &length);
-    if (text == NULL)
+    if (text == NULL) {
+        note_unlisted(scan);
         return;
+    }
     AppItem item;
     int got = applist_parse_desktop(path, text, length, scan->lang, &item);
     if (got < 0)
@@ -163,16 +176,6 @@ static bool is_desktop_file(const char *name)
 {
     size_t length = strlen(name);
     return length > 8 && strcmp(name + length - 8, ".desktop") == 0;
-}
-
-// A function to note a folder that could not be listed because memory ran out (fileio's own reason, as
-// fileio.c tells it): the list is short, so finish() lets it go, as it does for a file read short of
-// memory. One that could not be listed for another reason (no permission) holds no apps, as a top folder
-// that cannot be listed does while another can.
-static void note_unlisted(AppScan *scan)
-{
-    if (strcmp(fileio_last_error(), "out of memory") == 0)
-        scan->short_of_memory = true;
 }
 
 // A function to read the .desktop files in a folder and the folders under it. `prefix` is the desktop
