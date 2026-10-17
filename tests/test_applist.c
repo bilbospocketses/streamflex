@@ -38,8 +38,9 @@ static const char *command_at(const AppList *list, int index)
 }
 
 // A function to test reading a .desktop file: its name, its path as the command, its Icon= value; keys
-// as the Desktop Entry Specification reads them (spaces around '=', CRLF line ends, comments, the first
-// of a key repeated, another group's keys left out, escapes read); and the item cleared after
+// as the Desktop Entry Specification reads them (white space before a line and around '=', CRLF line
+// ends, comments, the first of a key repeated, another group's keys left out, escapes read); booleans as
+// GLib reads them; and the item cleared after
 static void test_parse(void)
 {
     AppItem item;
@@ -65,12 +66,62 @@ static void test_parse(void)
     CHECK_STR(item.name, "Back\\slash");
     CHECK(item.icon == NULL);
     applist_item_clear(&item);
+
+    // White space before a line is dropped, as GLib drops it (a space, \t, \v, \f): an indented group,
+    // key or comment is read as one
+    CHECK_INT(parse("/a.desktop", " \t# an indented comment\n \t[Desktop Entry]\n\vType=Application\n \fName=Indented\n"
+                    "  Exec=a\n", "C", &item), 1);
+    CHECK_STR(item.name, "Indented");
+    applist_item_clear(&item);
+    CHECK_STR(name_in("[Desktop Entry]\nType=Application\nExec=a\n\tName=Tabbed\nName=Second\n", "C"), "Tabbed");
+
+    // A tab around '=' is dropped as a space is
+    CHECK_INT(parse("/a.desktop", "[Desktop Entry]\nType\t=\tApplication\nName \t=\t Tabs\nExec\t=\ta\nIcon\t= \ttabs\n", "C",
+                    &item), 1);
+    CHECK_STR(item.name, "Tabs");
+    CHECK_STR(item.icon, "tabs");
+    applist_item_clear(&item);
+
+    // A boolean keeps its case, as GLib reads it: True and TRUE are not true
+    CHECK_INT(parse("/a.desktop", "[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=True\nHidden=TRUE\n", "C",
+                    &item), 1);
+    applist_item_clear(&item);
+
+    // An action group's NoDisplay is not the entry's
+    CHECK_INT(parse("/a.desktop", "[Desktop Entry]\nType=Application\nName=A\nExec=a\n[Desktop Action hide]\nNoDisplay=true\n"
+                    "Exec=a --hide\n", "C", &item), 1);
+    applist_item_clear(&item);
+
+    // \n, \r and \t read as a space, as a tile's one line needs; an unknown escape keeps its backslash
+    // (GLib rejects the value); an Icon= that is only an escaped space is no icon
+    CHECK_INT(parse("/a.desktop", "[Desktop Entry]\nType=Application\nName=A\\nB\\rC\\tD \\q\nIcon=\\s\nExec=a\n", "C", &item), 1);
+    CHECK_STR(item.name, "A B C D \\q");
+    CHECK(item.icon == NULL);
+    applist_item_clear(&item);
+}
+
+// A function to test a text with no terminator whose last byte is a lone backslash ending a value: the
+// backslash is kept, and nothing past the text is read (ASan reports a read past an exact-size buffer)
+static void test_unterminated(void)
+{
+    static const char desktop[] = "[Desktop Entry]\nType=Application\nExec=a\nName=A\\";
+    size_t length = sizeof(desktop) - 1;
+    char *text = malloc(length);
+    CHECK(text != NULL);
+    if (text == NULL)
+        return;
+    memcpy(text, desktop, length);
+    AppItem item;
+    CHECK_INT(applist_parse_desktop("/a.desktop", text, length, "C", &item), 1);
+    CHECK_STR(item.name, "A\\");
+    applist_item_clear(&item);
+    free(text);
 }
 
 // A function to test the files that are not apps: hidden from menus (NoDisplay, Hidden, either as true
-// or as 1), run in a terminal (Terminal, which unix.c has none for), not an application (Link,
-// Directory, or no Type), with no name or no Exec (unix.c launches nothing without one), keys outside
-// [Desktop Entry], an empty file, and a path holding ';', which
+// or as 1, white space after it ignored), run in a terminal (Terminal, which unix.c has none for), not
+// an application (Link, Directory, or no Type), with no name or no Exec (unix.c launches nothing without
+// one), keys outside [Desktop Entry], an empty file, and a path holding ';', which
 // unix.c's start_process() would cut there. Each is 0 (skipped, never -1: nothing ran short) and leaves
 // the item empty.
 static void test_skipped(void)
@@ -79,6 +130,8 @@ static void test_skipped(void)
         "[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=true\n",
         "[Desktop Entry]\nType=Application\nName=A\nExec=a\nHidden=true\n",
         "[Desktop Entry]\nType=Application\nName=A\nExec=a\nHidden=1\n",
+        "[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=true \n",    // White space after it, as GLib reads it
+        "[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=true\t\n",
         "[Desktop Entry]\nType=Application\nName=A\nExec=htop\nTerminal=true\n",
         "[Desktop Entry]\nType=Link\nName=A\nURL=https://example.com\n",
         "[Desktop Entry]\nType=Directory\nName=A\n",
@@ -132,6 +185,18 @@ static void test_localized(void)
     CHECK_STR(name_in("[Desktop Entry]\nType=Application\nExec=k\nName=Kodi\nName[de]=\n", "de_DE"), "Kodi");
     CHECK_STR(name_in("[Desktop Entry]\nType=Application\nExec=k\nName[de]=Nur deutsch\n", "de_DE"), "Nur deutsch");
     CHECK_STR(name_in("[Desktop Entry]\nType=Application\nExec=k\nName[de]=Nur deutsch\n", "en_US"), "(skipped)");
+
+    // An action group's Name[de] is not the entry's, as Chrome's and Firefox's files carry one
+    static const char *const chrome = "[Desktop Entry]\nType=Application\nExec=chrome\nName=Chrome\n"
+        "[Desktop Action new-window]\nName=New Window\nName[de]=Neues Fenster\nExec=chrome --new-window\n";
+    CHECK_STR(name_in(chrome, "de_DE.UTF-8"), "Chrome");
+
+    // C and POSIX have no localized names, so a Name[C] or Name[POSIX] key is not one
+    static const char *const c_named = "[Desktop Entry]\nType=Application\nExec=k\nName=Kodi\nName[C]=Kodi C\n"
+        "Name[POSIX]=Kodi POSIX\n";
+    CHECK_STR(name_in(c_named, "C"), "Kodi");
+    CHECK_STR(name_in(c_named, "C.UTF-8"), "Kodi");
+    CHECK_STR(name_in(c_named, "POSIX"), "Kodi");
 }
 
 // A function to test the list: what is left out (uninstallers, help and readme entries, documents, web
@@ -196,6 +261,15 @@ static void test_list(void)
     CHECK(applist_add(list, "One", "/a/one.desktop", NULL));
     applist_sort(list);
     CHECK_STR(name_at(list, 0), "One");
+    applist_free(list);
+
+    // Two apps of the same name, the later command added first: the command orders them
+    list = applist_create();
+    CHECK(applist_add(list, "Steam", "/b/steam.desktop", NULL));
+    CHECK(applist_add(list, "Steam", "/a/steam.desktop", NULL));
+    applist_sort(list);
+    CHECK_STR(command_at(list, 0), "/a/steam.desktop");
+    CHECK_STR(command_at(list, 1), "/b/steam.desktop");
     applist_free(list);
 }
 
@@ -307,6 +381,7 @@ static void test_appsfolder_command(void)
 int main(void)
 {
     test_parse();
+    test_unterminated();
     test_skipped();
     test_localized();
     test_list();

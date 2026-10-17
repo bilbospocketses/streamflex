@@ -50,6 +50,13 @@ static bool is_word_byte(char c)
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
+// A function to tell whether a byte is white space as GLib's key-file reader reads it (g_ascii_isspace()):
+// a space, \t, \n, \v, \f or \r
+static bool is_space(char c)
+{
+    return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
 // A function to compare two texts as the list sorts and matches names: ASCII letters in either case alike,
 // every other byte by its value, so UTF-8 sorts by code point and no character is split
 static int compare_text(const char *a, const char *b)
@@ -254,9 +261,12 @@ static bool slice_is(Slice slice, const char *text)
 }
 
 // A function to read a boolean as the Desktop Entry Specification writes one: "true" ("1" read as well,
-// as GLib reads it)
+// as GLib reads it), its case kept and white space after it ignored, as GLib's parse_value_as_boolean()
+// reads it (gkeyfile.c:4592-4600)
 static bool slice_true(Slice slice)
 {
+    while (slice.length > 0 && is_space(slice.text[slice.length - 1]))
+        slice.length--;
     return slice_is(slice, "true") || slice_is(slice, "1");
 }
 
@@ -323,6 +333,9 @@ static char *unescaped(Slice value)
     size_t n = 0;
     for (size_t i = 0; i < value.length; i++) {
         char c = value.text[i];
+        // An unknown escape (\q) keeps its backslash, and so does a lone one that ends the value, read no
+        // further than its end. GLib rejects the whole value at either (gkeyfile.c:4342-4371); StreamFlex
+        // keeps it on purpose, listing the app rather than hiding it.
         if (c == '\\' && i + 1 < value.length) {
             char next = value.text[i + 1];
             if (next == 's' || next == 'n' || next == 't' || next == 'r') {
@@ -377,6 +390,11 @@ int applist_parse_desktop(const char *path, const char *text, size_t length, con
         at = end + 1;
         if (line.length > 0 && line.text[line.length - 1] == '\r')
             line.length--;
+        // White space before a comment, a group or a key is dropped, as GLib drops it (gkeyfile.c:1267-1269)
+        while (line.length > 0 && is_space(line.text[0])) {
+            line.text++;
+            line.length--;
+        }
         if (line.length == 0 || line.text[0] == '#')
             continue;
         if (line.text[0] == '[') {
@@ -386,11 +404,12 @@ int applist_parse_desktop(const char *path, const char *text, size_t length, con
         const char *equals = memchr(line.text, '=', line.length);
         if (!in_entry || equals == NULL)
             continue;
+        // White space around '=' is dropped too (gkeyfile.c:1378-1381, 1397-1400)
         Slice key = { line.text, (size_t) (equals - line.text) };
-        while (key.length > 0 && key.text[key.length - 1] == ' ')
+        while (key.length > 0 && is_space(key.text[key.length - 1]))
             key.length--;
         Slice value = { equals + 1, (size_t) (line.text + line.length - (equals + 1)) };
-        while (value.length > 0 && value.text[0] == ' ') {
+        while (value.length > 0 && is_space(value.text[0])) {
             value.text++;
             value.length--;
         }
