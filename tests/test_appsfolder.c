@@ -1,11 +1,12 @@
 // The shell's AppsFolder on a real Windows (3c Task 8): the scan lists apps through COM, each with a
-// name, an ID and the command that launches it; an app's image comes at 256 px or less as a straight-alpha
-// surface holding the shell's own bitmap as it is, which is straight alpha already (a Windows that
-// premultiplied it would fail here), and a bitmap with no alpha at all comes opaque; an ID the folder does
-// not have, one that is not UTF-8, a web link, and no size give no image and say why; the scan and the
-// image each end the COM they started; a stop asked for before the first item lists nothing, and is no
-// failure; and the whole scan runs on its own thread, COM started there, as settings run it. What the
-// runner has installed is not known, so no app is named.
+// name and an ID the shell finds the app by again, as explorer.exe does when a tile launches it; an app's
+// image comes at 256 px or less as a straight-alpha surface holding the shell's own bitmap as it is, which
+// is straight alpha already (a Windows that premultiplied it would fail here), and a bitmap with no alpha
+// at all comes opaque; no ID, no size, an ID too long, an ID the folder does not have, one that is not
+// UTF-8, and a web link give no image and say why; the scan and the image each end the COM they started; a
+// stop asked for before the first item lists nothing, and is no failure; and the whole scan runs on its own
+// thread, COM started there, as settings run it. What the runner has installed is not known, so no app is
+// named.
 #define COBJMACROS
 #include <stdbool.h>
 #include <stdio.h>
@@ -52,6 +53,22 @@ static void test_pixels(void)
     SDL_DestroySurface(surface);
 }
 
+// A function to test appicon_image()'s refusals, each made before the shell is asked and each saying its
+// own reason: no ID, no size, and an ID too long to name an item by
+static void test_refusals(void)
+{
+    static char long_id[2001];   // 2000 bytes of 'A', far past the item's name the shell can be given
+    memset(long_id, 'A', sizeof(long_id) - 1);
+    CHECK(appicon_image(NULL, 256) == NULL);
+    CHECK_STR(SDL_GetError(), "There is no app ID to get an image for");
+    CHECK(appicon_image("", 256) == NULL);
+    CHECK_STR(SDL_GetError(), "There is no app ID to get an image for");
+    CHECK(appicon_image("StreamFlex.Test.NoSuchApp!App", 0) == NULL);
+    CHECK_STR(SDL_GetError(), "An app's image cannot be 0 px a side");
+    CHECK(appicon_image(long_id, 256) == NULL);
+    CHECK_STR(SDL_GetError(), "The app ID is 2000 bytes, too long to get an image for");
+}
+
 // A function to tell whether COM is ended on this thread, as appsfolder_scan() and appicon_image() each
 // leave it once they have started it themselves: starting it here is then a first start
 static bool com_ended(void)
@@ -60,6 +77,24 @@ static bool com_ended(void)
     if (SUCCEEDED(started))
         CoUninitialize();
     return started == S_OK;
+}
+
+// A function to ask the shell for the item an app ID names, as explorer.exe does when a tile runs
+// "shell:AppsFolder\<ID>": the launch's own round trip, with no image asked for. S_OK when it is found,
+// else why not; COM must be started on this thread.
+static HRESULT parse_app(const char *app_id)
+{
+    char text[1100];
+    wchar_t path[1100];
+    int written = snprintf(text, sizeof(text), "shell:AppsFolder\\%s", app_id);
+    if (written < 0 || (size_t) written >= sizeof(text) ||
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, path, (int) (sizeof(path) / sizeof(path[0]))) == 0)
+        return E_INVALIDARG;
+    IShellItem *item = NULL;
+    HRESULT hr = SHCreateItemFromParsingName(path, NULL, &IID_IShellItem, (void **) &item);
+    if (SUCCEEDED(hr))
+        IShellItem_Release(item);
+    return hr;
 }
 
 // A function to read the shell's own bitmap for an app, asked for as appicon_image() asks for it: its
@@ -108,11 +143,39 @@ static Uint32 *shell_bitmap(const char *app_id, int *width, int *height)
     return bits;
 }
 
-// A function to judge the shell's own bitmap for an app: 1 when a color is above its alpha (straight
-// alpha; a premultiplied bitmap cannot hold one) in an image with partly transparent pixels, 0 when every
-// color is at most its alpha in such an image (premultiplied, or straight with dark edges), -1 when no
-// image came or none of its pixels is partly transparent (there is nothing to judge by). At 1, `same`
-// says whether appicon_image()'s surface for the app holds the bitmap's pixels as they are.
+// A function to judge a bitmap's alpha by its partly transparent pixels, the only ones the question is
+// about: 1 when a color is above its alpha in one of them (straight alpha; a premultiplied bitmap cannot
+// hold one), 0 when every such color is at most its alpha (premultiplied, or straight with dark edges), -1
+// when no pixel is partly transparent (there is nothing to judge by). A fully transparent pixel's color
+// says nothing: GDI leaves stray color in some, in a premultiplied bitmap too.
+static int judge_alpha(const Uint32 *bits, size_t count)
+{
+    bool partial = false;
+    bool above = false;
+    for (size_t i = 0; i < count; i++) {
+        Uint32 alpha = bits[i] >> 24;
+        bool part = alpha > 0 && alpha < 255;
+        partial = partial || part;
+        above = above || (part && (((bits[i] >> 16) & 0xFF) > alpha || ((bits[i] >> 8) & 0xFF) > alpha || (bits[i] & 0xFF) > alpha));
+    }
+    return !partial ? -1 : above ? 1 : 0;
+}
+
+// A function to test the alpha judge on bitmaps made here: a premultiplied one with stray color at a
+// fully transparent pixel, which GDI's mask conversions leave, still reads as premultiplied; a straight one
+// reads as straight; one with no partly transparent pixel cannot be judged
+static void test_judge(void)
+{
+    static const Uint32 stray[3] = { 0x80402010u, 0x00FFFFFFu, 0xFFFFFFFFu };
+    static const Uint32 straight_edge[2] = { 0x80FF2010u, 0xFFFFFFFFu };
+    static const Uint32 none_partial[2] = { 0x00FFFFFFu, 0xFF102030u };
+    CHECK_INT(judge_alpha(stray, 3), 0);
+    CHECK_INT(judge_alpha(straight_edge, 2), 1);
+    CHECK_INT(judge_alpha(none_partial, 2), -1);
+}
+
+// A function to judge the shell's own bitmap for an app, as judge_alpha() does; -1 when no image came. At
+// 1, `same` says whether appicon_image()'s surface for the app holds the bitmap's pixels as they are.
 static int straight_alpha(const char *app_id, bool *same)
 {
     int width = 0;
@@ -121,15 +184,7 @@ static int straight_alpha(const char *app_id, bool *same)
     *same = false;
     if (bits == NULL)
         return -1;
-    size_t count = (size_t) width * (size_t) height;
-    bool partial = false;
-    bool above = false;
-    for (size_t i = 0; i < count; i++) {
-        Uint32 alpha = bits[i] >> 24;
-        partial = partial || (alpha > 0 && alpha < 255);
-        above = above || ((bits[i] >> 16) & 0xFF) > alpha || ((bits[i] >> 8) & 0xFF) > alpha || (bits[i] & 0xFF) > alpha;
-    }
-    int verdict = !partial ? -1 : above ? 1 : 0;
+    int verdict = judge_alpha(bits, (size_t) width * (size_t) height);
     if (verdict == 1) {
         SDL_Surface *image = appicon_image(app_id, 256);
         *same = image != NULL && image->w == width && image->h == height;
@@ -146,8 +201,10 @@ static int straight_alpha(const char *app_id, bool *same)
 int main(void)
 {
     test_pixels();
+    test_judge();
+    test_refusals();
 
-    // The scan, on this thread: apps, each with a name, an ID and the command made from it
+    // The scan, on this thread: apps, each with a name and an ID the shell finds the app by
     SDL_AtomicInt found;
     SDL_AtomicInt stop;
     SDL_SetAtomicInt(&found, 0);
@@ -163,17 +220,28 @@ int main(void)
     CHECK(count > 0);
     CHECK_INT(SDL_GetAtomicInt(&found), count);
     CHECK(list != NULL && !applist_failed(list));
+    // Every listed app's ID names an item the shell finds, as the launch asks it to; COM is started for
+    // the parsing and ended after it
     int bad = 0;
+    HRESULT started = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     for (int i = 0; i < count; i++) {
         const AppItem *item = applist_item(list, i);
-        char command[1200];
-        bool whole = item->name[0] != '\0' && item->icon != NULL &&
-                     applist_appsfolder_command(item->icon, command, sizeof(command)) && strcmp(command, item->command) == 0;
-        if (!whole && bad++ < 5)
-            fprintf(stderr, "app %d: '%s' runs '%s' (ID '%s')\n", i, item->name, item->command, item->icon != NULL ? item->icon : "none");
+        const char *id = item->icon != NULL ? item->icon : "none";
+        HRESULT parsed = item->icon != NULL ? parse_app(item->icon) : E_POINTER;
+        if (item->name[0] == '\0') {
+            bad++;
+            fprintf(stderr, "app %d (ID '%s') has no name\n", i, id);
+        }
+        if (FAILED(parsed)) {
+            bad++;
+            fprintf(stderr, "app %d: '%s': the shell does not find its ID '%s' (error 0x%08lX)\n", i, item->name, id,
+                    (unsigned long) parsed);
+        }
         if (i < 5)
             printf("  %s: %s\n", item->name, item->command);
     }
+    if (SUCCEEDED(started))
+        CoUninitialize();
     CHECK_INT(bad, 0);
     CHECK(com_ended());
 
@@ -230,14 +298,12 @@ int main(void)
     CHECK_INT(verdict, 1);
     CHECK(verdict != 1 || same);
 
-    // An ID the folder does not have: no image, and why; nor for an ID that is not UTF-8, or no size
+    // An ID the folder does not have: no image, and why; nor for an ID that is not UTF-8
     SDL_ClearError();
     CHECK(appicon_image("StreamFlex.Test.NoSuchApp!App", 256) == NULL);
     CHECK(SDL_GetError()[0] != '\0');
-    CHECK(appicon_image("", 256) == NULL);
     CHECK(appicon_image("\xFF", 256) == NULL);
     CHECK(strstr(SDL_GetError(), "UTF-8") != NULL);
-    CHECK(imaged == NULL || appicon_image(imaged->icon, 0) == NULL);
 
     // A web link is no app: refused before the shell is asked (asking can reach the Internet Shortcut
     // code, which set off a Controlled Folder Access block on Favorites), whatever the case of ".url"

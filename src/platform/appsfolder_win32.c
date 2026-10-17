@@ -23,10 +23,12 @@ static const GUID APPS_FOLDER = { 0x1E87508D, 0x89C2, 0x42F0, { 0x8A, 0x7E, 0x64
 static const GUID ENUM_ITEMS = { 0x94F60519, 0x2850, 0x4924, { 0xAA, 0x5A, 0xD1, 0x5E, 0x84, 0x86, 0x80, 0x39 } };
 static const PROPERTYKEY APP_USER_MODEL_ID = { { 0x9F4C2855, 0x9F79, 0x4B39, { 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3 } }, 5 };
 
-// A function to turn a UTF-16 string into UTF-8, into a buffer; false when it does not fit
-static bool to_utf8(const wchar_t *wide, char *out, int size)
+// A function to turn a UTF-16 string into UTF-8, into a buffer; false when it does not fit, or, with
+// WC_ERR_INVALID_CHARS in `flags`, when it is not valid UTF-16 (a lone surrogate, which flags 0 turns into
+// U+FFFD)
+static bool to_utf8(const wchar_t *wide, DWORD flags, char *out, int size)
 {
-    return WideCharToMultiByte(CP_UTF8, 0, wide, -1, out, size, NULL, NULL) > 0;
+    return WideCharToMultiByte(CP_UTF8, flags, wide, -1, out, size, NULL, NULL) > 0;
 }
 
 // A function to get an AppsFolder item's app ID: its AppUserModelID, else its name in the folder, which
@@ -51,7 +53,10 @@ static wchar_t *app_id_of(IShellItem *item)
 
 // A function to add one AppsFolder item to the list: its display name, the command that launches it,
 // and its app ID, which appicon_image() finds its image by. An item the list leaves out (an uninstaller,
-// a document) or that cannot be written adds nothing; out of memory, the list says so itself.
+// a document) or that cannot be written adds nothing; out of memory, the list says so itself. The name is
+// only shown, so a lone surrogate in it becomes U+FFFD and the app is still listed; the ID must name the
+// app exactly, so one that is not valid UTF-16 leaves the app out, since the shell would not find the item
+// by the U+FFFD it would become, and its tile would open nothing.
 static void add_item(AppList *list, IShellItem *item, SDL_AtomicInt *found)
 {
     wchar_t *name = NULL;
@@ -61,7 +66,8 @@ static void add_item(AppList *list, IShellItem *item, SDL_AtomicInt *found)
     char name_text[NAME_BYTES];
     char id_text[ID_BYTES];
     char command[COMMAND_BYTES];
-    if (id != NULL && to_utf8(name, name_text, (int) sizeof(name_text)) && to_utf8(id, id_text, (int) sizeof(id_text)) &&
+    if (id != NULL && to_utf8(name, 0, name_text, (int) sizeof(name_text)) &&
+        to_utf8(id, WC_ERR_INVALID_CHARS, id_text, (int) sizeof(id_text)) &&
         applist_appsfolder_command(id_text, command, sizeof(command)) && applist_add(list, name_text, command, id_text))
         SDL_AddAtomicInt(found, 1);
     CoTaskMemFree(name);
@@ -177,10 +183,18 @@ static SDL_Surface *surface_of(HBITMAP bitmap)
 // call and ended after it when this call started it. NULL, with SDL's error saying why, when there is none.
 SDL_Surface *appicon_image(const char *app_id, int size)
 {
-    char path[ID_BYTES + 32];
-    int written = app_id != NULL ? snprintf(path, sizeof(path), "shell:AppsFolder\\%s", app_id) : -1;
-    if (app_id == NULL || app_id[0] == '\0' || written < 0 || (size_t) written >= sizeof(path) || size <= 0) {
+    if (app_id == NULL || app_id[0] == '\0') {
         SDL_SetError("There is no app ID to get an image for");
+        return NULL;
+    }
+    if (size <= 0) {
+        SDL_SetError("An app's image cannot be %d px a side", size);
+        return NULL;
+    }
+    char path[ID_BYTES + 32];
+    int written = snprintf(path, sizeof(path), "shell:AppsFolder\\%s", app_id);
+    if (written < 0 || (size_t) written >= sizeof(path)) {
+        SDL_SetError("The app ID is %d bytes, too long to get an image for", (int) strlen(app_id));
         return NULL;
     }
     // A web link (an ID holding "://" or naming a .url file) is no app and gets no image: imaging an
