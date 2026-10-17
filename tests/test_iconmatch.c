@@ -92,6 +92,10 @@ static void test_find(void)
     CHECK_INT(found(NULL), -1);
     CHECK_INT(iconmatch_find("Kodi", ICONS, 0), -1);
     CHECK_INT(iconmatch_find("Kodi", NULL, 0), -1);
+
+    // Two icons the app's name matches alike: the first in the manifest's order
+    static const LibraryInfo SAME[] = { { "a", "Same", "", NULL, 0 }, { "b", "Same", "", NULL, 0 } };
+    CHECK_INT(iconmatch_find("Same", SAME, 2), 0);
 }
 
 // A function to find a loaded icon by its name; -1 when the library has none of that name

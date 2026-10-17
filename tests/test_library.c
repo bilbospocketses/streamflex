@@ -188,6 +188,8 @@ static void test_info(void)
     CHECK_STR(library_info(1)->name, "twice");
     const LibraryInfo *ok = library_info(3);
     CHECK_STR(ok->name, "ok");
+    CHECK_STR(ok->title, "First title");                         // A repeated title or group keeps the first
+    CHECK_STR(ok->group, "first-group");
     CHECK_INT(ok->match_count, 3);
     CHECK_STR(ok->match[0], "first");
     CHECK_STR(ok->match[1], "second");

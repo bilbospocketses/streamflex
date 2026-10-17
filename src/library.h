@@ -25,6 +25,7 @@ const char *library_legacy_name(const char *path);
 const char *library_rescue(const char *field, const char **name);
 void        library_free(void);
 int         library_count(void);                  // The icons loaded
-const LibraryInfo *library_info(int index);       // Manifest order; library_info(0) is the first of library_count() in one array
+const LibraryInfo *library_info(int index);       // Manifest order; library_info(0) is the first of library_count() in one array.
+                                                  // Valid only until library_free() or the next library_load()
 
 #endif

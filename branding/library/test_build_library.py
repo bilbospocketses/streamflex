@@ -133,6 +133,10 @@ class Aliases(unittest.TestCase):
             problems = bl.match_problems([("kodi", "Kodi")], {"kodi": (alias,)})
             self.assertTrue(any("is not lower case words" in p for p in problems), (alias, problems))
 
+    def test_an_alias_ending_in_a_newline_is_refused(self):
+        problems = bl.match_problems([("kodi", "Kodi")], {"kodi": ("xbmc\n",)})
+        self.assertTrue(any("is not lower case words" in p for p in problems), problems)
+
     def test_an_alias_another_icon_has_is_refused(self):
         icons = [("kodi", "Kodi"), ("plex", "Plex"), ("tv-shows", "TV shows")]
         for alias in ("plex", "tv shows"):

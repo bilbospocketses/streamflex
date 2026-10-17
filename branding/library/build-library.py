@@ -118,7 +118,7 @@ def match_problems(icons, match=None):
         if name not in names:
             problems.append(f"MATCH '{name}': no icon has that name")
         for alias in aliases:
-            if not ALIAS_RE.match(alias):
+            if not ALIAS_RE.fullmatch(alias):   # match()'s $ would let a final newline through
                 problems.append(f"MATCH '{name}': alias '{alias}' is not lower case words of a-z and 0-9, one space apart")
             elif taken.get(alias, name) != name:
                 problems.append(f"MATCH '{name}': alias '{alias}' is already {taken[alias]}'s")
