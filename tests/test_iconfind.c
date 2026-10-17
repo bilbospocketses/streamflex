@@ -110,13 +110,18 @@ static void make_more_fixture(void)
     make_file("b/icons/hicolor/64x64/apps/tie.png");
     make_file("a/icons/hicolor/128x128/apps/edge.png");
     make_file("b/icons/hicolor/scalable/apps/edge.svg");
+    make_file("a/icons/hicolor/99999999999x99999999999/apps/huge.png");   // Too large for an int: not a size folder
+    make_file("a/icons/hicolor/48x99999999999/apps/huge.png");            // The same, in its second number
 }
 
 // A function to test the rules the tests above leave open: a .svg or .xpm dropped too; an SVG in the
 // pixmaps, and a PNG there before an XPM; the first folder's SVG and, on a tie, its PNG; a PNG of exactly
-// ICONFIND_GOOD_SIZE over an SVG; a name too long to look for; and an absolute path that fits exactly
+// ICONFIND_GOOD_SIZE over an SVG; a size too large for an int, read as no size (the folders are listed in
+// every lookup, so under UBSan a size read past an int fails each one); a name too long to look for; and
+// an absolute path that fits exactly
 static void test_more_names(void)
 {
+    CHECK_STR(found("huge"), "(none)");
     CHECK_STR(found("inkscape.svg"), FIXTURE "/b/icons/hicolor/scalable/apps/inkscape.svg");
     CHECK_STR(found("legacy.XPM"), FIXTURE "/a/pixmaps/legacy.xpm");
     CHECK_STR(found("vector"), FIXTURE "/b/pixmaps/vector.svg");

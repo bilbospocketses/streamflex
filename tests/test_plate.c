@@ -465,8 +465,8 @@ static void test_save_nothing(void)
 }
 
 // A function to test the limits the brief's tests leave open: the letters and digits at the ends of their
-// ranges; a path that fits its buffer exactly, and one byte short; and an icons folder that cannot be
-// made, a file standing where a folder must be
+// ranges; a path that fits its buffer exactly, and one byte short; an icons folder that cannot be made, a
+// file standing where a folder must be; and a file named icons, which is not the icons folder
 static void test_limits(void)
 {
     CHECK_STR(file_name("Zoom 90"), "zoom-90.png");
@@ -489,6 +489,9 @@ static void test_limits(void)
     CHECK(fileio_make_dirs(DIR "\\blocked"));
     CHECK(fileio_write_all(DIR "\\blocked\\cfg", "x", 1));
     CHECK(!icons_dir_at(DIR "\\blocked\\cfg\\config.ini", NULL, out, sizeof(out)));
+    CHECK(fileio_make_dirs(DIR "\\filed\\cfg"));
+    CHECK(fileio_write_all(DIR "\\filed\\cfg\\icons", "x", 1));
+    CHECK(!icons_dir_at(DIR "\\filed\\cfg\\config.ini", NULL, out, sizeof(out)));
 #else
     snprintf(expected, sizeof(expected), "%s", DIR "/home/.config/streamflex/icons");
     CHECK(!icons_dir_at("/anywhere/config.ini", DIR "/home", out, strlen(expected)));
@@ -497,6 +500,9 @@ static void test_limits(void)
     CHECK(fileio_make_dirs(DIR "/blocked"));
     CHECK(fileio_write_all(DIR "/blocked/.config", "x", 1));
     CHECK(!icons_dir_at("/anywhere/config.ini", DIR "/blocked", out, sizeof(out)));
+    CHECK(fileio_make_dirs(DIR "/filed/.config/streamflex"));
+    CHECK(fileio_write_all(DIR "/filed/.config/streamflex/icons", "x", 1));
+    CHECK(!icons_dir_at("/anywhere/config.ini", DIR "/filed", out, sizeof(out)));
 #endif
 }
 

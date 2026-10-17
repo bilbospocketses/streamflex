@@ -222,7 +222,8 @@ bool plate_save(SDL_Surface *plated, const char *path)
 
 // A function to find the folder plated icons are saved in, and make it: on Windows, icons in the folder
 // `config_path` is in; on Linux, <home>/.config/streamflex/icons, beside the user's own config.ini. False
-// when there is no config path (Windows) or home (Linux), the path does not fit, or it cannot be made.
+// when there is no config path (Windows) or home (Linux), the path does not fit, or it cannot be made
+// (fileio_make_dirs() takes anything already there for the folder, so a file named icons is refused here).
 bool icons_dir_at(const char *config_path, const char *home, char *out, size_t size)
 {
     int written;
@@ -242,7 +243,7 @@ bool icons_dir_at(const char *config_path, const char *home, char *out, size_t s
 #endif
     if (written < 0 || (size_t) written >= size)
         return false;
-    return fileio_make_dirs(out);
+    return fileio_make_dirs(out) && fileio_is_dir(out);
 }
 
 // A function to make a file name from an app's name: lower-case ASCII letters and digits kept, every
