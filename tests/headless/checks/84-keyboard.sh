@@ -1,11 +1,12 @@
 # The on-screen keyboard (3c, spec "The on-screen keyboard" and "No OS keyboard, ever"), through the ways in
 # 3b's pages gain: the command picker's Type... (Startup command, Quit command, a binding's command) and a
 # path row's Type a path... (Mappings file). Typing on its keys with the remote, on a real keyboard with
-# Shift, and under a German layout with AltGr and a dead key; the keypad's digits and operators; the pad's
-# X, Y and Start; Back asking first after a change; Done off with the reason; the layout kept as
-# KeyboardLayout, and read back from the file; the settings key and a new screen size with the keyboard
-# open; a keyboard that cannot open; and SDL's text input stopped on the window. The Tiles pages' ways in
-# (titles, names, the app list's filter) are check 82's.
+# Shift and Caps Lock, and under a German layout with AltGr and a dead key; the keypad's digits and
+# operators; the pad's X, Y and Start; Back asking first after a change; Done off with the reason; a typed
+# path refused at Done, its field still the real keyboard's; the layout kept as KeyboardLayout, and read
+# back from the file; the settings key and a new screen size with the keyboard open, and the settings key
+# with it over the browser; a keyboard that cannot open; and SDL's text input stopped on the window. The
+# Tiles pages' ways in (titles, names, the app list's filter) are check 82's.
 # Not timing-sensitive: every key waits for its frame, xdotool type's keys reach the launcher in order, and every result is read from the log's lines or the saved file, never from a clock
 
 ARROW=$(printf ' \xE2\x80\xBA ')
@@ -55,17 +56,19 @@ grep -qx 'StartupCmd=ok' "$cfg" && grep -q 'Window: SDL text input is off for th
 result "keyboard: a command typed on the on-screen keys saves, the keyboard over the bottom 40% (exit $(cat "$out/f84-osk.code"))" $ok
 grep -E "Settings: (opened the keyboard|the keyboard|the key hint)|Window: SDL text input" "$log" | sed 's/^/      /'
 
-# On a real keyboard, with Shift: mixed case and symbols, each the layout's own; Enter is Done once typed
+# On a real keyboard, with Shift: mixed case and symbols, each the layout's own; with Caps Lock on, a types A
+# (Caps Lock goes off again before Enter); Enter is Done once typed
 cfg=$(writable_config f84-keys)
-CFG=$cfg run_keys f84-real $K84_QUIT +k84_type_mixed Return Menu
+CFG=$cfg run_keys f84-real $K84_QUIT +k84_type_mixed Caps_Lock a Caps_Lock Return Menu
 ok=1
 log=$out/f84-real.log
-grep -qxF 'QuitCmd=Kodi Box #2!' "$cfg" \
+grep -qxF 'QuitCmd=Kodi Box #2!A' "$cfg" \
     && grep -q "Settings: the keyboard typed 'K' (scancode K)" "$log" \
     && grep -q "Settings: the keyboard typed '#' (scancode 3)" "$log" \
     && grep -q "Settings: the keyboard typed '!' (scancode 1)" "$log" \
-    && grep -q "Settings: the keyboard finished with 'Kodi Box #2!'" "$log" && ran_clean f84-real && ok=0
-result "keyboard: a real keyboard types mixed case and symbols with Shift, and Enter is Done (exit $(cat "$out/f84-real.code"))" $ok
+    && grep -q "Settings: the keyboard typed 'A' (scancode A)" "$log" \
+    && grep -q "Settings: the keyboard finished with 'Kodi Box #2!A'" "$log" && ran_clean f84-real && ok=0
+result "keyboard: a real keyboard types mixed case and symbols with Shift, a capital with Caps Lock, and Enter is Done (exit $(cat "$out/f84-real.code"))" $ok
 grep -E "Settings: the keyboard (typed|finished)" "$log" | sed 's/^/      /'
 
 # A German layout (Review Focus 5): the Y key types z, AltGr+Q types @, Shift+2 types ", and the dead
@@ -223,20 +226,52 @@ grep -qx 'ControllerMappingsFile=/home/tester/k84/new.txt' "$cfg" \
 result "keyboard: Type a path... in a path row's browser types the path, which saves (exit $(cat "$out/f84-path.code"))" $ok
 
 # A typed path that is not there: Done is on while it is typed (the validator reads no disk), Done refuses
-# it, and the keyboard reopens on the same text with the reason, the browser under it; Esc then cancels at
-# once (no change), and nothing is saved
+# it, and the keyboard reopens on the same text with the reason, the browser under it. The field is the one
+# the real keyboard typed into, so its Backspace still deletes (one character, the keyboard staying open)
+# and its Enter is still Done, which refuses the shorter path too; Esc then cancels at once (no change since
+# that reopening), and nothing is saved
 cfg=$(writable_config f84-paths)
 CFG=$cfg run_keys f84-pathgone Menu Down Down Down Down Down Down Down Down Return Down Return Down Down Return \
-    Right Right Right Return +k84_type_gone Return Escape Menu
+    Right Right Right Return +k84_type_gone Return BackSpace Return Escape Menu
 ok=1
 log=$out/f84-pathgone.log
 ! grep -q 'Settings: Done is off: No file is there' "$log" \
     && grep -qx 'Settings: the typed path /home/tester/k84/gone.txt is refused: No file is there' "$log" \
-    && [ "$(grep -c 'Settings: opened the keyboard for Path for Mappings file' "$log")" = 2 ] \
+    && [ "$(grep -c 'Settings: opened the keyboard for Path for Mappings file' "$log")" = 3 ] \
     && grep -q "Settings: the keyboard reads '/home/tester/k84/gone.txt' (cursor 25)" "$log" \
     && grep -q 'Settings: the keyboard says No file is there' "$log" \
     && grep -q 'Settings: nothing changed' "$log" && cmp -s "$FX/f84-paths.ini" "$cfg" && ran_clean f84-pathgone && ok=0
 result "keyboard: a typed path that is not there is refused at Done, the keyboard reopening on it with why (exit $(cat "$out/f84-pathgone.code"))" $ok
+ok=1
+sed -n '/is refused: No file is there$/,$p' "$log" > "$out/f84-pathgone.after"
+sed -n "1,/Settings: the keyboard reads '\/home\/tester\/k84\/gone.tx' (cursor 24)/p" "$out/f84-pathgone.after" \
+    > "$out/f84-pathgone.between"
+grep -q "Settings: the keyboard reads '/home/tester/k84/gone.tx' (cursor 24)" "$out/f84-pathgone.between" \
+    && ! grep -q 'Settings: the keyboard was canceled' "$out/f84-pathgone.between" \
+    && grep -qx 'Settings: the typed path /home/tester/k84/gone.tx is refused: No file is there' "$log" \
+    && ! grep -q "Settings: the keyboard typed" "$out/f84-pathgone.after" \
+    && [ "$(grep -c 'Settings: the keyboard was canceled' "$log")" = 1 ] && ran_clean f84-pathgone && ok=0
+result "keyboard: after a typed path is refused, the real keyboard's Backspace still deletes and its Enter is still Done (exit $(cat "$out/f84-pathgone.code"))" $ok
+grep -E "Settings: (opened the keyboard|the keyboard reads|the typed path|the keyboard was canceled)" "$log" | sed 's/^/      /'
+
+# The settings key with the keyboard over the folder browser closes the browser too: a save that changed the
+# mappings file asks to restart, and the question is what settings show (its Yes row under the cursor), not
+# the browser's rows. The file is changed in the browser (new.txt, just above old.txt), the browser opened
+# again, and Type a path... opened in it before the settings key.
+cfg=$(writable_config f84-paths)
+CFG=$cfg run_keys f84-restart Menu Down Down Down Down Down Down Down Down Return Down Return Down Down Return \
+    Up Return Return Right Right Right Return Menu
+ok=1
+log=$out/f84-restart.log
+grep -qx 'ControllerMappingsFile=/home/tester/k84/new.txt' "$cfg" \
+    && [ "$(grep -c 'Settings: opened the keyboard for Path for Mappings file' "$log")" = 1 ] \
+    && precedes "$log" 'Settings: the keyboard was canceled as settings close' \
+        'Settings: asking to restart StreamFlex to apply the mappings file' \
+    && sed -n '/Settings: asking to restart StreamFlex to apply the mappings file$/,$p' "$log" \
+        | grep -q "Settings: the cursor's row reads Yes: " && ran_clean f84-restart && ok=0
+result "keyboard: the settings key with the keyboard over the browser closes both, so the restart question shows (exit $(cat "$out/f84-restart.code"))" $ok
+grep -E "Settings: (opened the keyboard|the keyboard was canceled|asking to restart|the cursor's row reads Yes|chose)" "$log" \
+    | sed 's/^/      /'
 
 # A keyboard that cannot open (out of memory) says so, and the keys stay with the page
 cfg=$(writable_config f84-keys)
