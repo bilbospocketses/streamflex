@@ -69,6 +69,10 @@ set(SOURCES
   applist.h
   appscan.c
   appscan.h
+  plate.c
+  plate.h
+  iconfind.c
+  iconfind.h
   settings_screen.c
   settings_screen.h
   settings_pickers.c

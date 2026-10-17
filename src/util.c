@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "alloc.h"
 #include "bindings.h"
+#include "plate.h"
 #include "inidoc.h"
 #include "platform/platform.h"
 #include <ini.h>
@@ -991,6 +992,19 @@ void resolve_library_icons(void)
         for (Entry *e = m->first_entry; e != NULL; e = e->next)
             resolve_entry_icon(e, m->name);
     }
+}
+
+// A function to find the folder an app's plated icon is saved in, and make it (spec "Icons"): beside
+// config.ini on Windows; on Linux ~/.config/streamflex/icons, beside the user's own config.ini, where
+// every Linux save writes. False when it cannot be made.
+bool icons_dir(char *out, size_t size)
+{
+#ifdef __unix__
+    char home[MAX_PATH_CHARS + 1];
+    return icons_dir_at(config.config_path, home_directory(home, sizeof(home)) ? home : NULL, out, size);
+#else
+    return icons_dir_at(config.config_path, NULL, out, size);
+#endif
 }
 
 // A function to dynamically allocate a buffer for and copy a formatted string

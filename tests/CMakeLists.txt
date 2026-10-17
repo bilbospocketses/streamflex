@@ -137,6 +137,24 @@ target_include_directories(test_applist PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_applist)
 add_test(NAME applist COMMAND test_applist)
 
+# Unit tests for plating an app's own icon, its file's name and its folder (plate.c draws on SDL3 surfaces
+# and saves through SDL3_image; fileio.c makes the folders). png_roundtrip runs the same program's PNG half:
+# the build's SDL3_image writes a PNG it reads back, pixel for pixel
+add_executable(test_plate test_plate.c "${PROJECT_SOURCE_DIR}/src/plate.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_plate PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(test_plate SDL3_image::SDL3_image SDL3::SDL3)
+link_fileio(test_plate)
+add_test(NAME plate COMMAND test_plate)
+add_test(NAME png_roundtrip COMMAND test_plate png)
+
+# Unit tests for finding a Linux app's own icon from its Icon= value, over a fixture tree (pure)
+add_executable(test_iconfind test_iconfind.c "${PROJECT_SOURCE_DIR}/src/iconfind.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_iconfind PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_iconfind)
+add_test(NAME iconfind COMMAND test_iconfind)
+
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
 # (colorpick.c allocates nothing; settings.c names colors through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
@@ -151,6 +169,7 @@ if (UNIX)
 endif ()
 add_test(NAME alloc COMMAND test_alloc)
 target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/applist.c")   # 3c Task 7: the installed apps' list
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/iconfind.c")   # 3c Task 9: the Linux icon lookup
 
 # A function to link inih the way the launcher does
 function(link_inih target)
