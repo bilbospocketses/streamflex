@@ -68,8 +68,10 @@ grep -qxF 'QuitCmd=Kodi Box #2!' "$cfg" \
 result "keyboard: a real keyboard types mixed case and symbols with Shift, and Enter is Done (exit $(cat "$out/f84-real.code"))" $ok
 grep -E "Settings: the keyboard (typed|finished)" "$log" | sed 's/^/      /'
 
-# A German layout (Review Focus 5): the Y key types z, AltGr+Q types @, the dead circumflex types its own ^,
-# Shift+2 types ". The layout is set on the X server once the launcher is connected (k84_german): Xvfb puts
+# A German layout (Review Focus 5): the Y key types z, AltGr+Q types @, Shift+2 types ", and the dead
+# circumflex types nothing (user ruling 2026-10-17, "Dead keys": SDL gives a dead key a scancode-masked
+# keycode, 0x40000035 for this one, and no text input composes it), so the e after it types e alone; ^ is
+# on the ?123 page. The layout is set on the X server once the launcher is connected (k84_german): Xvfb puts
 # its keymap back to US whenever its last client leaves, so a layout set before the run would be gone by
 # the time the launcher started. The run's end puts it back the same way; the setxkbmap after it is a guard.
 # The dead circumflex goes through key.py, by the keycode of the key left of 1: German puts dead_circumflex
@@ -77,7 +79,7 @@ grep -E "Settings: the keyboard (typed|finished)" "$log" | sed 's/^/      /'
 k84_german() { setxkbmap -layout de; sleep 1; }
 k84_dead() { python3 "$HERE/key.py" key dead_circumflex; sleep 1; }
 cfg=$(writable_config f84-keys)
-CFG=$cfg run_keys f84-german +k84_german $K84_STARTUP z +k84_altgr_q +k84_dead shift+2 Return Menu
+CFG=$cfg run_keys f84-german +k84_german $K84_STARTUP z +k84_altgr_q +k84_dead e shift+2 Return Menu
 setxkbmap -layout us
 ok=1
 log=$out/f84-german.log
@@ -85,13 +87,15 @@ grep -q "Settings: the keyboard typed 'z' (scancode Y)" "$log" \
     && grep -q "Settings: the keyboard typed '@' (scancode Q)" "$log" \
     && grep -q "Settings: the keyboard typed '\"' (scancode 2)" "$log" && ran_clean f84-german && ok=0
 result "keyboard: a German layout types its own letters and AltGr's (exit $(cat "$out/f84-german.code"))" $ok
-# OPEN (3c Task 12, reported to the controller): SDL 3.2.10 and 3.4.18 both give the dead circumflex as a
-# scancode-masked keycode (0x40000035), which types nothing under the real-keyboard rule, so this fails
-# until the plan rules on dead keys
+# The dead key reached the launcher (its key line), and between the @ and the e nothing was typed
 ok=1
-grep -qxF 'StartupCmd=z@^"' "$cfg" && grep -q "Settings: the keyboard typed '^' " "$log" && ok=0
-result "keyboard: under a German layout a dead key types its own character (exit $(cat "$out/f84-german.code"))" $ok
-grep -E "Settings: the keyboard (typed|finished)|^Key \` " "$log" | sed 's/^/      /'
+k84_between=$(sed -n "/Settings: the keyboard typed '@'/,/Settings: the keyboard typed 'e'/p" "$log" | grep -c 'Settings: the keyboard typed')
+grep -qxF 'StartupCmd=z@e"' "$cfg" && grep -q '^Key .* (#40000035) detected$' "$log" \
+    && sed -n "/Settings: the keyboard typed '@'/,\$p" "$log" | grep -q '(#40000035) detected' \
+    && [ "$k84_between" = 2 ] && grep -q "Settings: the keyboard typed 'e' (scancode E)" "$log" \
+    && grep -q "Settings: the keyboard reads 'z@e' (cursor 3)" "$log" && ran_clean f84-german && ok=0
+result "keyboard: under a German layout a dead key types nothing, and the next key still types (exit $(cat "$out/f84-german.code"))" $ok
+grep -E "Settings: the keyboard (typed|finished)|\(#40000035\) detected" "$log" | sed 's/^/      /'
 
 # The keypad (user ruling 2026-10-16, "Type the digit"): its digits, point and operators type their
 # character as the top row's keys do, Backspace then deletes (a printing key was typed), and Keypad Enter

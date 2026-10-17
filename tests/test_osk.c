@@ -511,7 +511,7 @@ static void test_key_char(void)
     CHECK_STR(out, "A");
     CHECK(osk_key_char(' ', out));
     CHECK_STR(out, " ");
-    CHECK(osk_key_char('^', out));                               // A dead key types its own character
+    CHECK(osk_key_char('^', out));                               // A key whose character is ^ (a dead key comes masked: nothing)
     CHECK_STR(out, "^");
     CHECK(osk_key_char(0xE9, out));                              // e acute, on a French keyboard
     CHECK_STR(out, "\xC3\xA9");
