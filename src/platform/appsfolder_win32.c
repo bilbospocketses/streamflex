@@ -183,10 +183,10 @@ SDL_Surface *appicon_image(const char *app_id, int size)
         SDL_SetError("There is no app ID to get an image for");
         return NULL;
     }
-    // A web link (an ID holding "://" or naming a .url file) is no app and gets no image: imaging every
-    // AppsFolder item, its web links among them, set off a Controlled Folder Access block on the Favorites
-    // folder (Defender event 1123, D:\OneDrive\Favorites, 2026-10-16). applist leaves these IDs out
-    // already, so no listed app is refused.
+    // A web link (an ID holding "://" or naming a .url file) is no app and gets no image: imaging an
+    // Internet Shortcut item makes the shell write into the Favorites known folder shortly afterward, which
+    // Windows' controlled folder access blocks with a warning to the user (measured 2026-10-17). applist
+    // leaves these IDs out too, so no listed app is refused.
     size_t length = strlen(app_id);
     if (strstr(app_id, "://") != NULL || (length >= 4 && SDL_strcasecmp(app_id + length - 4, ".url") == 0)) {
         SDL_SetError("%s is a web link, which has no app image", app_id);
