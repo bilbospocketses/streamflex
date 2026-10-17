@@ -104,7 +104,7 @@ MATCH = {
                  "git bash", "git cmd"),                        # Git for Windows' two shortcuts
     "notes": ("notepad", "text editor", "sticky notes", "obsidian"),   # GNOME's Text Editor
     "clock": ("clocks",),                                       # GNOME's Clocks
-    "mail": ("outlook", "thunderbird mail"),
+    "mail": ("outlook", "thunderbird mail"),                    # Thunderbird's Linux desktop-entry name
     "archive": ("winrar", "7 zip file manager"),                # 7-Zip's Start menu name
     "paint": ("paint 3d",),
     "remote": ("remote desktop", "windows app"),                # Windows App: Microsoft's Remote Desktop client since 2024

@@ -12,7 +12,7 @@
 
 ## Context
 
-A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;command`. The parser ignores the key name. The icon is a library icon name (one of 69 in `assets/icons/library/icons.ini`, each with a `title` and a `group`) or an image path. The command is a program, a `.lnk` (Windows), a `.desktop` file (Linux), a script, or a special command such as `:submenu Games`. Today every menu is written by hand.
+A menu is a `config.ini` section, and its lines are entries: `Key=title;icon;command`. The parser ignores the key name. The icon is a library icon name (one of 88 in `assets/icons/library/icons.ini`, each with a `title` and a `group`) or an image path. The command is a program, a `.lnk` (Windows), a `.desktop` file (Linux), a script, or a special command such as `:submenu Games`. Today every menu is written by hand.
 
 3c lets the user build their launcher from the couch. **Its scope is the tiles users add themselves:** apps such as Edge, Chrome, Kodi, Steam or Calculator, scripts, special commands and submenus. The streaming services arrive later as built-in tiles from the D-pad overlay sub-project, which users do not install, and 3c's add flow can take that source then.
 
