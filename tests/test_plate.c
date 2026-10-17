@@ -10,6 +10,7 @@
 #include "check.h"
 #include "plate.h"
 #include "fileio.h"
+#include "alloc.h"
 
 #define DIR "plate-fixture"
 #ifdef _WIN32
@@ -330,6 +331,175 @@ static void test_png_roundtrip(void)
     SDL_DestroySurface(plated);
 }
 
+// A function to test the smallest plate, 4 px: it is made, and its corner pixel is partly covered, since
+// the radius (0.88 px) is not a whole pixel; and an icon with no width or no height is refused
+static void test_smallest(void)
+{
+    SDL_Surface *icon = solid(4, 4, RED);
+    SDL_Surface *smallest = icon != NULL ? plate_icon(icon, 4) : NULL;
+    SDL_DestroySurface(icon);
+    CHECK(smallest != NULL);
+    if (smallest != NULL) {
+        int corner = (int) (pixel(smallest, 0, 0) >> 24);
+        CHECK(corner > 0 && corner < 255);
+        SDL_DestroySurface(smallest);
+    }
+    SDL_Surface *no_width = SDL_CreateSurface(0, 5, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *no_height = SDL_CreateSurface(5, 0, SDL_PIXELFORMAT_ARGB8888);
+    CHECK(no_width != NULL && no_height != NULL);
+    SDL_ClearError();
+    CHECK(plate_icon(no_width, 100) == NULL);
+    CHECK(SDL_GetError()[0] != '\0');
+    CHECK(plate_icon(no_height, 100) == NULL);
+    SDL_DestroySurface(no_width);
+    SDL_DestroySurface(no_height);
+}
+
+// A function to test an icon so thin its short side rounds to no pixel: 200 x 1 is one row, 60 wide, at
+// row 49; 1 x 200 is one column at column 49
+static void test_thin(void)
+{
+    SDL_Surface *plated = plated_at_100(solid(200, 1, RED));
+    if (plated != NULL) {
+        CHECK_PIXEL(plated, 50, 48, PLATE);
+        CHECK_PIXEL(plated, 50, 49, RED);
+        CHECK_PIXEL(plated, 50, 50, PLATE);
+        SDL_DestroySurface(plated);
+    }
+    plated = plated_at_100(solid(1, 200, RED));
+    if (plated != NULL) {
+        CHECK_PIXEL(plated, 48, 50, PLATE);
+        CHECK_PIXEL(plated, 49, 50, RED);
+        CHECK_PIXEL(plated, 50, 50, PLATE);
+        SDL_DestroySurface(plated);
+    }
+}
+
+// A function to test an icon in another format: it is converted first, so XRGB8888, whose fourth byte is
+// no alpha whatever it holds, is an opaque square
+static void test_other_format(void)
+{
+    SDL_Surface *icon = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_XRGB8888);
+    CHECK(icon != NULL);
+    for (int y = 0; icon != NULL && y < 4; y++) {
+        for (int x = 0; x < 4; x++)
+            put(icon, x, y, ARGB(0x00, 0xFF, 0x00, 0x00));
+    }
+    SDL_Surface *plated = plated_at_100(icon);
+    if (plated == NULL)
+        return;
+    CHECK_PIXEL(plated, 50, 50, RED);
+    SDL_DestroySurface(plated);
+}
+
+// A function to test that shrinking weighs a pixel it covers in part by that part: 90 px to the 60 px box
+// is 1.5 to 1, and the one white column (46) of a black icon is half in output column 30 (45 to 46.5) and
+// half in 31 (46.5 to 48), so each is 255 x 0.5 / 1.5 = 85 gray
+static void test_partial_pixels(void)
+{
+    SDL_Surface *icon = SDL_CreateSurface(90, 90, SDL_PIXELFORMAT_ARGB8888);
+    CHECK(icon != NULL);
+    for (int y = 0; icon != NULL && y < 90; y++) {
+        for (int x = 0; x < 90; x++)
+            put(icon, x, y, x == 46 ? ARGB(255, 255, 255, 255) : ARGB(255, 0, 0, 0));
+    }
+    SDL_Surface *plated = plated_at_100(icon);
+    if (plated == NULL)
+        return;
+    CHECK_PIXEL(plated, 49, 50, ARGB(0xFF, 0, 0, 0));
+    CHECK_PIXEL(plated, 50, 50, ARGB(0xFF, 85, 85, 85));
+    CHECK_PIXEL(plated, 51, 50, ARGB(0xFF, 85, 85, 85));
+    CHECK_PIXEL(plated, 52, 50, ARGB(0xFF, 0, 0, 0));
+    SDL_DestroySurface(plated);
+}
+
+// A function to test a shrink whose last pixel ends past the icon in floating point: 7 px to the 6 px box
+// of a 10 px plate ends at 7 + 9e-16, and no pixel past the icon is read (ASan says when one is); the icon
+// is red to the box's edge
+static void test_overrun(void)
+{
+    SDL_Surface *icon = solid(7, 7, RED);
+    SDL_Surface *plated = icon != NULL ? plate_icon(icon, 10) : NULL;
+    SDL_DestroySurface(icon);
+    CHECK(plated != NULL);
+    if (plated == NULL)
+        return;
+    CHECK_PIXEL(plated, 2, 2, RED);
+    CHECK_PIXEL(plated, 7, 7, RED);
+    SDL_DestroySurface(plated);
+}
+
+// A function to test that growing holds the edge pixels: 2 x 2, transparent on the left and white on the
+// right, grown to the 60 px box; its first column is the left pixel's (the plate through it), its last the
+// right pixel's. Interpolating past the edge would give the first column a negative alpha.
+static void test_grow_edges(void)
+{
+    SDL_Surface *icon = SDL_CreateSurface(2, 2, SDL_PIXELFORMAT_ARGB8888);
+    CHECK(icon != NULL);
+    for (int y = 0; icon != NULL && y < 2; y++) {
+        put(icon, 0, y, ARGB(0, 255, 255, 255));
+        put(icon, 1, y, ARGB(255, 255, 255, 255));
+    }
+    SDL_Surface *plated = plated_at_100(icon);
+    if (plated == NULL)
+        return;
+    CHECK_PIXEL(plated, 20, 50, PLATE);
+    CHECK_PIXEL(plated, 79, 50, ARGB(0xFF, 0xFF, 0xFF, 0xFF));
+    SDL_DestroySurface(plated);
+}
+
+// A function to test plate_save() with no icon: false, saying so, and a file that was at the path before
+// it is still there, as it was
+static void test_save_nothing(void)
+{
+    fileio_remove(DIR SEP "kept.png");
+    CHECK(fileio_write_all(DIR SEP "kept.png", "x", 1));
+    SDL_ClearError();
+    CHECK(!plate_save(NULL, DIR SEP "kept.png"));
+    CHECK_STR(SDL_GetError(), "There is no icon to save");
+    CHECK(fileio_present(DIR SEP "kept.png"));
+    size_t length = 0;
+    char *kept = fileio_read_all(DIR SEP "kept.png", &length);
+    CHECK_STR(kept, "x");
+    alloc_free(kept);
+}
+
+// A function to test the limits the brief's tests leave open: the letters and digits at the ends of their
+// ranges; a path that fits its buffer exactly, and one byte short; and an icons folder that cannot be
+// made, a file standing where a folder must be
+static void test_limits(void)
+{
+    CHECK_STR(file_name("Zoom 90"), "zoom-90.png");
+
+    static const char *const dir = DIR SEP "icons";
+    char path[256];
+    char expected[256];
+    fileio_remove(DIR SEP "icons" SEP "fits.png");
+    snprintf(expected, sizeof(expected), "%s", DIR SEP "icons" SEP "fits.png");
+    CHECK(!icons_new_path(dir, "Fits", path, strlen(expected)));
+    CHECK(icons_new_path(dir, "Fits", path, strlen(expected) + 1));
+    CHECK_STR(path, expected);
+
+    char out[512];
+#ifdef _WIN32
+    snprintf(expected, sizeof(expected), "%s", DIR "\\cfg\\icons");
+    CHECK(!icons_dir_at(DIR "\\cfg\\config.ini", NULL, out, strlen(expected)));
+    CHECK(icons_dir_at(DIR "\\cfg\\config.ini", NULL, out, strlen(expected) + 1));
+    CHECK_STR(out, expected);
+    CHECK(fileio_make_dirs(DIR "\\blocked"));
+    CHECK(fileio_write_all(DIR "\\blocked\\cfg", "x", 1));
+    CHECK(!icons_dir_at(DIR "\\blocked\\cfg\\config.ini", NULL, out, sizeof(out)));
+#else
+    snprintf(expected, sizeof(expected), "%s", DIR "/home/.config/streamflex/icons");
+    CHECK(!icons_dir_at("/anywhere/config.ini", DIR "/home", out, strlen(expected)));
+    CHECK(icons_dir_at("/anywhere/config.ini", DIR "/home", out, strlen(expected) + 1));
+    CHECK_STR(out, expected);
+    CHECK(fileio_make_dirs(DIR "/blocked"));
+    CHECK(fileio_write_all(DIR "/blocked/.config", "x", 1));
+    CHECK(!icons_dir_at("/anywhere/config.ini", DIR "/blocked", out, sizeof(out)));
+#endif
+}
+
 int main(int argc, char **argv)
 {
     if (!SDL_Init(0)) {
@@ -349,6 +519,14 @@ int main(int argc, char **argv)
         test_file_names();
         test_new_path();
         test_icons_dir();
+        test_smallest();
+        test_thin();
+        test_other_format();
+        test_partial_pixels();
+        test_overrun();
+        test_grow_edges();
+        test_save_nothing();
+        test_limits();
     }
     SDL_Quit();
     return check_report();
