@@ -339,6 +339,12 @@ static void test_editing(void)
     osk_command(osk, OSK_RIGHT);                                 // The left arrow
     CHECK_INT(osk_command(osk, OSK_OK), OSK_NONE);
 
+    // The Space key on the bottom row types a space, as the pad's Y does
+    CHECK(go(osk, BOTTOM, 4));
+    CHECK_INT(osk_command(osk, OSK_OK), OSK_CHANGED);
+    CHECK_STR(osk_text(osk), " ");
+    CHECK_INT(osk_command(osk, OSK_BACKSPACE), OSK_CHANGED);
+
     // Not inserted: nothing; a lone lead or continuation byte; a control character; U+007F; a surrogate;
     // an overlong form; past U+10FFFF
     static const char *const bad[] = { "", "\xC3", "\x80", "a\tb", "\x7F", "\xED\xA0\x80", "\xC0\xAF", "\xF4\x90\x80\x80" };
