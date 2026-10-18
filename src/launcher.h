@@ -1,6 +1,7 @@
 #include "layout.h"
 #include "derive.h"
 #include "padpower.h"
+#include "menuedit.h"
 
 // Launcher parameters
 #define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
@@ -138,6 +139,8 @@ typedef struct entry {
 // Linked list for menus
 typedef struct menu {
     char            *name;
+    char            *section;         // The config.ini section it was read from (its name when settings opened); NULL
+                                      // for a menu made in settings. menu_for() finds a menus model's menu by it.
     unsigned int    num_entries;
     Entry           *first_entry;
     Entry           **items;          // Entries by index, for the layout math
@@ -163,6 +166,8 @@ typedef struct {
     bool   held;
     Uint32 pressed_at;
     Uint32 repeat_due;
+    bool   ok;           // 3c: a press taken as OK in the menus (it runs :select, settings closed): it never
+                         // repeats until let go, in the menus or in the settings its hold opened
 } ControlHold;
 
 // Linked list of gamepad controls
@@ -286,6 +291,7 @@ typedef struct {
     bool inhibit_os_screensaver;
     char *startup_cmd;
     char *quit_cmd;
+    int keyboard_layout;                // [General] KeyboardLayout: 0 QWERTY, 1 ABC (osk.h's OskLayout)
     ModeOnLaunch on_launch;
     bool screensaver_enabled;
     Uint32 screensaver_idle_time;
@@ -365,3 +371,7 @@ typedef enum { RELOAD_NONE = 0, RELOAD_TARGETS = 1, RELOAD_DEVICE = 2, RELOAD_SI
 void reload_mark(ReloadReason why);   // Event handlers only mark; nothing reloads inside the drain
 void reload_run_pending(void);        // After the drain, before drawing: geometry first, then the textures
 bool app_in_front(void);              // state.application_launching || state.application_running
+Menu *menu_for(const MenuEditMenu *menu);   // The live menu a menus model's menu stands for; NULL for one new to the launcher
+void menus_apply(const MenuEdit *edit);     // Rebuild the live Menu and Entry lists from the model; textures stale, layout recomputed
+void select_entry(int index);   // Select a tile of the menu on show, scrolled into view: the settings preview's
+void outline_entry(int index);  // Outline a tile of the menu on show in the settings preview, as Move does; -1 for none

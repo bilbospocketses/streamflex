@@ -9,13 +9,19 @@
 
 typedef struct {
     char name[LIBRARY_NAME_MAX + 1];
-    char *file;   // as written in the manifest
-    char *path;   // the full path once the file is checked; NULL if the icon was rejected
+    char *file;       // as written in the manifest
+    char *path;       // the full path once the file is checked; NULL if the icon was rejected
+    char *title;      // NULL when the manifest gives none
+    char *group;
+    char **match;     // the match = aliases, trimmed
+    int match_count;
 } LibraryIcon;
 
 static LibraryIcon *icons = NULL;
 static int icon_count = 0;
 static int icon_capacity = 0;
+static LibraryInfo *infos = NULL;   // the icons kept, in the manifest's order, for library_info()
+static int info_count = 0;
 static LibraryWarn warn_function = NULL;
 static char *parsing = NULL;   // the manifest section being read
 static int target = -1;        // its index in icons, or -1 while its keys are skipped
@@ -77,13 +83,48 @@ static int add_icon(const char *name)
     snprintf(icon->name, sizeof(icon->name), "%s", name);
     icon->file = NULL;
     icon->path = NULL;
+    icon->title = NULL;
+    icon->group = NULL;
+    icon->match = NULL;
+    icon->match_count = 0;
     return icon_count++;
 }
 
+// A function to add an icon's match = aliases: a comma-separated list, each alias trimmed of spaces and an
+// empty one skipped; a repeated match key adds to them. Out of memory, an alias is left out.
+static void add_aliases(LibraryIcon *icon, const char *value)
+{
+    const char *part = value;
+    while (*part != '\0') {
+        size_t length = strcspn(part, ",");
+        const char *start = part;
+        const char *end = part + length;
+        while (start < end && isspace((unsigned char) *start))
+            start++;
+        while (end > start && isspace((unsigned char) end[-1]))
+            end--;
+        if (end > start) {
+            char **grown = realloc(icon->match, (size_t) (icon->match_count + 1) * sizeof(char*));
+            if (grown != NULL)
+                icon->match = grown;
+            char *alias = grown != NULL ? malloc((size_t) (end - start) + 1) : NULL;
+            if (alias != NULL) {
+                memcpy(alias, start, (size_t) (end - start));
+                alias[end - start] = '\0';
+                icon->match[icon->match_count++] = alias;
+            }
+        }
+        part += length;
+        if (*part == ',')
+            part++;
+    }
+}
+
 // The inih handler. inih reports keys, not section headers, so a change of section name marks a new
-// section. A repeated section keeps the first; a repeated 'file' keeps the first. A section with no keys
-// at all never reaches this handler (inih's default build has no header callback, and Linux uses the
-// system library), so it is skipped without the "has no 'file'" warning. build-library.py never writes one.
+// section. A repeated section keeps the first; a repeated 'file', 'title' or 'group' keeps the first, and a
+// repeated 'match' adds to it. A section with no keys at all never reaches this handler (inih's default
+// build has no header callback, and Linux uses the system library), so it is skipped without the "has no
+// 'file'" warning. build-library.py never writes one.
 static int handler(void *user, const char *section, const char *key, const char *value)
 {
     (void) user;
@@ -99,12 +140,21 @@ static int handler(void *user, const char *section, const char *key, const char 
         else
             target = add_icon(section);
     }
-    if (target >= 0 && !strcmp(key, "file")) {
-        if (icons[target].file != NULL)
+    if (target < 0)
+        return 1;
+    LibraryIcon *icon = &icons[target];
+    if (!strcmp(key, "file")) {
+        if (icon->file != NULL)
             warn("Icon library: [%s] has 'file' twice, keeping the first", section);
         else
-            icons[target].file = strdup(value);
+            icon->file = strdup(value);
     }
+    else if (!strcmp(key, "title") && icon->title == NULL)
+        icon->title = strdup(value);
+    else if (!strcmp(key, "group") && icon->group == NULL)
+        icon->group = strdup(value);
+    else if (!strcmp(key, "match"))
+        add_aliases(icon, value);
     return 1;
 }
 
@@ -195,7 +245,31 @@ int library_load(const char *root)
         icon->path = path;
         count++;
     }
+    // The icons kept, in the manifest's order and in one array, for the icon pickers (library_info())
+    infos = count > 0 ? malloc((size_t) count * sizeof(LibraryInfo)) : NULL;
+    if (count > 0 && infos == NULL)
+        warn("Icon library: out of memory listing its icons, so the icon pickers show none");
+    for (int i = 0; infos != NULL && i < icon_count; i++) {
+        const LibraryIcon *icon = &icons[i];
+        if (icon->path == NULL)
+            continue;
+        infos[info_count++] = (LibraryInfo) { icon->name, icon->title != NULL ? icon->title : icon->name,
+            icon->group != NULL ? icon->group : "", (const char *const *) icon->match, icon->match_count };
+    }
     return count;
+}
+
+// A function to count the icons loaded (a rejected one is not), for the icon pickers
+int library_count(void)
+{
+    return info_count;
+}
+
+// A function to describe a loaded icon by its place in the manifest's order; NULL past either end. The
+// icons sit in one array, so library_info(0) and library_count() are what iconmatch_find() searches.
+const LibraryInfo *library_info(int index)
+{
+    return index >= 0 && index < info_count ? &infos[index] : NULL;
 }
 
 // A function to find a loaded (not rejected) icon by name
@@ -279,11 +353,19 @@ void library_free(void)
     for (int i = 0; i < icon_count; i++) {
         free(icons[i].file);
         free(icons[i].path);
+        free(icons[i].title);
+        free(icons[i].group);
+        for (int a = 0; a < icons[i].match_count; a++)
+            free(icons[i].match[a]);
+        free(icons[i].match);
     }
     free(icons);
     icons = NULL;
     icon_count = 0;
     icon_capacity = 0;
+    free(infos);
+    infos = NULL;
+    info_count = 0;
     free(parsing);
     parsing = NULL;
     target = -1;

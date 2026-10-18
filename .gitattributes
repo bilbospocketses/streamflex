@@ -14,4 +14,5 @@ tests/qa/*.py text eol=lf
 vcpkg-overlays/** text eol=lf
 # The unit runner and the mutant driver run in the Linux harness images, as the harness's scripts do
 tests/unit.sh text eol=lf
+tests/check-no-text-input.sh text eol=lf
 tests/mutants/** text eol=lf

@@ -43,11 +43,12 @@ A line that starts with `#` or `;` is a comment, and is ignored. A comment can a
 - Shell variable expansion is generally not supported, e.g. you cannot use the ~ character to refer to your home directory. The exception is for commands, since those are passed through to your system shell.
 
 ## The Settings Screen
-The settings screen changes every setting on this page from the remote: each section under [Settings](#settings), each menu's grid, the [Clock](#clock), the [Screensaver](#screensaver), the [Hotkeys](#hotkeys) and the [Gamepad](#gamepad-controls). It shows each change in a preview as you make it, and saves your changes into your config file when you leave. The menus' entries are still written in the config file.
+The settings screen changes every setting on this page from the remote: each section under [Settings](#settings), each menu's grid, the [Clock](#clock), the [Screensaver](#screensaver), the [Hotkeys](#hotkeys) and the [Gamepad](#gamepad-controls). It shows each change in a preview as you make it, and saves your changes into your config file when you leave. It also edits your menus: their tiles, their order, their names and their icons (see [Editing menus](#editing-menus)).
 
 ### Opening it
 - Press the **Menu** key on the remote (the context-menu key on a keyboard), or **Start** on a gamepad when [gamepad controls](#gamepad-controls) are enabled, as they are by default. Either works unless your config gives that key or button something else to do. SDL reports the Menu key as one of two keycodes, `#40000065` (a keyboard's context-menu key) or `#40000076` (a remote's Menu button), and both open settings; a hotkey on either code takes that code over. The name the debug log gives `#40000065` depends on the SDL version: it may read `Key Application (#40000065)` or `Key Menu (#40000065)`, so go by the keycode.
 - Or run the `:settings` [special command](#special-commands) from a menu entry, a hotkey or a gamepad control. The default config's System menu has a Settings tile.
+- Or hold OK (Return, or the pad's A) on a tile for 0.8 s: settings open at that tile's page. See [The hold-OK shortcut](#the-hold-ok-shortcut).
 
 Holding the key or button opens settings once. Settings don't open while an application is launching or running.
 
@@ -74,6 +75,7 @@ The first page has a row for each page below, in this order, and *Discard change
 - *After launching an app* ([OnLaunch](#onlaunch)): *Blank screen*, *Keep showing* or *Quit*.
 - *App timeout* ([ApplicationTimeout](#applicationtimeout)): 3, 5, 10, 15, 20 or 30 seconds.
 - *Startup command* and *Quit command* ([StartupCmd](#startupcmd), [QuitCmd](#quitcmd)): chosen in the [command picker](#the-command-picker). *None* removes the line.
+- *Keyboard layout* ([KeyboardLayout](#keyboardlayout)): *QWERTY* or *ABC*, the layout the [on-screen keyboard](#the-on-screen-keyboard) opens in.
 
 VSync and the FPS limit take effect at once, with no restart.
 
@@ -95,7 +97,7 @@ The grid of every menu (*All menus*, which is the `[Layout]` section) and of eac
 - *Largest button* ([IconSize](#iconsize)): 64, 96, 128, 160, 192, 256, 320, 384, 512, 768 or 1024 px. On *All menus*, *Fill* lets buttons grow as large as the grid allows.
 - On *All menus* only: *Icon spacing* ([IconSpacing](#iconspacing)): 0% to 10% of the screen width, in steps of 1; and *Vertical center* ([VCenter](#vcenter)): 25% to 75%, in steps of 5.
 
-On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again. A menu with no entries cannot be shown in the preview, but its grid can still be changed. The Menus page lists up to 62 menus; with more, it lists 61, and a note at its end counts the rest, whose grids you set in the config file.
+On a menu's own page, the lowest step, *All menus*, makes that menu follow the shared grid again. A menu with no entries shows in the preview as it does in the launcher, with its note, *This menu is empty. Hold OK to add tiles.*, and its grid can be changed like any other's. Under a menu's grid rows, *Tiles ›* (*N tiles*) opens its [Tiles page](#editing-menus); *All menus* has none. The Menus page lists up to 62 menus; with more, it lists 61, and a note at its end counts the rest, whose grids you set in the config file.
 
 #### The Titles page
 - *Size* ([FontSize](#fontsize)): Small, Medium or Large. Titles scale with each menu's buttons. A fixed size from your config file stays among the choices, shown as *Fixed*.
@@ -172,6 +174,8 @@ The preview shows each image as you move over it, and the first image of a highl
 
 For the gamepad's *Mappings file*, the browser lists every file, not only images, and previews none of them. It lists files only, so a pipe or a device never appears.
 
+Every listing ends with *Type a path…*, which opens the [on-screen keyboard](#the-on-screen-keyboard) on the folder on show. A path typed there is chosen as one chosen in the list, once it names what the row needs: an image that opens for *Image*, a folder of at least two images for *Folder*, and a file for *Mappings file*. While you type, *Done* is grayed only for a path the config file cannot hold; whether the path is there is looked at when you press *Done*, and when it is not what the row needs, the keyboard opens again on it, its note saying why.
+
 ### The pickers
 A row whose value is a color, a font, a command, the default menu or the gamepad's device opens a picker with OK. The picker takes the place of the rows; the key hint at the bottom says which keys it takes. **Menu** and `:home` leave a picker without choosing, and close settings as they would from the page.
 
@@ -196,6 +200,7 @@ The startup and quit commands, and a binding's command, are chosen from a list:
 - *Open submenu:* each of your menus;
 - on Windows only, *Close the app on show*, the [`:exit`](#exit) hotkey's command;
 - every command your menus' entries run, each named by its entry's title, and each once.
+- last, *Type…*, which opens the [on-screen keyboard](#the-on-screen-keyboard) on the command, for a `:fork` line, a path, or any other command.
 
 A command from your config file that none of these runs is listed first, as *Custom: ...*, so choosing it keeps it. **Up and Down** move, **Left and Right** move a page at a time, **OK** chooses, and **Back** closes the list without choosing.
 
@@ -211,6 +216,63 @@ Choosing a family writes its Regular style's file to `Font`, or the first style 
 
 #### The list pickers
 *Default menu* lists your menus, in the order the config file has them. *Device* lists *Any*, then each gamepad connected, by name; it is made again when a gamepad is plugged in or pulled out. The keys are the command picker's, and Left and Right on these rows step through the same choices without opening the list.
+
+### The on-screen keyboard
+A title, a submenu's name, a command, a path, and the filters of the app list and the icon grid are typed on StreamFlex's own keyboard. It opens across the bottom 40% of the screen, beside the settings column and over the preview, with the field's label and the field itself above its keys; the preview stays in view above it, and follows a tile's title as you type it.
+
+- **Layouts.** *QWERTY*, the default, has a number row, three letter rows and a bottom row of *ABC*, *?123*, *àé*, *Shift*, *Space*, *⌫*, *◀* *▶* (the text cursor) and *Done*. *ABC* is the alphabet in a grid seven keys wide, with the same bottom row. *?123* is a page of digits and symbols, and *àé* a page of accents: à á â ä ã å æ ç è é ê ë ì í î ï ñ ò ó ô ö õ ø œ ù ú û ü ý ÿ ß. The *ABC* key (*QWERTY* on the alphabetical grid) switches the layout, and the keyboard opens in the one you used last, which is saved as [KeyboardLayout](#keyboardlayout).
+- **The remote.** Left and Right step between keys, wrapping within a row; Up and Down go to the key in the next row nearest the one you are on. OK types the highlighted key. *Shift* capitalizes the next letter; pressed twice, it turns on caps lock until it is pressed again.
+- **A gamepad.** X deletes, Y types a space, and Start is *Done*.
+- **Back** closes the keyboard at once when nothing was changed. After a change, the first Back shows *Back again to discard*, and the second throws the change away.
+- **Done** stays grayed while the text cannot be written, and the keyboard's note says why: a title with `;` (which would split `title;icon;command`), an empty title, a name taken by another menu, or a line too long for the config file.
+- **A real keyboard** types into the field too, from the keys themselves: each printing key types the character your keyboard layout gives it, with Shift, Caps Lock and AltGr (on Windows, Right Alt, or Ctrl and Alt together, is AltGr). The keypad's digits and `. / * - +` type their characters, its point a `.` on every layout. Many remotes send Enter for OK and Backspace for Back, so Enter types the highlighted key and Backspace backs out, as everywhere in settings, until you type a character into the field on the keyboard; from then on, in that field, Enter is *Done* and Backspace deletes. The keypad's Enter is always *Done*, and Esc is always Back. The arrows always move the keyboard's highlight. A held key types again as it repeats.
+- **Limits.** A dead key does not combine with the next letter: on Linux it types nothing (`^` is on the *?123* page), and on Windows it types its own accent (`^`, `` ` ``, `~`) and the next key types on its own. An input method is bypassed, so a Japanese or Chinese layout types Latin letters; the *àé* page has the European accents. Layouts that need no input method, such as Greek or Cyrillic, type their own letters.
+- **No other keyboard appears.** StreamFlex never turns on the system's text input, which is what brings up Windows' touch keyboard, GNOME's screen keyboard and KDE's virtual keyboard, so none of them covers the screen, whatever their settings.
+
+### Editing menus
+Each menu's tiles are edited on its **Tiles page**: *Menus ›*, the menu, *Tiles ›*. A tile is one entry of the menu's section (see [Creating Menus](#creating-menus)), and a submenu is a section of its own, opened by a tile that runs `:submenu <its name>`.
+
+- **The Tiles page** lists *Add ›*, then each tile in the menu's order: a tile that opens a submenu shows that menu's tile count and ›, and any other tile its command. The preview highlights the tile the cursor is on. An empty menu's page holds only *Empty: Add ›*. A menu of more than 62 tiles lists 61 and counts the rest in a note; to edit one of those, hold OK on it in the launcher, which opens its page all the same.
+- **Add ›** on the Tiles page puts the new tile at the end; *Add after this tile ›* on a tile's page (below) puts it right after that tile. Either offers:
+  - *App ›*: one of your installed apps (see [Installed apps](#installed-apps)).
+  - *Browse for a program ›*: the [folder browser](#the-folder-browser), listing folders and programs only: on Windows `.exe` and `.lnk` files; on Linux `.desktop` files and files with their execute bit set (a script without it could not run). The tile is titled by the file's name without its extension. A path with a space is written in quotes, double on Windows and single on Linux, so it runs as one path.
+  - *Submenu ›*: a name, typed on the keyboard. It makes the section `[<name>]` at the end of your config file, empty, and a tile that runs `:submenu <name>` with the library's `folder` icon. A new submenu gets no Back tile: Back, and the pad's B, already go back.
+  - *Special ›*: *Home*, *Back*, *Settings*, *Sleep*, *Restart*, *Shut down* or *Quit*, each with its library icon.
+- **A tile's page:**
+  - *Title*: opens the keyboard on it. The preview shows it as you type. A submenu tile's title is its menu's name, so changing it renames the menu (below).
+  - *Icon ›*: see [Icons](#icons).
+  - *Command ›*: an installed app, a program browsed to, a special command, or *Type…* for a `:fork` line or any other command. `:select` is never offered, as a menu entry cannot use it. A submenu tile's command is grayed: renaming its title changes it.
+  - *Move*: OK picks the tile up, and the preview outlines it. The arrows move it through the grid as they move the highlight in a menu, Left and Right along its row, stopping at the row's ends, and Up and Down a row, keeping the column, the preview laying the menu out again at each step; OK drops it there, and Back puts it back where it was.
+  - *Move to menu ›*: the other menus; the tile goes to the end of the one you choose. A submenu tile cannot go into its own menu, or into a menu inside it, and those rows say why.
+  - *Add after this tile ›*: the Add page, whose new tile goes right after this one.
+  - *Remove*: a tile goes at once; *Discard changes* is the undo, as everywhere in settings. A submenu tile asks first: *Remove <name> and its N tiles*, or *Remove only this tile*, which is offered only when another tile also opens that menu. The default menu cannot be removed.
+- **Renaming a submenu** renames its section, every tile in every menu whose command is exactly `:submenu <old name>`, `DefaultMenu` when it names it, and every hotkey, gamepad control, startup command and quit command that is exactly `:submenu <old name>`.
+- **A menu's name** is 1 to 49 bytes, holds no `]` and no `;` (it is also its tile's title), does not start or end with a space, and is neither a reserved section's (General, Layout, Background, Titles, Highlight, Scroll Indicators, Clock, Screensaver, Hotkeys, Gamepad) nor another menu's. Names that differ only in case count as the same, since they would look the same on screen; a menu may change the case of its own name.
+- **A tile** needs a title, an icon and a command; its title holds no `;`, and its whole line must fit one line of the config file (199 bytes), with any comment or spacing that line already has. Until it does, *Done* stays grayed, with the reason.
+- **Leaving settings** lands on the menu they were opened over, or on the default menu if that menu was removed; after the [hold-OK shortcut](#the-hold-ok-shortcut), on the tile that was held.
+
+#### Installed apps
+*App ›* lists the apps installed, alphabetically. It looks for them the first time you open it after settings open, showing *Finding apps… (N)* meanwhile, and keeps what it found until settings close; Back works while it looks, and closing settings stops it at once. Up from the list's top row, or a printing key on a real keyboard, opens the keyboard to filter the list as you type.
+
+- **On Windows,** the list is the Start menu's: the shell's AppsFolder, desktop and Store apps alike, leaving out uninstallers and help or readme shortcuts. A tile runs its app with `explorer.exe shell:AppsFolder\<app ID>`, or `explorer.exe "shell:AppsFolder\<app ID>"` when the ID holds a space or a comma, so Explorer reads it as one argument.
+- **On Linux,** the list is read from the `.desktop` files in each `applications` folder of `$XDG_DATA_DIRS`, in `~/.local/share/applications`, in Flatpak's exports (`/var/lib/flatpak/exports/share/applications` and `~/.local/share/flatpak/exports/share/applications`) and in `/var/lib/snapd/desktop/applications`. An app is named in your language (`Name[<language>]`, from `LC_ALL`, `LC_MESSAGES` or `LANG`), or by its `Name`. Files with `NoDisplay=true` or `Hidden=true`, a `Type` other than `Application` or no `Exec` are left out, as are apps with `Terminal=true` (StreamFlex runs an app with no terminal, so one would show nothing), uninstallers and readmes, and a file in your own folder hides one of the same name in the system's. A tile runs the app's `.desktop` file.
+- **When no list comes** (the search failed, or found nothing), *App ›* says why in the note under the preview, and *Browse for a program ›*, *Submenu ›* and *Special ›* still add tiles.
+
+A new app's tile gets, as it is added, the library's icon for it when the library has one; else its own icon, put on the plate and saved in the `icons` folder as [Icons](#icons) says (*Discard changes* deletes it); else the generic *apps* icon. Its *Icon ›* page offers every choice again.
+
+#### Icons
+A tile's *Icon ›* lists, in this order, and puts the cursor on the first that applies:
+1. **A library match:** the library icon whose name, title or one of whose aliases matches the tile's title, compared in lower case, without punctuation and without vendor words such as *Microsoft*, *Google*, *Apple* or *Valve* (the aliases are the manifest's `match =` lines; see the [Icon Library](icons)). With no match and no icon of its own, this row offers the generic *apps* icon.
+2. ***Its own icon***, for an app: on Windows the image the Start menu shows for it, at 256 px; on Linux its `.desktop` file's `Icon=`, as a path, or looked up by name in the hicolor theme (its largest PNG when that is at least 128 px, else its SVG, else its largest PNG), in `/usr/share/pixmaps`, and in Flatpak's exported icons. It is centered on the library's square teal plate (`#07606C`) and saved as a 512 px PNG named after the app (its letters and digits in lower case, each run of anything else one `-`, or `app` when none is left; `-2`, `-3` and on for a name already taken) in an `icons` folder: beside `config.ini` on Windows, and `~/.config/streamflex/icons` on Linux. An icon that cannot be read or put on its plate is not offered. One that cannot be saved (a folder you cannot write, for example) leaves the tile's icon as it was, and the note says why. A tile that already shows its own icon's file keeps it (the same picture) when you choose *Its own icon* again: no second file is written. Once the app's icon or the tile's command has changed, a new file is written.
+3. ***Library ›***: every library icon with its title, under its group's heading. Up from the top row, or a printing key on a real keyboard, opens the keyboard to filter the grid by title, name or alias.
+4. ***Browse for an image ›***: the [folder browser](#the-folder-browser).
+
+The preview shows each icon on the tile as the cursor reaches it. StreamFlex only ever writes files in the `icons` folder; *Discard changes* deletes the ones written in that visit that no tile uses, and nothing else ever deletes one.
+
+#### The hold-OK shortcut
+In the launcher's menus, OK selects a tile as it is let go, not as it is pressed, so a quick press feels as it always has. Held for 0.8 s, it opens settings at that tile's page instead, and letting go then does nothing; in an empty menu, it opens the menu's Tiles page. Back from the tile's page goes to the Tiles page, then up through the settings as usual, and closing settings lands on the tile you held.
+
+OK is Return, any hotkey whose command is `:select`, and any gamepad control whose command is `:select` (the pad's A by default). Only the first press counts: a second OK while one is held does nothing, and a held OK's repeats never act, in the menus or in the settings its hold opened. Opening settings another way while OK is held (Menu, or a `:settings` hotkey or button) cancels the hold: it never fires, and letting go does nothing. A mouse click still selects at once. Inside settings, OK acts as it is pressed.
 
 ### Key and button bindings
 *Controls › Keyboard* lists the [hotkeys](#hotkeys), and *Controls › Gamepad* lists the gamepad's [controls](#controls) under its settings. Each list starts with *Add binding*, and then has a row for each binding: its key or button, and the command it runs. A binding's page has three rows:
@@ -248,7 +310,8 @@ A new hotkey is written as `HotkeyN=#<keycode>;<command>`, numbered one above th
 - The previous version is kept beside it as `config.ini.bak`. The new file is written beside the old one and then swapped in whole, so a failed save never leaves half a file. On Windows, a config file you have hidden stays hidden.
 - A file that sets the columns with the older name, `MaxButtons`, keeps that name when they are saved. A file that has both `Columns` and `MaxButtons` in `[Layout]` is left with `Columns` alone.
 - Hotkeys and gamepad controls are saved line by line: only the lines of the bindings you changed, added or removed are written. A binding's line that was changed by hand while settings were open keeps the hand edit, and your change is written beside it as a new line; where two lines bind one key or button, the first in the file is the one that runs. A line removed by hand stays removed, and the removal is skipped. The debug log (`-d`) says so in a `Settings: not saved as asked: ...` line for each.
-- **Discard changes**, on the first page, puts everything back as it was when you opened settings, the bindings included.
+- Menus are saved section by section: each menu's entries are made to match its Tiles page, in order, each line keeping its key. A new tile is written as `EntryN=title;icon;command`, N one above the highest `Entry<number>` in its section. A new submenu's section goes at the end of the file; a removed one goes with every line up to the next section; a renamed one keeps its place. A menu's `Rows`, `Columns` and `IconSize` lines, and every comment, stay as they are. A tile changed or removed by hand while settings were open keeps the hand edit, as a binding's does: your change is written as a new line, and a removal is skipped; a menu renamed or removed by hand meanwhile is skipped, with its own settings. The debug log says so in its `Settings: not saved as asked: ...` lines. The one exception is a menu you renamed in settings that was also renamed or removed by hand: the tiles that open it already carry the new name, which no section would have, so the save fails and says why, as it does when a hand edit gave a section the name a menu is taking.
+- **Discard changes**, on the first page, puts everything back as it was when you opened settings, the bindings and the menus included, and deletes any icon file saved in that visit that no tile uses.
 - **On Linux**, the config installed with the package (in `/usr/share/streamflex`) cannot be changed. Your first save writes your own copy to `~/.config/streamflex/config.ini`, which StreamFlex reads from then on, and later saves change that copy. If that copy exists but cannot be read, the save fails and says why rather than replace it.
 - If the file cannot be written, settings say why, and offer to try again or to leave without saving; Back returns to the settings instead. The config file stays as it was.
 - Quitting StreamFlex while settings are open saves nothing.
@@ -281,9 +344,10 @@ The settings in this section control the general behavior of the launcher.
 - [InhibitOSScreensaver](#inhibitosscreensaver)
 - [StartupCmd](#startupcmd)
 - [QuitCmd](#quitcmd)
+- [KeyboardLayout](#keyboardlayout)
 
 ##### DefaultMenu
-This is the title of the main menu that shows when StreamFlex is started. The value *must* match the name of one of your menu sections, or there will be an error and StreamFlex will refuse to start. See the [Creating Menus](#creating-menus) section for more information.
+This is the title of the main menu that shows when StreamFlex is started. The value *must* match the name of one of your menu sections, or there will be an error and StreamFlex will refuse to start. It may name a menu with no entries, which shows its note. See the [Creating Menus](#creating-menus) section for more information.
 
 ##### VSync
 Defines whether VSync will be used to synchronize the frame rate with the refresh rate of your monitor. This setting is a boolean "true" or "false"
@@ -335,6 +399,11 @@ Defines a command that StreamFlex will execute immediately upon startup. This ca
 
 ##### QuitCmd
 Defines a command that StreamFlex will execute immediately before quitting. This can be used to do any mode switching or appplication starting to prepare your desktop, e.g. for maintenance.
+
+##### KeyboardLayout
+The layout the [on-screen keyboard](#the-on-screen-keyboard) opens in: `QWERTY` or `ABC`. The keyboard's own *ABC* (or *QWERTY*) key changes it, and the settings screen saves the change, as it does the General page's *Keyboard layout* row.
+
+Default: QWERTY
 
 #### Background
 The settings in this section control what StreamFlex will display in the background.
@@ -602,6 +671,8 @@ Default: 100%
 ## Creating Menus
 At least one menu must be defined in the configuration file, and the title must match the `DefaultMenu` setting value. The title of a menu is its section name. Any title may be used that is not reserved for another section, such as "Settings", "Gamepad", etc. The entries of the menu are implemented as key=value pairs. The name of the key will be ignored by the program, and is therefore arbtrary. However, it is recommended to pick something intutitive such as Entry1, Entry2, Entry3, etc. The entry information is contained in the value.
 
+A section with no entries, a header alone or one with only comments under it, is a menu too: it shows the note *This menu is empty. Hold OK to add tiles.*, OK there does nothing, and Back leaves it. The settings screen adds, changes, moves and removes entries for you; see [Editing menus](#editing-menus).
+
 Each entry value contains 3 parts of information in order: the title, the icon, and the command to run when the button is clicked. These are delimited by semicolons:
 ```ini
 Entry=title;icon;command
@@ -647,6 +718,7 @@ These three names count as layout settings only when their value is a number. A 
   - Up and Down move between rows, keeping the column. Moving down into a shorter last row lands on its last button.
   - The grid scrolls one row at a time. With `WrapEntries`, moving down from the last row goes to the first, and up from the first goes to the last.
 - Each menu remembers its selected button and scroll position when you come back to it, unless `ResetOnBack` is set.
+- **OK** selects the highlighted button as it is let go. Held for 0.8 s, it opens that button's page in the settings screen instead; see [The hold-OK shortcut](#the-hold-ok-shortcut).
 
 ### Selected Icon Overrides
 The Selected Icon Override feature allows the user to define a different icon for the launcher to display when an entry is highlighted. To use this feature, name the path of the selected icon the same as the default entry icon path, but with a suffix of `_selected` (not including the file extension).
@@ -694,7 +766,7 @@ Move the highlight cursor up one row. Only a menu with two or more [Rows](#rows)
 Move the highlight cursor down one row.
 
 #### :select
-Press enter on the current selection. This special command is only available as a gamepad or hotkey command, it is forbidden for menu entries: a menu entry that uses it is ignored, and the log says why.
+Press enter on the current selection. In the launcher's menus it selects as it is let go, and held it opens the tile's page in settings, as Return does. This special command is only available as a gamepad or hotkey command, it is forbidden for menu entries: a menu entry that uses it is ignored, and the log says why.
 
 #### :shutdown
 Shut down the computer.<sup>1</sup>
@@ -876,7 +948,7 @@ The controls are defined in key=value pairs, where the key is the name of the ax
 
 The [SDL GameController](https://wiki.libsdl.org/CategoryGameController) interface is an abstraction which conceptualizes a controller as having an Xbox-style layout. The mapping names in SDL are based on the *location* of the buttons on an Xbox controller, and may not correspond to the actual labeling of the buttons on your controller. For example, `ButtonA` is for the "bottom" button, `ButtonB` is for the "right" button of the 4 main control buttons. If you have a Playstation-style controller, those mapping names will correspond to the X button and the Circle button, respectively. 
 
-The default controls in StreamFlex allow the user to move the highlight cursor with the left stick or the DPad, select an entry by pressing A, and go back to the previous menu by pressing B. These controls are simple and will suffice for the vast majority of use cases. The settings screen's *Gamepad* page adds, changes and removes controls, capturing the button from the gamepad; see [Key and button bindings](#key-and-button-bindings).
+The default controls in StreamFlex allow the user to move the highlight cursor with the left stick or the DPad, select an entry by pressing A (as it is let go; held for 0.8 s, A opens the tile's page in settings), and go back to the previous menu by pressing B. These controls are simple and will suffice for the vast majority of use cases. The settings screen's *Gamepad* page adds, changes and removes controls, capturing the button from the gamepad; see [Key and button bindings](#key-and-button-bindings).
 
 Up and down have defaults of their own. If your config maps nothing to `:up` or `:down`, the DPad's up and down buttons and the left stick's vertical axis run them, unless your config already uses those controls for something else. A config written before grids existed can still move between rows.
 

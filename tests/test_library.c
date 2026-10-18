@@ -155,6 +155,50 @@ static void test_rescue(void)
     CHECK(library_rescue("Netflix", NULL) == NULL);          // nothing loaded, nothing rescued
 }
 
+// A function to test listing the icons for the pickers: the ones loaded, in the manifest's order and in
+// one array, each with its title (its name when it has none), its group ("" when none) and its match =
+// aliases, trimmed, an empty one skipped and a repeated key adding to them; none after library_free()
+static void test_info(void)
+{
+    warnings = 0;
+    CHECK_INT(library_load(LIBRARY_FIXTURES "/good"), 4);
+    CHECK_INT(library_count(), 4);
+    const LibraryInfo *netflix = library_info(0);
+    CHECK(netflix != NULL);
+    CHECK_STR(netflix->name, "netflix");
+    CHECK_STR(netflix->title, "Netflix");
+    CHECK_STR(netflix->group, "video");
+    CHECK_INT(netflix->match_count, 0);
+    CHECK_STR(library_info(1)->name, "movies");
+    CHECK(library_info(1) == netflix + 1);                       // One array, as iconmatch_find() takes it
+    const LibraryInfo *kodi = library_info(3);
+    CHECK_STR(kodi->name, "kodi");
+    CHECK_INT(kodi->match_count, 2);
+    CHECK_STR(kodi->match[0], "xbmc");
+    CHECK_STR(kodi->match[1], "kodi media center");
+    CHECK(library_info(4) == NULL);
+    CHECK(library_info(-1) == NULL);
+    CHECK_INT(warnings, 0);
+
+    CHECK_INT(library_load(LIBRARY_FIXTURES "/bad"), 4);
+    CHECK_INT(library_count(), 4);                               // Only what loaded
+    CHECK_STR(library_info(0)->name, "dup");
+    CHECK_STR(library_info(0)->title, "dup");
+    CHECK_STR(library_info(0)->group, "");
+    CHECK_STR(library_info(1)->name, "twice");
+    const LibraryInfo *ok = library_info(3);
+    CHECK_STR(ok->name, "ok");
+    CHECK_STR(ok->title, "First title");                         // A repeated title or group keeps the first
+    CHECK_STR(ok->group, "first-group");
+    CHECK_INT(ok->match_count, 3);
+    CHECK_STR(ok->match[0], "first");
+    CHECK_STR(ok->match[1], "second");
+    CHECK_STR(ok->match[2], "third");
+    library_free();
+    CHECK_INT(library_count(), 0);
+    CHECK(library_info(0) == NULL);
+}
+
 #ifndef _WIN32
 #define PIPED "library-piped"
 
@@ -233,6 +277,7 @@ int main(void)
     test_reload_and_free();
     test_legacy();
     test_rescue();
+    test_info();
 #ifndef _WIN32
     test_load_skips_what_is_not_a_file();
 #endif

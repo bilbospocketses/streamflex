@@ -13,12 +13,14 @@
 
 #ifdef STREAMFLEX_TEST_HOOKS
 // Only the headless harness builds these. STREAMFLEX_TEST_FAIL names one of the settings screen's
-// steps (places, browser, command, keep or bindings; the pickers' list, rows, select, pads or apply; the font
+// steps (places, browser, command, keep or bindings; the pickers' list, rows, select, pads, apply or keyboard,
+// the on-screen keyboard; the font
 // picker's fontlist, fontscan, fontfolder, faces or sample) or the launcher's restart (its copy of the
 // arguments, made at the start), which then runs as if memory had run
 // out, or for keep, as if the saved file's permissions could not be kept; or one its own code fails
-// (fontthread: no thread starts; fontadd: the listing thread cannot add a file; decodelock: the image
-// decode lock is not made): failures no real run can be made to give.
+// (fontthread: no thread starts; fontadd: the listing thread cannot add a file; plate: an app's own
+// icon cannot be put on its plate; appthread: the installed apps' thread does not start; decodelock:
+// the image decode lock is not made): failures no real run can be made to give.
 
 // A function standing in for realloc that always fails
 static void *failing_reallocate(void *memory, size_t size)
@@ -60,7 +62,7 @@ void test_fail(const char *step, bool on)
 }
 
 // A function to tell whether the harness asked for `step` to fail, where the step's own code fails
-// it (no allocation hook is involved: fontthread, fontadd, decodelock). Main thread only: it logs.
+// it (no allocation hook is involved: fontthread, fontadd, appthread, plate, decodelock). Main thread only: it logs.
 bool test_failing(const char *step)
 {
     const char *asked = getenv("STREAMFLEX_TEST_FAIL");

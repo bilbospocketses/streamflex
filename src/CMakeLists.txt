@@ -32,6 +32,12 @@ set(SOURCES
   inidoc.h
   config_save.c
   config_save.h
+  menuedit.c
+  menuedit.h
+  osk.c
+  osk.h
+  iconmatch.c
+  iconmatch.h
   settings.c
   settings.h
   derive.c
@@ -61,6 +67,16 @@ set(SOURCES
   keycodes.h
   browser.c
   browser.h
+  applist.c
+  applist.h
+  appscan.c
+  appscan.h
+  plate.c
+  plate.h
+  iconfind.c
+  iconfind.h
+  icongrid.c
+  icongrid.h
   settings_screen.c
   settings_screen.h
   settings_pickers.c
@@ -104,6 +120,8 @@ else ()
     ole32
     uuid
     advapi32
+    gdi32
+    user32
   )
   target_include_directories(${EXECUTABLE_TITLE} PUBLIC ${INIH_INCLUDE_DIR} ${GETOPT_INCLUDE_DIR})
 endif ()

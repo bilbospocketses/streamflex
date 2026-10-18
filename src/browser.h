@@ -23,7 +23,8 @@ typedef enum {
     BROWSER_ROW_USE_FOLDER,
     BROWSER_ROW_FOLDER,
     BROWSER_ROW_IMAGE,
-    BROWSER_ROW_FILE
+    BROWSER_ROW_FILE,
+    BROWSER_ROW_TYPE     // "Type a path...", last when offered (browser_offer_typing): `path` is the folder on show, "" at the places
 } BrowserRowKind;
 
 typedef struct {
@@ -61,7 +62,8 @@ typedef enum {
     BROWSER_NONE,
     BROWSER_MOVED,
     BROWSER_CHOSEN,
-    BROWSER_CLOSED
+    BROWSER_CLOSED,
+    BROWSER_TYPE         // OK on the Type row: the caller opens the keyboard on its path
 } BrowserResult;
 
 typedef struct Browser Browser;
@@ -81,5 +83,14 @@ bool browser_first_image(const Browser *browser, const char *folder, char *out, 
 bool browser_is_image(const char *name);
 bool browser_is_image_file(const FileioEntry *entry);   // The one rule for every image scan
 bool browser_parent(const char *path, char *out, size_t size);
+void browser_offer_typing(Browser *browser);   // Every listing ends with a "Type a path..." row from now on
+// The program browser (3c): which files are programs, the command that runs one and the path a command
+// names, the title a tile starts with, and the icon a .desktop file names
+bool browser_is_program(const char *name, bool executable, bool windows);
+bool browser_program_command(const char *path, bool windows, char *out, size_t size);
+bool browser_program_path(const char *command, char *out, size_t size);
+const char *browser_program_why(const char *path, bool windows, size_t max_line);   // Why it cannot be a tile's command
+void browser_program_title(const char *path, char *out, size_t size);
+bool browser_desktop_icon(const char *text, size_t length, char *out, size_t size);
 
 #endif

@@ -28,6 +28,7 @@ void print_usage(void);
 
 // Windows-specific function prototypes
 #ifdef _WIN32
+#include "appsfolder.h"   // appsfolder_scan(), appicon_image()
 bool has_exit_hotkey(void);
 void set_exit_hotkey(SDL_Keycode keycode);
 SDL_Keycode exit_hotkey_keycode(void);   // 0 when there is no exit hotkey

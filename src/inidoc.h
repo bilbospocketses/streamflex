@@ -42,7 +42,7 @@ IniDoc *inidoc_parse(const char *text, size_t length);
 char *inidoc_serialize(const IniDoc *doc, size_t *length);
 const char *inidoc_get(const IniDoc *doc, const char *section, const char *key);
 bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *value, IniDocPlacement placement);
-const char *inidoc_why(const IniDoc *doc);   // Why the last set, add or list-mode remove failed; "" when it succeeded
+const char *inidoc_why(const IniDoc *doc);   // Why the last set, add, list-mode or section edit failed; "" when it succeeded
 bool inidoc_remove(IniDoc *doc, const char *section, const char *key);
 const char *inidoc_check(const char *key, const char *value);
 const char *inidoc_check_in(const IniDoc *doc, const char *section, const char *key, const char *value);
@@ -51,6 +51,19 @@ int inidoc_find_line(const IniDoc *doc, const char *section, const char *text);
 bool inidoc_list_set(IniDoc *doc, int line, const char *key, const char *value);
 bool inidoc_list_add(IniDoc *doc, const char *section, const char *key, const char *value);
 bool inidoc_list_remove(IniDoc *doc, int line);
+// Insert key=value into `section` before the key line `before` (from inidoc_list() or inidoc_find_line()),
+// or after the section's last key when `before` is -1, as inidoc_list_add() does; the section must exist
+bool inidoc_list_insert(IniDoc *doc, const char *section, int before, const char *key, const char *value);
+// Move the key line `line` within its section to before the key line `before`, or after the section's
+// last key when -1; comments and blank lines stay where they were
+bool inidoc_list_move(IniDoc *doc, int line, int before);
+bool inidoc_add_section(IniDoc *doc, const char *section);       // "[section]" at the end, after a blank line
+bool inidoc_remove_section(IniDoc *doc, const char *section);    // Every header of it, and its lines
+bool inidoc_rename_section(IniDoc *doc, const char *old_name, const char *new_name);   // Every header of it
+bool inidoc_has_section(const IniDoc *doc, const char *section);
+// The sections' names in the order each is first read, each once; fills at most `max` and returns how
+// many there are, as inidoc_list() does. The names point into the document until its next edit.
+int inidoc_sections(const IniDoc *doc, const char **names, int max);
 void inidoc_free(IniDoc *doc);
 
 #endif

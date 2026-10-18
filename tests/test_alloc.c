@@ -15,6 +15,11 @@
 #include "listpick.h"
 #include "fontlist.h"
 #include "bindings.h"
+#include "menuedit.h"
+#include "osk.h"
+#include "applist.h"
+#include "iconfind.h"
+#include "icongrid.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -578,6 +583,32 @@ static void prove_browser(void)
     browser_free(browser);
     no_leak(__LINE__, runs);
     report("finding a folder's first image");
+
+    // Offering Type a path... (3c): out of memory, the rows stay as they were and nothing is offered, so a
+    // later offer still makes the Type row, with the cursor kept
+    for (int n = 1;; n++) {
+        Browser *offered = browser_open(BROWSER_IMAGE, "/home/me/Pictures/zebra.jpg", PLACES, 2, fake_list, NULL, NULL, NULL);
+        char before[2048];
+        char now[2048];
+        describe_browser(offered, before, sizeof(before));
+        int rows = browser_row_count(offered);
+        arm(n);
+        browser_offer_typing(offered);
+        disarm();
+        describe_browser(offered, now, sizeof(now));
+        if (failed) {
+            CHECK_RUN(strcmp(before, now) == 0, n);
+            browser_offer_typing(offered);   // Nothing was offered, so this offer makes the row
+        }
+        const BrowserRow *last = browser_row(offered, rows);
+        CHECK_RUN(browser_row_count(offered) == rows + 1 && last != NULL && last->kind == BROWSER_ROW_TYPE &&
+                  browser_cursor(offered) == 2, n);
+        browser_free(offered);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("offering Type a path");
 }
 
 // A function to prove that removing a key allocates nothing, so it cannot fail for want of memory
@@ -775,6 +806,285 @@ static void prove_config_save_lists(void)
     report("saving list edits");
 }
 
+// The document callback the save proof uses: a section added, as menuedit_apply() adds one
+static bool add_kids(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    (void) context;
+    if (inidoc_add_section(doc, "Kids"))
+        return true;
+    snprintf(result->why, sizeof(result->why), "%s", inidoc_why(doc));
+    return false;
+}
+
+// A function to prove that a save through a document callback fails cleanly: refused with memory's
+// reason, the config as it was and no notes, or done in full with its one note (a removal of a line
+// that is not there)
+static void prove_config_save_with(void)
+{
+    static const char *const before = "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    static const char *const after = "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Kids]\nRows=3\n";
+    ConfigEdit edit = { "Kids", "Rows", NULL, "3", INIDOC_UNDER_HEADER };
+    ConfigListEdit gone = { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey2=#4000003B;:home", NULL, false, NULL };
+    CHECK(fileio_make_dirs(DIR));
+    for (int n = 1;; n++) {
+        fileio_remove(CONFIG ".tmp");
+        fileio_remove(CONFIG ".bak.tmp");
+        CHECK(fileio_write_all(CONFIG, before, strlen(before)));
+        ConfigSaveResult result;
+        arm(n);
+        bool ok = config_save_with(CONFIG, NULL, NULL, &edit, 1, &gone, 1, add_kids, NULL, &result);
+        disarm();
+        if (ok)
+            CHECK_RUN(holds(CONFIG, after) && result.note_count == 1, n);
+        else {
+            CHECK_RUN(failed && holds(CONFIG, before), n);
+            CHECK_RUN(strstr(result.why, "out of memory") != NULL, n);
+            CHECK_RUN(result.notes[0] == '\0' && result.note_count == 0, n);
+        }
+        CHECK_RUN(!fileio_exists(CONFIG ".tmp"), n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("saving through a document callback");
+}
+
+static const char *const MENUS_TEXT =
+    "[General]\nDefaultMenu=Main\n[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n"
+    "Entry3=Steam;steam;steam\n[Games]\nEntry1=Retro;retro;retroarch\n[Empty]\n";
+
+// A function to load the menus model from MENUS_TEXT, with the document gone again
+static MenuEdit *load_menus(void)
+{
+    IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+    MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+    inidoc_free(doc);
+    return edit;
+}
+
+// A function to describe a menus model, for telling whether an operation that failed left it as it was
+static void describe_menus(const MenuEdit *edit, char *out, size_t size)
+{
+    size_t used = 0;
+    out[0] = '\0';
+    for (int m = 0; m < menuedit_count(edit) && used < size; m++) {
+        const MenuEditMenu *menu = menuedit_menu(edit, m);
+        used += (size_t) snprintf(out + used, size - used, "[%s<%s]", menu->name,
+                                  menu->original_name != NULL ? menu->original_name : "");
+        for (int t = 0; t < menu->count && used < size; t++) {
+            const MenuTile *tile = &menu->tiles[t];
+            used += (size_t) snprintf(out + used, size - used, "%s=%s;%s;%s<%s|", tile->key != NULL ? tile->key : "",
+                                      tile->title, tile->icon, tile->command, tile->original != NULL ? tile->original : "");
+        }
+    }
+    if (used < size)
+        snprintf(out + used, size - used, "default=%s", menuedit_default(edit) != NULL ? menuedit_default(edit) : "");
+}
+
+// A function to prove that loading and copying the menus fail cleanly: NULL, and nothing left allocated
+static void prove_menuedit_load(void)
+{
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+        arm(n);
+        MenuEdit *edit = menuedit_load(doc, "Main");
+        MenuEdit *copy = edit != NULL ? menuedit_copy(edit) : NULL;
+        disarm();
+        CHECK_RUN(failed ? copy == NULL : (copy != NULL && menuedit_count(copy) == 3 && !menuedit_changed(copy)), n);
+        menuedit_free(copy);
+        menuedit_free(edit);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("loading and copying the menus");
+}
+
+#define MENU_EDIT_STEPS 6
+
+// A function to make one of the menu edits the proof runs, in order; the reason it refused, or NULL
+static const char *menu_edit_step(MenuEdit *edit, int step)
+{
+    switch (step) {
+    case 0:
+        return menuedit_add(edit, 0, 0, "Plex", "plex", "plex");
+    case 1:
+        return menuedit_set(edit, 0, 0, "Kodi 21", "kodi", "kodi");
+    case 2:
+        return menuedit_add_submenu(edit, 0, -1, "Kids", "kids");
+    case 3:
+        return menuedit_rename_menu(edit, 1, "Play");
+    case 4:
+        return menuedit_move_to_menu(edit, 0, 1, 1);
+    default:
+        return menuedit_move_to_menu(edit, 0, 2, 2);   // Steam, read from the file, to Empty: a move is kept
+    }
+}
+
+// A function to prove that the menu edits fail cleanly: "Out of memory", with the model as it was before
+// the edit that failed, and nothing left allocated once it is freed; or each done, as without a failure
+static void prove_menuedit_edits(void)
+{
+    static char before[4096];
+    static char after[4096];
+    static char expected[4096];
+    MenuEdit *edit = load_menus();
+    for (int step = 0; step < MENU_EDIT_STEPS; step++)
+        CHECK(menu_edit_step(edit, step) == NULL);
+    describe_menus(edit, expected, sizeof(expected));
+    menuedit_free(edit);
+    for (int n = 1;; n++) {
+        edit = load_menus();
+        arm(n);
+        const char *why = NULL;
+        for (int step = 0; why == NULL && step < MENU_EDIT_STEPS; step++) {
+            describe_menus(edit, before, sizeof(before));
+            why = menu_edit_step(edit, step);
+        }
+        disarm();
+        describe_menus(edit, after, sizeof(after));
+        if (why == NULL)
+            CHECK_RUN(!failed && strcmp(after, expected) == 0, n);
+        else {
+            CHECK_RUN(failed && strcmp(why, "Out of memory") == 0, n);
+            CHECK_RUN(strcmp(after, before) == 0, n);
+        }
+        menuedit_free(edit);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("editing the menus");
+}
+
+// A function to prove that copying a model that keeps a move fails cleanly: NULL, and nothing left allocated;
+// or a copy whose save keeps the moved tile's line when the menu it went to is gone, as the model's does
+static void prove_menuedit_copy_moves(void)
+{
+    static const char *const no_empty =
+        "[General]\nDefaultMenu=Main\n[Main]\nRows=2\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n"
+        "Entry3=Steam;steam;steam\n[Games]\nEntry1=Retro;retro;retroarch\n";
+    for (int n = 1;; n++) {
+        MenuEdit *edit = load_menus();
+        CHECK(edit != NULL && menuedit_move_to_menu(edit, 0, 2, 2) == NULL);   // Steam to Empty
+        arm(n);
+        MenuEdit *copy = menuedit_copy(edit);
+        disarm();
+        if (copy == NULL)
+            CHECK_RUN(failed, n);
+        else {
+            IniDoc *doc = inidoc_parse(no_empty, strlen(no_empty));
+            ConfigSaveResult result;
+            memset(&result, 0, sizeof(result));
+            bool ok = doc != NULL && menuedit_apply(copy, doc, &result);
+            char *out = ok ? text_of(doc) : NULL;
+            CHECK_RUN(!failed && out != NULL && strcmp(out, no_empty) == 0 && result.note_count == 2, n);
+            alloc_free(out);
+            inidoc_free(doc);
+        }
+        menuedit_free(copy);
+        menuedit_free(edit);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("copying the menus with a move");
+}
+
+// A function to prove that writing the menus into a document fails cleanly: false, with memory's reason;
+// or done, giving the file expected
+static void prove_menuedit_apply(void)
+{
+    static const char *const expected =
+        "[General]\nDefaultMenu=Home\n[Home]\nRows=2\nEntry3=Steam;steam;steam\nEntry4=Plex;plex;plex\n"
+        "Entry2=Play;games;:submenu Play\nEntry5=Kids;kids;:submenu Kids\n[Play]\nEntry1=Retro;retro;retroarch\n[Empty]\n"
+        "\n[Kids]\nEntry1=Paint;paint;mspaint\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(MENUS_TEXT, strlen(MENUS_TEXT));
+        MenuEdit *edit = menuedit_load(doc, "Main");
+        CHECK(menuedit_rename_menu(edit, 0, "Home") == NULL && menuedit_rename_menu(edit, 1, "Play") == NULL &&
+              menuedit_remove(edit, 0, 0) == NULL && menuedit_move(edit, 0, 1, 0) == NULL &&
+              menuedit_add(edit, 0, 0, "Plex", "plex", "plex") == NULL && menuedit_add_submenu(edit, 0, -1, "Kids", "kids") == NULL &&
+              menuedit_add(edit, 3, -1, "Paint", "paint", "mspaint") == NULL);
+        ConfigSaveResult result;
+        memset(&result, 0, sizeof(result));
+        arm(n);
+        bool ok = menuedit_apply(edit, doc, &result);
+        disarm();
+        char *out = text_of(doc);
+        if (ok)
+            CHECK_RUN(!failed && out != NULL && strcmp(out, expected) == 0, n);
+        else
+            CHECK_RUN(failed && strstr(result.why, "out of memory") != NULL, n);
+        alloc_free(out);
+        menuedit_free(edit);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("writing the menus");
+}
+
+// A function to prove that making the settings model again over new menus fails cleanly: NULL with the
+// old model as it was, and nothing left allocated; or made, a pad whose name could not be copied named
+// "Pad 0", as settings_set_pads() names it
+static void prove_settings_remodel(void)
+{
+    static const char *const names[] = { "Main", "Games" };
+    static const char *const now[] = { "Kids", "Play", "Main" };
+    static const char *const was[] = { NULL, "Games", "Main" };
+    static const char *const pads[] = { "Xbox Controller" };
+    for (int n = 1;; n++) {
+        SettingsState *old = settings_create(names, 2);
+        CHECK(old != NULL);
+        settings_set_pads(old, pads, 1);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number = 4;
+        arm(n);
+        SettingsState *state = settings_remodel(old, now, was, 3);
+        disarm();
+        if (state == NULL)
+            CHECK_RUN(failed, n);
+        else {
+            CHECK_RUN(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number == 4, n);
+            CHECK_RUN(strcmp(settings_pad_name(state, 0), failed ? "Pad 0" : "Xbox Controller") == 0, n);
+        }
+        CHECK_RUN(settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number == 4, n);
+        settings_free(state);
+        settings_free(old);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("making the settings model again over new menus");
+}
+
+// A function to prove that making the on-screen keyboard fails cleanly: NULL, and nothing left
+// allocated; or made, and then typing and moving in it allocate nothing
+static void prove_osk(void)
+{
+    for (int n = 1;; n++) {
+        arm(n);
+        Osk *osk = osk_create("Title for Kodi", "Kodi", 64, NULL, NULL, OSK_QWERTY);
+        disarm();
+        bool made_failed = failed;
+        CHECK_RUN(made_failed ? osk == NULL : osk != NULL, n);
+        if (osk != NULL) {
+            arm(1);
+            bool edited = osk_insert(osk, "\xC3\xA9") == OSK_CHANGED && osk_command(osk, OSK_BACKSPACE) == OSK_CHANGED &&
+                          osk_command(osk, OSK_DOWN) == OSK_MOVED && osk_command(osk, OSK_OK) == OSK_CHANGED;
+            disarm();
+            CHECK_RUN(edited && calls == 0 && strcmp(osk_text(osk), "Kodia") == 0, n);
+        }
+        osk_free(osk);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !made_failed)
+            break;
+    }
+    report("making the on-screen keyboard");
+}
+
 // A function to prove that loading and changing bindings fails cleanly: a list that could not be
 // loaded is empty, and Discard leaves it so; a binding that could not be added is not there; and
 // nothing is left allocated. Eight lines fill the list's first block, so the addition must grow it.
@@ -838,6 +1148,158 @@ static void prove_bindings_reload(void)
     report("loading the bindings again");
 }
 
+// A function to prove that the section edits fail cleanly: refused, saying "out of memory", with the
+// document as it was before the call that failed; or done. Moving a line, removing a section and
+// listing the sections allocate nothing, so they cannot fail for want of memory. Games has two headers,
+// so a rename can fail on the second after making the first, which it frees.
+static void prove_section_edits(void)
+{
+    static const char *const text = "[Main]\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n[Games] ; mine\nEntry1=C;apps;:quit\n"
+                                    "[Games]\nEntry2=D;apps;:quit\n";
+    static const char *const after_insert = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                            "[Games] ; mine\nEntry1=C;apps;:quit\n[Games]\nEntry2=D;apps;:quit\n";
+    static const char *const after_rename = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                            "[Play] ; mine\nEntry1=C;apps;:quit\n[Play]\nEntry2=D;apps;:quit\n";
+    static const char *const done = "[Main]\nEntry3=N;apps;:home\nEntry1=A;apps;:quit\nEntry2=B;apps;:quit\n"
+                                    "[Play] ; mine\nEntry1=C;apps;:quit\n[Play]\nEntry2=D;apps;:quit\n\n[Kids]\n";
+    for (int n = 1;; n++) {
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        arm(n);
+        bool inserted = inidoc_list_insert(doc, "Main", 1, "Entry3", "N;apps;:home");
+        bool renamed = inserted && inidoc_rename_section(doc, "Games", "Play");
+        bool added = renamed && inidoc_add_section(doc, "Kids");
+        disarm();
+        char *out = text_of(doc);
+        if (!failed)
+            CHECK_RUN(added && out != NULL && strcmp(out, done) == 0, n);
+        else {
+            CHECK_RUN(strcmp(inidoc_why(doc), "out of memory") == 0, n);
+            CHECK_RUN(out != NULL && strcmp(out, renamed ? after_rename : inserted ? after_insert : text) == 0, n);
+        }
+        alloc_free(out);
+        inidoc_free(doc);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the section edits");
+
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    const char *names[4];
+    arm(1);
+    bool moved = inidoc_list_move(doc, 2, 1);
+    bool removed = inidoc_remove_section(doc, "Games");
+    int count = inidoc_sections(doc, names, 4);
+    disarm();
+    CHECK(moved && removed && count == 1 && !failed && calls == 0);
+    inidoc_free(doc);
+    no_leak(__LINE__, 1);
+}
+
+// A function to prove that the app list fails cleanly: a .desktop file read short of memory says so (-1,
+// never 0, which would read as a file that is no app) with nothing left allocated; an add short of memory
+// is refused, the list keeps the apps added before it and says it is short; or all is done, 71 apps, the
+// list growing past its first block
+static void prove_applist(void)
+{
+    static const char *const desktop = "[Desktop Entry]\nType=Application\nName=Kodi\nName[de]=Kodi DE\nIcon=kodi\nExec=kodi\n";
+    int short_reads = 0;
+    for (int n = 1;; n++) {
+        AppItem item = { NULL, NULL, NULL };
+        int added = 0;
+        arm(n);
+        AppList *list = applist_create();
+        int got = list != NULL ? applist_parse_desktop("/a/kodi.desktop", desktop, strlen(desktop), "de_DE", &item) : 0;
+        bool parsed = got == 1;
+        bool adding = parsed && applist_add(list, item.name, item.command, item.icon);
+        added += adding ? 1 : 0;
+        for (int i = 0; adding && i < 70; i++) {
+            char name[16];
+            snprintf(name, sizeof(name), "App %d", i);
+            adding = applist_add(list, name, "/a/x.desktop", NULL);
+            added += adding ? 1 : 0;
+        }
+        disarm();
+        if (!failed)
+            CHECK_RUN(added == 71 && applist_count(list) == 71 && !applist_failed(list) &&
+                      strcmp(applist_item(list, 0)->name, "Kodi DE") == 0, n);
+        else {
+            CHECK_RUN(added < 71, n);
+            CHECK_RUN(list == NULL || applist_count(list) == added, n);
+            CHECK_RUN(list == NULL || !parsed || applist_failed(list), n);
+            CHECK_RUN(list == NULL || got != 0, n);
+            CHECK_RUN(got != -1 || (item.name == NULL && item.command == NULL && item.icon == NULL), n);
+            short_reads += got == -1 ? 1 : 0;
+        }
+        if (parsed)
+            applist_item_clear(&item);
+        applist_free(list);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    CHECK(short_reads > 0);   // An allocation of the read's own failed in some run, so the -1 was met
+    report("the app list");
+}
+
+// A function to prove that the icon lookup fails cleanly: each folder listing that runs out of memory is
+// a folder with no icons, so the answer is the other folder's icon, or none; with no failure, the largest
+static void prove_iconfind(void)
+{
+    static const char *const dirs[] = { DIR "/icons/a", DIR "/icons/b" };
+    static const char *const small = DIR "/icons/a/icons/hicolor/48x48/apps/kodi.png";
+    static const char *const large = DIR "/icons/b/icons/hicolor/256x256/apps/kodi.png";
+    CHECK(fileio_make_dirs(DIR "/icons/a/icons/hicolor/48x48/apps"));
+    CHECK(fileio_make_dirs(DIR "/icons/b/icons/hicolor/256x256/apps"));
+    CHECK(fileio_write_all(small, "x", 1));
+    CHECK(fileio_write_all(large, "x", 1));
+    for (int n = 1;; n++) {
+        char out[256];
+        arm(n);
+        bool ok = iconfind_path("kodi", dirs, 2, out, sizeof(out));
+        disarm();
+        if (!failed)
+            CHECK_RUN(ok && strcmp(out, large) == 0, n);
+        else
+            CHECK_RUN(!ok || strcmp(out, small) == 0 || strcmp(out, large) == 0, n);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("finding an app's icon");
+}
+
+// A function to prove that the library grid fails cleanly: made, or NULL with nothing left allocated;
+// a filter refused leaves the grid as it was (its icons, its query and its cursor), or is done
+static void prove_icongrid(void)
+{
+    static const char *const aliases[] = { "xbmc" };
+    static const LibraryInfo icons[] = {
+        { "power", "Power", "system", NULL, 0 }, { "kodi", "Kodi", "servers", aliases, 1 },
+        { "plex", "Plex", "servers", NULL, 0 }, { "apps", "Apps", "general", NULL, 0 }
+    };
+    for (int n = 1;; n++) {
+        arm(n);
+        IconGrid *grid = icongrid_create(icons, 4);
+        bool selected = grid != NULL && icongrid_select(grid, "plex");
+        bool filtered = grid != NULL && icongrid_filter(grid, "XBMC");
+        disarm();
+        if (grid == NULL)
+            CHECK_RUN(failed, n);
+        else if (!filtered) {
+            CHECK_RUN(failed && selected, n);
+            CHECK_RUN(icongrid_count(grid) == 4 && strcmp(icongrid_query(grid), "") == 0 && icongrid_cursor(grid) == 2, n);
+        }
+        else
+            CHECK_RUN(icongrid_count(grid) == 1 && strcmp(icongrid_icon(grid, 0)->name, "kodi") == 0, n);
+        icongrid_free(grid);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the library grid");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -872,8 +1334,19 @@ int main(void)
     prove_fontlist_finish();
     prove_list_mode();
     prove_config_save_lists();
+    prove_config_save_with();
+    prove_menuedit_load();
+    prove_menuedit_edits();
+    prove_menuedit_copy_moves();
+    prove_menuedit_apply();
+    prove_settings_remodel();
+    prove_osk();
     prove_bindings();
     prove_bindings_reload();
+    prove_section_edits();
+    prove_applist();
+    prove_iconfind();
+    prove_icongrid();
     alloc_set_hooks(NULL);
     return check_report();
 }

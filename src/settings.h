@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "bindings.h"
+#include "menuedit.h"
 
 #define SETTING_TEXT_MAX 1024  // Longest path a setting holds
 #define SETTINGS_MAX_ROWS 64   // Most rows one page shows; Menus counts the rest in a note
@@ -75,6 +76,7 @@ typedef enum {
     SET_ID_APPLICATION_TIMEOUT,
     SET_ID_STARTUP_CMD,
     SET_ID_QUIT_CMD,
+    SET_ID_KEYBOARD_LAYOUT,      // 3c: the on-screen keyboard's layout, QWERTY or ABC
     // [Background], beyond 3a's
     SET_ID_CHROMA_KEY_COLOR,
     SET_ID_OVERLAY,
@@ -210,7 +212,14 @@ typedef enum {
     SETTINGS_PAGE_CAPTURE,       // Press the key or button
     SETTINGS_PAGE_CONFIRM,       // Keep the key captured, try again, or cancel
     SETTINGS_PAGE_SAVE_FAILED,
-    SETTINGS_PAGE_RESTART        // Saved: restart StreamFlex now to apply what waits for the next start?
+    SETTINGS_PAGE_RESTART,       // Saved: restart StreamFlex now to apply what waits for the next start?
+    SETTINGS_PAGE_TILES,         // 3c: a menu's tiles, Add first
+    SETTINGS_PAGE_TILE,          // One tile: Title, Remove (Tasks 10b, 11 and 13 add rows)
+    SETTINGS_PAGE_ADD,           // What a new tile is: a submenu, a special command (Task 10b: an app, a program)
+    SETTINGS_PAGE_SPECIAL,       // The special commands a tile can run
+    SETTINGS_PAGE_REMOVE_MENU,   // A submenu tile's Remove: the menu with its tiles, or the tile alone
+    SETTINGS_PAGE_MOVE_TO,       // The other menus a tile can be moved to
+    SETTINGS_PAGE_ICON           // A tile's icon: the library match, its own icon, the library, an image
 } SettingsPage;
 
 typedef enum {
@@ -237,7 +246,23 @@ typedef enum {
     SETTINGS_ACTION_TRY_AGAIN,
     SETTINGS_ACTION_CANCEL,
     SETTINGS_ACTION_RESTART,
-    SETTINGS_ACTION_NO_RESTART
+    SETTINGS_ACTION_NO_RESTART,
+    SETTINGS_ACTION_OPEN_TILE,          // A tile's row: its page
+    SETTINGS_ACTION_EDIT_TITLE,         // The keyboard on the tile's title
+    SETTINGS_ACTION_REMOVE_TILE,
+    SETTINGS_ACTION_REMOVE_WITH_TILES,  // A submenu tile's confirm page: the menu with its tiles...
+    SETTINGS_ACTION_REMOVE_ONLY_TILE,   // ...or the tile alone, while another tile opens the menu
+    SETTINGS_ACTION_ADD_SUBMENU,        // The keyboard for a new submenu's name
+    SETTINGS_ACTION_ADD_SPECIAL,        // A special command's row; `tile` is its place on the page
+    SETTINGS_ACTION_ADD_APP,            // The app list, for a new tile
+    SETTINGS_ACTION_ADD_PROGRAM,        // The program browser, for a new tile
+    SETTINGS_ACTION_EDIT_COMMAND,       // The tile's command: an app, a program, a special command, or typed
+    SETTINGS_ACTION_MOVE,               // Pick the tile up, to move it through the grid
+    SETTINGS_ACTION_MOVE_TO,            // Move to menu's rows: `menu` is the menu
+    SETTINGS_ACTION_ICON_SUGGESTED,     // The Icon page: the library icon offered first (the match, or the generic one)
+    SETTINGS_ACTION_ICON_OWN,           // ...the app's own icon, on a plate
+    SETTINGS_ACTION_ICON_GRID,          // ...the library grid
+    SETTINGS_ACTION_ICON_BROWSE         // ...the folder browser, for an image
 } SettingsAction;
 
 typedef struct {
@@ -254,6 +279,8 @@ typedef struct {
     bool steps;                  // Left and Right step its value while it is enabled: a setting, or a
                                  // picker for a color, the default menu or the device
     int binding;                 // BINDING rows: the binding's index
+    int tile;                    // Tiles rows and the links on Tiles pages: the tile's index (-1: none);
+                                 // Special rows: the command's place
 } SettingsRow;
 
 typedef enum {
@@ -282,7 +309,15 @@ typedef enum {
     SETTINGS_EVENT_PICK_COMMAND, // Open the command picker for the binding page's binding
     SETTINGS_EVENT_BINDINGS,     // The binding lists changed: apply them; with `confirm`, start the 10 s for `code`
     SETTINGS_EVENT_RESTART,      // Saved: restart StreamFlex now
-    SETTINGS_EVENT_CLOSE_SAVED   // Saved: close, with no restart and nothing saved again
+    SETTINGS_EVENT_CLOSE_SAVED,  // Saved: close, with no restart and nothing saved again
+    SETTINGS_EVENT_MENUS,        // The menus model changed: put it into the launcher; with `rebind`, the bindings
+                                 // and the Startup and Quit commands a submenu's rename rewrote, too
+    SETTINGS_EVENT_TYPE_TITLE,   // Open the keyboard on the title of tile `tile` of menu `menu`
+    SETTINGS_EVENT_TYPE_NAME,    // Open the keyboard for a new submenu's name, for the Add page's menu
+    SETTINGS_EVENT_PICK_APP,     // Open the app list, for a new tile in the Add page's menu
+    SETTINGS_EVENT_BROWSE_PROGRAM,   // Open the program browser, for a new tile there
+    SETTINGS_EVENT_PICK_TILE_COMMAND, // Open the command list for tile `tile` of menu `menu`
+    SETTINGS_EVENT_ICON          // The Icon page's row `action` was chosen: the screen acts, then calls settings_icon_done()
 } SettingsEventKind;
 
 typedef struct {
@@ -292,6 +327,10 @@ typedef struct {
     int device;                  // CAPTURE and BINDINGS: the BindingsDevice captured from, or changed
     int code;                    // BINDINGS with confirm: the key whose navigation was taken
     bool confirm;
+    int menu;                    // Tiles events: the menu (the settings' index) and the tile they are about
+    int tile;
+    bool rebind;                 // MENUS: a rename rewrote bindings and the Startup and Quit commands
+    SettingsAction action;       // ICON: the row chosen
 } SettingsEvent;
 
 typedef struct SettingsState SettingsState;
@@ -314,6 +353,36 @@ SettingSlot *settings_slot(SettingsState *state, SettingId id, int menu);
 int settings_slot_count(const SettingsState *state);
 SettingSlot *settings_slot_at(SettingsState *state, int index);
 void settings_set_entry(SettingsState *state, SettingId id, int menu, const SettingValue *value);
+// The model made again over the menus as they are now, after one came, went, was renamed or moved:
+// old_names[i] is the name menu i had in `old` (NULL for a new one), by which its settings and their
+// entries are carried across. NULL when out of memory, `old` untouched; the caller frees `old`.
+SettingsState *settings_remodel(const SettingsState *old, const char *const *names, const char *const *old_names, int count);
+void settings_set_menus(SettingsState *state, MenuEdit *menus);   // Borrowed: the screen owns the menus model
+MenuEdit *settings_menus(const SettingsState *state);             // NULL when the screen has none
+bool settings_menus_edited(const SettingsState *state);   // The menus model differs from how it was read
+int settings_preview_tile(SettingsState *state);           // The tile the preview highlights; -1 for none
+// Why a tile's title, or a new submenu's name, cannot be written as typed; NULL when it can (the keyboard's validators)
+const char *settings_title_problem(const SettingsState *state, int menu, int tile, const char *title);
+const char *settings_name_problem(const SettingsState *state, const char *name);
+// The keyboard's results: a tile's title (a submenu tile's renames its menu); a new submenu, and a new tile
+// (the Special page's, the app list's, the program browser's), each into the Add page's menu: after the tile
+// whose Add after this tile opened it, or at the end from the Tiles page's Add
+SettingsEvent settings_set_title(SettingsState *state, int menu, int tile, const char *title);
+SettingsEvent settings_add_tile(SettingsState *state, const char *title, const char *icon, const char *command);
+SettingsEvent settings_add_submenu(SettingsState *state, const char *name);
+// A tile's command, chosen in its command list (an app's, a program's, a special one, or typed), and why
+// one cannot be written (the keyboard's validator); an app's or a file's name made a tile's title
+SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command);
+// A tile's icon, as the Icon page chose it (a library name or an image's path); refused with the reason
+// as the notice when the tile's line could not hold it (Known integration work 8.2)
+SettingsEvent settings_set_icon(SettingsState *state, int menu, int tile, const char *icon);
+const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command);
+void settings_tile_title(const char *name, char *out, size_t size);
+// Move (3c): the grid the preview lays the menu out in now, which the arrows move a picked-up tile through;
+// the tile picked up (-1: none); and where an arrow sends it
+void settings_set_grid(SettingsState *state, int rows, int columns);
+int settings_moving_tile(const SettingsState *state);
+int settings_move_target(int index, int count, int rows, int columns, SettingsCommand command);
 bool settings_changed(const SettingSlot *slot);
 bool settings_any_changed(const SettingsState *state);
 int settings_rows(SettingsState *state, SettingsRow *rows, int max);
@@ -348,5 +417,24 @@ SettingsEvent settings_bind_command(SettingsState *state, const char *command);
 SettingsEvent settings_revert_binding(SettingsState *state);
 void settings_keep_binding(SettingsState *state);   // The 10 s were confirmed: nothing goes back
 const char *settings_binding_command(const SettingsState *state);   // The command the binding page shows
+
+// The Icon page (spec "Icons"). What it offers for its tile, found by the screen as it opens: the
+// library icon offered first (the match, or the generic one when the app has neither a match nor an
+// icon of its own; "" for none) and whether the app's own icon is offered. Its rows wait for them.
+#define SETTINGS_ICON_TEXT_MAX 64
+typedef struct {
+    bool ready;                                     // Found for the page on show
+    char suggested[SETTINGS_ICON_TEXT_MAX];         // A library icon's name, or ""
+    char suggested_title[SETTINGS_ICON_TEXT_MAX];   // Its title, which its row shows
+    bool matched;                                   // A match for the app's name; false: the generic icon
+    bool own;                                       // The app's own icon was read and plated
+} SettingsIconChoices;
+void settings_set_icon_choices(SettingsState *state, const SettingsIconChoices *choices);   // The cursor to the first row
+const SettingsIconChoices *settings_icon_choices(const SettingsState *state);
+bool settings_icon_tile(const SettingsState *state, int *menu, int *tile);   // The Icon page on show, and its tile
+void settings_icon_done(SettingsState *state, const char *why);   // NULL: chosen, back to the tile's page; else why
+// The pages opened at a tile, as the remote opens them: Menus, the menu, its Tiles page and the tile's
+// page (tile -1: the Tiles page); they stop at the last that opened when a menu or tile is not there
+void settings_show_tile(SettingsState *state, int menu, int tile);
 
 #endif

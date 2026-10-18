@@ -85,10 +85,10 @@ If your config file is in one of the above locations, StreamFlex can be started 
 ```bash
 streamflex -c /path/to/config.ini
 ```
-StreamFlex ships with a default config file which is intended strictly for demonstration purposes. If you try to start one of the applications, it is possible that nothing will happen because the install path is different on your system, or you don't have the application installed at all. See the [configuration file documentation](docs/configuration.md#configuring-streamflex) for instuctions on how to change the menus and settings.
+StreamFlex ships with a default config file which is intended strictly for demonstration purposes. If you try to start one of the applications, it is possible that nothing will happen because the install path is different on your system, or you don't have the application installed at all. The [settings screen](docs/configuration.md#the-settings-screen) changes the menus and settings from the remote, and the [configuration file documentation](docs/configuration.md#configuring-streamflex) explains every setting.
 
 ### Controls
-The keyboard arrow keys move the highlight cursor: left and right along a row, and up and down between the rows of a grid. Enter selects the current entry, backspace goes back to the previous menu (if applicable), and Esc quits the program. 
+The keyboard arrow keys move the highlight cursor: left and right along a row, and up and down between the rows of a grid. Enter selects the current entry as it is let go (held for about a second, it opens that entry's page in the settings screen), backspace goes back to the previous menu (if applicable), and Esc quits the program. 
 
 #### TV Remotes
 StreamFlex does not feature built-in decoding of IR or CEC signals. If you plan to use a TV remote to control the device, it is assumed that these signals are decoded by the OS or another program and mapped to keyboard presses, which can then be received by StreamFlex.

@@ -116,7 +116,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s, the
 # two menus again with no decode thread, about 10 s, and two menus of 48 XPM icons, about 4 s each;
 # Task 1.17: a menu of one broken SVG icon, about 3 s), until a set measures it. 72-fallback-fonts.sh's
-# is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each).
+# is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each). The menu-editing
+# checks' (80-menus-live.sh to 87-menus-log.sh) are the mean of the four passes in CI's build.yml run
+# 39162761021 at 2acc058, on 2026-10-18 (each file's SHARD BEGIN to SHARD END, by the job log's times).
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -129,7 +131,8 @@ declare -A shard_seconds=(
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
-    [70-chroma.sh]=3 [72-fallback-fonts.sh]=40
+    [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=47 [84-keyboard.sh]=543
+    [82-tiles.sh]=463 [81-apps.sh]=103 [83-move.sh]=158 [85-icons.sh]=109 [86-hold-ok.sh]=14 [86-hold-ok-timing.sh]=87 [87-menus-log.sh]=25
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
@@ -138,7 +141,7 @@ declare -A shard_seconds=(
 timing_pinned=(42-features.sh 47-screen-timing.sh 48-device-loss-timing.sh 48-pad-repeat.sh 49-fade-wall-time.sh
                50-settings-timing.sh 55-settings-pages-timing.sh 58-settings-pickers-timing.sh
                59-settings-fonts-timing.sh 60-settings-background-timing.sh 62-settings-bindings-pad-timing.sh
-               62-settings-bindings-timing.sh 67-wayland-timing.sh)
+               62-settings-bindings-timing.sh 67-wayland-timing.sh 86-hold-ok-timing.sh)
 
 # A function to find the check files and choose the ones this run runs (checks, in name order):
 # with no selection all of them; with timing those marked "# Timing-sensitive", with rest the

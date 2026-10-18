@@ -57,13 +57,33 @@ target_include_directories(test_config_save PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_config_save)
 add_test(NAME config_save COMMAND test_config_save)
 
+# Unit tests for the menus model: its operations, its name and tile rules, and how a save makes the file
+# match it (pure; it writes through inidoc.c and numbers lines and notes through config_save.c, which
+# reads files through fileio.c)
+add_executable(test_menuedit test_menuedit.c "${PROJECT_SOURCE_DIR}/src/menuedit.c" "${PROJECT_SOURCE_DIR}/src/config_save.c"
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_menuedit PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_menuedit)
+add_test(NAME menuedit COMMAND test_menuedit)
+
+# Unit tests for the on-screen keyboard's model (pure): its layouts, moves, Shift, UTF-8 editing and the
+# real-keyboard rule; the fields' validators come from menuedit.c, as the settings pages give them
+add_executable(test_osk test_osk.c "${PROJECT_SOURCE_DIR}/src/osk.c" "${PROJECT_SOURCE_DIR}/src/menuedit.c"
+  "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_osk PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_osk)
+add_test(NAME osk COMMAND test_osk)
+
 # Unit tests for the settings table and the settings screen's pages; settings.c reads counts and
 # sizes through layout.c's parsers, paths through fileio.c's helpers, the key and gamepad bindings
 # through bindings.c's model (whose lines the tests parse with inidoc.c), and names a color through
-# colorpick.c's swatches (whose contrast math needs libm)
+# colorpick.c's swatches (whose contrast math needs libm). The settings model made again over renamed
+# menus is saved through config_save.c with the menus model's own save (menuedit.c), as the screen saves.
 add_executable(test_settings test_settings.c "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c"
   "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/bindings.c"
-  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+  "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c" "${PROJECT_SOURCE_DIR}/src/menuedit.c"
+  "${PROJECT_SOURCE_DIR}/src/config_save.c")
 target_include_directories(test_settings PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_settings)
 if (UNIX)
@@ -109,18 +129,48 @@ target_include_directories(test_browser PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_browser)
 add_test(NAME browser COMMAND test_browser)
 
+# Unit tests for the installed apps' list: the .desktop reader, the rules that leave apps out, one app
+# found twice, the order, the filter and the data folders (pure; names compare through fileio.c's helpers)
+add_executable(test_applist test_applist.c "${PROJECT_SOURCE_DIR}/src/applist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_applist PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_applist)
+add_test(NAME applist COMMAND test_applist)
+
+# Unit tests for plating an app's own icon, its file's name and its folder (plate.c draws on SDL3 surfaces
+# and saves through SDL3_image; fileio.c makes the folders). png_roundtrip runs the same program's PNG half:
+# the build's SDL3_image writes a PNG it reads back, pixel for pixel
+add_executable(test_plate test_plate.c "${PROJECT_SOURCE_DIR}/src/plate.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_plate PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(test_plate SDL3_image::SDL3_image SDL3::SDL3)
+link_fileio(test_plate)
+add_test(NAME plate COMMAND test_plate)
+add_test(NAME png_roundtrip COMMAND test_plate png)
+
+# Unit tests for finding a Linux app's own icon from its Icon= value, over a fixture tree (pure)
+add_executable(test_iconfind test_iconfind.c "${PROJECT_SOURCE_DIR}/src/iconfind.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_iconfind PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_iconfind)
+add_test(NAME iconfind COMMAND test_iconfind)
+
 # The allocation-failure proof: every allocation in the pure modules made to fail in turn
 # (colorpick.c allocates nothing; settings.c names colors through it)
 add_executable(test_alloc test_alloc.c "${PROJECT_SOURCE_DIR}/src/alloc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/browser.c"
   "${PROJECT_SOURCE_DIR}/src/settings.c" "${PROJECT_SOURCE_DIR}/src/layout.c" "${PROJECT_SOURCE_DIR}/src/listpick.c"
-  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c")
+  "${PROJECT_SOURCE_DIR}/src/fontlist.c" "${PROJECT_SOURCE_DIR}/src/bindings.c" "${PROJECT_SOURCE_DIR}/src/colorpick.c"
+  "${PROJECT_SOURCE_DIR}/src/menuedit.c" "${PROJECT_SOURCE_DIR}/src/osk.c")
 target_include_directories(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src")
 link_fileio(test_alloc)
 if (UNIX)
   target_link_libraries(test_alloc m)
 endif ()
 add_test(NAME alloc COMMAND test_alloc)
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/applist.c")   # 3c Task 7: the installed apps' list
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/iconfind.c")   # 3c Task 9: the Linux icon lookup
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/icongrid.c")   # 3c Task 13: the library grid
 
 # A function to link inih the way the launcher does
 function(link_inih target)
@@ -153,6 +203,21 @@ if (UNIX)
 endif ()
 add_test(NAME library_svg COMMAND test_library_svg)
 
+# Unit tests for matching an app's name to a library icon (pure), and the shipped manifest's aliases,
+# read through library.c, which reads it with inih
+add_executable(test_iconmatch test_iconmatch.c "${PROJECT_SOURCE_DIR}/src/iconmatch.c" "${PROJECT_SOURCE_DIR}/src/library.c"
+  "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_iconmatch PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_iconmatch PRIVATE LIBRARY_ROOT="${PROJECT_SOURCE_DIR}/assets/icons/library")
+link_inih(test_iconmatch)
+link_fileio(test_iconmatch)
+add_test(NAME iconmatch COMMAND test_iconmatch)
+
+# Unit tests for the library grid's model: its groups, its filter and its arrows (pure)
+add_executable(test_icongrid test_icongrid.c "${PROJECT_SOURCE_DIR}/src/icongrid.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_icongrid PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME icongrid COMMAND test_icongrid)
+
 # Unit test 14: the window a background needs and the renderers that may draw it (pure, linked alone)
 add_executable(test_winplan test_winplan.c "${PROJECT_SOURCE_DIR}/src/winplan.c")
 target_include_directories(test_winplan PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -175,6 +240,20 @@ if (WIN32)
   # whitespace may stand between the message's words
   string(REPLACE " " "[ \t\r\n]+" missing_fix "lacks the Vulkan fix's error string")
   set_tests_properties(vulkan_fix_control PROPERTIES PASS_REGULAR_EXPRESSION "${missing_fix}")
+endif ()
+
+# The shell's AppsFolder on the runner (3c Task 8): the scan lists apps through COM, an app's image comes
+# at 256 px, and the scan's thread does the same with COM started on it. Windows only; it links the scan
+# and its list without the launcher (the shell and COM through link_fileio(); IShellItem2::GetString is a
+# COM method, so no propsys)
+if (WIN32)
+  add_executable(test_appsfolder test_appsfolder.c "${PROJECT_SOURCE_DIR}/src/platform/appsfolder_win32.c"
+    "${PROJECT_SOURCE_DIR}/src/appscan.c" "${PROJECT_SOURCE_DIR}/src/applist.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+    "${PROJECT_SOURCE_DIR}/src/alloc.c")
+  target_include_directories(test_appsfolder PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(test_appsfolder SDL3::SDL3 gdi32 user32)
+  link_fileio(test_appsfolder)
+  add_test(NAME appsfolder COMMAND test_appsfolder)
 endif ()
 
 # Unit tests for the key codes config.ini stores (SDL2's numbering) against the codes keys send on SDL3 (pure)

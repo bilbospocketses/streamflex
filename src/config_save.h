@@ -1,6 +1,7 @@
 // Saving the settings screen's changes into config.ini: only the changed keys, and the changed lines
 // of the list sections, applied to the file as it is on disk at that moment, with the old file kept
-// as .bak and the new one swapped in whole. Pure: no SDL; memory comes from alloc.h.
+// as .bak and the new one swapped in whole. A document callback can make its own changes to that fresh
+// read first: menuedit_apply() writes the menus so. Pure: no SDL; memory comes from alloc.h.
 #ifndef CONFIG_SAVE_H
 #define CONFIG_SAVE_H
 
@@ -16,7 +17,9 @@ typedef struct {
     const char *alias;          // An older name the parser reads as `key` (MaxButtons for Columns),
                                 // edited in its place when only it is present; NULL if none
     const char *value;          // NULL removes the key
-    IniDocPlacement placement;  // Where a new key goes
+    IniDocPlacement placement;  // Where a new key goes. INIDOC_UNDER_HEADER is a menu's own setting: when its
+                                // section is not in the file (renamed or removed by hand meanwhile), the edit
+                                // is skipped with a CONFIG_NOTE_SECTION_GONE note
 } ConfigEdit;
 
 typedef enum {
@@ -36,10 +39,11 @@ typedef struct {
     const char *value;      // SET, ADD
 } ConfigListEdit;
 
-// What a note says of a list edit the save could not make as asked
+// What a note says of an edit the save could not make as asked
 typedef enum {
     CONFIG_NOTE_CHANGED_MEANWHILE,   // Its line changed by hand meanwhile: the change is written as a new line
-    CONFIG_NOTE_REMOVAL_SKIPPED      // Its line is gone: the removal is skipped
+    CONFIG_NOTE_REMOVAL_SKIPPED,     // Its line is gone: the removal is skipped
+    CONFIG_NOTE_SECTION_GONE         // Its menu was renamed or removed by hand meanwhile: that menu's edits are skipped
 } ConfigNoteKind;
 
 typedef struct {
@@ -48,17 +52,26 @@ typedef struct {
     char why[512];                      // Why the save failed, in a few words
     char warning[160];                  // What a save that succeeded could not keep, such as the file's
                                         // permissions; "" when nothing
-    char notes[CONFIG_SAVE_NOTES_SIZE]; // One line per list edit that could not be made as asked; "" when
-                                        // none, and always "" after a save that failed (nothing was made)
+    char notes[CONFIG_SAVE_NOTES_SIZE]; // One line per edit that could not be made as asked; "" when none,
+                                        // and always "" after a save that failed (nothing was made)
     ConfigNoteKind note_kinds[CONFIG_SAVE_NOTES_SIZE / 2];   // Each line of `notes`' kind, in order (a
                                                              // line takes 2 bytes at least, with its break)
     int note_count;                     // The lines in `notes`: a note cut off whole at its end has none
 } ConfigSaveResult;
+
+// Called on the fresh read, before `edits` and `lists` are applied. False fails the save with `result->why` set.
+typedef bool (*ConfigDocEdit)(IniDoc *doc, void *context, ConfigSaveResult *result);
 
 bool config_save(const char *loaded, const char *system_prefix, const char *user_config,
                  const ConfigEdit *edits, int count, ConfigSaveResult *result);
 bool config_save_all(const char *loaded, const char *system_prefix, const char *user_config,
                      const ConfigEdit *edits, int count, const ConfigListEdit *lists, int list_count,
                      ConfigSaveResult *result);
+bool config_save_with(const char *loaded, const char *system_prefix, const char *user_config,
+                      const ConfigEdit *edits, int count, const ConfigListEdit *lists, int list_count,
+                      ConfigDocEdit doc_edit, void *context, ConfigSaveResult *result);
+void config_save_note(ConfigSaveResult *result, ConfigNoteKind kind, const char *text);   // Appends one note line
+bool config_save_next_key(const IniDoc *doc, const char *section, const char *stem, char *out, size_t size,
+                          ConfigSaveResult *result);
 
 #endif

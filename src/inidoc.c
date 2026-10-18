@@ -32,7 +32,7 @@ struct IniDoc {
     int capacity;
     bool bom;            // The file started with a UTF-8 byte order mark
     const char *eol;     // The ending new lines get: the file's first one, else "\n"
-    const char *why;     // Why the last set, add or list-mode remove failed; "" after one that succeeded
+    const char *why;     // Why the last set, add, list-mode or section edit failed; "" after one that succeeded
 };
 
 static const char *const EOL_LF = "\n";
@@ -48,6 +48,12 @@ static const char *const SECTION_TOO_LONG =
     "the section's name is too long for one line of config.ini (199 bytes at most)";
 static const char *const NO_SAFE_PLACE = "it would change how other lines read";
 static const char *const NOT_A_KEY = "the line is not a key";
+static const char *const NOT_IN_SECTION = "the line is not in that section";
+static const char *const NO_SECTION = "the section is not there";
+static const char *const SECTION_EXISTS = "a section of that name is there already";
+static const char *const HAS_CONTINUATIONS = "the line has indented lines after it, which config.ini reads with it";
+static const char *const SECTION_NAME_TOO_LONG = "the section's name is too long for config.ini (49 bytes at most)";
+static const char *const NOT_A_SECTION_NAME = "config.ini would not read it back as that section's name";
 
 // A function to tell whitespace as inih does (isspace in the C locale)
 static bool is_space(char c)
@@ -544,6 +550,20 @@ static bool try_place(IniDoc *doc, int at, const char *text, const char *section
     return refuse(doc, NO_SAFE_PLACE);
 }
 
+// A function to add a section's header at the end of the file, after a blank line unless the file
+// already ends with one. When out of memory it takes back every line it added, and is false.
+static bool append_header(IniDoc *doc, const char *header)
+{
+    int lines_before = doc->count;
+    bool ok = true;
+    if (doc->count > 0 && doc->lines[doc->count - 1].text[0] != '\0')
+        ok = insert_line(doc, doc->count, "");
+    ok = ok && insert_line(doc, doc->count, header);
+    while (!ok && doc->count > lines_before)
+        remove_line(doc, doc->count - 1);
+    return ok;
+}
+
 // A function to add a missing section at the end, after a blank line, with the key's line in it
 static bool add_section(IniDoc *doc, const char *text, const char *section, const char *key, const char *value)
 {
@@ -555,15 +575,11 @@ static bool add_section(IniDoc *doc, const char *text, const char *section, cons
         return refuse(doc, OUT_OF_MEMORY);
     snprintf(header, header_size, "[%s]", section);
     int lines_before = doc->count;
-    bool ok = true;
-    if (doc->count > 0 && doc->lines[doc->count - 1].text[0] != '\0')
-        ok = insert_line(doc, doc->count, "");
-    ok = ok && insert_line(doc, doc->count, header);
+    bool ok = append_header(doc, header);
     alloc_free(header);
     if (!ok)
-        refuse(doc, OUT_OF_MEMORY);
-    else
-        ok = try_place(doc, doc->count, text, section, key, value);
+        return refuse(doc, OUT_OF_MEMORY);
+    ok = try_place(doc, doc->count, text, section, key, value);
 
     // On failure take back every line added: the header and the blank line before it
     while (!ok && doc->count > lines_before)
@@ -625,7 +641,7 @@ bool inidoc_set(IniDoc *doc, const char *section, const char *key, const char *v
     return ok;
 }
 
-// A function to say why the last set, add or list-mode remove failed; "" when it succeeded
+// A function to say why the last set, add, list-mode or section edit failed; "" when it succeeded
 const char *inidoc_why(const IniDoc *doc)
 {
     return doc->why;
@@ -848,6 +864,292 @@ bool inidoc_list_remove(IniDoc *doc, int line)
     remove_continuations(doc, line);
     remove_line(doc, line);
     return true;
+}
+
+// A function to insert a line into a list section before the key line `before` (an index from
+// inidoc_list() or inidoc_find_line()), or after the section's last key when `before` is -1, as
+// inidoc_list_add() places it. Unlike inidoc_list_add() it never makes the section: it must be there. A
+// comment just above `before` ends up above the new line. Refused where the new line would change how
+// another reads (before an indented key that follows a key with an empty name, which would become its
+// continuation), with the file as it was.
+bool inidoc_list_insert(IniDoc *doc, const char *section, int before, const char *key, const char *value)
+{
+    doc->why = "";
+    if (find_header(doc, section) < 0)
+        return refuse(doc, NO_SECTION);
+    if (before == -1)
+        return inidoc_list_add(doc, section, key, value);
+    if (before < 0 || before >= doc->count || doc->lines[before].kind != LINE_KEY)
+        return refuse(doc, NOT_A_KEY);
+    if (!same_section(section_name(doc, doc->lines[before].section), section))
+        return refuse(doc, NOT_IN_SECTION);
+    const char *reason = inidoc_check(key, value);
+    if (reason != NULL)
+        return refuse(doc, reason);
+    size_t size = strlen(key) + strlen(value) + 2;
+    char *text = alloc_malloc(size);
+    if (text == NULL)
+        return refuse(doc, OUT_OF_MEMORY);
+    snprintf(text, size, "%s=%s", key, value);
+    int keys_before = count_keys(doc);
+    bool inserted = insert_line(doc, before, text);
+    alloc_free(text);
+    if (!inserted)
+        return refuse(doc, OUT_OF_MEMORY);
+    if (!list_line_proven(doc, before, key, value, keys_before)) {
+        remove_line(doc, before);
+        return refuse(doc, NO_SAFE_PLACE);
+    }
+    return true;
+}
+
+// A function to tell whether a key line of a section lies strictly between two lines
+static bool key_between(const IniDoc *doc, const char *section, int after, int before)
+{
+    for (int i = after + 1; i < before; i++) {
+        const Line *line = &doc->lines[i];
+        if (line->kind == LINE_KEY && same_section(section_name(doc, line->section), section))
+            return true;
+    }
+    return false;
+}
+
+// A function to move a line from one index to another, as it is: its text, its name, its value and its
+// ending go with it. The file's last line keeps having no line ending when it had none: the line that
+// leaves the end, or takes it, swaps endings with the one that takes or leaves it, so moving a line back
+// puts every ending back. It allocates nothing, and leaves placing the lines to the caller.
+static void shift_line(IniDoc *doc, int from, int to)
+{
+    int last = doc->count - 1;
+    bool open_end = doc->lines[last].eol[0] == '\0';
+    Line moving = doc->lines[from];
+    if (from < to)
+        memmove(&doc->lines[from], &doc->lines[from + 1], (size_t) (to - from) * sizeof(Line));
+    else
+        memmove(&doc->lines[to + 1], &doc->lines[to], (size_t) (from - to) * sizeof(Line));
+    doc->lines[to] = moving;
+    if (open_end && (from == last || to == last)) {
+        int a = from == last ? to : last;
+        int b = from == last ? last : last - 1;
+        const char *eol = doc->lines[a].eol;
+        doc->lines[a].eol = doc->lines[b].eol;
+        doc->lines[b].eol = eol;
+    }
+}
+
+// A function to move a key line within its section: to before the key line `before`, or after the
+// section's last key and its continuation lines when `before` is -1. Comments and blank lines stay where
+// they were, and a line already in its place (no key of its section between it and the place) does not
+// move. Refused for a key with continuation lines (they would have to move with it, past the lines among
+// them), a key with an empty name (the indented keys after it would join the key before it), and a place
+// where it would change how a line reads, which is taken back. The key count proves that last: the line
+// lands before a key, or after the last key's continuation lines, and leaves no continuation behind, so a
+// line can only change by turning from a key into a continuation. It allocates nothing.
+bool inidoc_list_move(IniDoc *doc, int line, int before)
+{
+    doc->why = "";
+    if (line < 0 || line >= doc->count || doc->lines[line].kind != LINE_KEY)
+        return refuse(doc, NOT_A_KEY);
+    if (before != -1 && (before < 0 || before >= doc->count || doc->lines[before].kind != LINE_KEY))
+        return refuse(doc, NOT_A_KEY);
+    const char *section = section_name(doc, doc->lines[line].section);
+    if (before != -1 && !same_section(section_name(doc, doc->lines[before].section), section))
+        return refuse(doc, NOT_IN_SECTION);
+    if (doc->lines[line].name[0] == '\0')
+        return refuse(doc, NO_SAFE_PLACE);
+    if (has_continuations(doc, line))
+        return refuse(doc, HAS_CONTINUATIONS);
+    if (before == line || (before == -1 ? !key_between(doc, section, line, doc->count)
+                                        : line < before && !key_between(doc, section, line, before)))
+        return true;
+    int target = before;
+    if (before == -1) {
+        for (int i = 0; i < doc->count; i++) {
+            const Line *other = &doc->lines[i];
+            if (other->kind == LINE_KEY && same_section(section_name(doc, other->section), section))
+                target = end_of_key(doc, i) + 1;
+        }
+    }
+    int to = target > line ? target - 1 : target;
+    int keys_before = count_keys(doc);
+    shift_line(doc, line, to);
+    classify_all(doc);
+    if (count_keys(doc) != keys_before) {
+        shift_line(doc, to, line);
+        classify_all(doc);
+        return refuse(doc, NO_SAFE_PLACE);
+    }
+    return true;
+}
+
+// A function to say why "[name]" would not read back as a header of exactly that name, or NULL when it
+// would: inih keeps 49 bytes of a name, and ends a header at its first ']' or at a ';' after whitespace
+static const char *section_name_problem(const char *name)
+{
+    size_t length = strlen(name);
+    if (length > (size_t) INIDOC_MAX_SECTION)
+        return SECTION_NAME_TOO_LONG;
+    if (length == 0 || strchr(name, '\n') != NULL || strchr(name, '\r') != NULL ||
+        find_chars_or_comment(name, 0, "]") != length)
+        return NOT_A_SECTION_NAME;
+    return NULL;
+}
+
+// A function to add an empty section at the end of the file, after a blank line, as inidoc_set() adds a
+// missing one. Refused when the section is there already, or when its name would not read back as itself.
+bool inidoc_add_section(IniDoc *doc, const char *section)
+{
+    doc->why = "";
+    const char *reason = section_name_problem(section);
+    if (reason != NULL)
+        return refuse(doc, reason);
+    if (find_header(doc, section) >= 0)
+        return refuse(doc, SECTION_EXISTS);
+    char header[INIDOC_MAX_SECTION + 3];
+    snprintf(header, sizeof(header), "[%s]", section);
+    if (!append_header(doc, header))
+        return refuse(doc, OUT_OF_MEMORY);
+    return true;
+}
+
+// A function to tell whether a line is a header of a section
+static bool is_header_of(const IniDoc *doc, int i, const char *section)
+{
+    return doc->lines[i].kind == LINE_SECTION && same_section(doc->lines[i].name, section);
+}
+
+// A function to make a header's line again with a new name between its brackets, keeping its spacing
+// and whatever follows the closing bracket (a comment); the reason it cannot, or NULL
+static const char *renamed_header(const Line *line, const char *name, Line *out)
+{
+    size_t start = 0;
+    while (is_space(line->text[start]))
+        start++;
+    size_t end = find_chars_or_comment(line->text, start + 1, "]");   // The bracket read_line() found
+    size_t name_length = strlen(name);
+    size_t length = start + 1 + name_length + (line->length - end);
+    if (length > INIDOC_MAX_LINE)
+        return SECTION_TOO_LONG;
+    *out = *line;   // Keeps the line ending; read_line() replaces the name
+    out->text = alloc_malloc(length + 1);
+    if (out->text == NULL)
+        return OUT_OF_MEMORY;
+    memcpy(out->text, line->text, start + 1);
+    memcpy(out->text + start + 1, name, name_length);
+    memcpy(out->text + start + 1 + name_length, line->text + end, line->length - end);
+    out->text[length] = '\0';
+    out->length = length;
+    if (!read_line(out)) {
+        alloc_free(out->text);
+        return OUT_OF_MEMORY;
+    }
+    return NULL;
+}
+
+// A function to rename a section: each of its headers is written again with the new name. Refused when
+// no header has the old name, the new one would not read back as itself, or another section has it
+// already (inih would read the two as one). Every new line is made before any is put in, so running out
+// of memory changes nothing.
+bool inidoc_rename_section(IniDoc *doc, const char *old_name, const char *new_name)
+{
+    doc->why = "";
+    const char *reason = section_name_problem(new_name);
+    if (reason != NULL)
+        return refuse(doc, reason);
+
+    // Copies, of the bytes inih compares: either name may point into a header this replaces
+    char old_copy[INIDOC_MAX_SECTION + 1];
+    char new_copy[INIDOC_MAX_SECTION + 1];
+    snprintf(old_copy, sizeof(old_copy), "%s", old_name);
+    snprintf(new_copy, sizeof(new_copy), "%s", new_name);
+    if (find_header(doc, old_copy) < 0)
+        return refuse(doc, NO_SECTION);
+    if (!same_section(old_copy, new_copy) && find_header(doc, new_copy) >= 0)
+        return refuse(doc, SECTION_EXISTS);
+    int headers = 0;
+    for (int i = 0; i < doc->count; i++) {
+        if (is_header_of(doc, i, old_copy))
+            headers++;
+    }
+    Line *renamed = alloc_calloc((size_t) headers, sizeof(Line));
+    if (renamed == NULL)
+        return refuse(doc, OUT_OF_MEMORY);
+    int made = 0;
+    for (int i = 0; i < doc->count && reason == NULL; i++) {
+        if (is_header_of(doc, i, old_copy)) {
+            reason = renamed_header(&doc->lines[i], new_copy, &renamed[made]);
+            if (reason == NULL)
+                made++;
+        }
+    }
+    if (reason != NULL) {
+        while (made > 0)
+            free_line(&renamed[--made]);
+        alloc_free(renamed);
+        return refuse(doc, reason);
+    }
+    made = 0;
+    for (int i = 0; i < doc->count; i++) {
+        if (is_header_of(doc, i, old_copy)) {
+            free_line(&doc->lines[i]);
+            doc->lines[i] = renamed[made++];
+        }
+    }
+    alloc_free(renamed);
+    classify_all(doc);
+    return true;
+}
+
+// A function to remove a section: each of its headers and every line after one up to the next header,
+// its comments and blank lines included. When that runs to the end of the file, the empty lines before
+// the header go too. So a section added at the end and removed again leaves the file as it was when its
+// last line was not empty (the add put one empty line before the header, and the remove takes it); when
+// it was, the add put none, and the remove takes every empty line at the file's end, the file's own. It
+// allocates nothing.
+bool inidoc_remove_section(IniDoc *doc, const char *section)
+{
+    doc->why = "";
+    char name[INIDOC_MAX_SECTION + 1];   // A copy, of the bytes inih compares: `section` may point into a header this removes
+    snprintf(name, sizeof(name), "%s", section);
+    int header = find_header(doc, name);
+    if (header < 0)
+        return refuse(doc, NO_SECTION);
+    for (; header >= 0; header = find_header(doc, name)) {
+        int end = header + 1;
+        while (end < doc->count && doc->lines[end].kind != LINE_SECTION)
+            end++;
+        int start = header;
+        while (end == doc->count && start > 0 && doc->lines[start - 1].length == 0)
+            start--;
+        for (int i = end - 1; i >= start; i--)
+            remove_line(doc, i);
+    }
+    return true;
+}
+
+// A function to tell whether a section has a header in the file, matched as inih matches names
+bool inidoc_has_section(const IniDoc *doc, const char *section)
+{
+    return find_header(doc, section) >= 0;
+}
+
+// A function to list the file's sections by name, in the order each is first read, each once (inih
+// reads two headers of one name as one section), as inih gives the names: cut to 49 bytes. It fills at
+// most `max` names, which point into the document until its next edit, and returns how many there are.
+int inidoc_sections(const IniDoc *doc, const char **names, int max)
+{
+    int count = 0;
+    for (int i = 0; i < doc->count; i++) {
+        bool first = doc->lines[i].kind == LINE_SECTION;
+        for (int k = 0; first && k < i; k++)
+            first = !is_header_of(doc, k, doc->lines[i].name);
+        if (!first)
+            continue;
+        if (count < max)
+            names[count] = doc->lines[i].name;
+        count++;
+    }
+    return count;
 }
 
 // A function to free a document

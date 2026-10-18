@@ -700,6 +700,111 @@ static void test_list_notes(void)
     remove_folder(CONFIG ".bak.tmp");
 }
 
+// What the document callback in these tests does
+typedef struct {
+    bool refuse;   // Note something, then fail the save
+    int calls;
+} DocEditTest;
+
+// A document callback: a note, then a section added (an edit that sets a key in it shows the callback ran
+// first), or a refusal
+static bool edit_doc(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    DocEditTest *test = context;
+    test->calls++;
+    config_save_note(result, CONFIG_NOTE_SECTION_GONE, "[Games] is not there any more, so the changes to that menu are skipped");
+    if (test->refuse) {
+        snprintf(result->why, sizeof(result->why), "the menus cannot be written: a test said no");
+        return false;
+    }
+    if (!inidoc_add_section(doc, "Kids")) {
+        snprintf(result->why, sizeof(result->why), "%s", inidoc_why(doc));
+        return false;
+    }
+    return true;
+}
+
+// A function to test a save through a document callback: it runs once, on the fresh read (a hand edit
+// made meanwhile included), before the single-key edits (one sets a key in the section it adds) and the
+// list edits; its notes come first; and when it fails, the save fails with its reason, the file and its
+// backup are as before, and no note is left
+static void test_save_with_a_document_callback(void)
+{
+    reset(CONFIG, ORIGINAL);
+    const char *meanwhile =
+        "; my launcher\n[Layout]\nRows=1\nMaxButtons=4 ; the old name\n\n[Games]\nIconSize=128\nEntry1=One;apps;:quit\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n";
+    CHECK(fileio_write_all(CONFIG, meanwhile, strlen(meanwhile)));
+    ConfigEdit edit = { "Kids", "Rows", NULL, "3", INIDOC_UNDER_HEADER };
+    ConfigListEdit gone = { CONFIG_LIST_REMOVE, "Hotkeys", "Hotkey2=#4000003B;:home", NULL, false, NULL };
+    DocEditTest test = { false, 0 };
+    ConfigSaveResult result;
+    CHECK(config_save_with(CONFIG, NULL, NULL, &edit, 1, &gone, 1, edit_doc, &test, &result));
+    CHECK_INT(test.calls, 1);
+    CHECK(holds(CONFIG,
+        "; my launcher\n[Layout]\nRows=1\nMaxButtons=4 ; the old name\n\n[Games]\nIconSize=128\nEntry1=One;apps;:quit\n"
+        "[Hotkeys]\nHotkey1=#4000003A;:quit\n\n[Kids]\nRows=3\n"));
+    CHECK(holds(CONFIG ".bak", meanwhile));
+    CHECK_INT(result.note_count, 2);
+    CHECK_INT(result.note_kinds[0], CONFIG_NOTE_SECTION_GONE);
+    CHECK_INT(result.note_kinds[1], CONFIG_NOTE_REMOVAL_SKIPPED);
+    CHECK_STR(result.notes, "[Games] is not there any more, so the changes to that menu are skipped\n"
+                            "'Hotkey2=#4000003B;:home' is not there any more, so its removal is skipped");
+
+    reset(CONFIG, ORIGINAL);
+    test.refuse = true;
+    CHECK(!config_save_with(CONFIG, NULL, NULL, &edit, 1, NULL, 0, edit_doc, &test, &result));
+    CHECK_STR(result.why, "the menus cannot be written: a test said no");
+    CHECK(holds(CONFIG, ORIGINAL));
+    CHECK(!fileio_exists(CONFIG ".bak"));
+    CHECK_STR(result.notes, "");
+    CHECK_INT(result.note_count, 0);
+}
+
+// A function to test a menu's own setting (placed under its header) whose menu a hand edit renamed or
+// removed meanwhile: it is skipped with a note, rather than making the section again as an empty menu.
+// A removal there has nothing to do and says nothing; a setting outside the menus still makes its section.
+static void test_setting_of_a_gone_menu_is_skipped(void)
+{
+    reset(CONFIG, ORIGINAL);
+    ConfigEdit edits[] = {
+        { "Games", "Rows", NULL, "3", INIDOC_UNDER_HEADER },
+        { "Movies", "Columns", NULL, "5", INIDOC_UNDER_HEADER },
+        { "Movies", "IconSize", NULL, NULL, INIDOC_UNDER_HEADER },
+        { "Background", "Mode", NULL, "Image", INIDOC_AFTER_LAST_KEY }
+    };
+    ConfigSaveResult result;
+    CHECK(config_save(CONFIG, NULL, NULL, edits, 4, &result));
+    CHECK(holds(CONFIG,
+        "; my launcher\n[Layout]\nRows=1\nMaxButtons=4 ; the old name\n\n[Games]\nRows=3\nIconSize=128\n"
+        "Entry1=One;apps;:quit\n\n[Background]\nMode=Image\n"));
+    CHECK_INT(result.note_count, 1);
+    CHECK_INT(result.note_kinds[0], CONFIG_NOTE_SECTION_GONE);
+    CHECK_STR(result.notes, "[Movies] is not there any more, so its Columns change is skipped");
+}
+
+// A function to test adding notes by hand, as a document callback does: one line each, an empty one
+// adding nothing, and none past the end of the buffer, so every note counted has its line
+static void test_save_note(void)
+{
+    ConfigSaveResult result;
+    memset(&result, 0, sizeof(result));
+    config_save_note(&result, CONFIG_NOTE_SECTION_GONE, "first");
+    config_save_note(&result, CONFIG_NOTE_SECTION_GONE, "");
+    config_save_note(&result, CONFIG_NOTE_CHANGED_MEANWHILE, "second");
+    CHECK_STR(result.notes, "first\nsecond");
+    CHECK_INT(result.note_count, 2);
+    CHECK_INT(result.note_kinds[1], CONFIG_NOTE_CHANGED_MEANWHILE);
+
+    // Each "x" takes two bytes with its break: 505 more fit in the 1023 after "first\nsecond", and the
+    // 506th finds room for its break alone, so it has no line and no kind
+    for (int i = 0; i < 600; i++)
+        config_save_note(&result, CONFIG_NOTE_SECTION_GONE, "x");
+    CHECK_INT((int) strlen(result.notes), (int) sizeof(result.notes) - 1);
+    CHECK(result.notes[sizeof(result.notes) - 2] == '\n');
+    CHECK_INT(result.note_count, 507);
+}
+
 int main(void)
 {
     test_saves_only_the_edits();
@@ -719,6 +824,9 @@ int main(void)
     test_list_numbering();
     test_list_edit_edges();
     test_list_notes();
+    test_save_with_a_document_callback();
+    test_setting_of_a_gone_menu_is_skipped();
+    test_save_note();
 #ifndef _WIN32
     test_unreadable_user_config_fails();
     test_follows_a_symbolic_link();

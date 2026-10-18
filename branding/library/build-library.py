@@ -38,6 +38,10 @@ GENERIC = [
     ("back", "Back", "system", "arrow_back", None, 1.0),
     ("lock", "Lock", "system", "lock", None, 1.0),
     ("user", "Switch user", "system", "switch_account", None, 1.0),
+    ("security", "Security", "system", "shield", None, 1.0),
+    ("backup", "Backup", "system", "backup", None, 1.0),
+    ("tools", "Tools", "system", "build", None, 1.0),
+    ("accessibility", "Accessibility", "system", "accessibility_new", None, 1.0),
     ("movies", "Movies", "media", "movie", 0, 1.0),
     ("news", "News", "media", "newspaper", 1, 1.0),
     ("kids", "Kids", "media", "toys", 2, 1.0),
@@ -61,12 +65,97 @@ GENERIC = [
     ("download", "Downloads", "general", "download", None, 1.0),
     ("terminal", "Terminal", "general", "terminal", None, 1.0),
     ("desktop", "Desktop", "general", "desktop_windows", None, 1.0),
+    ("notes", "Notes", "general", "sticky_note_2", None, 1.0),
+    ("calculator", "Calculator", "general", "calculate", None, 1.0),
+    ("clock", "Clock", "general", "schedule", None, 1.0),
+    ("weather", "Weather", "general", "partly_cloudy_day", None, 1.0),
+    ("calendar", "Calendar", "general", "calendar_month", None, 1.0),
+    ("mail", "Mail", "general", "mail", None, 1.0),
+    ("chat", "Chat", "general", "chat", None, 1.0),
+    ("documents", "Documents", "general", "description", None, 1.0),
+    ("code", "Code", "general", "code", None, 1.0),
+    ("cloud", "Cloud", "general", "cloud", None, 1.0),
+    ("archive", "Archive", "general", "folder_zip", None, 1.0),
+    ("store", "Store", "general", "store", None, 1.0),
+    ("camera", "Camera", "general", "photo_camera", None, 1.0),
+    ("paint", "Paint", "general", "brush", None, 1.0),
     ("display", "Display", "devices", "display_settings", None, 1.0),
     ("audio", "Sound", "devices", "volume_up", None, 1.0),
     ("bluetooth", "Bluetooth", "devices", "bluetooth", None, 1.0),
     ("network", "Network", "devices", "wifi", None, 1.0),
     ("gamepad", "Controllers", "devices", "gamepad", None, 1.0),
+    ("remote", "Remote desktop", "devices", "screen_share", None, 1.0),
 ]
+
+# Other names an app goes by, which src/iconmatch.c compares an app's name with beside each icon's name and
+# title: old names, and the names the apps install under where those differ. Keyed by icon name, generic
+# and brand alike, so brands.ini (which import-brand.py rewrites) is left alone. Each is written as
+# iconmatch.c compares it: lower-case words of a-z and 0-9, one space apart. A vendor's name in front
+# (Google, Amazon, NVIDIA...) needs no alias: iconmatch.c drops it from the app's name.
+MATCH = {
+    "settings": ("control panel", "system settings"),          # Windows' Control Panel, KDE's System Settings
+    "security": ("windows security", "defender"),               # Microsoft Defender, its vendor's name dropped
+    "backup": ("windows backup",),
+    "tools": ("windows tools",),                                # Windows 11's folder of administrative tools
+    "accessibility": ("magnifier", "narrator", "on screen keyboard", "voice access"),   # Windows' own
+    "movies": ("media player", "videos", "movies tv"),          # Windows' Media Player and Movies & TV, GNOME's Videos
+    "folder": ("file explorer", "files"),                       # Windows' and GNOME's file managers
+    "terminal": ("windows terminal", "gnome terminal", "command prompt", "windows powershell", "powershell",
+                 "git bash", "git cmd"),                        # Git for Windows' two shortcuts
+    "notes": ("notepad", "text editor", "sticky notes", "obsidian"),   # GNOME's Text Editor
+    "clock": ("clocks",),                                       # GNOME's Clocks
+    "mail": ("outlook", "thunderbird mail"),                    # Thunderbird's Linux desktop-entry name
+    "archive": ("winrar", "7 zip file manager"),                # 7-Zip's Start menu name
+    "paint": ("paint 3d",),
+    "remote": ("remote desktop", "windows app"),                # Windows App: Microsoft's Remote Desktop client since 2024
+    "hbo-max": ("max",),                                        # The service's name from 2023 to 2025
+    "prime-video": ("prime video for windows",),                # The Microsoft Store app's name
+    "peacock": ("peacock tv",),
+    "tubi": ("tubi tv",),
+    "plex": ("plex htpc", "plex media player", "plex media server"),
+    "jellyfin": ("jellyfin media player",),
+    "kodi": ("xbmc",),                                          # Kodi's name until 2014
+    "vlc": ("vlc media player",),
+    "steam": ("steam runtime",),                                # Linux's "Steam (Runtime)" desktop entry
+    "es-de": ("emulationstation desktop edition", "emulationstation de"),
+    "moonlight": ("moonlight game streaming",),
+}
+ALIAS_RE = re.compile(r"^[a-z0-9]+( [a-z0-9]+)*$")
+
+
+def normalized(text):
+    """A name as src/iconmatch.c compares an icon's: lower case, apostrophes dropped, every other mark a break
+    between words (the library's names and titles are ASCII)."""
+    text = text.lower().replace("'", "").replace("’", "")
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text).split())
+
+
+def match_lines(name):
+    """The manifest's match = line for an icon, or none."""
+    return [f"match = {', '.join(MATCH[name])}"] if name in MATCH else []
+
+
+def match_problems(icons, match=None):
+    """icons: [(name, title)] in manifest order. Each MATCH key must name an icon, and each alias must be written
+    as iconmatch.c compares it and be no other icon's name, title or alias: iconmatch.c takes the first icon in
+    the manifest's order that has it, so the other icon would lose its apps."""
+    match = MATCH if match is None else match
+    problems, taken = [], {}
+    for name, title in icons:
+        for text in (name, title):
+            taken.setdefault(normalized(text), name)
+    names = {name for name, _title in icons}
+    for name, aliases in match.items():
+        if name not in names:
+            problems.append(f"MATCH '{name}': no icon has that name")
+        for alias in aliases:
+            if not ALIAS_RE.fullmatch(alias):   # match()'s $ would let a final newline through
+                problems.append(f"MATCH '{name}': alias '{alias}' is not lower case words of a-z and 0-9, one space apart")
+            elif taken.get(alias, name) != name:
+                problems.append(f"MATCH '{name}': alias '{alias}' is already {taken[alias]}'s")
+            else:
+                taken[alias] = name
+    return problems
 
 XN, YN, ZN = 0.95047, 1.0, 1.08883   # D65 white
 
@@ -190,7 +279,7 @@ def manifest_problems(lines):
 
 def build_outputs(brands_ini=libtools.BRANDS_INI):
     """Return ({library-relative path: text}, [errors])."""
-    outputs, errors, names = {}, [], set()
+    outputs, errors, names, icons = {}, [], set(), []
     manifest = list(MANIFEST_HEAD)
     for name, title, group, glyph, slot, trim in GENERIC:
         if not libtools.NAME_RE.match(name) or name in names:
@@ -200,7 +289,8 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         if contrast_with_white(color) < MIN_CONTRAST:
             errors.append(f"generic '{name}': plate {color} gives white only {contrast_with_white(color):.2f}:1")
         outputs[f"generic/{name}.svg"] = generic_svg(color, glyph_paths(glyph), trim)
-        manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"]
+        manifest += ["", f"[{name}]", f"title = {title}", f"group = {group}", f"file = generic/{name}.svg"] + match_lines(name)
+        icons.append((name, title))
 
     rows = []
     for name, keys in libtools.read_sections(brands_ini):
@@ -219,12 +309,14 @@ def build_outputs(brands_ini=libtools.BRANDS_INI):
         elif libtools.sha256_file(png) != keys["sha256"]:
             errors.append(f"brand '{name}': {png.name} does not match the sha256 in brands.ini; re-import it")
         manifest += ["", f"[{name}]", f"title = {keys['title']}", f"group = {keys['group']}",
-                     f"file = brands/{name}.png", f"owner = {keys['owner']}"]
+                     f"file = brands/{name}.png"] + match_lines(name) + [f"owner = {keys['owner']}"]
+        icons.append((name, keys["title"]))
         if keys.get("android"):
             manifest.append(f"android = {keys['android']}")
         manifest += [f"source = {keys['source']}", f"sha256 = {keys['sha256']}"]
         rows.append(f"| `{name}.png` | {keys['title']} | {keys['owner']} | {keys['source']} |")
 
+    errors += match_problems(icons)
     errors += manifest_problems(manifest)
     outputs["icons.ini"] = "\n".join(manifest) + "\n"
     outputs["brands/NOTICE.md"] = NOTICE_HEAD + ("\n".join(rows) + "\n" if rows else "| (none yet) | | | |\n")

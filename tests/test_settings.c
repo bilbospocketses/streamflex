@@ -6,6 +6,9 @@
 #include "bindings.h"
 #include "inidoc.h"
 #include "alloc.h"
+#include "fileio.h"
+#include "config_save.h"
+#include "menuedit.h"
 
 #define ARROW " \xE2\x80\xBA "   // U+203A with a space either side, between pages in the page path
 #define TIMES "\xC3\x97"         // U+00D7, the multiplication sign
@@ -1021,11 +1024,11 @@ static void test_general_page(void)
     settings_path(state, path, sizeof(path));
     CHECK_STR(path, "Settings" ARROW "General");
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
-    CHECK_INT(count, 11);
+    CHECK_INT(count, 12);
     static const char *const labels[] = { "Default menu", "Wrap around", "Reset on Back", "Mouse select",
         "Block the OS screensaver", "VSync", "FPS limit", "After launching an app", "App timeout",
-        "Startup command", "Quit command" };
-    for (int i = 0; i < 11; i++)
+        "Startup command", "Quit command", "Keyboard layout" };
+    for (int i = 0; i < 12; i++)
         CHECK_STR(rows[i].label, labels[i]);
     CHECK_INT(rows[0].kind, SETTINGS_ROW_PICK);
     CHECK_INT(rows[9].kind, SETTINGS_ROW_PICK);
@@ -1943,6 +1946,1240 @@ static void test_restart_page(void)
     settings_free(state);
 }
 
+// A function to test making the model again over menus that came, went, were renamed or moved (plan
+// ruling 5): a pending change to a menu's settings follows the menu by its old name, a new menu's
+// settings start unchanged, everything else is carried across, the Default menu row follows a rename
+// and goes back to its entry when the menu it named is gone, and a page about a menu follows it, or
+// closes when it is gone
+static void test_remodel(void)
+{
+    SettingsState *old = open_model();                       // Main, and Games with Rows 3 and Columns 6
+    static const char *const text = "[Main]\nEntry1=Kodi;kodi;kodi\n\n[Games]\nRows=3\nEntry1=Retro;emulators;:back\n";
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    MenuEdit *menus = menuedit_load(doc, "Main");
+    inidoc_free(doc);
+    settings_set_menus(old, menus);
+    static const char *const pads[] = { "Xbox Controller" };
+    settings_set_pads(old, pads, 1);
+    settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");          // Games: 3 -> 2
+    settings_slot(old, SET_ID_MENU_COLUMNS, 0)->value = parsed(SET_ID_MENU_COLUMNS, "5");    // Main: All menus -> 5
+    settings_slot(old, SET_ID_LAYOUT_ROWS, -1)->value = parsed(SET_ID_LAYOUT_ROWS, "2");     // [Layout]: 1 -> 2
+    SettingSlot *default_menu = settings_slot(old, SET_ID_DEFAULT_MENU, -1);
+    snprintf(default_menu->value.text, sizeof(default_menu->value.text), "Games");           // Main -> Games, unsaved
+
+    // Games' page: Menus, then down past All menus and Main
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    CHECK_INT(settings_preview_menu(old), 1);
+
+    // Kids new at the front, Games renamed Play, Main after it
+    static const char *const names[] = { "Kids", "Play", "Main" };
+    static const char *const old_names[] = { NULL, "Games", "Main" };
+    SettingsState *state = settings_remodel(old, names, old_names, 3);
+    CHECK(state != NULL);
+    CHECK_INT(settings_slot_count(state), SET_ID_GLOBAL_COUNT + 3 * SET_ID_PER_MENU_COUNT);
+    SettingSlot *rows = settings_slot(state, SET_ID_MENU_ROWS, 1);
+    CHECK_INT(rows->menu, 1);
+    CHECK_INT(rows->value.number, 2);
+    CHECK_INT(rows->entry.number, 3);
+    CHECK(settings_changed(rows));
+    CHECK_INT(settings_slot(state, SET_ID_MENU_COLUMNS, 1)->value.number, 6);
+    SettingSlot *columns = settings_slot(state, SET_ID_MENU_COLUMNS, 2);
+    CHECK_INT(columns->menu, 2);
+    CHECK_INT(columns->value.number, 5);
+    CHECK(columns->entry.inherit);
+    for (int id = SET_ID_MENU_ROWS; id < SET_ID_COUNT; id++) {
+        SettingSlot *slot = settings_slot(state, (SettingId) id, 0);   // Kids: new, following [Layout]
+        CHECK(slot->value.inherit && slot->entry.inherit && !settings_changed(slot));
+    }
+    CHECK_INT(settings_slot(state, SET_ID_LAYOUT_ROWS, -1)->value.number, 2);
+    CHECK(settings_changed(settings_slot(state, SET_ID_LAYOUT_ROWS, -1)));
+    CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->value.text, "Play");   // The unsaved Games follows its rename
+    CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->entry.text, "Main");
+    CHECK(settings_menus(state) == menus);
+    CHECK_STR(settings_pad_name(state, 0), "Xbox Controller");
+    CHECK(settings_any_changed(state));
+
+    // The page about Games is Play's now, at Play's place
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 1);
+    char path[256];
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Play");
+    SettingsRow shown[SETTINGS_MAX_ROWS];
+    settings_rows(state, shown, SETTINGS_MAX_ROWS);
+    CHECK_STR(shown[0].value, "2");
+
+    // The old model is as it was: the screen frees it once the new one is made
+    CHECK_INT(settings_slot(old, SET_ID_MENU_ROWS, 1)->value.number, 2);
+    CHECK_STR(settings_slot(old, SET_ID_DEFAULT_MENU, -1)->value.text, "Games");
+    settings_free(old);
+
+    // Play removed while its page is open: the page closes, and the Default menu row, which named it,
+    // goes back to its entry; Main's own change stays, at Main's new place
+    static const char *const fewer[] = { "Kids", "Main" };
+    SettingsState *after = settings_remodel(state, fewer, fewer, 2);
+    CHECK(after != NULL);
+    CHECK_INT(settings_page(after), SETTINGS_PAGE_MENUS);
+    CHECK_STR(settings_slot(after, SET_ID_DEFAULT_MENU, -1)->value.text, "Main");
+    CHECK(!settings_changed(settings_slot(after, SET_ID_DEFAULT_MENU, -1)));
+    CHECK_INT(settings_slot(after, SET_ID_MENU_COLUMNS, 1)->value.number, 5);
+    settings_free(state);
+
+    // The default menu renamed: its value and its entry both follow, so there is nothing to save for it
+    static const char *const home[] = { "Kids", "Home" };
+    SettingsState *renamed = settings_remodel(after, home, fewer, 2);
+    CHECK(renamed != NULL);
+    CHECK_STR(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)->value.text, "Home");
+    CHECK_STR(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)->entry.text, "Home");
+    CHECK(!settings_changed(settings_slot(renamed, SET_ID_DEFAULT_MENU, -1)));
+    settings_free(after);
+    settings_free(renamed);
+    menuedit_free(menus);
+}
+
+// A function to test that the Menus list's cursor stays on its menu when the menus change: Back from a
+// page about a menu that moved lands on that menu's row, so the preview shows the same menu; a cursor
+// on the list itself follows its menu by name, through a rename; and one whose menu is gone keeps its
+// row, now the nearest menu's
+static void test_remodel_menus_cursor(void)
+{
+    // Games' page: Menus, then down past All menus and Main to Games, row 3
+    SettingsState *old = open_model();
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_DOWN);
+    settings_command(old, SETTINGS_OK);
+
+    // Kids new between Main and Games: Back lands on Games, a row lower, not on Kids
+    static const char *const kids[] = { "Main", "Kids", "Games" };
+    static const char *const kids_was[] = { "Main", NULL, "Games" };
+    SettingsState *state = settings_remodel(old, kids, kids_was, 3);
+    CHECK(state != NULL);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    CHECK_INT(settings_cursor(state), 4);
+    CHECK_INT(settings_preview_menu(state), 2);
+    settings_free(old);
+
+    // On the list itself, Games renamed Play and moved to the front: the cursor follows it to row 2
+    static const char *const play[] = { "Play", "Main", "Kids" };
+    static const char *const play_was[] = { "Games", "Main", "Kids" };
+    SettingsState *renamed = settings_remodel(state, play, play_was, 3);
+    CHECK(renamed != NULL);
+    CHECK_INT(settings_cursor(renamed), 2);
+    CHECK_INT(settings_preview_menu(renamed), 0);
+    settings_free(state);
+
+    // Main highlighted (row 3) and removed: the cursor keeps its row, Kids' now, the menu after it
+    settings_command(renamed, SETTINGS_DOWN);
+    CHECK_INT(settings_cursor(renamed), 3);
+    static const char *const fewer[] = { "Play", "Kids" };
+    SettingsState *after = settings_remodel(renamed, fewer, fewer, 2);
+    CHECK(after != NULL);
+    CHECK_INT(settings_cursor(after), 3);
+    CHECK_INT(settings_preview_menu(after), 1);
+    settings_free(renamed);
+    settings_free(after);
+}
+
+#define REMODEL_DIR "settings-remodel-fixture"
+#define REMODEL_CONFIG REMODEL_DIR "/config.ini"
+
+// A function to write the menus model into a save's fresh read, as the save's document callback
+static bool apply_menus(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    return menuedit_apply((const MenuEdit *) context, doc, result);
+}
+
+// A function to save a model's changed settings over the menus model, as the screen's save makes its
+// edits: each slot's section is its menu's name, `sections[slot->menu]` (the screen reads the live
+// menu's, which menus_apply() names as the menus model does), and a menu's own setting goes under its
+// header. True when the save succeeded; `result` says what it could not make as asked.
+static bool save_over_menus(SettingsState *state, const char *const *sections, MenuEdit *edit, ConfigSaveResult *result)
+{
+    ConfigEdit edits[4];
+    static char values[4][SETTING_TEXT_MAX];
+    int n = 0;
+    for (int i = 0; i < settings_slot_count(state); i++) {
+        SettingSlot *slot = settings_slot_at(state, i);
+        if (!settings_changed(slot))
+            continue;
+        CHECK(n < 4);
+        if (n >= 4)
+            break;
+        setting_format(slot->def, &slot->value, values[n], SETTING_TEXT_MAX);
+        edits[n].section = slot->def->section != NULL ? slot->def->section : sections[slot->menu];
+        edits[n].key = slot->def->key;
+        edits[n].alias = slot->def->alias;
+        edits[n].value = slot->value.inherit ? NULL : values[n];
+        edits[n].placement = slot->def->section != NULL ? INIDOC_AFTER_LAST_KEY : INIDOC_UNDER_HEADER;
+        n++;
+    }
+    memset(result, 0, sizeof(*result));
+    return config_save_with(REMODEL_CONFIG, NULL, NULL, edits, n, NULL, 0, apply_menus, edit, result);
+}
+
+// A function to start the remodel's save from a known file, with no backup lying about
+static void reset_remodel_config(const char *text)
+{
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+    CHECK(fileio_make_dirs(REMODEL_DIR));
+    CHECK(fileio_write_all(REMODEL_CONFIG, text, strlen(text)));
+}
+
+// A function to test that an unsaved change to a menu's own setting follows the menu through a rename
+// made in settings, to the save: the remodel carries it to the renamed menu, the save's edit names the
+// menu's new section, and the menus model's save (menuedit_apply(), the document callback, run before
+// the slot edits) renames the section first, so the change lands under the new header with no note.
+// Named by the old section instead, the edit would be skipped as a menu gone (the reason it must not be).
+static void test_remodel_slot_edit_follows_rename(void)
+{
+    static const char *const text =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=3\nEntry1=Retro;retro;retroarch\n";
+    static const char *const saved =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Play;games;:submenu Play\n\n[Play]\nRows=2\nEntry1=Retro;retro;retroarch\n";
+    static const char *const names[] = { "Main", "Games" };
+    for (int pass = 0; pass < 2; pass++) {
+        reset_remodel_config(text);
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+        inidoc_free(doc);
+        SettingsState *old = settings_create(names, 2);
+        CHECK(edit != NULL && old != NULL);
+        if (edit == NULL || old == NULL) {
+            menuedit_free(edit);
+            settings_free(old);
+            return;
+        }
+        SettingValue rows = parsed(SET_ID_MENU_ROWS, "3");
+        settings_set_entry(old, SET_ID_MENU_ROWS, 1, &rows);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");   // Games: 3 -> 2, unsaved
+
+        // Games renamed Play in the menus model, and the settings model made again over it, as
+        // settings_menus_changed() makes it: each menu's name now, and the name it had
+        CHECK(menuedit_rename_menu(edit, 1, "Play") == NULL);
+        const char *now[2];
+        for (int m = 0; m < 2; m++)
+            now[m] = menuedit_menu(edit, m)->name;
+        CHECK_STR(now[1], "Play");
+        SettingsState *state = settings_remodel(old, now, names, 2);
+        settings_free(old);
+        CHECK(state != NULL);
+        if (state == NULL) {
+            menuedit_free(edit);
+            return;
+        }
+        CHECK_INT(settings_slot(state, SET_ID_MENU_ROWS, 1)->value.number, 2);
+
+        ConfigSaveResult result;
+        char *written = NULL;
+        if (pass == 0) {
+            CHECK(save_over_menus(state, now, edit, &result));
+            CHECK_INT(result.note_count, 0);
+            CHECK_STR(result.notes, "");
+            written = fileio_read_all(REMODEL_CONFIG, NULL);
+            CHECK(written != NULL);
+            CHECK_STR(written != NULL ? written : "", saved);
+        }
+        else {
+            // The old section's name: the change is skipped, so Play keeps its Rows=3, and the note says
+            // the menu is gone
+            CHECK(save_over_menus(state, names, edit, &result));
+            CHECK_INT(result.note_count, 1);
+            CHECK_INT(result.note_kinds[0], CONFIG_NOTE_SECTION_GONE);
+            written = fileio_read_all(REMODEL_CONFIG, NULL);
+            CHECK(written != NULL && strstr(written, "\n[Play]\nRows=3\nEntry1=Retro;retro;retroarch\n") != NULL);
+        }
+        alloc_free(written);
+        settings_free(state);
+        menuedit_free(edit);
+    }
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+}
+
+// A function to test the save after a menu is removed or renamed with unsaved changes pending, Games'
+// Rows (3 -> 2) and the Default menu row: a removed menu's own settings go with it (settings_remodel()
+// makes no slots for it), so the save writes nothing for it and notes nothing, and a Default menu row
+// naming it goes back to its entry; a Default menu row naming a renamed menu, or the file's DefaultMenu
+// naming one (which the menus model's save rewrites), names the new name. Every save names a menu that
+// exists, with no note.
+static void test_remodel_save_after_remove_and_rename(void)
+{
+    static const char *const text =
+        "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=3\nEntry1=Retro;retro;retroarch\n";
+    static const struct {
+        const char *what;            // "remove Games", "rename Games", "rename Main"
+        const char *pending_default; // The Default menu row's unsaved value; NULL: unchanged
+        const char *saved;
+    } cases[] = {
+        { "remove Games", "Games", "[General]\nDefaultMenu=Main\n\n[Main]\n" },
+        { "rename Games", "Games",
+          "[General]\nDefaultMenu=Play\n\n[Main]\nEntry1=Play;games;:submenu Play\n\n[Play]\nRows=2\nEntry1=Retro;retro;retroarch\n" },
+        { "rename Main", NULL,
+          "[General]\nDefaultMenu=Home\n\n[Home]\nEntry1=Games;games;:submenu Games\n\n[Games]\nRows=2\nEntry1=Retro;retro;retroarch\n" },
+    };
+    static const char *const names[] = { "Main", "Games" };
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        reset_remodel_config(text);
+        IniDoc *doc = inidoc_parse(text, strlen(text));
+        MenuEdit *edit = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+        inidoc_free(doc);
+        SettingsState *old = settings_create(names, 2);
+        CHECK(edit != NULL && old != NULL);
+        if (edit == NULL || old == NULL) {
+            menuedit_free(edit);
+            settings_free(old);
+            return;
+        }
+        SettingValue rows = parsed(SET_ID_MENU_ROWS, "3");
+        settings_set_entry(old, SET_ID_MENU_ROWS, 1, &rows);
+        settings_slot(old, SET_ID_MENU_ROWS, 1)->value = parsed(SET_ID_MENU_ROWS, "2");   // Games: 3 -> 2, unsaved
+        entry(old, SET_ID_DEFAULT_MENU, "Main");
+        if (cases[c].pending_default != NULL) {
+            SettingSlot *slot = settings_slot(old, SET_ID_DEFAULT_MENU, -1);
+            snprintf(slot->value.text, sizeof(slot->value.text), "%s", cases[c].pending_default);
+        }
+
+        // The change to the menus model, then the settings model made again over it, as
+        // settings_menus_changed() makes it: each menu's name now, and the name it had
+        const char *why = strcmp(cases[c].what, "remove Games") == 0 ? menuedit_remove_menu(edit, 0, 0, true)
+                        : strcmp(cases[c].what, "rename Games") == 0 ? menuedit_rename_menu(edit, 1, "Play")
+                        : menuedit_rename_menu(edit, 0, "Home");
+        CHECK(why == NULL);
+        int count = menuedit_count(edit);
+        const char *now[2] = { NULL, NULL };
+        const char *was[2] = { NULL, NULL };
+        for (int m = 0; m < count && m < 2; m++) {
+            const MenuEditMenu *menu = menuedit_menu(edit, m);
+            now[m] = menu->name;
+            was[m] = menu->original_name;
+        }
+        SettingsState *state = settings_remodel(old, now, was, count);
+        settings_free(old);
+        CHECK(state != NULL);
+        if (state == NULL) {
+            menuedit_free(edit);
+            return;
+        }
+        CHECK_INT(settings_slot_count(state), SET_ID_GLOBAL_COUNT + count * SET_ID_PER_MENU_COUNT);
+        if (strcmp(cases[c].what, "remove Games") == 0) {
+            CHECK(!settings_any_changed(state));   // Games' Rows went with Games; the Default menu row went back
+            CHECK_STR(settings_slot(state, SET_ID_DEFAULT_MENU, -1)->value.text, "Main");
+        }
+
+        ConfigSaveResult result;
+        CHECK(save_over_menus(state, now, edit, &result));
+        CHECK_INT(result.note_count, 0);
+        CHECK_STR(result.notes, "");
+        char *written = fileio_read_all(REMODEL_CONFIG, NULL);
+        CHECK_STR(written != NULL ? written : "", cases[c].saved);
+        alloc_free(written);
+        settings_free(state);
+        menuedit_free(edit);
+    }
+    fileio_remove(REMODEL_CONFIG);
+    fileio_remove(REMODEL_CONFIG ".bak");
+}
+
+// A function to test the keyboard's layout setting (3c): QWERTY or ABC, as the file and the screen name
+// them, a choice the General page steps
+static void test_keyboard_layout(void)
+{
+    SettingValue value = parsed(SET_ID_KEYBOARD_LAYOUT, "ABC");
+    CHECK_INT(value.number, 1);
+    CHECK_STR(formatted(SET_ID_KEYBOARD_LAYOUT, &value), "ABC");
+    value = parsed(SET_ID_KEYBOARD_LAYOUT, "QWERTY");
+    CHECK_INT(value.number, 0);
+    CHECK_STR(described(SET_ID_KEYBOARD_LAYOUT, &value, NULL), "QWERTY");
+    SettingValue stepped_to = setting_step(setting_def(SET_ID_KEYBOARD_LAYOUT), &value, &value, 1);
+    CHECK_STR(formatted(SET_ID_KEYBOARD_LAYOUT, &stepped_to), "ABC");
+    CHECK(!setting_parse(setting_def(SET_ID_KEYBOARD_LAYOUT), "abc", &value));   // Names match exactly, as the parser's
+    CHECK(setting_find("General", "KeyboardLayout") == setting_def(SET_ID_KEYBOARD_LAYOUT));
+
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    entry(state, SET_ID_KEYBOARD_LAYOUT, "QWERTY");
+    open_page(state, "General");
+    const SettingsRow *row = row_labeled(state, rows, "Keyboard layout");
+    CHECK_INT(row->kind, SETTINGS_ROW_SETTING);
+    CHECK_STR(row->value, "QWERTY");
+    cursor_to(state, "Keyboard layout");
+    CHECK_INT(settings_command(state, SETTINGS_RIGHT).kind, SETTINGS_EVENT_CHANGED);
+    CHECK_STR(row_labeled(state, rows, "Keyboard layout")->value, "ABC");
+    settings_free(state);
+}
+
+// The menus the Tiles pages' tests start from: Main, with a submenu tile and a plain one, and Games
+static const char *const TILES_TEXT =
+    "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Games;games;:submenu Games\nEntry2=Kodi;kodi;kodi --standalone\n\n"
+    "[Games]\nRows=3\nEntry1=Retro;emulators;:back\nEntry2=Pong;games;:back\n";
+
+// A function to give a model the menus model of a config's text, with its default menu; the caller frees
+// it after the model
+static MenuEdit *with_menus(SettingsState *state, const char *text, const char *default_menu)
+{
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    MenuEdit *edit = menuedit_load(doc, default_menu);
+    inidoc_free(doc);
+    CHECK(edit != NULL);
+    settings_set_menus(state, edit);
+    return edit;
+}
+
+// A function to open a menu's Tiles page from the top page: Menus, the menu, Tiles
+static void open_tiles(SettingsState *state, const char *menu)
+{
+    open_page(state, "Menus");
+    cursor_to(state, menu);
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Tiles");
+    settings_command(state, SETTINGS_OK);
+}
+
+// A function to get a tile of the menus model; NULL when there is none
+static const MenuTile *tile_of(const MenuEdit *edit, const char *menu, int t)
+{
+    const MenuEditMenu *m = menuedit_menu(edit, menuedit_find(edit, menu));
+    return m != NULL && t >= 0 && t < m->count ? &m->tiles[t] : NULL;
+}
+
+// A function to test the Tiles pages (3c): the Menu page's Tiles row; the Tiles page's rows, a submenu tile a
+// link; the tile the preview highlights, the one under the cursor; the Tiles page's Add, at the end, through
+// the Special page; a tile's page, its title and its removal
+static void test_tiles_pages(void)
+{
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, TILES_TEXT, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    char label[64];
+    open_page(state, "Menus");
+    cursor_to(state, "Main");
+    settings_command(state, SETTINGS_OK);
+    const SettingsRow *tiles = row_labeled(state, rows, "Tiles");
+    CHECK_INT(tiles->kind, SETTINGS_ROW_LINK);
+    CHECK_STR(tiles->value, "2 tiles");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 5);   // Rows, Columns, Largest button, Tiles, the note
+    CHECK_INT(rows[4].kind, SETTINGS_ROW_NOTE);
+    cursor_to(state, "Tiles");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_STR(rows[0].label, "Add");
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_LINK);
+    CHECK_STR(rows[1].label, "Games");
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_LINK);
+    CHECK_STR(rows[1].value, "2 tiles");
+    CHECK_STR(rows[2].label, "Kodi");
+    CHECK_INT(rows[2].kind, SETTINGS_ROW_ACTION);
+    setting_command_label("kodi --standalone", label, sizeof(label));
+    CHECK_STR(rows[2].value, label);
+
+    // The preview shows Main, the tile under the cursor highlighted; Add is about none
+    CHECK_INT(settings_preview_menu(state), 0);
+    CHECK_INT(settings_preview_tile(state), -1);
+    settings_command(state, SETTINGS_DOWN);
+    CHECK_INT(settings_preview_tile(state), 0);
+    settings_command(state, SETTINGS_UP);
+    CHECK_INT(settings_preview_tile(state), -1);
+
+    // Add, Special, Sleep: the Tiles page's Add puts it at the end, wherever its cursor has been, with the
+    // special's title, icon and command
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ADD);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "Add");
+    cursor_to(state, "Special");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_SPECIAL);
+    static const char *const specials[] = { "Home", "Back", "Settings", "Sleep", "Restart", "Shut down", "Quit" };
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 7);
+    for (int i = 0; i < 7; i++)
+        CHECK_STR(rows[i].label, specials[i]);
+    cursor_to(state, "Sleep");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.menu, 0);
+    CHECK_INT(event.tile, 2);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    const MenuTile *sleep = tile_of(edit, "Main", 2);
+    CHECK(sleep != NULL && sleep->key == NULL);
+    CHECK_STR(sleep->title, "Sleep");
+    CHECK_STR(sleep->icon, "sleep");
+    CHECK_STR(sleep->command, ":sleep");
+    CHECK_STR(tile_of(edit, "Main", 1)->title, "Kodi");
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[settings_cursor(state)].label, "Sleep");
+    CHECK_INT(settings_preview_tile(state), 2);
+    CHECK(settings_menus_edited(state));
+    CHECK(!settings_any_changed(state));                           // The slots and bindings alone
+
+    // The tile's page: its title through the keyboard's event, and Remove, back on the tile now in its place
+    // (the last, Kodi)
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "Sleep");
+    CHECK_STR(row_labeled(state, rows, "Title")->value, "Sleep");
+    CHECK_INT(row_labeled(state, rows, "Add after this tile")->kind, SETTINGS_ROW_LINK);
+    cursor_to(state, "Title");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_TYPE_TITLE);
+    CHECK_INT(event.menu, 0);
+    CHECK_INT(event.tile, 2);
+    CHECK_STR(settings_title_problem(state, 0, 2, "a;b"), "A title can't contain ;");
+    CHECK(settings_title_problem(state, 0, 2, "Nap") == NULL);
+    event = settings_set_title(state, 0, 2, "Nap");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK(!event.rebind);
+    CHECK_STR(tile_of(edit, "Main", 2)->title, "Nap");
+    event = settings_set_title(state, 0, 2, "");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "Type a title");
+    cursor_to(state, "Remove");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK(tile_of(edit, "Main", 2) == NULL);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[settings_cursor(state)].label, "Kodi");
+    CHECK(!settings_menus_edited(state));                          // Back as it was read
+
+    // The top page's Discard is enabled by a menus change alone
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Remove");
+    settings_command(state, SETTINGS_OK);
+    for (int i = 0; i < 3; i++)
+        settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
+    CHECK(row_labeled(state, rows, "Discard changes")->enabled);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test an empty menu's Tiles page, and a new submenu through the keyboard's events: its name
+// checked, made where the Add page puts a tile (in an empty menu, the first), with the folder icon
+static void test_empty_menu_and_new_submenu(void)
+{
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, "[Main]\nEntry1=Kodi;kodi;kodi\n\n[Games]\n", "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    open_tiles(state, "Games");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 1);
+    CHECK_STR(rows[0].label, "Empty: Add");
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_LINK);
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ADD);
+    cursor_to(state, "Submenu");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_TYPE_NAME);
+    CHECK_STR(settings_name_problem(state, "Main"), "There's already a menu with that name");
+    CHECK_STR(settings_name_problem(state, "main"), "There's already a menu with that name");
+    CHECK_STR(settings_name_problem(state, "General"), "That name is kept for settings");
+    CHECK_STR(settings_name_problem(state, "a]b"), "A name can't contain ]");
+    CHECK(settings_name_problem(state, "Kids") == NULL);
+    event = settings_add_submenu(state, "Kids");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_INT(menuedit_count(edit), 3);
+    const MenuTile *kids = tile_of(edit, "Games", 0);
+    CHECK(kids != NULL);
+    CHECK_STR(kids->title, "Kids");
+    CHECK_STR(kids->icon, "folder");
+    CHECK_STR(kids->command, ":submenu Kids");
+    event = settings_add_submenu(state, "Kids");                    // Refused: the Add page is gone, and so is the name
+    CHECK_INT(event.kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(menuedit_count(edit), 3);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test Add after this tile (user ruling 2026-10-16, Fable review C3): a tile's page offers it,
+// and the new tile goes right after that tile, here the third of four, back on the Tiles page on it; the
+// Tiles page's own Add still puts one at the end, wherever its cursor has been
+static void test_add_after_tile(void)
+{
+    static const char *const text = "[Main]\nEntry1=A;apps;:home\nEntry2=B;apps;:home\nEntry3=C;apps;:home\n"
+                                    "Entry4=D;apps;:home\n";
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    open_tiles(state, "Main");
+    cursor_to(state, "C");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    cursor_to(state, "Add after this tile");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ADD);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "C" ARROW "Add");
+    CHECK_INT(settings_preview_tile(state), 2);                     // The preview highlights the tile it goes after
+    cursor_to(state, "Special");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Home");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.tile, 3);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);           // Under the tile's page, on the new tile
+    CHECK_STR(tile_of(edit, "Main", 2)->title, "C");
+    CHECK_STR(tile_of(edit, "Main", 3)->title, "Home");
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "D");
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[settings_cursor(state)].label, "Home");
+
+    // The Tiles page's Add, its cursor having passed B on the way up: at the end all the same
+    cursor_to(state, "B");
+    cursor_to(state, "Add");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Special");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Back");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.tile, 5);
+    CHECK_STR(tile_of(edit, "Main", 5)->title, "Back");
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "D");
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// The menus of the tests that weigh a tile in its own line: Main's one tile has a comment after it, 152 bytes
+// in all, its comment 130 (Fable review M2)
+static char commented_text[256];
+
+// A function to make commented_text, and give a 60-byte value that fits a line of config.ini alone but not
+// that tile's line with its comment
+static const char *commented_menus(char long_value[61])
+{
+    snprintf(commented_text, sizeof(commented_text), "[Main]\nEntry1=A;apps;:home ; ");
+    size_t used = strlen(commented_text);
+    memset(commented_text + used, 'c', 130);
+    snprintf(commented_text + used + 130, sizeof(commented_text) - used - 130, "\n");
+    memset(long_value, 'a', 60);
+    long_value[60] = '\0';
+    return commented_text;
+}
+
+// A function to test that a tile's title is weighed in the tile's own line as config.ini has it (Task 3's
+// menuedit_check_set(), Fable review M2): the comment after the line leaves less room, so Done is grayed for
+// a title menuedit_check_tile() alone would pass, and the save never refuses it
+static void test_title_weighed_in_its_line(void)
+{
+    char long_value[61];
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, commented_menus(long_value), "Main");
+    CHECK(menuedit_check_tile(long_value, "apps", ":home") == NULL);   // Entry99999= + 60 + ;apps;:home: 82
+    CHECK_STR(settings_title_problem(state, 0, 0, long_value),         // In its line: 7 + 60 + 11 + 3 + 130 = 211
+              "It's too long for its line of config.ini with the comment there (199 bytes)");
+    CHECK(settings_title_problem(state, 0, 0, "Nap") == NULL);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test a submenu tile's Remove: the confirm page's two rows, the second only while another
+// tile opens the menu; Remove only this tile; Remove the menu with its tiles, and every tile that opens it;
+// and the default menu, which cannot be removed
+static void test_remove_submenu(void)
+{
+    static const char *const text = "[Main]\nEntry1=Games;games;:submenu Games\nEntry2=Play;games;:submenu Games\n"
+                                     "Entry3=Kodi;kodi;kodi\n\n[Games]\nEntry1=Retro;emulators;:back\nEntry2=Pong;games;:back\n";
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    open_tiles(state, "Main");
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Remove");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_REMOVE_MENU);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "Games" ARROW "Remove?");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Remove Games and its 2 tiles");
+    CHECK(rows[0].enabled);
+    CHECK_STR(rows[1].label, "Remove only this tile");
+    cursor_to(state, "Remove only this tile");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "Play");
+    CHECK_INT(menuedit_find(edit, "Games"), 1);
+
+    // Play is the only opener now: one row, and the menu goes with its tiles
+    cursor_to(state, "Play");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Remove");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 1);
+    CHECK_STR(rows[0].label, "Remove Games and its 2 tiles");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_INT(menuedit_find(edit, "Games"), -1);
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "Kodi");
+    settings_free(state);
+    menuedit_free(edit);
+
+    // The default menu's tile: the row is grayed with its reason, and OK on it changes nothing
+    state = open_model();
+    edit = with_menus(state, text, "Games");
+    open_tiles(state, "Main");
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Remove");
+    settings_command(state, SETTINGS_OK);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK(!rows[0].enabled);
+    CHECK_STR(rows[0].why, "The default menu can't be removed");
+    CHECK_INT(settings_cursor(state), 0);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(menuedit_find(edit, "Games"), 1);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test a submenu tile's title, which renames its menu (spec "Renaming a submenu tile renames
+// the submenu"): the name rules, the tile's own title following, and every binding and Startup or Quit
+// command that holds exactly ":submenu <old>" rewritten (Known integration work 1), the rest left
+static void test_rename_submenu(void)
+{
+    static const char *const text = "[Main]\nEntry1=Fun;games;:submenu Games\nEntry2=Kodi;kodi;kodi\n\n"
+                                     "[Games]\nEntry1=Retro;emulators;:back\n";
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, text, "Main");
+    Bindings *b = with_lines(state, "Hotkey1=#4000003A;:submenu Games\nHotkey2=#4000003B;:submenu Gamesx",
+                             "ButtonX=:submenu Games", false);
+    entry(state, SET_ID_STARTUP_CMD, ":submenu Games");
+    entry(state, SET_ID_QUIT_CMD, ":submenu Gamesx");
+    CHECK_STR(settings_title_problem(state, 0, 0, "Main"), "There's already a menu with that name");
+    CHECK_STR(settings_title_problem(state, 0, 0, "a]b"), "A name can't contain ]");
+    CHECK(settings_title_problem(state, 0, 0, "Play") == NULL);
+
+    SettingsEvent refused = settings_set_title(state, 0, 0, "Main");
+    CHECK_INT(refused.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "There's already a menu with that name");
+    CHECK_INT(menuedit_find(edit, "Games"), 1);
+
+    SettingsEvent event = settings_set_title(state, 0, 0, "Play");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK(event.rebind);
+    CHECK_INT(menuedit_find(edit, "Play"), 1);
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "Play");             // Its own title ("Fun") follows too
+    CHECK_STR(tile_of(edit, "Main", 0)->command, ":submenu Play");
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 0)->command, ":submenu Play");
+    CHECK_STR(bindings_at(b, BINDINGS_KEYBOARD, 1)->command, ":submenu Gamesx");
+    CHECK_STR(bindings_at(b, BINDINGS_GAMEPAD, 0)->command, ":submenu Play");
+    CHECK_STR(settings_slot(state, SET_ID_STARTUP_CMD, -1)->value.text, ":submenu Play");
+    CHECK_STR(settings_slot(state, SET_ID_QUIT_CMD, -1)->value.text, ":submenu Gamesx");
+    CHECK(settings_changed(settings_slot(state, SET_ID_STARTUP_CMD, -1)));
+    CHECK(bindings_changed(b));
+    settings_free(state);
+    bindings_free(b);
+    menuedit_free(edit);
+
+    // A tile inside the menu it opens (written by hand: Move to menu forbids making one): the rename leaves
+    // the settings' name for the menu the old one, so the tile is found again by the menus model's index
+    // (Fable review I3), and takes the new name as its title
+    state = open_model();
+    edit = with_menus(state, "[Main]\nEntry1=Kodi;kodi;kodi\n\n[Games]\nEntry1=Loop;games;:submenu Games\n", "Main");
+    event = settings_set_title(state, 1, 0, "Play");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_STR(tile_of(edit, "Play", 0)->command, ":submenu Play");
+    CHECK_STR(tile_of(edit, "Play", 0)->title, "Play");
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test that a page about a tile the model no longer has shows no rows, and that the Tiles
+// row is absent while no menus model was read
+static void test_tiles_without_menus(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    open_page(state, "Menus");
+    cursor_to(state, "Main");
+    settings_command(state, SETTINGS_OK);
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++)
+        CHECK(strcmp(rows[i].label, "Tiles") != 0);
+    CHECK_INT(settings_preview_tile(state), -1);
+    CHECK(!settings_menus_edited(state));
+    settings_free(state);
+}
+
+// A function to test the Add page's rows and a tile's Command (3c, Task 10b): App and Browse for a program
+// first, each asking the screen for its picker; a tile added as the app list adds one; the Command row,
+// grayed on a submenu tile; a command set, and ones a tile cannot run refused with their reasons
+static void test_tile_commands(void)
+{
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, TILES_TEXT, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char label[64];
+    open_tiles(state, "Main");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ADD);
+    static const char *const adds[] = { "App", "Browse for a program", "Submenu", "Special" };
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 4);
+    for (int i = 0; i < 4; i++)
+        CHECK_STR(rows[i].label, adds[i]);
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_PICK_APP);
+    cursor_to(state, "Browse for a program");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_BROWSE_PROGRAM);
+    event = settings_add_tile(state, "Kodi Box", "kodi", "/usr/share/applications/kodi.desktop");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.tile, 2);
+    CHECK_STR(tile_of(edit, "Main", 2)->command, "/usr/share/applications/kodi.desktop");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    const SettingsRow *command = row_labeled(state, rows, "Command");
+    CHECK(!command->enabled);
+    CHECK_STR(command->why, "A submenu tile's command is its menu's name: change it with Title");
+    cursor_to(state, "Command");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_BACK);
+
+    cursor_to(state, "Kodi");
+    settings_command(state, SETTINGS_OK);
+    setting_command_label("kodi --standalone", label, sizeof(label));
+    CHECK_STR(row_labeled(state, rows, "Command")->value, label);
+    cursor_to(state, "Command");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_PICK_TILE_COMMAND);
+    CHECK_INT(event.menu, 0);
+    CHECK_INT(event.tile, 1);
+    CHECK_STR(settings_command_problem(state, 0, 1, ":select"), "A tile can't run :select");
+    CHECK_STR(settings_command_problem(state, 0, 1, "a ;b"), "A command can't have ; after a space");
+    CHECK(settings_command_problem(state, 0, 1, ":fork kodi") == NULL);
+    event = settings_set_command(state, 0, 1, ":fork kodi");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_STR(tile_of(edit, "Main", 1)->command, ":fork kodi");
+    CHECK_STR(tile_of(edit, "Main", 1)->title, "Kodi");
+    event = settings_set_command(state, 0, 1, "");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "Choose a command");
+    settings_free(state);
+    menuedit_free(edit);
+
+    // A command is weighed in the tile's own line, its comment counted (Task 10a's commented_menus(), Fable
+    // review M2): 7 + 1 + 6 + 60 + 3 + 130 = 207 bytes there, though 78 alone
+    char long_value[61];
+    state = open_model();
+    edit = with_menus(state, commented_menus(long_value), "Main");
+    CHECK(menuedit_check_tile("A", "apps", long_value) == NULL);
+    CHECK_STR(settings_command_problem(state, 0, 0, long_value),
+              "It's too long for its line of config.ini with the comment there (199 bytes)");
+    CHECK(settings_command_problem(state, 0, 0, ":quit") == NULL);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test an app's or a file's name made a tile's title: ';' a comma, control characters spaces,
+// the edges trimmed of both (a leading tab would be a leading space, which config.ini's line refuses), cut
+// on a character's edge to the keyboard's limit; nothing left is "App"
+static void test_tile_title(void)
+{
+    char title[MENUEDIT_TITLE_MAX + 1];
+    settings_tile_title("  Foo; Bar  ", title, sizeof(title));
+    CHECK_STR(title, "Foo, Bar");
+    settings_tile_title("Line\tbreak\n", title, sizeof(title));
+    CHECK_STR(title, "Line break");
+    settings_tile_title("\t \x7F" "Tab first", title, sizeof(title));
+    CHECK_STR(title, "Tab first");
+    CHECK(menuedit_check_tile(title, "apps", ":home") == NULL);
+    char name[200];
+    memset(name, 'a', 70);
+    name[70] = '\0';
+    settings_tile_title(name, title, sizeof(title));
+    CHECK_INT((int) strlen(title), MENUEDIT_TITLE_MAX);
+    name[0] = 'a';
+    for (int i = 0; i < 40; i++)
+        memcpy(name + 1 + 2 * i, "\xC3\xA9", 2);                    // e acute, two bytes each
+    name[81] = '\0';
+    settings_tile_title(name, title, sizeof(title));
+    CHECK_INT((int) strlen(title), 63);                              // 64 would cut the 32nd in half
+    settings_tile_title("", title, sizeof(title));
+    CHECK_STR(title, "App");
+    settings_tile_title(" ; ", title, sizeof(title));
+    CHECK_STR(title, ",");
+}
+
+// A function to test where a picked-up tile goes for each arrow (spec "Move"), by the launcher's own rule
+// (layout_move()): in a grid Left and Right within the row, stopping at its ends, Up and Down a row keeping
+// the column, onto a shorter last row's last tile, stopping at the first and last rows; a strip's Left and
+// Right along it, its Up and Down nothing. Five tiles three wide: [0 1 2] [3 4].
+static void test_move_target(void)
+{
+    CHECK_INT(settings_move_target(0, 5, 2, 3, SETTINGS_RIGHT), 1);
+    CHECK_INT(settings_move_target(0, 5, 2, 3, SETTINGS_LEFT), 0);
+    CHECK_INT(settings_move_target(2, 5, 2, 3, SETTINGS_RIGHT), 2);   // The row's end: it stays
+    CHECK_INT(settings_move_target(3, 5, 2, 3, SETTINGS_LEFT), 3);    // The row's start: it stays
+    CHECK_INT(settings_move_target(4, 5, 2, 3, SETTINGS_RIGHT), 4);
+    CHECK_INT(settings_move_target(1, 5, 2, 3, SETTINGS_DOWN), 4);
+    CHECK_INT(settings_move_target(2, 5, 2, 3, SETTINGS_DOWN), 4);    // A shorter last row: its last tile
+    CHECK_INT(settings_move_target(3, 5, 2, 3, SETTINGS_DOWN), 3);    // The last row: it stays
+    CHECK_INT(settings_move_target(4, 5, 2, 3, SETTINGS_UP), 1);
+    CHECK_INT(settings_move_target(1, 5, 2, 3, SETTINGS_UP), 1);      // The first row: it stays
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_RIGHT), 3);   // A strip scrolls on: no row's end
+    CHECK_INT(settings_move_target(4, 5, 1, 3, SETTINGS_RIGHT), 4);
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_DOWN), 2);    // A strip's Up and Down do nothing
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_UP), 2);
+    CHECK_INT(settings_move_target(0, 0, 2, 3, SETTINGS_RIGHT), 0);   // No tiles
+}
+
+// A function to test Move (spec "Move"): OK picks the tile up; the arrows move it in the menus model, the
+// pages and the preview following it; OK drops it; Back puts it back where it was picked up; Home drops it
+// where it is and closes
+static void test_move_tile(void)
+{
+    static const char *const text = "[Main]\nEntry1=A;apps;:home\nEntry2=B;apps;:home\nEntry3=C;apps;:home\n"
+                                    "Entry4=D;apps;:home\nEntry5=E;apps;:home\n\n[Games]\nEntry1=Retro;emulators;:back\n";
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    settings_set_grid(state, 2, 3);
+    open_tiles(state, "Main");
+    cursor_to(state, "A");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(row_labeled(state, rows, "Move")->kind, SETTINGS_ROW_ACTION);
+    CHECK_INT(row_labeled(state, rows, "Move to menu")->kind, SETTINGS_ROW_LINK);
+    cursor_to(state, "Move");
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_moving_tile(state), 0);
+    SettingsEvent event = settings_command(state, SETTINGS_RIGHT);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.tile, 1);
+    CHECK_STR(tile_of(edit, "Main", 1)->title, "A");
+    event = settings_command(state, SETTINGS_DOWN);
+    CHECK_INT(event.tile, 4);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK_INT(settings_moving_tile(state), 4);
+    CHECK_INT(settings_preview_tile(state), 4);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "A");   // The page follows its tile
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);       // The last already
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK(settings_menus_edited(state));
+    settings_command(state, SETTINGS_BACK);                       // The Tiles page, on A where it was dropped
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[settings_cursor(state)].label, "A");
+
+    // Picked up again, moved, then Back: back where it was picked up, the mode over, the page as it was
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move");
+    settings_command(state, SETTINGS_OK);
+    settings_command(state, SETTINGS_LEFT);
+    settings_command(state, SETTINGS_UP);
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "A");
+    event = settings_command(state, SETTINGS_BACK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+
+    // Home while it is up drops it where it is, then closes
+    settings_command(state, SETTINGS_OK);
+    settings_command(state, SETTINGS_LEFT);
+    CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_CLOSE_HOME);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 3)->title, "A");
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test Move to menu: every other menu, but for a submenu tile the menu it opens and every menu
+// inside that one, grayed with the reasons; a tile moved to the end of the menu chosen
+static void test_move_to_menu(void)
+{
+    static const char *const names[] = { "Main", "Games", "Arcade" };
+    static const char *const text = "[Main]\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n\n"
+                                    "[Games]\nEntry1=Arcade;games;:submenu Arcade\nEntry2=Retro;emulators;:back\n\n"
+                                    "[Arcade]\nEntry1=Pong;games;:back\n";
+    SettingsState *state = settings_create(names, 3);
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    open_tiles(state, "Main");
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move to menu");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MOVE_TO);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "Games" ARROW "Move to");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Games");
+    CHECK(!rows[0].enabled);
+    CHECK_STR(rows[0].why, "This tile opens that menu");
+    CHECK_STR(rows[1].label, "Arcade");
+    CHECK(!rows[1].enabled);
+    CHECK_STR(rows[1].why, "That menu is inside the one this tile opens");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+
+    // A plain tile: both offered; Arcade chosen, the tile goes to its end, back on Main's Tiles page
+    cursor_to(state, "Kodi");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move to menu");
+    settings_command(state, SETTINGS_OK);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK(rows[0].enabled && rows[1].enabled);
+    cursor_to(state, "Arcade");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(tile_of(edit, "Arcade", 1)->title, "Kodi");
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "Games");
+    CHECK(tile_of(edit, "Main", 1) == NULL);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to open a model over Main and Games with the menus model Task 10a's pages read: Main's three
+// tiles and Games' two. The caller frees the menus model after the model.
+static SettingsState *tiles_model(MenuEdit **menus)
+{
+    static const char *const names[] = { "Main", "Games" };
+    static const char *const text = "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Kodi;kodi;kodi\n"
+                                     "Entry2=Games;games;:submenu Games\nEntry3=Bye;quit;:quit\n\n"
+                                     "[Games]\nEntry1=Retro;emulators;retro\nEntry2=Steam;steam;steam\n";
+    SettingsState *state = settings_create(names, 2);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    *menus = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+    inidoc_free(doc);
+    CHECK(state != NULL && *menus != NULL);
+    settings_set_menus(state, *menus);
+    return state;
+}
+
+// A function to name the row under the cursor on the page on show
+static const char *cursor_label(SettingsState *state)
+{
+    static SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    int cursor = settings_cursor(state);
+    return cursor >= 0 && cursor < count ? rows[cursor].label : "(no row)";
+}
+
+// A function to test opening the pages at a tile (the hold-OK shortcut's way in, and the harness's):
+// Menus, the menu, its Tiles page and the tile's page, each opened from the row that leads on, so Back
+// walks up them with each cursor where it was; tile -1 stops at the Tiles page; a tile or a menu that is
+// not there stops at the last page that opened
+static void test_show_tile(void)
+{
+    MenuEdit *menus = NULL;
+    SettingsState *state = tiles_model(&menus);
+    settings_show_tile(state, 1, 1);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(cursor_label(state), "Steam");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 1);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    CHECK_STR(cursor_label(state), "Games");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
+    CHECK_STR(cursor_label(state), "Menus");
+
+    settings_show_tile(state, 0, -1);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_INT(settings_preview_menu(state), 0);
+    settings_show_tile(state, 0, 7);              // Main has no tile 7: its Tiles page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    settings_show_tile(state, 5, 0);              // No menu 5: the Menus page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
+// A function to open a model over `count` menus named in `names`, with the menus model of `text`; the
+// caller frees the menus model after the model
+static SettingsState *text_model(const char *const *names, int count, const char *text, MenuEdit **menus)
+{
+    SettingsState *state = settings_create(names, count);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    *menus = doc != NULL ? menuedit_load(doc, names[0]) : NULL;
+    inidoc_free(doc);
+    CHECK(state != NULL && *menus != NULL);
+    settings_set_menus(state, *menus);
+    return state;
+}
+
+// A function to test opening the pages at a tile the pages have no row for (Fable review I4): the 66th tile
+// of a 70-tile menu, past the Tiles page's rows (its note counts it), and the one tile of the 66th of 70
+// menus, past the Menus page's; each page opens all the same, and Back walks up the pages as ever
+static void test_show_tile_past_rows(void)
+{
+    static const char *const main_name[] = { "Main" };
+    char text[4096] = "[Main]\n";
+    for (int t = 0; t < 70; t++) {
+        size_t used = strlen(text);
+        snprintf(text + used, sizeof(text) - used, "Entry%d=T%d;apps;:home\n", t + 1, t);
+    }
+    MenuEdit *menus = NULL;
+    SettingsState *state = text_model(main_name, 1, text, &menus);
+    char path[256];
+    settings_show_tile(state, 0, 65);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "T65");
+    CHECK_INT(settings_preview_tile(state), 65);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(cursor_label(state), "Add");                   // No row leads to T65: the cursor where it opened
+    settings_free(state);
+    menuedit_free(menus);
+
+    static char labels[70][8];
+    const char *names[70];
+    text[0] = '\0';
+    for (int m = 0; m < 70; m++) {
+        snprintf(labels[m], sizeof(labels[m]), "M%d", m);
+        names[m] = labels[m];
+        size_t used = strlen(text);
+        snprintf(text + used, sizeof(text) - used, "[M%d]\nEntry1=Only%d;apps;:home\n", m, m);
+    }
+    state = text_model(names, 70, text, &menus);
+    settings_show_tile(state, 65, 0);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "M65" ARROW "Tiles" ARROW "Only65");
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 65);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
+// A function to test the Icon page (spec "Icons"): opened from a tile's page, about that tile; until the
+// screen has looked, Library and Browse alone; then the choices in the spec's order with the cursor on
+// the first that applies (the library match, else its own icon, else the generic icon); OK on each row
+// hands the screen that row, the page staying; a choice made goes back to the tile's page, and one
+// refused stays with why
+static void test_icon_page(void)
+{
+    MenuEdit *menus = NULL;
+    SettingsState *state = tiles_model(&menus);
+    settings_show_tile(state, 1, 1);              // Games' Steam
+    cursor_to(state, "Icon");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);
+    int menu = -1;
+    int tile = -1;
+    CHECK(settings_icon_tile(state, &menu, &tile));
+    CHECK_INT(menu, 1);
+    CHECK_INT(tile, 1);
+    CHECK_INT(settings_preview_menu(state), 1);
+    char path[512];
+    settings_path(state, path, sizeof(path));
+    size_t length = strlen(path);
+    CHECK(length > strlen(ARROW "Icon") && strcmp(path + length - strlen(ARROW "Icon"), ARROW "Icon") == 0);
+    CHECK(!settings_icon_choices(state)->ready);
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Library");
+    CHECK_STR(rows[1].label, "Browse for an image");
+    CHECK_INT(settings_cursor(state), 0);
+
+    // A match and its own icon: the match first, and the cursor put back on it
+    SettingsIconChoices choices;
+    memset(&choices, 0, sizeof(choices));
+    snprintf(choices.suggested, sizeof(choices.suggested), "steam");
+    snprintf(choices.suggested_title, sizeof(choices.suggested_title), "Steam");
+    choices.matched = true;
+    choices.own = true;
+    settings_command(state, SETTINGS_DOWN);
+    settings_set_icon_choices(state, &choices);
+    CHECK(settings_icon_choices(state)->ready);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 4);
+    CHECK_STR(rows[0].label, "Steam");
+    CHECK_STR(rows[0].value, "Library match");
+    CHECK_STR(rows[1].label, "Its own icon");
+    CHECK_STR(rows[2].label, "Library");
+    CHECK_STR(rows[3].label, "Browse for an image");
+    CHECK_INT(settings_cursor(state), 0);
+    static const SettingsAction actions[] = { SETTINGS_ACTION_ICON_SUGGESTED, SETTINGS_ACTION_ICON_OWN,
+                                             SETTINGS_ACTION_ICON_GRID, SETTINGS_ACTION_ICON_BROWSE };
+    for (int i = 0; i < 4; i++) {
+        SettingsEvent event = settings_command(state, SETTINGS_OK);
+        CHECK_INT(event.kind, SETTINGS_EVENT_ICON);
+        CHECK_INT(event.action, actions[i]);
+        CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);   // The screen acts; the page waits for it
+        settings_command(state, SETTINGS_DOWN);
+    }
+
+    // The screen sets the icon it chose through the model (a library name or an image's path), as a tile's
+    // command is set: one the tile's line cannot hold is refused with the reason, the tile as it was
+    SettingsEvent set = settings_set_icon(state, 1, 1, "kodi");
+    CHECK_INT(set.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(set.menu, 1);
+    CHECK_INT(set.tile, 1);
+    CHECK_STR(tile_of(menus, "Games", 1)->icon, "kodi");
+    CHECK_STR(tile_of(menus, "Games", 1)->title, "Steam");
+    set = settings_set_icon(state, 1, 1, "");
+    CHECK_INT(set.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "Choose an icon");
+    CHECK_STR(tile_of(menus, "Games", 1)->icon, "kodi");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);       // The page is the screen's to leave
+
+    // Refused: the page stays, its reason in the caption until the next key; chosen: the tile's page
+    settings_icon_done(state, "Couldn't save its icon");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);
+    CHECK_STR(settings_notice(state), "Couldn't save its icon");
+    settings_command(state, SETTINGS_UP);
+    CHECK_STR(settings_notice(state), "");
+    settings_icon_done(state, NULL);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    CHECK(!settings_icon_tile(state, &menu, &tile));
+    settings_icon_done(state, NULL);              // Not on the Icon page: nothing happens
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+
+    // Opened again, the screen looks again. Its own icon alone comes first; with neither, the generic icon
+    cursor_to(state, "Icon");
+    settings_command(state, SETTINGS_OK);
+    CHECK(!settings_icon_choices(state)->ready);
+    memset(&choices, 0, sizeof(choices));
+    choices.own = true;
+    settings_set_icon_choices(state, &choices);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_STR(rows[0].label, "Its own icon");
+    snprintf(choices.suggested, sizeof(choices.suggested), "apps");
+    snprintf(choices.suggested_title, sizeof(choices.suggested_title), "Apps");
+    choices.own = false;
+    settings_set_icon_choices(state, &choices);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_STR(rows[0].label, "Apps");
+    CHECK_STR(rows[0].value, "Generic icon");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -1980,6 +3217,26 @@ int main(void)
     test_restart_words();
     test_restart_tracking();
     test_restart_page();
+    test_keyboard_layout();
+    test_remodel();
+    test_tiles_pages();
+    test_empty_menu_and_new_submenu();
+    test_add_after_tile();
+    test_title_weighed_in_its_line();
+    test_remove_submenu();
+    test_rename_submenu();
+    test_tiles_without_menus();
+    test_tile_commands();
+    test_tile_title();
+    test_move_target();
+    test_move_tile();
+    test_move_to_menu();
+    test_show_tile();
+    test_show_tile_past_rows();
+    test_icon_page();
+    test_remodel_menus_cursor();
+    test_remodel_slot_edit_follows_rename();
+    test_remodel_save_after_remove_and_rename();
     return check_report();
 }
 

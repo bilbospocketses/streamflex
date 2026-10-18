@@ -9,6 +9,7 @@ static const char *const IMAGE_EXTENSIONS[] = { ".jpg", ".jpeg", ".png", ".webp"
 static const char *const TOO_FEW = "a slideshow needs 2 or more images";
 static const char *const TOO_LONG = "the path is too long for the settings to hold (1023 bytes at most)";
 static const char *const OUT_OF_MEMORY = "out of memory";
+static const char *const TYPE_LABEL = "Type a path\xE2\x80\xA6";   // U+2026, the ellipsis
 
 typedef enum {
     LOAD_DONE,
@@ -29,6 +30,7 @@ struct Browser {
     int cursor;
     char chosen[BROWSER_PATH_MAX];
     const char *why;        // Why the last command did nothing because of the browser itself; NULL otherwise
+    bool typing;            // Every listing ends with a Type row (browser_offer_typing)
 };
 
 // A function to compare names without regard to ASCII case, then exactly
@@ -77,6 +79,157 @@ bool browser_is_image(const char *name)
 bool browser_is_image_file(const FileioEntry *entry)
 {
     return entry->is_file && !entry->hidden && browser_is_image(entry->name);
+}
+
+#define DESKTOP_EXTENSION ".desktop"   // unix.c's EXT_DESKTOP: a .desktop file, matched exactly
+// The bytes a shell reads as part of one word, unquoted: a Linux path of only these needs no quotes
+#define SHELL_WORD "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._+,:@%=-"
+
+// A function to tell whether a name ends with an extension, whatever its case
+static bool ends_with_any_case(const char *name, const char *extension)
+{
+    size_t length = strlen(name);
+    size_t extension_length = strlen(extension);
+    if (length <= extension_length)
+        return false;
+    const char *tail = name + length - extension_length;
+    for (size_t k = 0; k < extension_length; k++) {
+        if (fileio_lower(tail[k]) != fileio_lower(extension[k]))
+            return false;
+    }
+    return true;
+}
+
+// A function to tell whether a file is a program the launcher can run, for the program browser: on
+// Windows an .exe or an .lnk, whatever its case; on Linux a .desktop file (unix.c launches one by its
+// exact extension) or a file with its execute bit (`executable`), a script included
+bool browser_is_program(const char *name, bool executable, bool windows)
+{
+    if (windows)
+        return ends_with_any_case(name, ".exe") || ends_with_any_case(name, ".lnk");
+    size_t length = strlen(name);
+    size_t desktop = strlen(DESKTOP_EXTENSION);
+    return executable || (length > desktop && strcmp(name + length - desktop, DESKTOP_EXTENSION) == 0);
+}
+
+// A function to write the command that runs a program chosen in the program browser. On Windows: the path,
+// in double quotes when it holds a space (win32.c's parse_command() ends the file at the first space
+// otherwise). On Linux: a .desktop file's path as it is (unix.c reads it as a file, up to a ';'); any other
+// path as it is when the shell reads it as one word, else in single quotes. False, with `out` empty, when
+// it cannot be written so: a '"' in a Windows path, a '\'' in a Linux one that needs quotes, a ';' in a
+// .desktop path, or no room.
+bool browser_program_command(const char *path, bool windows, char *out, size_t size)
+{
+    out[0] = '\0';
+    size_t length = strlen(path);
+    bool quote;
+    if (windows) {
+        if (strchr(path, '"') != NULL)
+            return false;
+        quote = strchr(path, ' ') != NULL;
+    }
+    else if (browser_is_program(path, false, false)) {
+        if (strchr(path, ';') != NULL)
+            return false;
+        quote = false;
+    }
+    else {
+        quote = strspn(path, SHELL_WORD) != length;
+        if (quote && strchr(path, '\'') != NULL)
+            return false;
+    }
+    if (length + (quote ? 2 : 0) + 1 > size)
+        return false;
+    if (!quote)
+        snprintf(out, size, "%s", path);
+    else if (windows)
+        snprintf(out, size, "\"%s\"", path);
+    else
+        snprintf(out, size, "'%s'", path);
+    return true;
+}
+
+// A function to say why a program's path cannot be a tile's command, or NULL: its characters, as
+// browser_program_command() refuses them, or a command longer than `max_line` bytes (config.ini's line)
+const char *browser_program_why(const char *path, bool windows, size_t max_line)
+{
+    char command[BROWSER_PATH_MAX + 3];   // Room for any path and its quotes: a refusal here is its characters
+    if (!browser_program_command(path, windows, command, sizeof(command)))
+        return windows ? "This path can't be written as a command" : "A path with ' or ; can't be run from here";
+    return strlen(command) > max_line ? "It's too long for a line of config.ini" : NULL;
+}
+
+// A function to give the path a program's command names, the inverse of browser_program_command(): the text
+// inside its quotes when it is quoted whole ('...' or "..."), else the command as it is (whether that is a
+// file is the caller's question). False, with `out` empty, when it does not fit.
+bool browser_program_path(const char *command, char *out, size_t size)
+{
+    out[0] = '\0';
+    size_t length = strlen(command);
+    bool quoted = length >= 2 && (command[0] == '"' || command[0] == '\'') && command[length - 1] == command[0] &&
+                  memchr(command + 1, command[0], length - 2) == NULL;
+    const char *start = quoted ? command + 1 : command;
+    size_t kept = quoted ? length - 2 : length;
+    if (kept + 1 > size)
+        return false;
+    memcpy(out, start, kept);
+    out[kept] = '\0';
+    return true;
+}
+
+// A function to give a program's file name without its extension, as its tile's title starts (a name
+// whose only dot is its first keeps it: ".tool")
+void browser_program_title(const char *path, char *out, size_t size)
+{
+    fileio_base_name(path, out, size);
+    char *dot = strrchr(out, '.');
+    if (dot != NULL && dot != out)
+        *dot = '\0';
+}
+
+// A function to read the icon a .desktop file names, from its text: the [Desktop Entry] group's first Icon=,
+// its spaces at either end dropped, as applist.c reads it. NoDisplay and Hidden are not read: a tile can run
+// a file the app list leaves out, and its icon is its own all the same (Fable review M18). False, with `out`
+// empty, for no Icon= there, an empty one, or one that does not fit.
+bool browser_desktop_icon(const char *text, size_t length, char *out, size_t size)
+{
+    out[0] = '\0';
+    bool in_entry = false;
+    for (size_t at = 0; at < length;) {
+        size_t end = at;
+        while (end < length && text[end] != '\n')
+            end++;
+        const char *line = text + at;
+        size_t line_length = end - at;
+        at = end + 1;
+        if (line_length > 0 && line[line_length - 1] == '\r')
+            line_length--;
+        if (line_length == 0 || line[0] == '#')
+            continue;
+        if (line[0] == '[') {
+            in_entry = line_length == 15 && memcmp(line, "[Desktop Entry]", 15) == 0;
+            continue;
+        }
+        if (!in_entry || line_length < 4 || memcmp(line, "Icon", 4) != 0)
+            continue;
+        size_t k = 4;
+        while (k < line_length && line[k] == ' ')
+            k++;
+        if (k == line_length || line[k] != '=')
+            continue;   // Icon[de]=, Iconic=: another key
+        k++;
+        while (k < line_length && line[k] == ' ')
+            k++;
+        size_t value_end = line_length;
+        while (value_end > k && line[value_end - 1] == ' ')
+            value_end--;
+        if (value_end == k || value_end - k + 1 > size)
+            return false;
+        memcpy(out, line + k, value_end - k);
+        out[value_end - k] = '\0';
+        return true;
+    }
+    return false;
 }
 
 // A function to tell a root, which has no parent: "/", "C:", "C:\" or "\\server\share"
@@ -192,11 +345,15 @@ static void select_path(Browser *browser, const char *path)
 // out of memory, with what was on show left as it was.
 static bool load_places(Browser *browser, const char *selected)
 {
-    BrowserRow *rows = alloc_calloc((size_t) (browser->place_count > 0 ? browser->place_count : 1), sizeof(BrowserRow));
+    // A row's room more than the places, for the Type row, which browser_offer_typing() puts there when the
+    // places were shown before it was offered
+    BrowserRow *rows = alloc_calloc((size_t) browser->place_count + 1, sizeof(BrowserRow));
     int count = 0;
     bool ok = rows != NULL;
     for (int i = 0; ok && i < browser->place_count; i++)
         ok = add_row(rows, &count, BROWSER_ROW_PLACE, browser->places[i].label, alloc_strdup(browser->places[i].path), true, NULL);
+    if (ok && browser->typing)
+        ok = add_row(rows, &count, BROWSER_ROW_TYPE, TYPE_LABEL, alloc_strdup(""), true, NULL);
     if (!ok) {
         free_row_list(rows, count);
         browser->why = OUT_OF_MEMORY;
@@ -251,7 +408,9 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
     if (ok) {
         qsort(folders, (size_t) folder_count, sizeof(FileioEntry*), compare_entries);
         qsort(images, (size_t) image_count, sizeof(FileioEntry*), compare_entries);
-        rows = alloc_calloc((size_t) (folder_count + image_count + 1), sizeof(BrowserRow));
+        // A row's room for Use this folder and one for the Type row, which browser_offer_typing() puts there
+        // when the folder was shown before it was offered (the room is kept in every mode)
+        rows = alloc_calloc((size_t) (folder_count + image_count + 2), sizeof(BrowserRow));
         ok = rows != NULL;
     }
     if (ok && browser->mode == BROWSER_FOLDER) {
@@ -269,6 +428,8 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
         ok = add_row(rows, &row_count, browser->mode == BROWSER_FILE ? BROWSER_ROW_FILE : BROWSER_ROW_IMAGE,
                      images[i]->name, path, choosable && why == NULL, why);
     }
+    if (ok && browser->typing)
+        ok = add_row(rows, &row_count, BROWSER_ROW_TYPE, TYPE_LABEL, alloc_strdup(copy), true, NULL);
     alloc_free(folders);
     alloc_free(images);
     fileio_free_list(entries, count);
@@ -402,6 +563,8 @@ BrowserResult browser_command(Browser *browser, BrowserCommand command, int page
             if (browser->cursor < 0 || browser->cursor > last)
                 return BROWSER_NONE;
             const BrowserRow *row = &browser->rows[browser->cursor];
+            if (row->kind == BROWSER_ROW_TYPE)
+                return BROWSER_TYPE;
             if (row->kind == BROWSER_ROW_PLACE || row->kind == BROWSER_ROW_FOLDER) {
                 char *path = alloc_strdup(row->path);   // The row goes when the folder opens
                 bool opened = path != NULL && load_folder(browser, path, NULL) == LOAD_DONE;
@@ -496,4 +659,15 @@ bool browser_first_image(const Browser *browser, const char *folder, char *out, 
     alloc_free(path);
     fileio_free_list(entries, count > 0 ? count : 0);
     return found;
+}
+
+// A function to end every listing with a "Type a path..." row from now on (3c: a path row's way to the
+// keyboard). The listing on show gets it in the room both loaders keep for it, so the folder is not listed
+// again, and the cursor stays. Out of memory, nothing is offered and the rows stay as they were.
+void browser_offer_typing(Browser *browser)
+{
+    if (browser->typing)
+        return;
+    browser->typing = add_row(browser->rows, &browser->row_count, BROWSER_ROW_TYPE, TYPE_LABEL,
+                              alloc_strdup(browser->folder != NULL ? browser->folder : ""), true, NULL);
 }

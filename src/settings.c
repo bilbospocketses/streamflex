@@ -28,6 +28,8 @@ static const char *const TIME_NAMES[] = { "24hr", "12hr", "Auto", NULL };
 static const char *const TIME_LABELS[] = { "14:05", "2:05 PM", "Auto" };
 static const char *const DATE_NAMES[] = { "Big", "Little", "Auto", NULL };
 static const char *const DATE_LABELS[] = { "Sep 28", "28 Sep", "Auto" };
+static const char *const KEYBOARD_NAMES[] = { "QWERTY", "ABC", NULL };   // osk.h's OskLayout, in its order
+static const char *const KEYBOARD_LABELS[] = { "QWERTY", "ABC" };
 #define MODE_IMAGE 1
 #define MODE_SLIDESHOW 2
 
@@ -42,6 +44,27 @@ static const int FPS_STEPS[] = { 30, 60, 75, 120, 144, 165, 240 };
 static const char *const TRANSPARENT_NOTE =
     "The desktop shows through. On Linux this needs a compositor: see Transparent Backgrounds in the configuration docs.";
 static const char *const MENU_NOTE = "The lowest step, All menus, follows the shared grid.";
+
+#define SUBMENU_COMMAND ":submenu "   // launcher.h's SCMD_SUBMENU and the space before a menu's name
+#define SUBMENU_ICON "folder"         // A new submenu tile's library icon
+
+static const char *const WHY_DEFAULT_MENU = "The default menu can't be removed";
+static const char *const WHY_SUBMENU_COMMAND = "A submenu tile's command is its menu's name: change it with Title";
+#define APP_TITLE "App"   // A tile's title when its app's or file's name leaves nothing
+static const char *const WHY_OPENS_IT = "This tile opens that menu";
+static const char *const WHY_INSIDE_IT = "That menu is inside the one this tile opens";
+
+// The special commands a tile can run (spec "Special ›"), as the Special page lists them: the title a new tile
+// takes, its library icon, and launcher.h's command (settings.c is pure, so they are written out)
+static const struct {
+    const char *title;
+    const char *icon;
+    const char *command;
+} SPECIAL_TILES[] = {
+    { "Home", "home", ":home" }, { "Back", "back", ":back" }, { "Settings", "settings", ":settings" },
+    { "Sleep", "sleep", ":sleep" }, { "Restart", "restart", ":restart" }, { "Shut down", "power", ":shutdown" },
+    { "Quit", "quit", ":quit" }
+};
 
 // Rows marked with the same comment belong to the same page (Task 5 lays the pages out)
 static const SettingDef DEFS[SET_ID_COUNT] = {
@@ -97,6 +120,9 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
         .key = SETTING_STARTUP_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
     [SET_ID_QUIT_CMD] = { .id = SET_ID_QUIT_CMD, .label = "Quit command", .section = "General",
         .key = SETTING_QUIT_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
+    [SET_ID_KEYBOARD_LAYOUT] = { .id = SET_ID_KEYBOARD_LAYOUT, .label = "Keyboard layout", .section = "General",
+        .key = SETTING_KEYBOARD_LAYOUT, .type = SET_TYPE_CHOICE, .lo = 0, .hi = 1, .names = KEYBOARD_NAMES,
+        .labels = KEYBOARD_LABELS },
 
     // Background, beyond 3a's
     [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through color", .section = "Background",
@@ -885,6 +911,8 @@ typedef struct {
     int entry_mode;    // The background mode when the page opened, for the incomplete-mode rule
     int device;        // The bindings the page is about (BindingsDevice): the Keyboard and Gamepad pages
                        // set it, and the binding pages opened from them inherit it
+    int tile;          // Tiles pages: the tile the page is about; on the Add and Special pages, the one a new
+                       // tile goes after (-1: none, which is the end; the Tiles page's own is always -1)
 } PageRef;
 
 struct SettingsState {
@@ -897,11 +925,21 @@ struct SettingsState {
     char notice[256];
     char failure[1400];
     char more_menus[128];  // The Menus page's note for the menus it has no room to list
+    char more_tiles[128];  // The Tiles page's note for the tiles it has no room to list
+    int grid_rows;               // The preview's grid as laid out now (settings_set_grid()), which Move steps through
+    int grid_columns;
+    struct {                     // The tile Move picked up (spec "Move")
+        bool active;
+        int menu;                // The settings' menu it is in
+        int from;                // Where it was picked up: Back puts it back there
+        int at;                  // Where it is now
+    } move;
     char *pads[SETTINGS_MAX_PADS]; // The gamepads present, by device index, for the Device row; NULL: no name
     char pad_fallback[SETTINGS_MAX_PADS][16];  // "Pad N", for a pad with no name
     int pad_count;
     Bindings *bindings;          // The key and gamepad bindings, while settings are open; NULL: no binding rows
     SettingsKeyNamer namer;
+    MenuEdit *menus;             // The menus model while settings are open (borrowed: the screen owns it); NULL: none
     struct {                     // The binding the binding page edits
         int device;
         int index;               // -1: a new one, not yet in the list
@@ -919,6 +957,7 @@ struct SettingsState {
     } undo;
     char confirm_note[96];       // The confirm page's "Captured: ..."
     char restart_note[320];      // The restart page's question
+    SettingsIconChoices icon;    // What the Icon page offers for its tile, once the screen has looked
 };
 
 // A function to start the model over the launcher's menus; the caller then sets every entry value
@@ -1093,6 +1132,7 @@ static SettingsRow new_row(SettingsRowKind kind, const char *label)
     memset(&row, 0, sizeof(row));
     row.kind = kind;
     row.menu = -1;
+    row.tile = -1;
     row.enabled = true;
     snprintf(row.label, sizeof(row.label), "%s", label);
     return row;
@@ -1227,11 +1267,113 @@ static int add_row(SettingsRow *rows, int count, int max, SettingsRow row)
     return count + 1;
 }
 
+// A function to find the menus model's menu for a menu of the settings, by its name (the two lists keep one
+// order, but a name is what both are sure of); -1 with no menus model, or no such menu
+static int edit_index(const SettingsState *state, int menu)
+{
+    if (state->menus == NULL || menu < 0 || menu >= state->menu_count)
+        return -1;
+    return menuedit_find(state->menus, state->names[menu]);
+}
+
+// A function to get the menus model's menu for a menu of the settings; NULL when there is none
+static const MenuEditMenu *edit_menu(const SettingsState *state, int menu)
+{
+    int e = edit_index(state, menu);
+    return e >= 0 ? menuedit_menu(state->menus, e) : NULL;
+}
+
+// A function to get a tile; NULL when there is none
+static const MenuTile *edit_tile(const SettingsState *state, int menu, int tile)
+{
+    const MenuEditMenu *m = edit_menu(state, menu);
+    return m != NULL && tile >= 0 && tile < m->count ? &m->tiles[tile] : NULL;
+}
+
+// A function to find the menu a tile opens in the menus model; -1 for a tile that opens none, or one whose
+// menu is gone (a tile like any other)
+static int opened_menu(const SettingsState *state, const MenuTile *tile)
+{
+    const char *name = tile != NULL ? menuedit_submenu_of(tile) : NULL;
+    return name != NULL ? menuedit_find(state->menus, name) : -1;
+}
+
+// A function to make a tile's row on the Tiles page: one that opens a menu is a link, showing its tile count;
+// any other shows its command. OK on either opens the tile's page.
+static SettingsRow tile_row(const SettingsState *state, int menu, int t)
+{
+    const MenuTile *tile = edit_tile(state, menu, t);
+    int s = opened_menu(state, tile);
+    SettingsRow row = s >= 0 ? link_row(tile->title, "", SETTINGS_PAGE_TILE, menu)
+                             : action_row(tile->title, SETTINGS_ACTION_OPEN_TILE, true);
+    row.menu = menu;
+    row.tile = t;
+    if (s >= 0) {
+        int count = menuedit_menu(state->menus, s)->count;
+        snprintf(row.value, sizeof(row.value), count == 1 ? "%d tile" : "%d tiles", count);
+    }
+    else
+        setting_command_label(tile->command, row.value, sizeof(row.value));
+    return row;
+}
+
+// A function to add the Tiles page's rows: Add (Empty: Add in an empty menu), which puts a new tile at the
+// end (its row's tile is -1), then each tile in order. A page holds SETTINGS_MAX_ROWS rows: tiles past them
+// are counted in a note, never cut off unseen.
+static int tiles_rows(SettingsState *state, const PageRef *top, SettingsRow *rows, int n, int max)
+{
+    const MenuEditMenu *menu = edit_menu(state, top->menu);
+    if (menu == NULL)
+        return n;
+    n = add_row(rows, n, max, link_row(menu->count == 0 ? "Empty: Add" : "Add", "", SETTINGS_PAGE_ADD, top->menu));
+    int room = SETTINGS_MAX_ROWS - 2;
+    int shown = menu->count <= room ? menu->count : room - 1;
+    for (int t = 0; t < shown; t++)
+        n = add_row(rows, n, max, tile_row(state, top->menu, t));
+    if (shown < menu->count) {
+        snprintf(state->more_tiles, sizeof(state->more_tiles),
+            "%d more tiles have no room here: hold OK on one in the menu to edit it", menu->count - shown);
+        n = add_row(rows, n, max, note_row(state->more_tiles));
+    }
+    return n;
+}
+
+// A function to add a submenu tile's Remove rows (spec "Decisions"): the menu with its tiles, grayed for the
+// default menu, and the tile alone, only while another tile opens the menu too
+static int remove_menu_rows(SettingsState *state, const PageRef *top, SettingsRow *rows, int n, int max)
+{
+    int s = opened_menu(state, edit_tile(state, top->menu, top->tile));
+    if (s < 0)
+        return n;
+    const MenuEditMenu *submenu = menuedit_menu(state->menus, s);
+    const char *default_menu = menuedit_default(state->menus);
+    char label[128];
+    snprintf(label, sizeof(label), submenu->count == 1 ? "Remove %s and its %d tile" : "Remove %s and its %d tiles",
+        submenu->name, submenu->count);
+    SettingsRow with = action_row(label, SETTINGS_ACTION_REMOVE_WITH_TILES, true);
+    n = add_row(rows, n, max, grayed(with, default_menu != NULL && strcmp(default_menu, submenu->name) == 0, WHY_DEFAULT_MENU));
+    if (menuedit_openers(state->menus, submenu->name) > 1)
+        n = add_row(rows, n, max, action_row("Remove only this tile", SETTINGS_ACTION_REMOVE_ONLY_TILE, true));
+    return n;
+}
+
 // A function to give the model its bindings, and a way to name keys and buttons
 void settings_set_bindings(SettingsState *state, Bindings *bindings, SettingsKeyNamer namer)
 {
     state->bindings = bindings;
     state->namer = namer;
+}
+
+// A function to give the model the menus model, which the screen owns and frees after it
+void settings_set_menus(SettingsState *state, MenuEdit *menus)
+{
+    state->menus = menus;
+}
+
+// A function to get the menus model the screen gave; NULL when it gave none
+MenuEdit *settings_menus(const SettingsState *state)
+{
+    return state->menus;
 }
 
 // A function to name a key or button through the screen's namer
@@ -1274,6 +1416,61 @@ static const char *refuse_remove(const SettingsState *state)
     return bindings_refuse_change(state->bindings, device, state->pending.index, 0, NULL, true);
 }
 
+// A function to tell whether a menu leads to another through its submenu tiles, however deep; true when out
+// of memory, so a move that could not be ruled out is refused
+static bool reaches(const MenuEdit *edit, int from, int target)
+{
+    int count = menuedit_count(edit);
+    int *queue = alloc_calloc((size_t) count, sizeof(int));
+    bool *seen = alloc_calloc((size_t) count, sizeof(bool));
+    bool found = queue == NULL || seen == NULL;
+    int head = 0;
+    int tail = 0;
+    if (!found) {
+        queue[tail++] = from;
+        seen[from] = true;
+    }
+    while (!found && head < tail) {
+        const MenuEditMenu *menu = menuedit_menu(edit, queue[head++]);
+        for (int t = 0; t < menu->count && !found; t++) {
+            const char *name = menuedit_submenu_of(&menu->tiles[t]);
+            int next = name != NULL ? menuedit_find(edit, name) : -1;
+            if (next == target)
+                found = true;
+            else if (next >= 0 && !seen[next]) {
+                seen[next] = true;
+                queue[tail++] = next;
+            }
+        }
+    }
+    alloc_free(queue);
+    alloc_free(seen);
+    return found;
+}
+
+// A function to add Move to menu's rows: every other menu. A submenu tile's own menu, and every menu inside
+// it, are grayed with the reason: the tile would be the only way to them, inside them.
+static int move_to_rows(SettingsState *state, const PageRef *top, SettingsRow *rows, int n, int max)
+{
+    const MenuTile *tile = edit_tile(state, top->menu, top->tile);
+    if (tile == NULL)
+        return n;
+    int s = opened_menu(state, tile);
+    for (int k = 0; k < state->menu_count; k++) {
+        if (k == top->menu)
+            continue;
+        int e = edit_index(state, k);
+        SettingsRow row = action_row(state->names[k], SETTINGS_ACTION_MOVE_TO, e >= 0);
+        row.menu = k;
+        if (s >= 0 && e == s)
+            row = grayed(row, true, WHY_OPENS_IT);
+        else if (s >= 0 && e >= 0 && reaches(state->menus, s, e))
+            row = grayed(row, true, WHY_INSIDE_IT);
+        n = add_row(rows, n, max, row);
+    }
+    return n;
+}
+
 // A function to list the rows of the page on show
 int settings_rows(SettingsState *state, SettingsRow *rows, int max)
 {
@@ -1306,13 +1503,14 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, link_row("Controls", is_on(state, SET_ID_GAMEPAD_ENABLED) ? "Gamepad on" : "Gamepad off",
                                                SETTINGS_PAGE_CONTROLS, -1));
             n = add_row(rows, n, max, new_row(SETTINGS_ROW_DIVIDER, ""));
-            n = add_row(rows, n, max, action_row("Discard changes", SETTINGS_ACTION_DISCARD, settings_any_changed(state)));
+            n = add_row(rows, n, max, action_row("Discard changes", SETTINGS_ACTION_DISCARD,
+                                                 settings_any_changed(state) || settings_menus_edited(state)));
             break;
         }
         case SETTINGS_PAGE_GENERAL: {
             static const SettingId ids[] = { SET_ID_DEFAULT_MENU, SET_ID_WRAP_ENTRIES, SET_ID_RESET_ON_BACK,
                 SET_ID_MOUSE_SELECT, SET_ID_INHIBIT_OS_SCREENSAVER, SET_ID_VSYNC, SET_ID_FPS_LIMIT, SET_ID_ON_LAUNCH,
-                SET_ID_APPLICATION_TIMEOUT, SET_ID_STARTUP_CMD, SET_ID_QUIT_CMD };
+                SET_ID_APPLICATION_TIMEOUT, SET_ID_STARTUP_CMD, SET_ID_QUIT_CMD, SET_ID_KEYBOARD_LAYOUT };
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_FPS_LIMIT)
@@ -1370,8 +1568,14 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, setting_row(state, settings_slot(state, m < 0 ? SET_ID_LAYOUT_ROWS : SET_ID_MENU_ROWS, m)));
             n = add_row(rows, n, max, setting_row(state, settings_slot(state, m < 0 ? SET_ID_LAYOUT_COLUMNS : SET_ID_MENU_COLUMNS, m)));
             n = add_row(rows, n, max, setting_row(state, settings_slot(state, m < 0 ? SET_ID_LAYOUT_ICON_SIZE : SET_ID_MENU_ICON_SIZE, m)));
-            if (m >= 0)
+            if (m >= 0) {
+                const MenuEditMenu *menu = edit_menu(state, m);
+                if (menu != NULL) {
+                    snprintf(text, sizeof(text), menu->count == 1 ? "%d tile" : "%d tiles", menu->count);
+                    n = add_row(rows, n, max, link_row("Tiles", text, SETTINGS_PAGE_TILES, m));
+                }
                 n = add_row(rows, n, max, note_row(MENU_NOTE));
+            }
             else {
                 n = add_row(rows, n, max, global_row(state, SET_ID_ICON_SPACING));
                 n = add_row(rows, n, max, global_row(state, SET_ID_VCENTER));
@@ -1520,6 +1724,21 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, action_row("Cancel", SETTINGS_ACTION_CANCEL, true));
             break;
         }
+        case SETTINGS_PAGE_ICON: {
+            // The library icon offered first, then the app's own icon, once the screen has looked (it
+            // looks as the page opens); the library and the folder browser always
+            const SettingsIconChoices *icon = &state->icon;
+            if (icon->ready && icon->suggested[0] != '\0') {
+                SettingsRow row = action_row(icon->suggested_title, SETTINGS_ACTION_ICON_SUGGESTED, true);
+                snprintf(row.value, sizeof(row.value), "%s", icon->matched ? "Library match" : "Generic icon");
+                n = add_row(rows, n, max, row);
+            }
+            if (icon->ready && icon->own)
+                n = add_row(rows, n, max, action_row("Its own icon", SETTINGS_ACTION_ICON_OWN, true));
+            n = add_row(rows, n, max, action_row("Library", SETTINGS_ACTION_ICON_GRID, true));
+            n = add_row(rows, n, max, action_row("Browse for an image", SETTINGS_ACTION_ICON_BROWSE, true));
+            break;
+        }
         case SETTINGS_PAGE_SAVE_FAILED:
             n = add_row(rows, n, max, note_row(state->failure));
             n = add_row(rows, n, max, action_row("Try again", SETTINGS_ACTION_RETRY, true));
@@ -1529,6 +1748,54 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, note_row(state->restart_note));
             n = add_row(rows, n, max, action_row("Yes", SETTINGS_ACTION_RESTART, true));
             n = add_row(rows, n, max, action_row("No", SETTINGS_ACTION_NO_RESTART, true));
+            break;
+        case SETTINGS_PAGE_TILES:
+            n = tiles_rows(state, top, rows, n, max);
+            break;
+        case SETTINGS_PAGE_TILE: {
+            const MenuTile *tile = edit_tile(state, top->menu, top->tile);
+            if (tile == NULL)
+                break;
+            SettingsRow title = action_row("Title", SETTINGS_ACTION_EDIT_TITLE, true);
+            snprintf(title.value, sizeof(title.value), "%s", tile->title);
+            n = add_row(rows, n, max, title);
+            SettingsRow icon = link_row("Icon", tile->icon, SETTINGS_PAGE_ICON, top->menu);
+            icon.tile = top->tile;   // The Icon page is about this tile: open_page() gives it the row's tile
+            n = add_row(rows, n, max, icon);
+            SettingsRow command = action_row("Command", SETTINGS_ACTION_EDIT_COMMAND, true);
+            setting_command_label(tile->command, command.value, sizeof(command.value));
+            n = add_row(rows, n, max, grayed(command, opened_menu(state, tile) >= 0, WHY_SUBMENU_COMMAND));
+            n = add_row(rows, n, max, action_row("Move", SETTINGS_ACTION_MOVE, true));
+            SettingsRow move_to = link_row("Move to menu", "", SETTINGS_PAGE_MOVE_TO, top->menu);
+            move_to.tile = top->tile;
+            n = add_row(rows, n, max, move_to);
+            SettingsRow after = link_row("Add after this tile", "", SETTINGS_PAGE_ADD, top->menu);
+            after.tile = top->tile;   // The Add page puts a new tile right after this one
+            n = add_row(rows, n, max, after);
+            n = add_row(rows, n, max, action_row("Remove", SETTINGS_ACTION_REMOVE_TILE, true));
+            break;
+        }
+        case SETTINGS_PAGE_ADD: {
+            n = add_row(rows, n, max, action_row("App", SETTINGS_ACTION_ADD_APP, true));
+            n = add_row(rows, n, max, action_row("Browse for a program", SETTINGS_ACTION_ADD_PROGRAM, true));
+            n = add_row(rows, n, max, action_row("Submenu", SETTINGS_ACTION_ADD_SUBMENU, true));
+            SettingsRow special = link_row("Special", "", SETTINGS_PAGE_SPECIAL, top->menu);
+            special.tile = top->tile;
+            n = add_row(rows, n, max, special);
+            break;
+        }
+        case SETTINGS_PAGE_SPECIAL:
+            for (int i = 0; i < LENGTH(SPECIAL_TILES); i++) {
+                SettingsRow row = action_row(SPECIAL_TILES[i].title, SETTINGS_ACTION_ADD_SPECIAL, true);
+                row.tile = i;
+                n = add_row(rows, n, max, row);
+            }
+            break;
+        case SETTINGS_PAGE_REMOVE_MENU:
+            n = remove_menu_rows(state, top, rows, n, max);
+            break;
+        case SETTINGS_PAGE_MOVE_TO:
+            n = move_to_rows(state, top, rows, n, max);
             break;
     }
     return n < max ? n : max;
@@ -1567,8 +1834,9 @@ static void fix_cursor(SettingsState *state)
     }
 }
 
-// A function to open a page on top of the one on show
-static void push_page(SettingsState *state, SettingsPage page, int menu)
+// A function to open a page on top of the one on show; a Tiles page is about a tile (-1: none), which its
+// rows are made for
+static void open_page(SettingsState *state, SettingsPage page, int menu, int tile)
 {
     if (state->depth + 1 >= SETTINGS_MAX_DEPTH)
         return;
@@ -1577,10 +1845,610 @@ static void push_page(SettingsState *state, SettingsPage page, int menu)
     memset(top, 0, sizeof(*top));
     top->page = page;
     top->menu = menu;
+    top->tile = tile;
     top->entry_mode = settings_slot(state, SET_ID_BACKGROUND_MODE, -1)->value.number;
     top->device = page == SETTINGS_PAGE_KEYBOARD ? BINDINGS_KEYBOARD
                 : page == SETTINGS_PAGE_GAMEPAD ? BINDINGS_GAMEPAD : state->stack[state->depth - 1].device;
+    if (page == SETTINGS_PAGE_ICON)
+        memset(&state->icon, 0, sizeof(state->icon));   // The screen looks again at what it offers
     fix_cursor(state);
+}
+
+// A function to open a page on top of the one on show
+static void push_page(SettingsState *state, SettingsPage page, int menu)
+{
+    open_page(state, page, menu, -1);
+}
+
+// A function to go back to the Tiles page at `depth`, its cursor on tile `t`, or on the last tile when t is
+// past the end now, or on Add when the menu is empty
+static void back_to_tiles(SettingsState *state, int depth, int t)
+{
+    state->depth = depth;
+    PageRef *page = &state->stack[depth];
+    const MenuEditMenu *menu = edit_menu(state, page->menu);
+    int count = menu != NULL ? menu->count : 0;
+    page->cursor = (t < count ? t : count - 1) + 1;   // Add is the first row
+    fix_cursor(state);
+}
+
+// A function to find the Tiles page an Add page at `add` was opened over: directly (the Tiles page's Add),
+// or through a tile's page (its Add after this tile)
+static int tiles_under(const SettingsState *state, int add)
+{
+    return state->stack[add - 1].page == SETTINGS_PAGE_TILE ? add - 2 : add - 1;
+}
+
+// A function to find the Add page under the page on show (it, or the Special page above it), over a Tiles
+// page as tiles_under() finds it; -1 when there is none
+static int adding_page(const SettingsState *state)
+{
+    for (int i = state->depth; i > 0; i--) {
+        if (state->stack[i].page != SETTINGS_PAGE_ADD)
+            continue;
+        int under = tiles_under(state, i);
+        return under >= 0 && state->stack[under].page == SETTINGS_PAGE_TILES ? i : -1;
+    }
+    return -1;
+}
+
+// A function to finish an addition the menus model made (`why` NULL) or refused: back on the Tiles page,
+// the cursor on the new tile, or the reason in the caption
+static SettingsEvent added(SettingsState *state, int add, int menu, int at, const char *why)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    back_to_tiles(state, tiles_under(state, add), at);
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = at;
+    return event;
+}
+
+// A function to add a tile to the Add page's menu: after the tile whose Add after this tile opened the page,
+// or at the end from the Tiles page's Add; then back on the Tiles page, the cursor on it. The Special page,
+// the app list and the program browser add through it. Refused with the menus model's reason in the caption.
+SettingsEvent settings_add_tile(SettingsState *state, const char *title, const char *icon, const char *command)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_NONE;
+    int add = adding_page(state);
+    if (add < 0)
+        return event;
+    int menu = state->stack[add].menu;
+    int after = state->stack[add].tile;
+    int e = edit_index(state, menu);
+    if (e < 0)
+        return event;
+    const char *why = menuedit_add(state->menus, e, after, title, icon, command);
+    return added(state, add, menu, after < 0 ? menuedit_menu(state->menus, e)->count - 1 : after + 1, why);
+}
+
+// A function to make a submenu (spec "Submenu ›"): `[name]` and a tile that opens it, with the folder icon,
+// where settings_add_tile() puts a tile. It gets no Back tile: Back and B go back.
+SettingsEvent settings_add_submenu(SettingsState *state, const char *name)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    int add = adding_page(state);
+    int menu = add >= 0 ? state->stack[add].menu : -1;
+    int e = edit_index(state, menu);
+    if (e < 0)
+        return event;
+    int after = state->stack[add].tile;
+    const char *why = menuedit_add_submenu(state->menus, e, after, name, SUBMENU_ICON);
+    return added(state, add, menu, after < 0 ? menuedit_menu(state->menus, e)->count - 1 : after + 1, why);
+}
+
+// A function to set a tile's command, as its command list chose it or the keyboard typed it; refused with the
+// reason in the caption
+SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return event;
+    const char *why = menuedit_set(state->menus, edit_index(state, menu), tile, t->title, t->icon, command);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = tile;
+    return event;
+}
+
+// A function to set a tile's icon, as the Icon page chose it (a library name, or an image's or a plated
+// file's path): the twin of settings_set_command(). Refused with the reason as the notice, which the Icon
+// page's caption shows.
+SettingsEvent settings_set_icon(SettingsState *state, int menu, int tile, const char *icon)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return event;
+    const char *refused = menuedit_set(state->menus, edit_index(state, menu), tile, t->title, icon, t->command);
+    if (refused != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", refused);   // The Icon page's caption says it
+        return event;
+    }
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = tile;
+    return event;
+}
+
+// A function to say why a tile cannot run a command, as typed, weighed in its line as config.ini has it
+// (menuedit_check_set(): its comment and spacing count); NULL when it can
+const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command)
+{
+    const MenuTile *t = edit_tile(state, menu, tile);
+    return t == NULL ? "The tile is gone"
+                     : menuedit_check_set(state->menus, edit_index(state, menu), tile, t->title, t->icon, command);
+}
+
+// A function to make an app's or a file's name a tile's title: a ';' (which ends a title in config.ini)
+// becomes a comma, a control character a space, the edges are trimmed of spaces and of what becomes one (a
+// leading tab would be a leading space, which config.ini's line refuses), and it is cut on a character's
+// edge to the keyboard's limit (MENUEDIT_TITLE_MAX bytes) or `size`; with nothing left, "App"
+void settings_tile_title(const char *name, char *out, size_t size)
+{
+    size_t limit = size - 1 < (size_t) MENUEDIT_TITLE_MAX ? size - 1 : (size_t) MENUEDIT_TITLE_MAX;
+    while (*name != '\0' && ((unsigned char) *name <= 0x20 || *name == 0x7F))
+        name++;
+    size_t n = 0;
+    for (; name[n] != '\0' && n < limit; n++) {
+        unsigned char c = (unsigned char) name[n];
+        out[n] = (char) (c == ';' ? ',' : c < 0x20 || c == 0x7F ? ' ' : c);
+    }
+    while (n > 0 && ((unsigned char) name[n] & 0xC0) == 0x80)   // The character the limit cut goes whole
+        n--;
+    while (n > 0 && out[n - 1] == ' ')
+        n--;
+    out[n] = '\0';
+    if (n == 0)
+        snprintf(out, size, "%s", APP_TITLE);
+}
+
+// A function to give the model the preview's grid as laid out now, which Move steps a tile through
+void settings_set_grid(SettingsState *state, int rows, int columns)
+{
+    state->grid_rows = rows;
+    state->grid_columns = columns;
+}
+
+// A function to give the tile Move picked up; -1 for none
+int settings_moving_tile(const SettingsState *state)
+{
+    return state->move.active ? state->move.at : -1;
+}
+
+// A function to work out where an arrow sends a picked-up tile (spec "Move"), as the launcher's arrows move
+// the highlight (layout_move(), layout.c:293-339): in a grid, Left and Right within the tile's row, stopping
+// at its ends, Up and Down to the row above or below keeping the column, onto the last tile of a shorter
+// last row, stopping at the first and last rows; in a one-row strip (or a grid with no columns) Left and
+// Right along it, Up and Down nothing. The launcher's wrap-around is not followed: a tile moved past an end
+// would land at the other.
+int settings_move_target(int index, int count, int rows, int columns, SettingsCommand command)
+{
+    if (count <= 0)
+        return index;
+    index = index < 0 ? 0 : index >= count ? count - 1 : index;
+    if (rows <= 1 || columns <= 0) {
+        if (command == SETTINGS_RIGHT)
+            return index < count - 1 ? index + 1 : index;
+        if (command == SETTINGS_LEFT)
+            return index > 0 ? index - 1 : index;
+        return index;
+    }
+    int row = index / columns;
+    int column = index % columns;
+    int last_row = (count - 1) / columns;
+    int length = count - row * columns < columns ? count - row * columns : columns;
+    if (command == SETTINGS_RIGHT)
+        return column < length - 1 ? index + 1 : index;
+    if (command == SETTINGS_LEFT)
+        return column > 0 ? index - 1 : index;
+    int target = command == SETTINGS_DOWN && row < last_row ? row + 1 : command == SETTINGS_UP && row > 0 ? row - 1 : -1;
+    if (target < 0)
+        return index;
+    int target_length = count - target * columns < columns ? count - target * columns : columns;
+    return target * columns + (column < target_length - 1 ? column : target_length - 1);
+}
+
+// A function to say why a new submenu's name cannot be written, or NULL: the name rules, then its tile's
+// line, `name;folder;:submenu name`
+const char *settings_name_problem(const SettingsState *state, const char *name)
+{
+    if (state->menus == NULL)
+        return "The menus could not be read";
+    const char *why = menuedit_check_name(state->menus, name, -1);
+    if (why != NULL)
+        return why;
+    char command[INIDOC_MAX_LINE + 1];
+    snprintf(command, sizeof(command), SUBMENU_COMMAND "%s", name);
+    return menuedit_check_tile(name, SUBMENU_ICON, command);
+}
+
+// A function to say why a tile's title cannot be written, or NULL. A tile that opens a menu is renamed with
+// its menu, so the name rules apply (its own name allowed in another case), then the tile's line with its
+// command renamed. The line is weighed as it is in config.ini (Task 3's menuedit_check_set(): its comment
+// and spacing count), so Done is grayed for a title the save would refuse.
+const char *settings_title_problem(const SettingsState *state, int menu, int tile, const char *title)
+{
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return "The tile is gone";
+    int e = edit_index(state, menu);
+    int s = opened_menu(state, t);
+    if (s < 0)
+        return menuedit_check_set(state->menus, e, tile, title, t->icon, t->command);
+    const char *why = menuedit_check_name(state->menus, title, s);
+    if (why != NULL)
+        return why;
+    char command[INIDOC_MAX_LINE + 1];
+    snprintf(command, sizeof(command), SUBMENU_COMMAND "%s", title);
+    return menuedit_check_set(state->menus, e, tile, title, t->icon, command);
+}
+
+// A function to rewrite every command outside the menus that opens a renamed menu (Known integration work 1):
+// each binding, keyboard or gamepad, and the Startup and Quit commands, holding exactly ":submenu <old>".
+// True when one was rewritten.
+static bool rename_commands(SettingsState *state, const char *old_name, const char *new_name)
+{
+    char before[BINDINGS_COMMAND_MAX];
+    char after[BINDINGS_COMMAND_MAX];
+    snprintf(before, sizeof(before), SUBMENU_COMMAND "%s", old_name);
+    snprintf(after, sizeof(after), SUBMENU_COMMAND "%s", new_name);
+    bool rewrote = false;
+    for (int d = BINDINGS_KEYBOARD; state->bindings != NULL && d <= BINDINGS_GAMEPAD; d++) {
+        for (int i = 0; i < bindings_count(state->bindings, (BindingsDevice) d); i++) {
+            const Binding *binding = bindings_at(state->bindings, (BindingsDevice) d, i);
+            if (binding->removed || strcmp(binding->command, before) != 0)
+                continue;
+            bindings_set(state->bindings, (BindingsDevice) d, i, binding->code, after);
+            rewrote = true;
+        }
+    }
+    static const SettingId commands[] = { SET_ID_STARTUP_CMD, SET_ID_QUIT_CMD };
+    for (int i = 0; i < LENGTH(commands); i++) {
+        SettingSlot *slot = settings_slot(state, commands[i], -1);
+        if (slot->value.inherit || strcmp(slot->value.text, before) != 0)
+            continue;
+        snprintf(slot->value.text, sizeof(slot->value.text), "%s", after);
+        rewrote = true;
+    }
+    return rewrote;
+}
+
+// A function to set a tile's title, as the keyboard typed it. A submenu tile's title is its menu's name: the
+// menu is renamed (each tile opening it follows, and the default menu), the tile takes the new name as its
+// own title, and so do the bindings and commands outside the menus (rename_commands()). Refused with the
+// reason in the caption.
+SettingsEvent settings_set_title(SettingsState *state, int menu, int tile, const char *title)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    int e = edit_index(state, menu);
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return event;
+    int s = opened_menu(state, t);
+    const char *why = NULL;
+    bool renamed = false;
+    if (s < 0)
+        why = menuedit_set(state->menus, e, tile, title, t->icon, t->command);
+    else {
+        char old_name[INIDOC_MAX_SECTION + 1];   // The menu's name goes with the rename
+        snprintf(old_name, sizeof(old_name), "%s", menuedit_menu(state->menus, s)->name);
+        why = menuedit_rename_menu(state->menus, s, title);
+        if (why == NULL) {
+            renamed = true;
+            event.rebind = rename_commands(state, old_name, title);
+            // The tile again, through the menus model's index: edit_tile() finds its menu by the settings'
+            // name, which is still the old one, so a tile inside the menu it opens would not be found
+            const MenuEditMenu *em = menuedit_menu(state->menus, e);
+            t = em != NULL && tile < em->count ? &em->tiles[tile] : NULL;
+            if (t != NULL && strcmp(t->title, title) != 0)
+                why = menuedit_set(state->menus, e, tile, title, t->icon, t->command);
+        }
+    }
+    if (why != NULL)
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+    if (why == NULL || renamed) {
+        event.kind = SETTINGS_EVENT_MENUS;
+        event.menu = menu;
+        event.tile = tile;
+    }
+    return event;
+}
+
+// A function to remove the tile page's tile: one that opens a menu asks first (the confirm page); any other
+// goes at once, back on the Tiles page on the tile now in its place
+static SettingsEvent remove_tile(SettingsState *state)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    int menu = state->stack[state->depth].menu;
+    int t = state->stack[state->depth].tile;
+    const MenuTile *tile = edit_tile(state, menu, t);
+    if (tile == NULL)
+        return event;
+    if (opened_menu(state, tile) >= 0) {
+        open_page(state, SETTINGS_PAGE_REMOVE_MENU, menu, t);
+        return event;
+    }
+    const char *why = menuedit_remove(state->menus, edit_index(state, menu), t);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    back_to_tiles(state, state->depth - 1, t);
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = -1;
+    return event;
+}
+
+// A function to do what the confirm page chose for a submenu tile: the menu with its tiles (and every tile
+// that opens it), or the tile alone; back on the Tiles page
+static SettingsEvent remove_submenu(SettingsState *state, bool with_tiles)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    int menu = state->stack[state->depth].menu;
+    int t = state->stack[state->depth].tile;
+    const char *why = menuedit_remove_menu(state->menus, edit_index(state, menu), t, with_tiles);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    back_to_tiles(state, state->depth - 2, t);
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = -1;
+    return event;
+}
+
+// A function to follow a moved tile with the pages: the tile's page is about it at its new place, and the
+// Tiles page under it has its cursor on it there
+static void moved_to(SettingsState *state, int at)
+{
+    state->move.at = at;
+    state->stack[state->depth].tile = at;
+    if (state->depth > 0 && state->stack[state->depth - 1].page == SETTINGS_PAGE_TILES)
+        state->stack[state->depth - 1].cursor = at + 1;   // Add is the first row
+}
+
+// A function to act on a key while a tile is picked up (spec "Move"): the arrows move it (settings_move_target(),
+// one menuedit_move() a step, which the screen lays out at once); OK drops it; Back puts it back where it was
+// picked up. Either ends the mode on the tile's page. Home and the key that opened settings drop it where it
+// is, then close settings as they would.
+static SettingsEvent move_command(SettingsState *state, SettingsCommand command)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_NONE;
+    int e = edit_index(state, state->move.menu);
+    const MenuEditMenu *menu = e >= 0 ? menuedit_menu(state->menus, e) : NULL;
+    int to = state->move.at;
+    switch (command) {
+        case SETTINGS_LEFT:
+        case SETTINGS_RIGHT:
+        case SETTINGS_UP:
+        case SETTINGS_DOWN:
+            if (menu != NULL)
+                to = settings_move_target(state->move.at, menu->count, state->grid_rows, state->grid_columns, command);
+            break;
+        case SETTINGS_BACK:
+            to = state->move.from;
+            break;
+        case SETTINGS_OK:
+        case SETTINGS_HOME:
+        case SETTINGS_CLOSE:
+            break;
+    }
+    if (menu != NULL && to != state->move.at) {
+        const char *why = menuedit_move(state->menus, e, state->move.at, to);
+        if (why != NULL) {
+            snprintf(state->notice, sizeof(state->notice), "%s", why);
+            return event;
+        }
+        moved_to(state, to);
+        event.kind = SETTINGS_EVENT_MENUS;
+        event.menu = state->move.menu;
+        event.tile = to;
+    }
+    if (command == SETTINGS_OK || command == SETTINGS_BACK || command == SETTINGS_HOME || command == SETTINGS_CLOSE) {
+        state->move.active = false;
+        if (event.kind == SETTINGS_EVENT_NONE)
+            event.kind = SETTINGS_EVENT_MOVED;
+    }
+    if (command == SETTINGS_HOME || command == SETTINGS_CLOSE)
+        event.kind = command == SETTINGS_HOME ? SETTINGS_EVENT_CLOSE_HOME : SETTINGS_EVENT_CLOSE;
+    return event;
+}
+
+// A function to move the tile page's tile to the end of another menu, back on the Tiles page on the tile now
+// in its place
+static SettingsEvent move_to_menu(SettingsState *state, int to_menu)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    int menu = state->stack[state->depth].menu;
+    int t = state->stack[state->depth].tile;
+    const char *why = menuedit_move_to_menu(state->menus, edit_index(state, menu), t, edit_index(state, to_menu));
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    back_to_tiles(state, state->depth - 2, t);
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = -1;
+    return event;
+}
+
+// A function to find a menu by its name; -1 when the model has none of that name
+static int menu_named(const SettingsState *state, const char *name)
+{
+    for (int m = 0; m < state->menu_count; m++) {
+        if (strcmp(state->names[m], name) == 0)
+            return m;
+    }
+    return -1;
+}
+
+// A function to keep the Default menu row naming a menu after the menus changed: its value and its entry
+// each follow a rename, and a value naming a menu now gone goes back to its entry, since saved it would
+// name no menu and StreamFlex would not start (old_names as settings_remodel() takes them)
+static void follow_default_menu(SettingsState *state, const char *const *old_names)
+{
+    SettingSlot *slot = &state->slots[SET_ID_DEFAULT_MENU];
+    char *texts[2] = { slot->entry.text, slot->value.text };
+    for (int i = 0; i < 2; i++) {
+        for (int m = 0; m < state->menu_count; m++) {
+            if (old_names[m] != NULL && strcmp(old_names[m], texts[i]) == 0) {
+                snprintf(texts[i], SETTING_TEXT_MAX, "%s", state->names[m]);
+                break;
+            }
+        }
+    }
+    if (slot->value.text[0] != '\0' && menu_named(state, slot->value.text) < 0)
+        slot->value = slot->entry;
+}
+
+// A function to find where a menu of the old model is in the new one, by the name it had (old_names as
+// settings_remodel() takes them); -1 when it is gone
+static int menu_now(const char *const *old_names, int count, const char *name)
+{
+    for (int m = 0; m < count; m++) {
+        if (old_names[m] != NULL && strcmp(old_names[m], name) == 0)
+            return m;
+    }
+    return -1;
+}
+
+// A function to list the rows of the page at `level` of the stack, as settings_rows() lists the page on show
+static int rows_at(SettingsState *state, int level, SettingsRow *rows, int max)
+{
+    int depth = state->depth;
+    state->depth = level;
+    int count = settings_rows(state, rows, max);
+    state->depth = depth;
+    return count;
+}
+
+// A function to find the menu the cursor of the Menus page at `level` of the stack rests on; -1 for none
+// (All menus, a note, or a page that is not the Menus page)
+static int menus_page_menu(SettingsState *state, int level)
+{
+    if (state->stack[level].page != SETTINGS_PAGE_MENUS)
+        return -1;
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = rows_at(state, level, rows, SETTINGS_MAX_ROWS);
+    int cursor = state->stack[level].cursor;
+    return cursor >= 0 && cursor < count && rows[cursor].kind == SETTINGS_ROW_LINK ? rows[cursor].menu : -1;
+}
+
+// A function to put the cursor of the Menus page at `level` of the stack on a menu's row, when it has one
+// (a menu past the page's room has none)
+static void menus_page_cursor(SettingsState *state, int level, int menu)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = rows_at(state, level, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        if (rows[i].kind == SETTINGS_ROW_LINK && rows[i].target == SETTINGS_PAGE_MENU && rows[i].menu == menu) {
+            state->stack[level].cursor = i;
+            return;
+        }
+    }
+}
+
+// A function to make the model again over a new list of menus, after one came, went, was renamed or
+// moved (plan ruling 5). Everything `old` holds is carried across: the pages, the bindings and how keys
+// are named, the pads, the notes, every value and its entry, and the menus model. A menu's own settings
+// follow it by the name it had in `old` (old_names[i], NULL for a new menu, whose settings start
+// inherited and unchanged); a menu now gone takes its settings with it. A page about a menu follows it to
+// its new place, or closes with every page above it when the menu is gone. NULL when out of memory, with
+// `old` untouched; the caller frees `old`.
+SettingsState *settings_remodel(const SettingsState *old, const char *const *names, const char *const *old_names, int count)
+{
+    SettingsState *state = settings_create(names, count);
+    if (state == NULL)
+        return NULL;
+    SettingSlot *slots = state->slots;
+    char **made = state->names;
+    int slot_count = state->slot_count;
+    *state = *old;
+
+    // The menu each Menus page's cursor rests on, read while the copy still lists the old menus
+    int highlighted[SETTINGS_MAX_DEPTH];
+    for (int i = 0; i <= state->depth; i++)
+        highlighted[i] = menus_page_menu(state, i);
+    state->slots = slots;
+    state->names = made;
+    state->slot_count = slot_count;
+    state->menu_count = count;
+
+    // The pads' names are the old model's to free, so they are copied; a copy that runs out of memory
+    // leaves the pad named "Pad N", as settings_set_pads() names it
+    for (int i = 0; i < old->pad_count; i++)
+        state->pads[i] = old->pads[i] != NULL ? alloc_strdup(old->pads[i]) : NULL;
+
+    for (int id = 0; id < SET_ID_GLOBAL_COUNT; id++)
+        state->slots[id] = old->slots[id];
+    for (int m = 0; m < count; m++) {
+        int from = old_names[m] != NULL ? menu_named(old, old_names[m]) : -1;
+        for (int k = 0; from >= 0 && k < SET_ID_PER_MENU_COUNT; k++) {
+            SettingSlot *slot = &state->slots[SET_ID_GLOBAL_COUNT + m * SET_ID_PER_MENU_COUNT + k];
+            *slot = old->slots[SET_ID_GLOBAL_COUNT + from * SET_ID_PER_MENU_COUNT + k];
+            slot->menu = m;
+        }
+    }
+    follow_default_menu(state, old_names);
+
+    // Each page about a menu follows it; one whose menu is gone closes, with every page above it
+    for (int i = 1; i <= state->depth; i++) {
+        PageRef *page = &state->stack[i];
+        if (page->menu < 0)
+            continue;
+        int to = menu_now(old_names, count, old->names[page->menu]);
+        if (to < 0) {
+            state->depth = i - 1;
+            break;
+        }
+        page->menu = to;
+    }
+
+    // The Menus page's cursor follows the menu it rested on, so Back from that menu's page lands on it, and
+    // the preview shows it; one whose menu is gone keeps its row, the nearest one now
+    for (int i = 0; i <= state->depth; i++) {
+        int to = highlighted[i] >= 0 ? menu_now(old_names, count, old->names[highlighted[i]]) : -1;
+        if (to >= 0)
+            menus_page_cursor(state, i, to);
+    }
+    fix_cursor(state);
+    return state;
 }
 
 // A function to apply the incomplete-mode rule when the Background page is left: Image with no
@@ -1663,7 +2531,7 @@ static bool step_device(SettingsState *state, const SettingSlot *slot, int direc
     return true;
 }
 
-// A function to read a [Hotkeys] key's number as the save numbers new lines (next_key() in
+// A function to read a [Hotkeys] key's number as the save numbers new lines (config_save_next_key() in
 // config_save.c): "Hotkey12" is 12; 0 for any other key, or one too long to add to
 static long long hotkey_number(const char *key)
 {
@@ -1852,6 +2720,8 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
     memset(&event, 0, sizeof(event));
     event.kind = SETTINGS_EVENT_NONE;
     state->notice[0] = '\0';
+    if (state->move.active)
+        return move_command(state, command);   // A tile is picked up: the keys are Move's
     SettingsRow rows[SETTINGS_MAX_ROWS];
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
     PageRef *top = &state->stack[state->depth];
@@ -1899,7 +2769,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             if (!row->enabled && row->kind != SETTINGS_ROW_ACTION)
                 break;
             if (row->kind == SETTINGS_ROW_LINK) {
-                push_page(state, row->target, row->menu);
+                open_page(state, row->target, row->menu, row->tile);
                 event.kind = SETTINGS_EVENT_MOVED;
             }
             else if (row->kind == SETTINGS_ROW_BROWSE) {
@@ -1962,6 +2832,63 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
                 bindings_remove(state->bindings, (BindingsDevice) state->pending.device, state->pending.index);
                 state->depth--;
                 event.kind = SETTINGS_EVENT_BINDINGS;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_OPEN_TILE) {
+                open_page(state, SETTINGS_PAGE_TILE, row->menu, row->tile);
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_EDIT_TITLE) {
+                event.kind = SETTINGS_EVENT_TYPE_TITLE;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_REMOVE_TILE)
+                event = remove_tile(state);
+            else if (row->kind == SETTINGS_ROW_ACTION &&
+                     (row->action == SETTINGS_ACTION_REMOVE_WITH_TILES || row->action == SETTINGS_ACTION_REMOVE_ONLY_TILE)) {
+                if (!row->enabled)
+                    break;   // Grayed: its reason is on show
+                event = remove_submenu(state, row->action == SETTINGS_ACTION_REMOVE_WITH_TILES);
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_ADD_SUBMENU) {
+                event.kind = SETTINGS_EVENT_TYPE_NAME;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_ADD_SPECIAL)
+                event = settings_add_tile(state, SPECIAL_TILES[row->tile].title, SPECIAL_TILES[row->tile].icon,
+                                          SPECIAL_TILES[row->tile].command);
+            else if (row->kind == SETTINGS_ROW_ACTION &&
+                     (row->action == SETTINGS_ACTION_ADD_APP || row->action == SETTINGS_ACTION_ADD_PROGRAM)) {
+                event.kind = row->action == SETTINGS_ACTION_ADD_APP ? SETTINGS_EVENT_PICK_APP : SETTINGS_EVENT_BROWSE_PROGRAM;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_EDIT_COMMAND) {
+                if (!row->enabled)
+                    break;   // Grayed: its reason is on show
+                event.kind = SETTINGS_EVENT_PICK_TILE_COMMAND;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_MOVE) {
+                state->move.active = true;
+                state->move.menu = top->menu;
+                state->move.from = top->tile;
+                state->move.at = top->tile;
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_MOVE_TO) {
+                if (!row->enabled)
+                    break;   // Grayed: its reason is on show
+                event = move_to_menu(state, row->menu);
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && (row->action == SETTINGS_ACTION_ICON_SUGGESTED ||
+                     row->action == SETTINGS_ACTION_ICON_OWN || row->action == SETTINGS_ACTION_ICON_GRID ||
+                     row->action == SETTINGS_ACTION_ICON_BROWSE)) {
+                // The screen sets the icon, or opens the library or the browser, then says whether it is done
+                event.kind = SETTINGS_EVENT_ICON;
+                event.action = row->action;
             }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_DISCARD) {
                 for (int i = 0; i < state->slot_count; i++)
@@ -2148,6 +3075,17 @@ void settings_path(const SettingsState *state, char *out, size_t size)
             case SETTINGS_PAGE_CONFIRM: name = "Keep it?"; break;
             case SETTINGS_PAGE_SAVE_FAILED: name = "Couldn't save"; break;
             case SETTINGS_PAGE_RESTART: name = "Restart?"; break;
+            case SETTINGS_PAGE_ICON: name = "Icon"; break;
+            case SETTINGS_PAGE_TILES: name = "Tiles"; break;
+            case SETTINGS_PAGE_TILE: {
+                const MenuTile *tile = edit_tile(state, page->menu, page->tile);
+                name = tile != NULL ? tile->title : "Tile";
+                break;
+            }
+            case SETTINGS_PAGE_ADD: name = "Add"; break;
+            case SETTINGS_PAGE_SPECIAL: name = "Special"; break;
+            case SETTINGS_PAGE_REMOVE_MENU: name = "Remove?"; break;
+            case SETTINGS_PAGE_MOVE_TO: name = "Move to"; break;
             case SETTINGS_PAGE_TOP: break;
         }
         size_t used = strlen(out);
@@ -2155,12 +3093,20 @@ void settings_path(const SettingsState *state, char *out, size_t size)
     }
 }
 
-// A function to say which menu the preview should show: the one a MENU page edits, or the one
+// A function to tell a page about a menu's tiles (3c), whose menu the preview shows
+static bool tiles_page(SettingsPage page)
+{
+    return page == SETTINGS_PAGE_TILES || page == SETTINGS_PAGE_TILE || page == SETTINGS_PAGE_ADD ||
+           page == SETTINGS_PAGE_SPECIAL || page == SETTINGS_PAGE_REMOVE_MENU || page == SETTINGS_PAGE_MOVE_TO ||
+           page == SETTINGS_PAGE_ICON;
+}
+
+// A function to say which menu the preview should show: the one a MENU or Tiles page is about, or the one
 // highlighted on the Menus page; -1 for the menu settings were opened from
 int settings_preview_menu(SettingsState *state)
 {
     const PageRef *top = &state->stack[state->depth];
-    if (top->page == SETTINGS_PAGE_MENU)
+    if (top->page == SETTINGS_PAGE_MENU || tiles_page(top->page))
         return top->menu;
     if (top->page == SETTINGS_PAGE_MENUS) {
         SettingsRow rows[SETTINGS_MAX_ROWS];
@@ -2171,8 +3117,117 @@ int settings_preview_menu(SettingsState *state)
     return -1;
 }
 
+// A function to say which tile the preview highlights: on the Tiles page the one under its cursor (none on
+// Add or the note), on the other Tiles pages the one they are about (the Add page's: the tile a new one goes
+// after); -1 for none
+int settings_preview_tile(SettingsState *state)
+{
+    const PageRef *top = &state->stack[state->depth];
+    if (top->page == SETTINGS_PAGE_TILES) {
+        SettingsRow rows[SETTINGS_MAX_ROWS];
+        int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+        return top->cursor >= 0 && top->cursor < count ? rows[top->cursor].tile : -1;
+    }
+    return tiles_page(top->page) ? top->tile : -1;
+}
+
+// A function to tell whether the menus differ from how they were read: a tile or a menu added, removed,
+// moved, renamed or changed
+bool settings_menus_edited(const SettingsState *state)
+{
+    return state->menus != NULL && menuedit_changed(state->menus);
+}
+
 // A function to get the note the last command left for the caption, or ""
 const char *settings_notice(const SettingsState *state)
 {
     return state->notice;
+}
+
+// A function to give the Icon page what the screen found for its tile, and put the cursor on the first
+// row: the first choice that applies, which the spec preselects
+void settings_set_icon_choices(SettingsState *state, const SettingsIconChoices *choices)
+{
+    state->icon = *choices;
+    state->icon.ready = true;
+    if (state->stack[state->depth].page == SETTINGS_PAGE_ICON) {
+        state->stack[state->depth].cursor = 0;
+        fix_cursor(state);
+    }
+}
+
+// A function to give what the Icon page offers; `ready` false until the screen has looked
+const SettingsIconChoices *settings_icon_choices(const SettingsState *state)
+{
+    return &state->icon;
+}
+
+// A function to tell whether the Icon page is on show, and which tile it is about: its menu's index and
+// the tile's place in it
+bool settings_icon_tile(const SettingsState *state, int *menu, int *tile)
+{
+    const PageRef *top = &state->stack[state->depth];
+    if (top->page != SETTINGS_PAGE_ICON)
+        return false;
+    *menu = top->menu;
+    *tile = top->tile;
+    return true;
+}
+
+// A function to end the Icon page's choice: chosen (`why` NULL), back to the tile's page; refused, the
+// page stays and the caption says why until the next key. Nothing happens off the Icon page.
+void settings_icon_done(SettingsState *state, const char *why)
+{
+    if (state->stack[state->depth].page != SETTINGS_PAGE_ICON)
+        return;
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return;
+    }
+    state->depth--;
+    fix_cursor(state);
+}
+
+// A function to put the cursor on the page's row that leads to `page` for `menu` (and, for a tile's page,
+// that `tile`; -1 for any) and press OK on it, as the remote would: a link row to it, or on the Tiles page
+// an ordinary tile's row, an OPEN_TILE action (Task 10a's tile_row() makes only a submenu tile's a link).
+// False when the page has no such row or the page did not open.
+static bool open_row(SettingsState *state, SettingsPage page, int menu, int tile)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        bool leads = rows[i].kind == SETTINGS_ROW_LINK ? rows[i].target == page
+                   : page == SETTINGS_PAGE_TILE && rows[i].kind == SETTINGS_ROW_ACTION &&
+                     rows[i].action == SETTINGS_ACTION_OPEN_TILE;
+        if (leads && rows[i].menu == menu && (tile < 0 || rows[i].tile == tile)) {
+            state->stack[state->depth].cursor = i;
+            settings_command(state, SETTINGS_OK);
+            return settings_page(state) == page;
+        }
+    }
+    return false;
+}
+
+// A function to open the pages at a tile, as the remote opens them from the top: Menus, the menu, its
+// Tiles page and the tile's page, each from the row that leads on, so Back walks up the same pages with
+// each cursor where it was. Tile -1 stops at the Tiles page (an empty menu's way in), and a menu or tile
+// that is not there stops at the last page that opened. A menu or tile its page has no row for (past the
+// rows the page has room for: its note counts it) has its page opened directly, the page under it keeping
+// its cursor where it opened (Fable review I4): the hold reaches what the remote cannot.
+void settings_show_tile(SettingsState *state, int menu, int tile)
+{
+    state->depth = 0;
+    fix_cursor(state);
+    if (!open_row(state, SETTINGS_PAGE_MENUS, -1, -1))
+        return;
+    if (!open_row(state, SETTINGS_PAGE_MENU, menu, -1)) {
+        if (menu < 0 || menu >= state->menu_count)
+            return;
+        open_page(state, SETTINGS_PAGE_MENU, menu, -1);
+    }
+    if (!open_row(state, SETTINGS_PAGE_TILES, menu, -1) || tile < 0)
+        return;
+    if (!open_row(state, SETTINGS_PAGE_TILE, menu, tile) && edit_tile(state, menu, tile) != NULL)
+        open_page(state, SETTINGS_PAGE_TILE, menu, tile);
 }
