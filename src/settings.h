@@ -212,7 +212,12 @@ typedef enum {
     SETTINGS_PAGE_CAPTURE,       // Press the key or button
     SETTINGS_PAGE_CONFIRM,       // Keep the key captured, try again, or cancel
     SETTINGS_PAGE_SAVE_FAILED,
-    SETTINGS_PAGE_RESTART        // Saved: restart StreamFlex now to apply what waits for the next start?
+    SETTINGS_PAGE_RESTART,       // Saved: restart StreamFlex now to apply what waits for the next start?
+    SETTINGS_PAGE_TILES,         // 3c: a menu's tiles, Add first
+    SETTINGS_PAGE_TILE,          // One tile: Title, Remove (Tasks 10b, 11 and 13 add rows)
+    SETTINGS_PAGE_ADD,           // What a new tile is: a submenu, a special command (Task 10b: an app, a program)
+    SETTINGS_PAGE_SPECIAL,       // The special commands a tile can run
+    SETTINGS_PAGE_REMOVE_MENU    // A submenu tile's Remove: the menu with its tiles, or the tile alone
 } SettingsPage;
 
 typedef enum {
@@ -239,7 +244,14 @@ typedef enum {
     SETTINGS_ACTION_TRY_AGAIN,
     SETTINGS_ACTION_CANCEL,
     SETTINGS_ACTION_RESTART,
-    SETTINGS_ACTION_NO_RESTART
+    SETTINGS_ACTION_NO_RESTART,
+    SETTINGS_ACTION_OPEN_TILE,          // A tile's row: its page
+    SETTINGS_ACTION_EDIT_TITLE,         // The keyboard on the tile's title
+    SETTINGS_ACTION_REMOVE_TILE,
+    SETTINGS_ACTION_REMOVE_WITH_TILES,  // A submenu tile's confirm page: the menu with its tiles...
+    SETTINGS_ACTION_REMOVE_ONLY_TILE,   // ...or the tile alone, while another tile opens the menu
+    SETTINGS_ACTION_ADD_SUBMENU,        // The keyboard for a new submenu's name
+    SETTINGS_ACTION_ADD_SPECIAL         // A special command's row; `tile` is its place on the page
 } SettingsAction;
 
 typedef struct {
@@ -256,6 +268,8 @@ typedef struct {
     bool steps;                  // Left and Right step its value while it is enabled: a setting, or a
                                  // picker for a color, the default menu or the device
     int binding;                 // BINDING rows: the binding's index
+    int tile;                    // Tiles rows and the links on Tiles pages: the tile's index (-1: none);
+                                 // Special rows: the command's place
 } SettingsRow;
 
 typedef enum {
@@ -284,7 +298,11 @@ typedef enum {
     SETTINGS_EVENT_PICK_COMMAND, // Open the command picker for the binding page's binding
     SETTINGS_EVENT_BINDINGS,     // The binding lists changed: apply them; with `confirm`, start the 10 s for `code`
     SETTINGS_EVENT_RESTART,      // Saved: restart StreamFlex now
-    SETTINGS_EVENT_CLOSE_SAVED   // Saved: close, with no restart and nothing saved again
+    SETTINGS_EVENT_CLOSE_SAVED,  // Saved: close, with no restart and nothing saved again
+    SETTINGS_EVENT_MENUS,        // The menus model changed: put it into the launcher; with `rebind`, the bindings
+                                 // and the Startup and Quit commands a submenu's rename rewrote, too
+    SETTINGS_EVENT_TYPE_TITLE,   // Open the keyboard on the title of tile `tile` of menu `menu`
+    SETTINGS_EVENT_TYPE_NAME     // Open the keyboard for a new submenu's name, for the Add page's menu
 } SettingsEventKind;
 
 typedef struct {
@@ -294,6 +312,9 @@ typedef struct {
     int device;                  // CAPTURE and BINDINGS: the BindingsDevice captured from, or changed
     int code;                    // BINDINGS with confirm: the key whose navigation was taken
     bool confirm;
+    int menu;                    // Tiles events: the menu (the settings' index) and the tile they are about
+    int tile;
+    bool rebind;                 // MENUS: a rename rewrote bindings and the Startup and Quit commands
 } SettingsEvent;
 
 typedef struct SettingsState SettingsState;
@@ -322,6 +343,17 @@ void settings_set_entry(SettingsState *state, SettingId id, int menu, const Sett
 SettingsState *settings_remodel(const SettingsState *old, const char *const *names, const char *const *old_names, int count);
 void settings_set_menus(SettingsState *state, MenuEdit *menus);   // Borrowed: the screen owns the menus model
 MenuEdit *settings_menus(const SettingsState *state);             // NULL when the screen has none
+bool settings_menus_edited(const SettingsState *state);   // The menus model differs from how it was read
+int settings_preview_tile(SettingsState *state);           // The tile the preview highlights; -1 for none
+// Why a tile's title, or a new submenu's name, cannot be written as typed; NULL when it can (the keyboard's validators)
+const char *settings_title_problem(const SettingsState *state, int menu, int tile, const char *title);
+const char *settings_name_problem(const SettingsState *state, const char *name);
+// The keyboard's results: a tile's title (a submenu tile's renames its menu); a new submenu, and a new tile
+// (the Special page's, the app list's, the program browser's), each into the Add page's menu: after the tile
+// whose Add after this tile opened it, or at the end from the Tiles page's Add
+SettingsEvent settings_set_title(SettingsState *state, int menu, int tile, const char *title);
+SettingsEvent settings_add_tile(SettingsState *state, const char *title, const char *icon, const char *command);
+SettingsEvent settings_add_submenu(SettingsState *state, const char *name);
 bool settings_changed(const SettingSlot *slot);
 bool settings_any_changed(const SettingsState *state);
 int settings_rows(SettingsState *state, SettingsRow *rows, int max);

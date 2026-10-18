@@ -120,6 +120,8 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # estimate from its runs (3c Task 4: eight runs of 5 to 10 s each, the leak pass's a little longer, and its
 # fix round's ninth, f80-hand-grid, 13 s on its own), until a set measures it. 84-keyboard.sh's is its
 # twenty runs' 512 s in one plain Debian pass of that file alone (3c Task 12), until a set measures it.
+# 82-tiles.sh's is an estimate from its runs (3c Task 10a: nine runs of 25 to 45 s each; Task 10b adds
+# four), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -133,6 +135,7 @@ declare -A shard_seconds=(
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
     [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=68 [84-keyboard.sh]=512
+    [82-tiles.sh]=480
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
