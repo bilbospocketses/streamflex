@@ -75,6 +75,8 @@ set(SOURCES
   plate.h
   iconfind.c
   iconfind.h
+  icongrid.c
+  icongrid.h
   settings_screen.c
   settings_screen.h
   settings_pickers.c

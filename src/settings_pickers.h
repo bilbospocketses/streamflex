@@ -59,6 +59,10 @@ bool pickers_raw_pad(int label);
 bool pickers_busy(void);             // A capture or the 10 s are running
 void apply_bindings(const Bindings *bindings);
 void pickers_open_binding_command(void);
+// The library grid, for the Icon page (spec "Icons", choice 3): `shown` is told the icon under its
+// cursor as it moves, `done` the icon chosen, or NULL when Back leaves it
+void pickers_open_icons(const char *current, void (*shown)(const char *name), void (*done)(const char *name));
+int pickers_drop_icon_textures(void);   // The grid's textures, before the renderer goes or settings close; how many
 
 // The on-screen keyboard (3c): opened on a field over the page or the list under it, which stays drawn;
 // it takes the remote's keys while open. `done` gets the text at Done, once it has closed; opened again from
