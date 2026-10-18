@@ -127,6 +127,7 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # 85-icons.sh's is an estimate from its eight runs (3c Task 13: about 10 s each, the grid's typing and the
 # Pictures folder's decode a little longer), until a set measures it. 86-hold-ok.sh's and 86-hold-ok-timing.sh's
 # are estimates from their runs (3c Task 14: four quick runs, and thirteen of up to 10 s), until a set measures them.
+# 87-menus-log.sh's is an estimate from its five runs (3c Task 15: about 8 s each), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -140,7 +141,7 @@ declare -A shard_seconds=(
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
     [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=68 [84-keyboard.sh]=512
-    [82-tiles.sh]=660 [81-apps.sh]=65 [83-move.sh]=150 [85-icons.sh]=100 [86-hold-ok.sh]=25 [86-hold-ok-timing.sh]=120
+    [82-tiles.sh]=660 [81-apps.sh]=65 [83-move.sh]=150 [85-icons.sh]=100 [86-hold-ok.sh]=25 [86-hold-ok-timing.sh]=120 [87-menus-log.sh]=45
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
