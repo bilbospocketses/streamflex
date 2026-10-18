@@ -251,7 +251,10 @@ typedef enum {
     SETTINGS_ACTION_REMOVE_WITH_TILES,  // A submenu tile's confirm page: the menu with its tiles...
     SETTINGS_ACTION_REMOVE_ONLY_TILE,   // ...or the tile alone, while another tile opens the menu
     SETTINGS_ACTION_ADD_SUBMENU,        // The keyboard for a new submenu's name
-    SETTINGS_ACTION_ADD_SPECIAL         // A special command's row; `tile` is its place on the page
+    SETTINGS_ACTION_ADD_SPECIAL,        // A special command's row; `tile` is its place on the page
+    SETTINGS_ACTION_ADD_APP,            // The app list, for a new tile
+    SETTINGS_ACTION_ADD_PROGRAM,        // The program browser, for a new tile
+    SETTINGS_ACTION_EDIT_COMMAND        // The tile's command: an app, a program, a special command, or typed
 } SettingsAction;
 
 typedef struct {
@@ -302,7 +305,10 @@ typedef enum {
     SETTINGS_EVENT_MENUS,        // The menus model changed: put it into the launcher; with `rebind`, the bindings
                                  // and the Startup and Quit commands a submenu's rename rewrote, too
     SETTINGS_EVENT_TYPE_TITLE,   // Open the keyboard on the title of tile `tile` of menu `menu`
-    SETTINGS_EVENT_TYPE_NAME     // Open the keyboard for a new submenu's name, for the Add page's menu
+    SETTINGS_EVENT_TYPE_NAME,    // Open the keyboard for a new submenu's name, for the Add page's menu
+    SETTINGS_EVENT_PICK_APP,     // Open the app list, for a new tile in the Add page's menu
+    SETTINGS_EVENT_BROWSE_PROGRAM,   // Open the program browser, for a new tile there
+    SETTINGS_EVENT_PICK_TILE_COMMAND // Open the command list for tile `tile` of menu `menu`
 } SettingsEventKind;
 
 typedef struct {
@@ -354,6 +360,11 @@ const char *settings_name_problem(const SettingsState *state, const char *name);
 SettingsEvent settings_set_title(SettingsState *state, int menu, int tile, const char *title);
 SettingsEvent settings_add_tile(SettingsState *state, const char *title, const char *icon, const char *command);
 SettingsEvent settings_add_submenu(SettingsState *state, const char *name);
+// A tile's command, chosen in its command list (an app's, a program's, a special one, or typed), and why
+// one cannot be written (the keyboard's validator); an app's or a file's name made a tile's title
+SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command);
+const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command);
+void settings_tile_title(const char *name, char *out, size_t size);
 bool settings_changed(const SettingSlot *slot);
 bool settings_any_changed(const SettingsState *state);
 int settings_rows(SettingsState *state, SettingsRow *rows, int max);

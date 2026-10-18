@@ -649,6 +649,100 @@ static void test_type_row_lists_nothing(void)
     }
 }
 
+// A function to test what the program browser lists and writes (3c): on Windows .exe and .lnk in any case;
+// on Linux a .desktop file, exactly, or a file with its execute bit. A command is the path, quoted when it
+// must be (a space on Windows; what the shell would split on Linux, but a .desktop path), and refused when
+// it cannot be; a title is the file's name without its extension.
+static void test_programs(void)
+{
+    CHECK(browser_is_program("Kodi.exe", false, true));
+    CHECK(browser_is_program("Edge.LNK", false, true));
+    CHECK(!browser_is_program("run.sh", true, true));
+    CHECK(browser_is_program("run.sh", true, false));
+    CHECK(browser_is_program("org.kde.dolphin.desktop", false, false));
+    CHECK(!browser_is_program("App.DESKTOP", false, false));          // unix.c launches ".desktop" exactly
+    CHECK(!browser_is_program("readme.txt", false, false));
+    CHECK(!browser_is_program("Kodi.exe", false, false));
+
+    char out[64];
+    CHECK(browser_program_command("C:\\Program Files\\Kodi\\kodi.exe", true, out, sizeof(out)));
+    CHECK_STR(out, "\"C:\\Program Files\\Kodi\\kodi.exe\"");
+    CHECK(browser_program_command("C:\\Games\\run.lnk", true, out, sizeof(out)));
+    CHECK_STR(out, "C:\\Games\\run.lnk");
+    CHECK(browser_program_command("/usr/bin/kodi", false, out, sizeof(out)));
+    CHECK_STR(out, "/usr/bin/kodi");
+    CHECK(browser_program_command("/home/me/My Games/run.sh", false, out, sizeof(out)));
+    CHECK_STR(out, "'/home/me/My Games/run.sh'");
+    CHECK(browser_program_command("/home/me/My Apps/kodi.desktop", false, out, sizeof(out)));
+    CHECK_STR(out, "/home/me/My Apps/kodi.desktop");
+    CHECK(!browser_program_command("/home/me/it's here/run.sh", false, out, sizeof(out)));
+    CHECK_STR(out, "");
+    CHECK(!browser_program_command("/home/me/a;b.desktop", false, out, sizeof(out)));
+    CHECK(!browser_program_command("/usr/bin/kodi", false, out, 8));      // No room
+
+    browser_program_title("/home/me/run-kodi.sh", out, sizeof(out));
+    CHECK_STR(out, "run-kodi");
+    browser_program_title("C:\\Games\\Kodi.exe", out, sizeof(out));
+    CHECK_STR(out, "Kodi");
+    browser_program_title("/usr/bin/kodi", out, sizeof(out));
+    CHECK_STR(out, "kodi");
+    browser_program_title("/opt/.tool", out, sizeof(out));
+    CHECK_STR(out, ".tool");
+
+    // The path a command names, for a tile's Command browse: inside the quotes browser_program_command()
+    // writes, else the command as it is (the caller asks whether that is a file)
+    CHECK(browser_program_path("\"C:\\Program Files\\Kodi\\kodi.exe\"", out, sizeof(out)));
+    CHECK_STR(out, "C:\\Program Files\\Kodi\\kodi.exe");
+    CHECK(browser_program_path("'/home/me/My Games/run.sh'", out, sizeof(out)));
+    CHECK_STR(out, "/home/me/My Games/run.sh");
+    CHECK(browser_program_path("/usr/bin/kodi", out, sizeof(out)));
+    CHECK_STR(out, "/usr/bin/kodi");
+    CHECK(browser_program_path("\"a\" b", out, sizeof(out)));            // Not quoted whole: as it is
+    CHECK_STR(out, "\"a\" b");
+    CHECK(browser_program_path("'", out, sizeof(out)));
+    CHECK_STR(out, "'");
+    CHECK(!browser_program_path("/usr/bin/kodi", out, 8));               // No room
+}
+
+// A function to test reading a .desktop file's Icon= (3c): the [Desktop Entry] group's first, its spaces at
+// either end dropped, whatever NoDisplay or Hidden say; another group's, a localized Icon[..], another key
+// that starts with Icon, an empty one or none read as none
+static void test_desktop_icon(void)
+{
+    char out[32];
+    static const char *const hidden = "[Desktop Entry]\r\nType=Application\r\nNoDisplay=true\r\nIcon = org.app \r\nIcon=second\r\n";
+    CHECK(browser_desktop_icon(hidden, strlen(hidden), out, sizeof(out)));
+    CHECK_STR(out, "org.app");
+    static const char *const other = "[Desktop Action New]\nIcon=action\n[Desktop Entry]\nIcon[de]=de\nIconic=no\n";
+    CHECK(!browser_desktop_icon(other, strlen(other), out, sizeof(out)));
+    CHECK_STR(out, "");
+    static const char *const empty = "[Desktop Entry]\n# Icon=commented\nIcon=\n";
+    CHECK(!browser_desktop_icon(empty, strlen(empty), out, sizeof(out)));
+    static const char *const path = "[Desktop Entry]\nIcon=/opt/app/icon.png";
+    CHECK(browser_desktop_icon(path, strlen(path), out, sizeof(out)));
+    CHECK_STR(out, "/opt/app/icon.png");
+    CHECK(!browser_desktop_icon(path, strlen(path), out, 8));          // No room
+}
+
+// A function to test why a program's path cannot be a tile's command (3c Task 10b review M1): its characters,
+// as browser_program_command() refuses them, or a command too long for a line of config.ini; NULL when it can be
+static void test_program_why(void)
+{
+    CHECK(browser_program_why("/usr/bin/kodi", false, 199) == NULL);
+    CHECK_STR(browser_program_why("/home/me/it's here/run.sh", false, 199), "A path with ' or ; can't be run from here");
+    CHECK_STR(browser_program_why("/home/me/a;b.desktop", false, 199), "A path with ' or ; can't be run from here");
+    CHECK_STR(browser_program_why("C:\\a\"b.exe", true, 199), "This path can't be written as a command");
+    char path[260];
+    memset(path, 'a', 250);
+    path[0] = '/';
+    path[250] = '\0';
+    CHECK_STR(browser_program_why(path, false, 199), "It's too long for a line of config.ini");
+    CHECK(browser_program_why(path, false, 250) == NULL);
+    path[100] = ' ';   // Quoted: 252 bytes
+    CHECK_STR(browser_program_why(path, false, 251), "It's too long for a line of config.ini");
+    CHECK(browser_program_why(path, false, 252) == NULL);
+}
+
 int main(void)
 {
     test_rows_and_start();
@@ -674,6 +768,9 @@ int main(void)
     test_file_mode_lists_only_regular_files();
     test_images_are_regular_files();
     test_type_row();
+    test_programs();
+    test_desktop_icon();
+    test_program_why();
     test_type_row_lists_nothing();
     return check_report();
 }

@@ -607,6 +607,36 @@ SDL_Texture *rasterize_svg(char *buffer, int w, int h, SDL_Rect *rect)
     return rasterize(buffer, w, h, rect, "An SVG image");
 }
 
+// A function to read an icon file whole, on the main thread (its rasterizer is the main thread's): an
+// SVG rasterized `size` px wide, its height in proportion, so an app's own icon plates sharp and a
+// library icon fills a button; any other image decoded at its own size. NULL, with SDL's error set, when
+// it cannot be read.
+SDL_Surface *load_icon_surface(const char *path, int size)
+{
+    size_t length = strlen(path);
+    if (length <= 4 || SDL_strcasecmp(path + length - 4, ".svg") != 0)
+        return load_image_file(path);
+    char *buffer = SDL_LoadFile(path, NULL);
+    if (buffer == NULL)
+        return NULL;
+    char error[256];
+    int width = 0, height = 0;
+    unsigned char *pixels = rasterize_pixels(rasterizer, buffer, size, -1, &width, &height, error, sizeof(error));
+    SDL_free(buffer);
+    if (pixels == NULL) {
+        SDL_SetError("%s", error);
+        return NULL;
+    }
+    // nanosvg writes R, G, B, A bytes in memory order: SDL_PIXELFORMAT_RGBA32
+    SDL_Surface *surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+    if (surface != NULL) {
+        for (int y = 0; y < height; y++)
+            SDL_memcpy((Uint8 *) surface->pixels + y * surface->pitch, pixels + y * 4 * width, (size_t) (4 * width));
+    }
+    free(pixels);
+    return surface;
+}
+
 // The decode thread's own SVG rasterizer, made when it starts and deleted when it ends
 void *icon_worker_start(void)
 {

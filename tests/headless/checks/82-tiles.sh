@@ -164,3 +164,98 @@ sed -n '/^\[Main\]/,/^$/p' "$e82_cfg" | grep -qx 'Entry2=Ciao;quit;:quit' \
     && ran_clean f82-meanwhile && ok=0
 result "tiles: a tile changed in settings and by hand is written as a new line, its note without the bindings' words (exit $(cat "$out/f82-meanwhile.code"))" $ok
 grep -E 'Settings: (not saved as asked|the menus were written)' "$log" | sed 's/^/      /'
+
+# --- Task 10b: the app list, the program browser, and a tile's Command ---
+
+# A fixture applications folder for the app scan (Task 7's STREAMFLEX_TEST_APP_DIRS), with three apps, each
+# naming an icon <id>82; and a data folder whose hicolor theme holds zed82's alone (an SVG), which the own
+# icon's lookup reads first through XDG_DATA_DIRS
+rm -rf "$TESTER_HOME/apps82" "$TESTER_HOME/apps82share"; mkdir -p "$TESTER_HOME/apps82"
+for e82_app in 'alpha:Alpha Tool' 'kodi:Kodi' 'zed:Zed Editor'; do
+    printf '[Desktop Entry]\nType=Application\nName=%s\nExec=/bin/true\nIcon=%s82\n' "${e82_app#*:}" "${e82_app%%:*}" \
+        > "$TESTER_HOME/apps82/${e82_app%%:*}.desktop"
+done
+E82_ZED_SVG=$TESTER_HOME/apps82share/icons/hicolor/scalable/apps/zed82.svg
+mkdir -p "$(dirname "$E82_ZED_SVG")"
+printf '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect x="8" y="8" width="112" height="112" rx="24" fill="#2864C8"/></svg>\n' \
+    > "$E82_ZED_SVG"
+chown -R tester:tester "$TESTER_HOME/apps82" "$TESTER_HOME/apps82share"
+E82_ZED_PNG=$TESTER_HOME/.config/streamflex/icons/zed-editor.png
+# The rows come the frame after Task 7's scan has its list: wait for them, not for the scan's verdict
+e82_apps_found() { wait_line 'Settings: the app list shows 3 of 3 apps' "$2"; }
+e82_type_z() { e82_type z; }
+
+# Add, App: Up from the top row opens the filter's keyboard (Back leaves it); Kodi, the second app, added at
+# the end with its library icon. Then Games' page, Add after this tile, App (the visit's scan is done: no
+# second listing), z typed on a real keyboard (it opens the filter with that z), Enter, and Zed Editor, the
+# one app left, added after Games with its own icon, which no library icon matches: plated and written as
+# a PNG in the icons folder as it is added (user ruling 2026-10-16). New lines are numbered in the menu's
+# order.
+rm -rf "$TESTER_HOME/.config/streamflex/icons"
+cfg=$(writable_config f82-tiles)
+STREAMFLEX_TEST_APP_DIRS=$TESTER_HOME/apps82 XDG_DATA_DIRS=$TESTER_HOME/apps82share:/usr/local/share:/usr/share \
+    CFG=$cfg run_keys f82-app $E82_TILES Return Return +e82_apps_found Up BackSpace Down Return Up Up Return \
+    $E82_AFTER Return Return +e82_type_z Return Return Menu
+ok=1
+log=$out/f82-app.log
+[ "$(e82_lines "$cfg")" = "[General]|DefaultMenu=Main|[Main]|Entry1=Games;games;:submenu Games|Entry3=Zed Editor;$E82_ZED_PNG;/home/tester/apps82/zed.desktop|Entry2=Bye;quit;:quit|Entry4=Kodi;kodi;/home/tester/apps82/kodi.desktop|[Games]|Rows=2|Entry1=Retro;emulators;:back|Entry2=Arcade;games;:submenu Arcade|[Arcade]|Entry1=Pong;games;:back|" ] \
+    && [ "$(grep -c '^Apps: listing the installed apps$' "$log")" = 1 ] && grep -qE '^Apps: found 3 apps \([0-9]+ ms\)$' "$log" \
+    && [ "$(grep -c 'Settings: opened the keyboard for Filter the apps' "$log")" = 2 ] \
+    && grep -q "Settings: 'z' (scancode Z) opens the keyboard on the filter" "$log" \
+    && grep -q 'Settings: the app list shows 1 of 3 apps for z' "$log" \
+    && grep -q 'Settings: chose the app Kodi' "$log" && grep -q 'Settings: chose the app Zed Editor' "$log" \
+    && grep -qx "Menus: the new tile 'Kodi' takes the library icon kodi, its match" "$log" \
+    && grep -qx "Menus: the new tile 'Zed Editor' takes its own icon from $E82_ZED_SVG, saved to $E82_ZED_PNG" "$log" \
+    && [ -f "$E82_ZED_PNG" ] && ran_clean f82-app && ok=0
+result "tiles: apps added from the app list, found once a visit and filtered by typing, each with its icon, save (exit $(cat "$out/f82-app.code"))" $ok
+grep -E '^Apps:|^Menus: the new tile|Settings: (the app list|opened the keyboard|chose the app)' "$log" | sed 's/^/      /'
+rm -rf "$TESTER_HOME/.config/streamflex/icons"
+
+# A scan that fails says why where the list would be, and the Add page's other rows still work
+cfg=$(writable_config f82-tiles)
+STREAMFLEX_TEST_APP_SCAN=fail CFG=$cfg run_keys f82-scanfail $E82_TILES Return Return BackSpace $E82_LAST Return \
+    Return Menu
+ok=1
+log=$out/f82-scanfail.log
+grep -q '^Apps: none listed: ' "$log" && sed -n '/^\[Main\]/,/^$/p' "$cfg" | grep -qx 'Entry3=Home;home;:home' \
+    && ran_clean f82-scanfail && ok=0
+result "tiles: a failed app scan says why, and Special still adds (exit $(cat "$out/f82-scanfail.code"))" $ok
+grep -E '^Apps:|Settings: the note under the preview' "$log" | sed 's/^/      /'
+
+# (Settings closed while the scan runs, Review Focus 4, is check 81's f81-closed: the one scan is Task 7's.)
+
+# A tile's Command, Browse for a program: it opens at the tile's own program, lists programs alone (the
+# README without its execute bit is left out), and run-kodi.sh becomes the command. Then the Tiles page's
+# Add, Browse for a program, which opens on the program last chosen: Up to old-tool.sh, added at the end,
+# titled by its file's name, with the generic icon (no library match, and a script names no icon of its own).
+rm -rf "$TESTER_HOME/progs82"; mkdir -p "$TESTER_HOME/progs82"
+printf '#!/bin/sh\nexit 0\n' > "$TESTER_HOME/progs82/old-tool.sh"
+printf '#!/bin/sh\nexit 0\n' > "$TESTER_HOME/progs82/run-kodi.sh"
+printf 'not a program\n' > "$TESTER_HOME/progs82/readme.txt"
+chmod 755 "$TESTER_HOME/progs82/old-tool.sh" "$TESTER_HOME/progs82/run-kodi.sh"
+chmod 644 "$TESTER_HOME/progs82/readme.txt"
+chown -R tester:tester "$TESTER_HOME/progs82"
+cfg=$(writable_config f82-progs)
+CFG=$cfg run_keys f82-browse $E82_TILES Down Return Down Return Down Down Return Down Return BackSpace Up Return \
+    Down Return Up Return Menu
+ok=1
+log=$out/f82-browse.log
+[ "$(e82_lines "$cfg")" = '[General]|DefaultMenu=Main|[Main]|Entry1=Tool;apps;/home/tester/progs82/run-kodi.sh|Entry2=Bye;quit;:quit|Entry3=old-tool;apps;/home/tester/progs82/old-tool.sh|' ] \
+    && grep -q 'Settings: the program browser leaves out readme.txt' "$log" \
+    && grep -qx "Menus: the new tile 'old-tool' takes the generic icon apps" "$log" \
+    && grep -q "Settings: the list's cursor reads Custom: /home/tester/progs82/old-tool.sh" "$log" \
+    && grep -q 'Settings: chose /home/tester/progs82/run-kodi.sh' "$log" \
+    && grep -q 'Settings: chose /home/tester/progs82/old-tool.sh' "$log" && ran_clean f82-browse && ok=0
+result "tiles: Browse for a program lists programs alone, sets a command and adds a tile (exit $(cat "$out/f82-browse.code"))" $ok
+grep -E 'Settings: (the program browser|chose|browsing|opened the list)' "$log" | sed 's/^/      /'
+
+# A tile's Command, Type...: the keyboard opens on its command; " now" typed on a real keyboard after it
+cfg=$(writable_config f82-tiles)
+e82_type_now() { e82_type ' now'; }
+CFG=$cfg run_keys f82-command $E82_TILES Down Down Return Down Return Right Right Right Return +e82_type_now Return Menu
+ok=1
+log=$out/f82-command.log
+sed -n '/^\[Main\]/,/^$/p' "$cfg" | grep -qx 'Entry2=Bye;quit;:quit now' \
+    && grep -q "Settings: opened the keyboard for Command for Bye" "$log" \
+    && grep -q "Settings: the keyboard reads ':quit now' (cursor 9)" "$log" && ran_clean f82-command && ok=0
+result "tiles: a tile's command typed on the keyboard saves (exit $(cat "$out/f82-command.code"))" $ok

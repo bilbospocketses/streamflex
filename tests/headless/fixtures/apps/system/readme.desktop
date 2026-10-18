@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=Foo Readme
+Exec=xdg-open /usr/share/doc/foo/README

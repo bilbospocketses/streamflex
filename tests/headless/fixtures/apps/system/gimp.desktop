@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=GIMP
+Name[de]=GIMP (de)
+Name[de_DE]=GIMP Bildbearbeitung
+Icon=gimp
+Exec=gimp %U

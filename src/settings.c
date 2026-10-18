@@ -49,6 +49,8 @@ static const char *const MENU_NOTE = "The lowest step, All menus, follows the sh
 #define SUBMENU_ICON "folder"         // A new submenu tile's library icon
 
 static const char *const WHY_DEFAULT_MENU = "The default menu can't be removed";
+static const char *const WHY_SUBMENU_COMMAND = "A submenu tile's command is its menu's name: change it with Title";
+#define APP_TITLE "App"   // A tile's title when its app's or file's name leaves nothing
 
 // The special commands a tile can run (spec "Special ›"), as the Special page lists them: the title a new tile
 // takes, its library icon, and launcher.h's command (settings.c is pure, so they are written out)
@@ -1676,6 +1678,9 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             SettingsRow title = action_row("Title", SETTINGS_ACTION_EDIT_TITLE, true);
             snprintf(title.value, sizeof(title.value), "%s", tile->title);
             n = add_row(rows, n, max, title);
+            SettingsRow command = action_row("Command", SETTINGS_ACTION_EDIT_COMMAND, true);
+            setting_command_label(tile->command, command.value, sizeof(command.value));
+            n = add_row(rows, n, max, grayed(command, opened_menu(state, tile) >= 0, WHY_SUBMENU_COMMAND));
             SettingsRow after = link_row("Add after this tile", "", SETTINGS_PAGE_ADD, top->menu);
             after.tile = top->tile;   // The Add page puts a new tile right after this one
             n = add_row(rows, n, max, after);
@@ -1683,6 +1688,8 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             break;
         }
         case SETTINGS_PAGE_ADD: {
+            n = add_row(rows, n, max, action_row("App", SETTINGS_ACTION_ADD_APP, true));
+            n = add_row(rows, n, max, action_row("Browse for a program", SETTINGS_ACTION_ADD_PROGRAM, true));
             n = add_row(rows, n, max, action_row("Submenu", SETTINGS_ACTION_ADD_SUBMENU, true));
             SettingsRow special = link_row("Special", "", SETTINGS_PAGE_SPECIAL, top->menu);
             special.tile = top->tile;
@@ -1845,6 +1852,60 @@ SettingsEvent settings_add_submenu(SettingsState *state, const char *name)
     int after = state->stack[add].tile;
     const char *why = menuedit_add_submenu(state->menus, e, after, name, SUBMENU_ICON);
     return added(state, add, menu, after < 0 ? menuedit_menu(state->menus, e)->count - 1 : after + 1, why);
+}
+
+// A function to set a tile's command, as its command list chose it or the keyboard typed it; refused with the
+// reason in the caption
+SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return event;
+    const char *why = menuedit_set(state->menus, edit_index(state, menu), tile, t->title, t->icon, command);
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = tile;
+    return event;
+}
+
+// A function to say why a tile cannot run a command, as typed, weighed in its line as config.ini has it
+// (menuedit_check_set(): its comment and spacing count); NULL when it can
+const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command)
+{
+    const MenuTile *t = edit_tile(state, menu, tile);
+    return t == NULL ? "The tile is gone"
+                     : menuedit_check_set(state->menus, edit_index(state, menu), tile, t->title, t->icon, command);
+}
+
+// A function to make an app's or a file's name a tile's title: a ';' (which ends a title in config.ini)
+// becomes a comma, a control character a space, the edges are trimmed of spaces and of what becomes one (a
+// leading tab would be a leading space, which config.ini's line refuses), and it is cut on a character's
+// edge to the keyboard's limit (MENUEDIT_TITLE_MAX bytes) or `size`; with nothing left, "App"
+void settings_tile_title(const char *name, char *out, size_t size)
+{
+    size_t limit = size - 1 < (size_t) MENUEDIT_TITLE_MAX ? size - 1 : (size_t) MENUEDIT_TITLE_MAX;
+    while (*name != '\0' && ((unsigned char) *name <= 0x20 || *name == 0x7F))
+        name++;
+    size_t n = 0;
+    for (; name[n] != '\0' && n < limit; n++) {
+        unsigned char c = (unsigned char) name[n];
+        out[n] = (char) (c == ';' ? ',' : c < 0x20 || c == 0x7F ? ' ' : c);
+    }
+    while (n > 0 && ((unsigned char) name[n] & 0xC0) == 0x80)   // The character the limit cut goes whole
+        n--;
+    while (n > 0 && out[n - 1] == ' ')
+        n--;
+    out[n] = '\0';
+    if (n == 0)
+        snprintf(out, size, "%s", APP_TITLE);
 }
 
 // A function to say why a new submenu's name cannot be written, or NULL: the name rules, then its tile's
@@ -2553,6 +2614,19 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_ADD_SPECIAL)
                 event = settings_add_tile(state, SPECIAL_TILES[row->tile].title, SPECIAL_TILES[row->tile].icon,
                                           SPECIAL_TILES[row->tile].command);
+            else if (row->kind == SETTINGS_ROW_ACTION &&
+                     (row->action == SETTINGS_ACTION_ADD_APP || row->action == SETTINGS_ACTION_ADD_PROGRAM)) {
+                event.kind = row->action == SETTINGS_ACTION_ADD_APP ? SETTINGS_EVENT_PICK_APP : SETTINGS_EVENT_BROWSE_PROGRAM;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_EDIT_COMMAND) {
+                if (!row->enabled)
+                    break;   // Grayed: its reason is on show
+                event.kind = SETTINGS_EVENT_PICK_TILE_COMMAND;
+                event.menu = top->menu;
+                event.tile = top->tile;
+            }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_DISCARD) {
                 for (int i = 0; i < state->slot_count; i++)
                     state->slots[i].value = state->slots[i].entry;
