@@ -372,3 +372,4 @@ bool app_in_front(void);              // state.application_launching || state.ap
 Menu *menu_for(const MenuEditMenu *menu);   // The live menu a menus model's menu stands for; NULL for one new to the launcher
 void menus_apply(const MenuEdit *edit);     // Rebuild the live Menu and Entry lists from the model; textures stale, layout recomputed
 void select_entry(int index);   // Select a tile of the menu on show, scrolled into view: the settings preview's
+void outline_entry(int index);  // Outline a tile of the menu on show in the settings preview, as Move does; -1 for none

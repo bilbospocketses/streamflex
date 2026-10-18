@@ -1868,6 +1868,33 @@ void select_entry(int index)
     log_debug("Menu '%s': tile %i selected", current_menu->name, index);
 }
 
+static int outlined = -1;   // The tile the settings preview outlines while Move has it up; -1: none
+
+// A function to outline a tile of the menu on show in the settings preview while Move has it picked up
+// (spec "Move": the preview outlines it); -1 for none. The log says when it changes.
+void outline_entry(int index)
+{
+    if (index == outlined)
+        return;
+    outlined = index;
+    if (index < 0)
+        log_debug("Settings: no tile outlined");
+    else
+        log_debug("Menu '%s': tile %i outlined", current_menu != NULL ? current_menu->name : "?", index);
+}
+
+// A function to draw the outline round a picked-up tile's button: white, a thirty-second of the button wide
+// and never under 2 px, so it reads over the highlight
+static void draw_outline(const SDL_Rect *button)
+{
+    int width = layout.button / 32 > 2 ? layout.button / 32 : 2;
+    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+    for (int i = 1; i <= width; i++) {
+        SDL_Rect box = { button->x - i, button->y - i, button->w + 2 * i, button->h + 2 * i };
+        outline_rect(renderer, &box);
+    }
+}
+
 // A function to load a submenu
 static void load_submenu(const char *submenu)
 {
@@ -2328,6 +2355,10 @@ void draw_scene(bool preview)
         if (config.titles_enabled)
             draw_texture(renderer, entry->title_texture, NULL, &entry->text_rect);
     }
+
+    // The tile Move picked up, outlined over its button in the settings preview
+    if (preview && outlined >= 0 && outlined < (int) current_menu->num_entries)
+        draw_outline(&current_menu->items[outlined]->icon_rect);
 }
 
 #ifdef STREAMFLEX_TEST_HOOKS

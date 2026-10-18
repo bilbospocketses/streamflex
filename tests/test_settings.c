@@ -2817,6 +2817,142 @@ static void test_tile_title(void)
     CHECK_STR(title, ",");
 }
 
+// A function to test where a picked-up tile goes for each arrow (spec "Move"), by the launcher's own rule
+// (layout_move()): in a grid Left and Right within the row, stopping at its ends, Up and Down a row keeping
+// the column, onto a shorter last row's last tile, stopping at the first and last rows; a strip's Left and
+// Right along it, its Up and Down nothing. Five tiles three wide: [0 1 2] [3 4].
+static void test_move_target(void)
+{
+    CHECK_INT(settings_move_target(0, 5, 2, 3, SETTINGS_RIGHT), 1);
+    CHECK_INT(settings_move_target(0, 5, 2, 3, SETTINGS_LEFT), 0);
+    CHECK_INT(settings_move_target(2, 5, 2, 3, SETTINGS_RIGHT), 2);   // The row's end: it stays
+    CHECK_INT(settings_move_target(3, 5, 2, 3, SETTINGS_LEFT), 3);    // The row's start: it stays
+    CHECK_INT(settings_move_target(4, 5, 2, 3, SETTINGS_RIGHT), 4);
+    CHECK_INT(settings_move_target(1, 5, 2, 3, SETTINGS_DOWN), 4);
+    CHECK_INT(settings_move_target(2, 5, 2, 3, SETTINGS_DOWN), 4);    // A shorter last row: its last tile
+    CHECK_INT(settings_move_target(3, 5, 2, 3, SETTINGS_DOWN), 3);    // The last row: it stays
+    CHECK_INT(settings_move_target(4, 5, 2, 3, SETTINGS_UP), 1);
+    CHECK_INT(settings_move_target(1, 5, 2, 3, SETTINGS_UP), 1);      // The first row: it stays
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_RIGHT), 3);   // A strip scrolls on: no row's end
+    CHECK_INT(settings_move_target(4, 5, 1, 3, SETTINGS_RIGHT), 4);
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_DOWN), 2);    // A strip's Up and Down do nothing
+    CHECK_INT(settings_move_target(2, 5, 1, 3, SETTINGS_UP), 2);
+    CHECK_INT(settings_move_target(0, 0, 2, 3, SETTINGS_RIGHT), 0);   // No tiles
+}
+
+// A function to test Move (spec "Move"): OK picks the tile up; the arrows move it in the menus model, the
+// pages and the preview following it; OK drops it; Back puts it back where it was picked up; Home drops it
+// where it is and closes
+static void test_move_tile(void)
+{
+    static const char *const text = "[Main]\nEntry1=A;apps;:home\nEntry2=B;apps;:home\nEntry3=C;apps;:home\n"
+                                    "Entry4=D;apps;:home\nEntry5=E;apps;:home\n\n[Games]\nEntry1=Retro;emulators;:back\n";
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    settings_set_grid(state, 2, 3);
+    open_tiles(state, "Main");
+    cursor_to(state, "A");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(row_labeled(state, rows, "Move")->kind, SETTINGS_ROW_ACTION);
+    CHECK_INT(row_labeled(state, rows, "Move to menu")->kind, SETTINGS_ROW_LINK);
+    cursor_to(state, "Move");
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_moving_tile(state), 0);
+    SettingsEvent event = settings_command(state, SETTINGS_RIGHT);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.tile, 1);
+    CHECK_STR(tile_of(edit, "Main", 1)->title, "A");
+    event = settings_command(state, SETTINGS_DOWN);
+    CHECK_INT(event.tile, 4);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK_INT(settings_moving_tile(state), 4);
+    CHECK_INT(settings_preview_tile(state), 4);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "A");   // The page follows its tile
+    CHECK_INT(settings_command(state, SETTINGS_DOWN).kind, SETTINGS_EVENT_NONE);       // The last already
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK(settings_menus_edited(state));
+    settings_command(state, SETTINGS_BACK);                       // The Tiles page, on A where it was dropped
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[settings_cursor(state)].label, "A");
+
+    // Picked up again, moved, then Back: back where it was picked up, the mode over, the page as it was
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move");
+    settings_command(state, SETTINGS_OK);
+    settings_command(state, SETTINGS_LEFT);
+    settings_command(state, SETTINGS_UP);
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "A");
+    event = settings_command(state, SETTINGS_BACK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 4)->title, "A");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+
+    // Home while it is up drops it where it is, then closes
+    settings_command(state, SETTINGS_OK);
+    settings_command(state, SETTINGS_LEFT);
+    CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_CLOSE_HOME);
+    CHECK_INT(settings_moving_tile(state), -1);
+    CHECK_STR(tile_of(edit, "Main", 3)->title, "A");
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test Move to menu: every other menu, but for a submenu tile the menu it opens and every menu
+// inside that one, grayed with the reasons; a tile moved to the end of the menu chosen
+static void test_move_to_menu(void)
+{
+    static const char *const names[] = { "Main", "Games", "Arcade" };
+    static const char *const text = "[Main]\nEntry1=Kodi;kodi;kodi\nEntry2=Games;games;:submenu Games\n\n"
+                                    "[Games]\nEntry1=Arcade;games;:submenu Arcade\nEntry2=Retro;emulators;:back\n\n"
+                                    "[Arcade]\nEntry1=Pong;games;:back\n";
+    SettingsState *state = settings_create(names, 3);
+    MenuEdit *edit = with_menus(state, text, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    open_tiles(state, "Main");
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move to menu");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MOVE_TO);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "Games" ARROW "Move to");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Games");
+    CHECK(!rows[0].enabled);
+    CHECK_STR(rows[0].why, "This tile opens that menu");
+    CHECK_STR(rows[1].label, "Arcade");
+    CHECK(!rows[1].enabled);
+    CHECK_STR(rows[1].why, "That menu is inside the one this tile opens");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+
+    // A plain tile: both offered; Arcade chosen, the tile goes to its end, back on Main's Tiles page
+    cursor_to(state, "Kodi");
+    settings_command(state, SETTINGS_OK);
+    cursor_to(state, "Move to menu");
+    settings_command(state, SETTINGS_OK);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK(rows[0].enabled && rows[1].enabled);
+    cursor_to(state, "Arcade");
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(tile_of(edit, "Arcade", 1)->title, "Kodi");
+    CHECK_STR(tile_of(edit, "Main", 0)->title, "Games");
+    CHECK(tile_of(edit, "Main", 1) == NULL);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -2865,6 +3001,9 @@ int main(void)
     test_tiles_without_menus();
     test_tile_commands();
     test_tile_title();
+    test_move_target();
+    test_move_tile();
+    test_move_to_menu();
     test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
     test_remodel_save_after_remove_and_rename();
