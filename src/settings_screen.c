@@ -714,6 +714,7 @@ static void follow_preview(void)
         show_preview(want);
     }
     select_preview_tile();
+    outline_entry(settings_moving_tile(model));
 }
 
 // A function run on its own thread: decode one image for the preview
@@ -1076,6 +1077,7 @@ static void close_settings(void)
         if (origin != NULL && current_menu != origin)
             show_menu(origin);
     }
+    outline_entry(-1);
     free_screen();
     log_debug("Settings closed");
     trim_title_fonts();
@@ -2016,6 +2018,7 @@ static void handle_command(const char *command)
         return;
     }
     SettingsPage before = settings_page(model);
+    settings_set_grid(model, layout.rows, layout.columns);   // Move steps through the grid as the preview lays it out
     SettingsEvent event = settings_command(model, key);
     handle_event(&event);
     if (model == NULL)
@@ -2336,6 +2339,7 @@ static void draw_column(SettingsRow *rows, int count)
     // "saves" and the browser's "OK opens or chooses" as the list picker's "OK chooses"
     const char *hint = pickers_active() ? pickers_hint()
                      : browser != NULL ? "Left and right page \xC2\xB7 OK chooses \xC2\xB7 Back goes up"
+                     : settings_moving_tile(model) >= 0 ? "Arrows move it \xC2\xB7 OK drops it \xC2\xB7 Back puts it back"
                      : settings_page(model) == SETTINGS_PAGE_TOP
                        ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back saves"
                        : "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back goes back";

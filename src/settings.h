@@ -217,7 +217,8 @@ typedef enum {
     SETTINGS_PAGE_TILE,          // One tile: Title, Remove (Tasks 10b, 11 and 13 add rows)
     SETTINGS_PAGE_ADD,           // What a new tile is: a submenu, a special command (Task 10b: an app, a program)
     SETTINGS_PAGE_SPECIAL,       // The special commands a tile can run
-    SETTINGS_PAGE_REMOVE_MENU    // A submenu tile's Remove: the menu with its tiles, or the tile alone
+    SETTINGS_PAGE_REMOVE_MENU,   // A submenu tile's Remove: the menu with its tiles, or the tile alone
+    SETTINGS_PAGE_MOVE_TO        // The other menus a tile can be moved to
 } SettingsPage;
 
 typedef enum {
@@ -254,7 +255,9 @@ typedef enum {
     SETTINGS_ACTION_ADD_SPECIAL,        // A special command's row; `tile` is its place on the page
     SETTINGS_ACTION_ADD_APP,            // The app list, for a new tile
     SETTINGS_ACTION_ADD_PROGRAM,        // The program browser, for a new tile
-    SETTINGS_ACTION_EDIT_COMMAND        // The tile's command: an app, a program, a special command, or typed
+    SETTINGS_ACTION_EDIT_COMMAND,       // The tile's command: an app, a program, a special command, or typed
+    SETTINGS_ACTION_MOVE,               // Pick the tile up, to move it through the grid
+    SETTINGS_ACTION_MOVE_TO             // Move to menu's rows: `menu` is the menu
 } SettingsAction;
 
 typedef struct {
@@ -365,6 +368,11 @@ SettingsEvent settings_add_submenu(SettingsState *state, const char *name);
 SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command);
 const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command);
 void settings_tile_title(const char *name, char *out, size_t size);
+// Move (3c): the grid the preview lays the menu out in now, which the arrows move a picked-up tile through;
+// the tile picked up (-1: none); and where an arrow sends it
+void settings_set_grid(SettingsState *state, int rows, int columns);
+int settings_moving_tile(const SettingsState *state);
+int settings_move_target(int index, int count, int rows, int columns, SettingsCommand command);
 bool settings_changed(const SettingSlot *slot);
 bool settings_any_changed(const SettingsState *state);
 int settings_rows(SettingsState *state, SettingsRow *rows, int max);
