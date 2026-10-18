@@ -47,6 +47,7 @@ unsigned timing_ms(Uint64 counts);                           // Whole millisecon
 void prime_image_formats(void);                              // Main thread, before any thread that decodes; makes the decode lock
 void quit_image_formats(void);                               // At quit, after every thread that decodes has ended
 SDL_Surface *load_image_file(const char *path);              // Any thread: read and decode, other formats one at a time
+SDL_Surface *load_icon_surface(const char *path, int size);  // Main thread: an SVG rasterized `size` wide, any other image at its own size
 SDL_Texture *render_highlight(int width, int height, SDL_Rect *rect);
 SDL_Surface *render_text(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);
 SDL_Texture *render_text_texture(const char *text, TextInfo *info, SDL_Rect *rect, int *text_height);

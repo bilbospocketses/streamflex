@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=VLC media player
+Icon=org.videolan.VLC
+Exec=/usr/bin/flatpak run org.videolan.VLC

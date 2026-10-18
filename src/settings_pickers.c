@@ -11,6 +11,7 @@
 #include "bindings.h"
 #include "keycodes.h"
 #include "listpick.h"
+#include "settings_screen.h"
 #include "colorpick.h"
 #include "fileio.h"
 #include "image.h"
@@ -78,7 +79,8 @@ typedef enum {
     PICKER_NONE,
     PICKER_LIST,
     PICKER_COLOR,
-    PICKER_FONT               // A list picker whose list is NULL while the fonts load
+    PICKER_FONT,              // A list picker whose list is NULL while the fonts load
+    PICKER_APPS               // A list picker whose list is NULL while the apps are found, or when none were
 } PickerKind;
 
 static PickerHost host;
@@ -145,6 +147,17 @@ typedef struct {
 } TypedCommand;
 static TypedCommand typed_command;
 
+// The list the screen made (pickers_open_list()), and the installed apps' list (pickers_open_apps()), whose
+// apps Task 7's scan finds (settings_apps(); it keeps them until settings close)
+static char list_label[96];                       // The list's name in the path line; "" for a setting's
+static void (*list_chosen)(const char *value) = NULL;
+static bool apps_listed = false;                  // The app list's rows were made from the scan's list
+static char app_filter[MENUEDIT_TITLE_MAX + 1];   // The app list's filter, as typed
+static void (*app_chosen)(const AppItem *item) = NULL;
+
+static void draw_list(int x, int top, int bottom);
+static void make_app_list(void);   // pickers_tick() makes the rows once the scan has its list
+
 static void close_keyboard(void);
 static void cancel_keyboard(const char *why);
 
@@ -183,6 +196,9 @@ static void close_picker(void)
     slot = NULL;
     picking_command = false;
     typing_opens = NULL;
+    list_chosen = NULL;
+    list_label[0] = '\0';
+    app_chosen = NULL;
     note[0] = '\0';
 }
 
@@ -1333,6 +1349,10 @@ static void type_command(void)
 void pickers_tick(void)
 {
     run_clocks();
+    // The app list's rows, on the frame after Task 7's scan has its list (its poll_apps() runs after this,
+    // in settings_draw())
+    if (kind == PICKER_APPS && !apps_listed && settings_apps(NULL, NULL) != NULL)
+        make_app_list();
     if (fonts_tick() && kind == PICKER_FONT)
         fill_open_fonts();
     if (keyboard != NULL && keyboard_pending && ticks_ms() - keyboard_changed_at >= keyboard_rest)
@@ -1417,6 +1437,151 @@ static void choose_font(const char *chosen)
     choose(font);
 }
 
+// A function to turn a remote's key into the list picker's
+static ListPickCommand list_key(const char *command)
+{
+    if (MATCH(command, SCMD_UP))
+        return LISTPICK_UP;
+    if (MATCH(command, SCMD_DOWN))
+        return LISTPICK_DOWN;
+    if (MATCH(command, SCMD_LEFT))
+        return LISTPICK_PAGE_UP;
+    if (MATCH(command, SCMD_RIGHT))
+        return LISTPICK_PAGE_DOWN;
+    if (MATCH(command, SCMD_SELECT))
+        return LISTPICK_OK;
+    return LISTPICK_BACK;
+}
+
+// A function to open a list the screen made (see settings_pickers.h)
+void pickers_open_list(const char *label, ListPick *made, void (*chosen)(const char *value))
+{
+    close_picker();
+    if (made == NULL) {
+        log_error("Settings: the list cannot open: out of memory");
+        return;
+    }
+    list = made;
+    list_chosen = chosen;
+    copy_string(list_label, label, sizeof(list_label));
+    forget_list_log();
+    kind = PICKER_LIST;
+    log_debug("Settings: opened the list for %s (%i rows)", label, listpick_count(list));
+}
+
+// A function to make the app list's rows from the apps Task 7's scan found, as the filter leaves them, the
+// cursor on the first; nothing matching is one grayed row that says so. While the scan runs, or with no
+// apps, there are no rows. Out of memory the list closes, and says so.
+static void make_app_list(void)
+{
+    listpick_free(list);
+    list = NULL;
+    const AppList *apps = settings_apps(NULL, NULL);
+    apps_listed = apps != NULL;
+    int count = apps != NULL ? applist_count(apps) : 0;
+    if (count == 0)
+        return;   // The column says why there is none, or that the apps are being found
+    int *rows = calloc((size_t) count, sizeof(int));
+    ListPick *made = rows != NULL ? listpick_create() : NULL;
+    bool ok = made != NULL;
+    int shown = ok ? applist_filter(apps, app_filter, rows, count) : 0;
+    char value[16];
+    for (int i = 0; ok && i < shown; i++) {
+        snprintf(value, sizeof(value), "%d", rows[i]);
+        ok = listpick_add(made, applist_item(apps, rows[i])->name, value, true, NULL);
+    }
+    if (ok && shown == 0)
+        ok = listpick_add(made, "No app matches", "", false, "No app's name holds what was typed");
+    free(rows);
+    if (!ok) {
+        listpick_free(made);
+        log_error("Settings: the app list cannot be made: out of memory");
+        close_picker();
+        return;
+    }
+    list = made;
+    forget_list_log();
+    log_debug("Settings: the app list shows %i of %i apps%s%s", shown, count, app_filter[0] != '\0' ? " for " : "", app_filter);
+}
+
+// A function to follow the app list's filter as it is typed, at once
+static void app_filter_changed(const char *text, void *context)
+{
+    UNUSED(context);
+    copy_string(app_filter, text, sizeof(app_filter));
+    if (kind == PICKER_APPS)
+        make_app_list();
+}
+
+// A function to open the keyboard on the app list's filter (Task 12's way into it for a filtered list):
+// `first` is the character a real keyboard's key typed to open it, or NULL (Up from the top row)
+static void open_app_filter(const char *first)
+{
+    pickers_open_keyboard("Filter the apps", app_filter, MENUEDIT_TITLE_MAX, NULL, NULL, app_filter_changed);
+    pickers_keyboard_follow(app_filter_changed, 0);
+    if (first != NULL)
+        pickers_keyboard_type(first);
+}
+
+// A function to open the app list (see settings_pickers.h): Task 7's scan starts with its first opening in a
+// visit (settings_apps_start() does nothing after that), and the rows come once it has found the apps
+// (pickers_tick())
+void pickers_open_apps(void (*chosen)(const AppItem *item))
+{
+    close_picker();
+    settings_apps_start();
+    app_chosen = chosen;
+    app_filter[0] = '\0';
+    kind = PICKER_APPS;
+    pickers_set_typing(open_app_filter);
+    make_app_list();
+    log_debug("Settings: opened the app list");
+}
+
+// A function to act on a key in the app list: while the apps are found, or when there are none, Back alone
+// closes it; Up from the top row opens the keyboard on its filter
+static void apps_command(const char *command)
+{
+    if (list == NULL) {
+        if (MATCH(command, SCMD_BACK))
+            close_picker();
+        return;
+    }
+    if (MATCH(command, SCMD_UP) && listpick_cursor(list) == 0) {
+        open_app_filter(NULL);
+        return;
+    }
+    ListPickResult result = listpick_command(list, list_key(command), list_page);
+    if (result == LISTPICK_CANCELED)
+        close_picker();
+    else if (result == LISTPICK_CHOSEN) {
+        const AppItem *item = applist_item(settings_apps(NULL, NULL), atoi(listpick_chosen(list)));
+        void (*chosen)(const AppItem *item) = app_chosen;
+        close_picker();
+        log_debug("Settings: chose the app %s", item != NULL ? item->name : "?");
+        if (item != NULL && chosen != NULL)
+            chosen(item);
+    }
+}
+
+// A function to draw the app list: its rows, or "Finding apps... (N)" while the scan runs, or why there are none
+static void draw_apps(int x, int top, int bottom)
+{
+    if (list != NULL) {
+        draw_list(x, top, bottom);
+        return;
+    }
+    int found = 0;
+    const char *why = NULL;
+    settings_apps(&found, &why);   // No reason while the scan runs: its count so far
+    char text[300];
+    if (why == NULL)
+        snprintf(text, sizeof(text), "Finding apps\xE2\x80\xA6 (%i)", found);
+    else
+        snprintf(text, sizeof(text), "%s", why);
+    host.text(host.font_row, text, x + host.margin / 2, top, host.column_width - host.margin, 255, false);
+}
+
 // A function to act on a key in the list picker, or the font picker. While the fonts load, the font
 // picker has no list: Back closes it, and every other key does nothing.
 static void list_command(const char *command)
@@ -1426,22 +1591,19 @@ static void list_command(const char *command)
             close_picker();
         return;
     }
-    ListPickCommand key;
-    if (MATCH(command, SCMD_UP))
-        key = LISTPICK_UP;
-    else if (MATCH(command, SCMD_DOWN))
-        key = LISTPICK_DOWN;
-    else if (MATCH(command, SCMD_LEFT))
-        key = LISTPICK_PAGE_UP;
-    else if (MATCH(command, SCMD_RIGHT))
-        key = LISTPICK_PAGE_DOWN;
-    else if (MATCH(command, SCMD_SELECT))
-        key = LISTPICK_OK;
-    else
-        key = LISTPICK_BACK;
+    ListPickCommand key = list_key(command);
     ListPickResult result = listpick_command(list, key, list_page);
     if (result == LISTPICK_CHOSEN && strcmp(listpick_chosen(list), TYPE_VALUE) == 0) {
         type_command();
+        return;
+    }
+    if (result == LISTPICK_CHOSEN && list_chosen != NULL) {
+        // A list the screen made: its value goes back, copied before the list goes
+        char chosen[LISTPICK_TEXT_MAX];
+        snprintf(chosen, sizeof(chosen), "%s", listpick_chosen(list));
+        void (*done)(const char *value) = list_chosen;
+        close_picker();
+        done(chosen);
         return;
     }
     if (result == LISTPICK_CHOSEN && picking_command) {
@@ -1527,6 +1689,8 @@ void pickers_command(const char *command)
         keyboard_command(command);
     else if (kind == PICKER_LIST || kind == PICKER_FONT)
         list_command(command);
+    else if (kind == PICKER_APPS)
+        apps_command(command);
     else if (kind == PICKER_COLOR)
         color_command(command);
 }
@@ -1695,6 +1859,8 @@ void pickers_draw(int x, int top, int bottom)
         draw_color(x, top, bottom);
     else if (kind == PICKER_FONT)
         draw_fonts(x, top, bottom);
+    else if (kind == PICKER_APPS)
+        draw_apps(x, top, bottom);
 }
 
 // A function to write the column's path line: the page's path, then the setting being chosen, then the
@@ -1706,6 +1872,11 @@ void pickers_path(char *out, size_t size)
     if (slot != NULL)
         snprintf(out + used, size - used, " \xE2\x80\xBA %s", slot->def->label);
     used = strlen(out);
+    if (list_label[0] != '\0')
+        snprintf(out + used, size - used, " \xE2\x80\xBA %s", list_label);
+    else if (kind == PICKER_APPS)
+        snprintf(out + used, size - used, " \xE2\x80\xBA App");
+    used = strlen(out);
     if (keyboard != NULL)
         snprintf(out + used, size - used, " \xE2\x80\xBA %s", osk_label(keyboard));
 }
@@ -1716,6 +1887,10 @@ const char *pickers_hint(void)
 {
     if (keyboard != NULL)
         return "OK types" DOT "Back cancels";
+    if (kind == PICKER_APPS && list == NULL)
+        return "Back goes back";
+    if (kind == PICKER_APPS)
+        return "Up filters" DOT "OK adds" DOT "Back cancels";
     if (kind == PICKER_COLOR && color_pick.editing)
         return "Arrows edit the digits" DOT "OK keeps" DOT "Back returns";
     if (kind == PICKER_COLOR)
@@ -1760,7 +1935,12 @@ const char *pickers_note(void)
         snprintf(note, sizeof(note), "%s", keyboard_note());
         return note;
     }
-    if (kind == PICKER_LIST && listpick_why(list) != NULL)
+    if (kind == PICKER_APPS && list == NULL) {
+        const char *why = NULL;
+        settings_apps(NULL, &why);   // Task 7's reason; none while the apps are being found
+        snprintf(note, sizeof(note), "%s", why != NULL ? why : "");
+    }
+    else if ((kind == PICKER_LIST || kind == PICKER_APPS) && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
     else if (kind == PICKER_COLOR) {
         SettingColor shown = colorpick_shown(&color_pick);

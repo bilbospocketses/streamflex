@@ -25,6 +25,13 @@
 #include "debug.h"
 #include "test_hooks.h"
 #include "platform/platform.h"
+#include "library.h"
+#include "iconmatch.h"
+#include "plate.h"
+#include "iconfind.h"
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #include "appscan.h"
 
 extern Config config;
@@ -47,6 +54,17 @@ extern TextInfo title_info;
 #define NOTE_TEXT_MAX 1600         // Longest note a row shows: a failed save's path and reason
 #define PREVIEW_REST_MS 300        // How long a cursor rests before the screen follows it: the Menus list's preview, Mode's window
 #define KEYBOARD_TOP_RATIO 0.6F    // The on-screen keyboard covers the screen's bottom 40%, right of the column
+#define ELLIPSIS "\xE2\x80\xA6"           // U+2026
+#define CHOOSE_APP "\x1F" "app"           // A tile's command list's rows that open something else: the app list...
+#define CHOOSE_PROGRAM "\x1F" "program"   // ...the program browser...
+#define CHOOSE_TYPED "\x1F" "typed"       // ...and the keyboard
+#ifdef _WIN32
+#define PROGRAM_WINDOWS true    // The program browser lists .exe and .lnk files, and quotes a path with a space
+#else
+#define PROGRAM_WINDOWS false   // It lists executables and .desktop files, and quotes what the shell would split
+#define ICON_DATA_DIRS 32       // The data folders the Linux icon lookup reads, at most
+#endif
+#define OWN_ICON_ASKED 256      // The size Windows is asked for an app's image (IShellItemImageFactory)
 #define SLOW_KEY_MS 50             // A key that keeps the screen waiting this long is logged
 #define ALPHA_VALUE 180            // A row's value
 #define ALPHA_DIM 110              // Grayed rows, the page path and the key hint
@@ -133,6 +151,17 @@ static BrowserMode browser_mode = BROWSER_IMAGE;   // The mode it was opened in
 static int browser_first = 0;            // Its first row on show
 static int browser_page = 1;             // How many of its rows fit: Left and Right move this far
 static char browser_note[128] = "";      // Why the last OK did nothing, for the caption
+static void (*browser_chose)(const char *path) = NULL;   // A browser for no setting (programs): its choice goes here
+static char program_last[BROWSER_PATH_MAX];              // The program last chosen: the program browser opens on it next
+static char icon_from[SETTING_TEXT_MAX + 32];            // Where the last own icon read came from, for the log
+
+// What the app list, the program browser and a tile's command list choose for: a new tile on the Add page,
+// or the command of tile `tile` of menu `menu`
+static struct {
+    bool adding;
+    int menu;
+    int tile;
+} choosing;
 
 // The installed apps, listed on their own thread at most once per visit, from its first Add > App (spec
 // "Installed apps")
@@ -828,8 +857,9 @@ static void log_browsing(void)
     log_debug("Settings: browsing %s", browser_folder(browser) != NULL ? browser_folder(browser) : "the places");
 }
 
-// A function to open the folder browser for an Image, Folder or Mappings file setting, at its current path
-static void open_browser(SettingSlot *slot)
+// A function to open the folder browser in a mode at a start, listing folders through `lister` and saying
+// why a path cannot be chosen through `check`; the places are fileio's. False, and said, when it cannot open.
+static bool start_browser(BrowserMode mode, const char *start, BrowserList lister, BrowserCheck check, void *context)
 {
     FileioPlace *places = NULL;
     test_fail("places", true);
@@ -843,7 +873,27 @@ static void open_browser(SettingSlot *slot)
         list[i].path = places[i].path;
         list[i].network = places[i].network;
     }
+    const char *why = "out of memory";
+    test_fail("browser", true);
+    browser = list != NULL ? browser_open(mode, start, list, count, lister, check, context, &why) : NULL;
+    test_fail("browser", false);
+    free(list);
+    fileio_free_places(places, count);
+    if (browser == NULL) {
+        log_error("Settings: the folder browser cannot open: %s", why);
+        return false;
+    }
+    browser_mode = mode;
+    browser_first = 0;
+    browser_note[0] = '\0';
+    log_browsing();
+    preview_highlighted();
+    return true;
+}
 
+// A function to open the folder browser for an Image, Folder or Mappings file setting, at its current path
+static void open_browser(SettingSlot *slot)
+{
     // Paths are checked against config.ini as the save will find it; unread, by the key alone
     size_t length = 0;
     char *text = fileio_read_all(config.config_path, &length);
@@ -851,25 +901,82 @@ static void open_browser(SettingSlot *slot)
     alloc_free(text);
     BrowserMode mode = slot->def->id == SET_ID_BACKGROUND_IMAGE ? BROWSER_IMAGE
                      : slot->def->id == SET_ID_GAMEPAD_MAPPINGS ? BROWSER_FILE : BROWSER_FOLDER;
-    const char *why = "out of memory";
-    test_fail("browser", true);
-    browser = list != NULL ? browser_open(mode, slot->value.text, list, count, list_folder, check_path, slot, &why) : NULL;
-    test_fail("browser", false);
-    free(list);
-    fileio_free_places(places, count);
-    if (browser == NULL) {
-        log_error("Settings: the folder browser cannot open: %s", why);
+    if (!start_browser(mode, slot->value.text, list_folder, check_path, slot)) {
         inidoc_free(browser_doc);
         browser_doc = NULL;
         return;
     }
     browser_slot = slot;
     browser_offer_typing(browser);   // 3c: every listing ends with Type a path...
-    browser_mode = mode;
-    browser_first = 0;
-    browser_note[0] = '\0';
-    log_browsing();
-    preview_highlighted();
+}
+
+// A function to list a folder for the program browser: as the folder browser lists one, with every file that
+// is not a program hidden (browser_is_program()), so its rows are folders and programs alone
+static int list_programs(const char *folder, FileioEntry **entries, void *context)
+{
+    UNUSED(context);
+    int count = fileio_list(folder, entries);
+    for (int i = 0; i < count; i++) {
+        FileioEntry *entry = &(*entries)[i];
+        if (!entry->is_file || entry->hidden)
+            continue;
+        bool executable = false;
+#ifndef _WIN32
+        char path[BROWSER_PATH_MAX];
+        snprintf(path, sizeof(path), "%s/%s", folder, entry->name);
+        executable = access(path, X_OK) == 0;
+#endif
+        if (!browser_is_program(entry->name, executable, PROGRAM_WINDOWS)) {
+            entry->hidden = true;
+            log_debug("Settings: the program browser leaves out %s", entry->name);
+        }
+    }
+    return count;
+}
+
+// A function to find the library icon a new tile's title matches (iconmatch.c); NULL for none, or when out of
+// memory (the tile then takes its own icon or apps, and the Icon page offers the match later)
+static const char *matched_icon(const char *title)
+{
+    int count = library_count();
+    LibraryInfo *icons = count > 0 ? calloc((size_t) count, sizeof(LibraryInfo)) : NULL;
+    for (int i = 0; icons != NULL && i < count; i++)
+        icons[i] = *library_info(i);
+    int found = icons != NULL ? iconmatch_find(title, icons, count) : -1;
+    free(icons);
+    return found >= 0 ? library_info(found)->name : NULL;
+}
+
+// A function to say why a program cannot be a tile's command, or NULL: its command cannot be written, or the
+// line it would be written in would not fit config.ini (Fable review M13): a tile's Command keeps the tile's
+// own title and icon; a new tile takes the file's name as its title and its library match or apps as its
+// icon (an own icon's path is weighed again as it is written, and new_tile_icon() takes apps when the line
+// cannot hold it). The reasons are the menus model's, which outlive the rows.
+static const char *check_program(const char *path, void *context)
+{
+    UNUSED(context);
+    char command[INIDOC_MAX_LINE + 1];
+    char name[BROWSER_PATH_MAX];
+    char title[MENUEDIT_TITLE_MAX + 1];
+    const char *why = browser_program_why(path, PROGRAM_WINDOWS, INIDOC_MAX_LINE);
+    if (why != NULL || !browser_program_command(path, PROGRAM_WINDOWS, command, sizeof(command)))
+        return why != NULL ? why : "This path can't be written as a command";
+    if (!choosing.adding)
+        return settings_command_problem(model, choosing.menu, choosing.tile, command);
+    browser_program_title(path, name, sizeof(name));
+    settings_tile_title(name, title, sizeof(title));
+    const char *match = matched_icon(title);
+    return menuedit_check_tile(title, match != NULL ? match : LIBRARY_FALLBACK_ICON, command);
+}
+
+// A function to open the program browser (spec "Browse for a program ›"): file mode, programs alone, at
+// `start` (a program's path, or a folder; "" as the folder browser opens)
+static void open_program_browser(const char *start, void (*chosen)(const char *path))
+{
+    if (!start_browser(BROWSER_FILE, start, list_programs, check_program, NULL))
+        return;
+    browser_slot = NULL;
+    browser_chose = chosen;
 }
 
 // A function to close the folder browser, back to the page it opened from (Background, or Gamepad)
@@ -878,6 +985,7 @@ static void close_browser(void)
     browser_free(browser);
     browser = NULL;
     browser_slot = NULL;
+    browser_chose = NULL;
     inidoc_free(browser_doc);
     browser_doc = NULL;
     want_preview_image("");
@@ -950,6 +1058,7 @@ static void free_screen(void)
     free(plated);
     plated = NULL;
     plated_count = 0;
+    program_last[0] = '\0';
     menuedit_free(menu_taken);
     menu_taken = NULL;
     bindings_free(bindings);
@@ -1235,6 +1344,246 @@ static void menus_follow(bool rebind)
     log_debug("Settings: the bindings and the Startup and Quit commands follow the renamed menu");
 }
 
+// A function to get a tile of the menus model by the settings' menu and the tile's index; NULL for none
+static const MenuTile *screen_tile(int menu, int tile)
+{
+    const MenuEditMenu *m = menu >= 0 && menu < menu_count && menu_edit != NULL
+                          ? menuedit_menu(menu_edit, menuedit_find(menu_edit, menus[menu]->name)) : NULL;
+    return m != NULL && tile >= 0 && tile < m->count ? &m->tiles[tile] : NULL;
+}
+
+#ifndef _WIN32
+// A function to read the icon a Linux app's .desktop file names, from a tile's command: the file (any
+// ";<action>" after it dropped, as unix.c launches it), read whole, its Icon= whatever its NoDisplay or
+// Hidden say (browser_desktop_icon(), Fable review M18). False for a command that is no .desktop file, `why`
+// left "", and for a file that cannot be read or names no icon, with why. 13b's Icon page reads it too.
+static bool desktop_icon_name(const char *command, char *out, size_t size, char *why, size_t why_size)
+{
+    char file[SETTING_TEXT_MAX];
+    snprintf(file, sizeof(file), "%s", command);
+    file[strcspn(file, ";")] = '\0';
+    size_t length = strlen(file);
+    if (length <= 8 || strcmp(file + length - 8, ".desktop") != 0)
+        return false;
+    size_t text_length = 0;
+    char *text = fileio_read_all(file, &text_length);
+    if (text == NULL) {
+        snprintf(why, why_size, "%s could not be read: %s", file, fileio_last_error());
+        return false;
+    }
+    bool named = browser_desktop_icon(text, text_length, out, size);
+    alloc_free(text);
+    if (!named)
+        snprintf(why, why_size, "%s names no icon", file);
+    return named;
+}
+#endif
+
+// A function to read an app's own icon by what names it (Windows: its AppsFolder app ID, appicon_image();
+// Linux: its Icon= value, looked up as iconfind_path() does over the data folders applist_data_dirs() names:
+// $XDG_DATA_HOME, else ~/.local/share; each of $XDG_DATA_DIRS, else /usr/local/share and /usr/share; then
+// the Flatpak exports' and Snap's, in that order; an SVG read at 512 px by load_icon_surface(), so it plates
+// sharp) and center it on the library's plate (plate_icon(), spec "Icons", choice 2), in memory: it is
+// written to a file only when it is used. NULL, with why, when it cannot be found, read or plated (the test
+// hook STREAMFLEX_TEST_FAIL=plate fails the plating, which 13b documents with check 85); icon_from says
+// where it came from. 13b's Icon page reads its own icon through it too.
+static SDL_Surface *plated_icon(const char *named, char *why, size_t size)
+{
+    SDL_Surface *image = NULL;
+#ifdef _WIN32
+    snprintf(icon_from, sizeof(icon_from), "the AppsFolder app %s", named);
+    image = appicon_image(named, OWN_ICON_ASKED);
+#else
+    char path[SETTING_TEXT_MAX];
+    char home[MAX_PATH_CHARS + 1];
+    char folders[4 * SETTING_TEXT_MAX];
+    const char *dirs[ICON_DATA_DIRS];
+    int count = applist_data_dirs(getenv("XDG_DATA_HOME"), getenv("XDG_DATA_DIRS"),
+                                  home_directory(home, sizeof(home)) ? home : NULL, folders, sizeof(folders),
+                                  dirs, ICON_DATA_DIRS);
+    if (!iconfind_path(named, dirs, count < ICON_DATA_DIRS ? count : ICON_DATA_DIRS, path, sizeof(path))) {
+        snprintf(why, size, "its icon %s is in none of the icon folders", named);
+        return NULL;
+    }
+    snprintf(icon_from, sizeof(icon_from), "%s", path);
+    image = load_icon_surface(path, PLATE_SIZE);
+#endif
+    if (image == NULL) {
+        snprintf(why, size, "%s could not be read: %s", icon_from, SDL_GetError());
+        return NULL;
+    }
+    bool failing = test_failing("plate");
+    SDL_Surface *on_plate = failing ? NULL : plate_icon(image, PLATE_SIZE);
+    if (on_plate == NULL)
+        snprintf(why, size, "%s could not be put on a plate: %s", icon_from, failing ? "the test hook failed it" : SDL_GetError());
+    SDL_DestroySurface(image);
+    return on_plate;
+}
+
+// A function to choose a new tile's icon as it is added (user ruling 2026-10-16, Fable review I5; spec
+// "Icons", in its order): the library icon its title matches; else the app's own icon, plated and written
+// as a new PNG in the icons folder (named from the title, never over a file that is there) and listed for
+// Discard, when the tile's line can hold its path (weighed first, so a refusal leaves no file); else the
+// library's apps. `named` names the app's own icon (the app list's AppItem.icon: Linux its Icon= value,
+// Windows its app ID), or is NULL to read it from a .desktop command (Linux: a browsed .desktop file; a
+// Windows program browsed has none). `out` gets a library name or the PNG's path; the log says which, and
+// why an own icon was not used.
+static void new_tile_icon(const char *title, const char *named, const char *command, char *out, size_t size)
+{
+    const char *match = matched_icon(title);
+    if (match != NULL) {
+        snprintf(out, size, "%s", match);
+        log_debug("Menus: the new tile '%s' takes the library icon %s, its match", title, match);
+        return;
+    }
+    snprintf(out, size, "%s", LIBRARY_FALLBACK_ICON);
+    char why[2 * SETTING_TEXT_MAX] = "";
+    char value[SETTING_TEXT_MAX] = "";
+    if (named != NULL)
+        snprintf(value, sizeof(value), "%s", named);
+#ifndef _WIN32
+    else if (!desktop_icon_name(command, value, sizeof(value), why, sizeof(why)))
+        value[0] = '\0';
+#endif
+    SDL_Surface *on_plate = value[0] != '\0' ? plated_icon(value, why, sizeof(why)) : NULL;
+    if (on_plate != NULL) {
+        char dir[SETTING_TEXT_MAX];
+        char path[SETTING_TEXT_MAX];
+        const char *refused = NULL;
+        if (!icons_dir(dir, sizeof(dir)))
+            snprintf(why, sizeof(why), "the icons folder could not be made: %s", fileio_last_error());
+        else if (!icons_new_path(dir, title, path, sizeof(path)))
+            snprintf(why, sizeof(why), "no new icon file could be named in %s", dir);
+        else if ((refused = menuedit_check_tile(title, path, command)) != NULL)
+            snprintf(why, sizeof(why), "its line could not hold %s: %s", path, refused);
+        else if (!plate_save(on_plate, path))
+            snprintf(why, sizeof(why), "it could not be saved to %s: %s", path, SDL_GetError());
+        else {
+            settings_note_plated(path);
+            snprintf(out, size, "%s", path);
+            log_debug("Menus: the new tile '%s' takes its own icon from %s, saved to %s", title, icon_from, path);
+        }
+        SDL_DestroySurface(on_plate);
+        if (why[0] == '\0')
+            return;
+    }
+    if (why[0] != '\0')
+        log_debug("Menus: the new tile '%s' has no icon of its own: %s", title, why);
+    log_debug("Menus: the new tile '%s' takes the generic icon %s", title, LIBRARY_FALLBACK_ICON);
+}
+
+// A function to take an app the app list chose: a new tile (its name the title; its library match, else
+// its own icon, else apps, new_tile_icon()), or a tile's new command
+static void app_chosen(const AppItem *item)
+{
+    SettingsEvent event;
+    if (choosing.adding) {
+        char title[MENUEDIT_TITLE_MAX + 1];
+        char icon[SETTING_TEXT_MAX];
+        settings_tile_title(item->name, title, sizeof(title));
+        new_tile_icon(title, item->icon, item->command, icon, sizeof(icon));
+        event = settings_add_tile(model, title, icon, item->command);
+    }
+    else
+        event = settings_set_command(model, choosing.menu, choosing.tile, item->command);
+    handle_event(&event);
+}
+
+// A function to take a program the program browser chose: a new tile (its file's name the title, its icon
+// as new_tile_icon() chooses it), or a tile's new command; the browser opens on it next time
+static void program_chosen(const char *path)
+{
+    char command[INIDOC_MAX_LINE + 1];
+    char name[BROWSER_PATH_MAX];
+    char title[MENUEDIT_TITLE_MAX + 1];
+    char icon[SETTING_TEXT_MAX];
+    copy_string(program_last, path, sizeof(program_last));
+    if (!browser_program_command(path, PROGRAM_WINDOWS, command, sizeof(command)))
+        return;   // check_program() refused every such row
+    SettingsEvent event;
+    if (choosing.adding) {
+        browser_program_title(path, name, sizeof(name));
+        settings_tile_title(name, title, sizeof(title));
+        new_tile_icon(title, NULL, command, icon, sizeof(icon));
+        event = settings_add_tile(model, title, icon, command);
+    }
+    else
+        event = settings_set_command(model, choosing.menu, choosing.tile, command);
+    handle_event(&event);
+}
+
+// A function to say why a tile cannot run a command as typed (the keyboard's validator)
+static const char *command_problem(const char *text, void *context)
+{
+    UNUSED(context);
+    return settings_command_problem(model, choosing.menu, choosing.tile, text);
+}
+
+// A function to take a typed command
+static void command_typed(const char *text, void *context)
+{
+    UNUSED(context);
+    SettingsEvent event = settings_set_command(model, choosing.menu, choosing.tile, text);
+    handle_event(&event);
+}
+
+// A function to act on the row a tile's command list chose: the app list, the program browser (at the
+// tile's own program when its command names a file, as it is or inside the quotes a browsed path was
+// written in), the keyboard, or a special command
+static void tile_command_chosen(const char *value)
+{
+    const MenuTile *tile = screen_tile(choosing.menu, choosing.tile);
+    if (tile == NULL)
+        return;
+    if (strcmp(value, CHOOSE_APP) == 0)
+        pickers_open_apps(app_chosen);
+    else if (strcmp(value, CHOOSE_PROGRAM) == 0) {
+        char path[BROWSER_PATH_MAX];
+        bool own = browser_program_path(tile->command, path, sizeof(path)) && fileio_is_file(path);
+        open_program_browser(own ? path : program_last, program_chosen);
+    }
+    else if (strcmp(value, CHOOSE_TYPED) == 0) {
+        char label[MENUEDIT_TITLE_MAX + 32];
+        snprintf(label, sizeof(label), "Command for %s", tile->title);
+        pickers_open_keyboard(label, tile->command, INIDOC_MAX_LINE, command_problem, NULL, command_typed);
+    }
+    else {
+        SettingsEvent event = settings_set_command(model, choosing.menu, choosing.tile, value);
+        handle_event(&event);
+    }
+}
+
+// A function to open a tile's command list (spec "Command ›"): the app list, a browse, the special
+// commands (never :select, which no tile may run), then Type...; the cursor on the tile's command, pinned
+// first as Custom when no row gives it
+static void open_tile_commands(int menu, int tile)
+{
+    static const char *const specials[] = { SCMD_HOME, SCMD_BACK, SCMD_SETTINGS, SCMD_SLEEP, SCMD_RESTART,
+                                            SCMD_SHUTDOWN, SCMD_QUIT };
+    const MenuTile *t = screen_tile(menu, tile);
+    if (t == NULL)
+        return;
+    choosing.adding = false;
+    choosing.menu = menu;
+    choosing.tile = tile;
+    char label[LISTPICK_TEXT_MAX];
+    ListPick *made = listpick_create();
+    bool ok = made != NULL && listpick_add(made, "App", CHOOSE_APP, true, NULL) &&
+              listpick_add(made, "Browse for a program", CHOOSE_PROGRAM, true, NULL);
+    for (size_t i = 0; ok && i < sizeof(specials) / sizeof(specials[0]); i++) {
+        setting_command_label(specials[i], label, sizeof(label));
+        ok = listpick_add(made, label, specials[i], true, NULL);
+    }
+    ok = ok && listpick_add(made, "Type" ELLIPSIS, CHOOSE_TYPED, true, NULL);
+    snprintf(label, sizeof(label), "Custom: %s", t->command);
+    ok = ok && listpick_select(made, t->command, label);
+    if (!ok) {
+        listpick_free(made);
+        made = NULL;
+    }
+    pickers_open_list("Command", made, tile_command_chosen);
+}
+
 // A function to say why a tile's title, as typed, cannot be written (the keyboard's validator)
 static const char *title_problem(const char *text, void *context)
 {
@@ -1377,6 +1726,17 @@ static void handle_event(const SettingsEvent *event)
             return;
         case SETTINGS_EVENT_TYPE_NAME:
             pickers_open_keyboard("Name for the new submenu", "", INIDOC_MAX_SECTION, name_problem, NULL, name_typed);
+            return;
+        case SETTINGS_EVENT_PICK_APP:
+            choosing.adding = true;
+            pickers_open_apps(app_chosen);
+            return;
+        case SETTINGS_EVENT_BROWSE_PROGRAM:
+            choosing.adding = true;
+            open_program_browser(program_last, program_chosen);
+            return;
+        case SETTINGS_EVENT_PICK_TILE_COMMAND:
+            open_tile_commands(event->menu, event->tile);
             return;
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
@@ -1547,6 +1907,15 @@ static void handle_browser_command(const char *command)
     if (result == BROWSER_CHOSEN) {
         char chosen[BROWSER_PATH_MAX];
         copy_string(chosen, browser_chosen(browser), sizeof(chosen));
+        if (browser_slot == NULL) {
+            // A browser for no setting: what it chose goes to whoever opened it, once it has closed
+            void (*done)(const char *path) = browser_chose;
+            close_browser();
+            log_debug("Settings: chose %s", chosen);
+            if (done != NULL)
+                done(chosen);
+            return;
+        }
         if (browser_slot->def->id == SET_ID_BACKGROUND_IMAGE) {
             // OK can come before the image's decode has finished: wait for it, to know whether it
             // opens. An image highlighted before may still be decoding, with this one next.
@@ -1786,7 +2155,9 @@ static void row_value_text(const SettingsRow *row, bool highlighted, char *out, 
     else if (row->kind == SETTINGS_ROW_LINK || row->kind == SETTINGS_ROW_BROWSE || row->kind == SETTINGS_ROW_PICK ||
              row->kind == SETTINGS_ROW_BINDING ||
              (row->kind == SETTINGS_ROW_ACTION &&
-              (row->action == SETTINGS_ACTION_BIND_COMMAND || row->action == SETTINGS_ACTION_ADD_SUBMENU)))
+              (row->action == SETTINGS_ACTION_BIND_COMMAND || row->action == SETTINGS_ACTION_ADD_SUBMENU ||
+               row->action == SETTINGS_ACTION_ADD_APP || row->action == SETTINGS_ACTION_ADD_PROGRAM ||
+               row->action == SETTINGS_ACTION_EDIT_COMMAND)))
         snprintf(out, size, "%s " RIGHT_ARROW, row->value);
     else
         snprintf(out, size, "%s", row->value);

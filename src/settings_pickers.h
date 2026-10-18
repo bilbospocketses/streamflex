@@ -12,6 +12,8 @@
 #include <SDL3_ttf/SDL_ttf.h>
 #include "settings.h"
 #include "osk.h"
+#include "listpick.h"
+#include "applist.h"
 
 typedef struct {
     SettingsState *model;
@@ -72,5 +74,12 @@ bool pickers_keyboard_open(void);
 bool pickers_owns_column(void);                     // A picker draws the column; the keyboard alone leaves it to the page
 bool pickers_text_key(SDL_Scancode scancode, SDL_Keymod mod, bool repeat);   // A real keyboard's key; true when taken
 void pickers_draw_keyboard(int x, int y, int w, int h);
+// The installed apps (3c), as Task 7's scan lists them (its first opening in a settings visit starts the
+// scan): `chosen` gets the app OK chose. Up from the top row, or typing on a real keyboard, opens the
+// keyboard on its filter.
+void pickers_open_apps(void (*chosen)(const AppItem *item));
+// A list the screen made (the picker owns it from here; NULL: out of memory, it does not open), `label` the
+// path line's last step; `chosen` gets the row's value OK chose, once the list has closed
+void pickers_open_list(const char *label, ListPick *made, void (*chosen)(const char *value));
 
 #endif

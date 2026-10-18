@@ -2717,6 +2717,105 @@ static void test_tiles_without_menus(void)
     settings_free(state);
 }
 
+// A function to test the Add page's rows and a tile's Command (3c, Task 10b): App and Browse for a program
+// first, each asking the screen for its picker; a tile added as the app list adds one; the Command row,
+// grayed on a submenu tile; a command set, and ones a tile cannot run refused with their reasons
+static void test_tile_commands(void)
+{
+    SettingsState *state = open_model();
+    MenuEdit *edit = with_menus(state, TILES_TEXT, "Main");
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char label[64];
+    open_tiles(state, "Main");
+    settings_command(state, SETTINGS_OK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ADD);
+    static const char *const adds[] = { "App", "Browse for a program", "Submenu", "Special" };
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 4);
+    for (int i = 0; i < 4; i++)
+        CHECK_STR(rows[i].label, adds[i]);
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_PICK_APP);
+    cursor_to(state, "Browse for a program");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_BROWSE_PROGRAM);
+    event = settings_add_tile(state, "Kodi Box", "kodi", "/usr/share/applications/kodi.desktop");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(event.tile, 2);
+    CHECK_STR(tile_of(edit, "Main", 2)->command, "/usr/share/applications/kodi.desktop");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+
+    cursor_to(state, "Games");
+    settings_command(state, SETTINGS_OK);
+    const SettingsRow *command = row_labeled(state, rows, "Command");
+    CHECK(!command->enabled);
+    CHECK_STR(command->why, "A submenu tile's command is its menu's name: change it with Title");
+    cursor_to(state, "Command");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_BACK);
+
+    cursor_to(state, "Kodi");
+    settings_command(state, SETTINGS_OK);
+    setting_command_label("kodi --standalone", label, sizeof(label));
+    CHECK_STR(row_labeled(state, rows, "Command")->value, label);
+    cursor_to(state, "Command");
+    event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_PICK_TILE_COMMAND);
+    CHECK_INT(event.menu, 0);
+    CHECK_INT(event.tile, 1);
+    CHECK_STR(settings_command_problem(state, 0, 1, ":select"), "A tile can't run :select");
+    CHECK_STR(settings_command_problem(state, 0, 1, "a ;b"), "A command can't have ; after a space");
+    CHECK(settings_command_problem(state, 0, 1, ":fork kodi") == NULL);
+    event = settings_set_command(state, 0, 1, ":fork kodi");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MENUS);
+    CHECK_STR(tile_of(edit, "Main", 1)->command, ":fork kodi");
+    CHECK_STR(tile_of(edit, "Main", 1)->title, "Kodi");
+    event = settings_set_command(state, 0, 1, "");
+    CHECK_INT(event.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "Choose a command");
+    settings_free(state);
+    menuedit_free(edit);
+
+    // A command is weighed in the tile's own line, its comment counted (Task 10a's commented_menus(), Fable
+    // review M2): 7 + 1 + 6 + 60 + 3 + 130 = 207 bytes there, though 78 alone
+    char long_value[61];
+    state = open_model();
+    edit = with_menus(state, commented_menus(long_value), "Main");
+    CHECK(menuedit_check_tile("A", "apps", long_value) == NULL);
+    CHECK_STR(settings_command_problem(state, 0, 0, long_value),
+              "It's too long for its line of config.ini with the comment there (199 bytes)");
+    CHECK(settings_command_problem(state, 0, 0, ":quit") == NULL);
+    settings_free(state);
+    menuedit_free(edit);
+}
+
+// A function to test an app's or a file's name made a tile's title: ';' a comma, control characters spaces,
+// the edges trimmed of both (a leading tab would be a leading space, which config.ini's line refuses), cut
+// on a character's edge to the keyboard's limit; nothing left is "App"
+static void test_tile_title(void)
+{
+    char title[MENUEDIT_TITLE_MAX + 1];
+    settings_tile_title("  Foo; Bar  ", title, sizeof(title));
+    CHECK_STR(title, "Foo, Bar");
+    settings_tile_title("Line\tbreak\n", title, sizeof(title));
+    CHECK_STR(title, "Line break");
+    settings_tile_title("\t \x7F" "Tab first", title, sizeof(title));
+    CHECK_STR(title, "Tab first");
+    CHECK(menuedit_check_tile(title, "apps", ":home") == NULL);
+    char name[200];
+    memset(name, 'a', 70);
+    name[70] = '\0';
+    settings_tile_title(name, title, sizeof(title));
+    CHECK_INT((int) strlen(title), MENUEDIT_TITLE_MAX);
+    snprintf(name, sizeof(name), "a");
+    for (int i = 0; i < 40; i++)
+        strcat(name, "\xC3\xA9");                                   // e acute, two bytes each
+    settings_tile_title(name, title, sizeof(title));
+    CHECK_INT((int) strlen(title), 63);                              // 64 would cut the 32nd in half
+    settings_tile_title("", title, sizeof(title));
+    CHECK_STR(title, "App");
+    settings_tile_title(" ; ", title, sizeof(title));
+    CHECK_STR(title, ",");
+}
+
 int main(void)
 {
     test_add_binding();
@@ -2763,6 +2862,8 @@ int main(void)
     test_remove_submenu();
     test_rename_submenu();
     test_tiles_without_menus();
+    test_tile_commands();
+    test_tile_title();
     test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
     test_remodel_save_after_remove_and_rename();
