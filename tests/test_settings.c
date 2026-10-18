@@ -2805,9 +2805,10 @@ static void test_tile_title(void)
     name[70] = '\0';
     settings_tile_title(name, title, sizeof(title));
     CHECK_INT((int) strlen(title), MENUEDIT_TITLE_MAX);
-    snprintf(name, sizeof(name), "a");
+    name[0] = 'a';
     for (int i = 0; i < 40; i++)
-        strcat(name, "\xC3\xA9");                                   // e acute, two bytes each
+        memcpy(name + 1 + 2 * i, "\xC3\xA9", 2);                    // e acute, two bytes each
+    name[81] = '\0';
     settings_tile_title(name, title, sizeof(title));
     CHECK_INT((int) strlen(title), 63);                              // 64 would cut the 32nd in half
     settings_tile_title("", title, sizeof(title));
