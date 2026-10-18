@@ -170,6 +170,7 @@ endif ()
 add_test(NAME alloc COMMAND test_alloc)
 target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/applist.c")   # 3c Task 7: the installed apps' list
 target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/iconfind.c")   # 3c Task 9: the Linux icon lookup
+target_sources(test_alloc PRIVATE "${PROJECT_SOURCE_DIR}/src/icongrid.c")   # 3c Task 13: the library grid
 
 # A function to link inih the way the launcher does
 function(link_inih target)
@@ -211,6 +212,11 @@ target_compile_definitions(test_iconmatch PRIVATE LIBRARY_ROOT="${PROJECT_SOURCE
 link_inih(test_iconmatch)
 link_fileio(test_iconmatch)
 add_test(NAME iconmatch COMMAND test_iconmatch)
+
+# Unit tests for the library grid's model: its groups, its filter and its arrows (pure)
+add_executable(test_icongrid test_icongrid.c "${PROJECT_SOURCE_DIR}/src/icongrid.c" "${PROJECT_SOURCE_DIR}/src/alloc.c")
+target_include_directories(test_icongrid PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME icongrid COMMAND test_icongrid)
 
 # Unit test 14: the window a background needs and the renderers that may draw it (pure, linked alone)
 add_executable(test_winplan test_winplan.c "${PROJECT_SOURCE_DIR}/src/winplan.c")

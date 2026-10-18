@@ -236,7 +236,7 @@ chmod 755 "$TESTER_HOME/progs82/old-tool.sh" "$TESTER_HOME/progs82/run-kodi.sh"
 chmod 644 "$TESTER_HOME/progs82/readme.txt"
 chown -R tester:tester "$TESTER_HOME/progs82"
 cfg=$(writable_config f82-progs)
-CFG=$cfg run_keys f82-browse $E82_TILES Down Return Down Return Down Down Return Down Return BackSpace Up Return \
+CFG=$cfg run_keys f82-browse $E82_TILES Down Return Down Down Return Down Down Return Down Return BackSpace Up Return \
     Down Return Up Return Menu
 ok=1
 log=$out/f82-browse.log
@@ -252,7 +252,7 @@ grep -E 'Settings: (the program browser|chose|browsing|opened the list)' "$log" 
 # A tile's Command, Type...: the keyboard opens on its command; " now" typed on a real keyboard after it
 cfg=$(writable_config f82-tiles)
 e82_type_now() { e82_type ' now'; }
-CFG=$cfg run_keys f82-command $E82_TILES Down Down Return Down Return Right Right Right Return +e82_type_now Return Menu
+CFG=$cfg run_keys f82-command $E82_TILES Down Down Return Down Down Return Right Right Right Return +e82_type_now Return Menu
 ok=1
 log=$out/f82-command.log
 sed -n '/^\[Main\]/,/^$/p' "$cfg" | grep -qx 'Entry2=Bye;quit;:quit now' \

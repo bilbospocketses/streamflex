@@ -32,4 +32,8 @@ int applist_data_dirs(const char *data_home, const char *data_dirs, const char *
 // the ID quoted when it holds a space or a comma. False for an ID that cannot be written so.
 bool applist_appsfolder_command(const char *app_id, char *out, size_t size);
 
+// The app ID an AppsFolder app's command (applist_appsfolder_command()'s) launches, read back out of it,
+// for its own image on the Icon page. False for any other command.
+bool applist_appsfolder_id(const char *command, char *out, size_t size);
+
 #endif

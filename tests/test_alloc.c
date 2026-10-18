@@ -19,6 +19,7 @@
 #include "osk.h"
 #include "applist.h"
 #include "iconfind.h"
+#include "icongrid.h"
 
 #define DIR "alloc-fixture"
 #define CONFIG DIR "/config.ini"
@@ -1268,6 +1269,37 @@ static void prove_iconfind(void)
     report("finding an app's icon");
 }
 
+// A function to prove that the library grid fails cleanly: made, or NULL with nothing left allocated;
+// a filter refused leaves the grid as it was (its icons, its query and its cursor), or is done
+static void prove_icongrid(void)
+{
+    static const char *const aliases[] = { "xbmc" };
+    static const LibraryInfo icons[] = {
+        { "power", "Power", "system", NULL, 0 }, { "kodi", "Kodi", "servers", aliases, 1 },
+        { "plex", "Plex", "servers", NULL, 0 }, { "apps", "Apps", "general", NULL, 0 }
+    };
+    for (int n = 1;; n++) {
+        arm(n);
+        IconGrid *grid = icongrid_create(icons, 4);
+        bool selected = grid != NULL && icongrid_select(grid, "plex");
+        bool filtered = grid != NULL && icongrid_filter(grid, "XBMC");
+        disarm();
+        if (grid == NULL)
+            CHECK_RUN(failed, n);
+        else if (!filtered) {
+            CHECK_RUN(failed && selected, n);
+            CHECK_RUN(icongrid_count(grid) == 4 && strcmp(icongrid_query(grid), "") == 0 && icongrid_cursor(grid) == 2, n);
+        }
+        else
+            CHECK_RUN(icongrid_count(grid) == 1 && strcmp(icongrid_icon(grid, 0)->name, "kodi") == 0, n);
+        icongrid_free(grid);
+        runs = n;
+        if (!no_leak(__LINE__, n) || !failed)
+            break;
+    }
+    report("the library grid");
+}
+
 int main(void)
 {
     AllocHooks hooks = { test_reallocate, test_release };
@@ -1314,6 +1346,7 @@ int main(void)
     prove_section_edits();
     prove_applist();
     prove_iconfind();
+    prove_icongrid();
     alloc_set_hooks(NULL);
     return check_report();
 }

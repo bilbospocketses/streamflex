@@ -957,6 +957,7 @@ struct SettingsState {
     } undo;
     char confirm_note[96];       // The confirm page's "Captured: ..."
     char restart_note[320];      // The restart page's question
+    SettingsIconChoices icon;    // What the Icon page offers for its tile, once the screen has looked
 };
 
 // A function to start the model over the launcher's menus; the caller then sets every entry value
@@ -1723,6 +1724,21 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, action_row("Cancel", SETTINGS_ACTION_CANCEL, true));
             break;
         }
+        case SETTINGS_PAGE_ICON: {
+            // The library icon offered first, then the app's own icon, once the screen has looked (it
+            // looks as the page opens); the library and the folder browser always
+            const SettingsIconChoices *icon = &state->icon;
+            if (icon->ready && icon->suggested[0] != '\0') {
+                SettingsRow row = action_row(icon->suggested_title, SETTINGS_ACTION_ICON_SUGGESTED, true);
+                snprintf(row.value, sizeof(row.value), "%s", icon->matched ? "Library match" : "Generic icon");
+                n = add_row(rows, n, max, row);
+            }
+            if (icon->ready && icon->own)
+                n = add_row(rows, n, max, action_row("Its own icon", SETTINGS_ACTION_ICON_OWN, true));
+            n = add_row(rows, n, max, action_row("Library", SETTINGS_ACTION_ICON_GRID, true));
+            n = add_row(rows, n, max, action_row("Browse for an image", SETTINGS_ACTION_ICON_BROWSE, true));
+            break;
+        }
         case SETTINGS_PAGE_SAVE_FAILED:
             n = add_row(rows, n, max, note_row(state->failure));
             n = add_row(rows, n, max, action_row("Try again", SETTINGS_ACTION_RETRY, true));
@@ -1743,6 +1759,9 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             SettingsRow title = action_row("Title", SETTINGS_ACTION_EDIT_TITLE, true);
             snprintf(title.value, sizeof(title.value), "%s", tile->title);
             n = add_row(rows, n, max, title);
+            SettingsRow icon = link_row("Icon", tile->icon, SETTINGS_PAGE_ICON, top->menu);
+            icon.tile = top->tile;   // The Icon page is about this tile: open_page() gives it the row's tile
+            n = add_row(rows, n, max, icon);
             SettingsRow command = action_row("Command", SETTINGS_ACTION_EDIT_COMMAND, true);
             setting_command_label(tile->command, command.value, sizeof(command.value));
             n = add_row(rows, n, max, grayed(command, opened_menu(state, tile) >= 0, WHY_SUBMENU_COMMAND));
@@ -1830,6 +1849,8 @@ static void open_page(SettingsState *state, SettingsPage page, int menu, int til
     top->entry_mode = settings_slot(state, SET_ID_BACKGROUND_MODE, -1)->value.number;
     top->device = page == SETTINGS_PAGE_KEYBOARD ? BINDINGS_KEYBOARD
                 : page == SETTINGS_PAGE_GAMEPAD ? BINDINGS_GAMEPAD : state->stack[state->depth - 1].device;
+    if (page == SETTINGS_PAGE_ICON)
+        memset(&state->icon, 0, sizeof(state->icon));   // The screen looks again at what it offers
     fix_cursor(state);
 }
 
@@ -1940,6 +1961,29 @@ SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, con
     const char *why = menuedit_set(state->menus, edit_index(state, menu), tile, t->title, t->icon, command);
     if (why != NULL) {
         snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return event;
+    }
+    event.kind = SETTINGS_EVENT_MENUS;
+    event.menu = menu;
+    event.tile = tile;
+    return event;
+}
+
+// A function to set a tile's icon, as the Icon page chose it (a library name, or an image's or a plated
+// file's path): the twin of settings_set_command(). Refused with the reason as the notice, which the Icon
+// page's caption shows.
+SettingsEvent settings_set_icon(SettingsState *state, int menu, int tile, const char *icon)
+{
+    SettingsEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = SETTINGS_EVENT_MOVED;
+    state->notice[0] = '\0';
+    const MenuTile *t = edit_tile(state, menu, tile);
+    if (t == NULL)
+        return event;
+    const char *refused = menuedit_set(state->menus, edit_index(state, menu), tile, t->title, icon, t->command);
+    if (refused != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", refused);   // The Icon page's caption says it
         return event;
     }
     event.kind = SETTINGS_EVENT_MENUS;
@@ -2839,6 +2883,13 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
                     break;   // Grayed: its reason is on show
                 event = move_to_menu(state, row->menu);
             }
+            else if (row->kind == SETTINGS_ROW_ACTION && (row->action == SETTINGS_ACTION_ICON_SUGGESTED ||
+                     row->action == SETTINGS_ACTION_ICON_OWN || row->action == SETTINGS_ACTION_ICON_GRID ||
+                     row->action == SETTINGS_ACTION_ICON_BROWSE)) {
+                // The screen sets the icon, or opens the library or the browser, then says whether it is done
+                event.kind = SETTINGS_EVENT_ICON;
+                event.action = row->action;
+            }
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_DISCARD) {
                 for (int i = 0; i < state->slot_count; i++)
                     state->slots[i].value = state->slots[i].entry;
@@ -3024,6 +3075,7 @@ void settings_path(const SettingsState *state, char *out, size_t size)
             case SETTINGS_PAGE_CONFIRM: name = "Keep it?"; break;
             case SETTINGS_PAGE_SAVE_FAILED: name = "Couldn't save"; break;
             case SETTINGS_PAGE_RESTART: name = "Restart?"; break;
+            case SETTINGS_PAGE_ICON: name = "Icon"; break;
             case SETTINGS_PAGE_TILES: name = "Tiles"; break;
             case SETTINGS_PAGE_TILE: {
                 const MenuTile *tile = edit_tile(state, page->menu, page->tile);
@@ -3045,7 +3097,8 @@ void settings_path(const SettingsState *state, char *out, size_t size)
 static bool tiles_page(SettingsPage page)
 {
     return page == SETTINGS_PAGE_TILES || page == SETTINGS_PAGE_TILE || page == SETTINGS_PAGE_ADD ||
-           page == SETTINGS_PAGE_SPECIAL || page == SETTINGS_PAGE_REMOVE_MENU || page == SETTINGS_PAGE_MOVE_TO;
+           page == SETTINGS_PAGE_SPECIAL || page == SETTINGS_PAGE_REMOVE_MENU || page == SETTINGS_PAGE_MOVE_TO ||
+           page == SETTINGS_PAGE_ICON;
 }
 
 // A function to say which menu the preview should show: the one a MENU or Tiles page is about, or the one
@@ -3089,4 +3142,92 @@ bool settings_menus_edited(const SettingsState *state)
 const char *settings_notice(const SettingsState *state)
 {
     return state->notice;
+}
+
+// A function to give the Icon page what the screen found for its tile, and put the cursor on the first
+// row: the first choice that applies, which the spec preselects
+void settings_set_icon_choices(SettingsState *state, const SettingsIconChoices *choices)
+{
+    state->icon = *choices;
+    state->icon.ready = true;
+    if (state->stack[state->depth].page == SETTINGS_PAGE_ICON) {
+        state->stack[state->depth].cursor = 0;
+        fix_cursor(state);
+    }
+}
+
+// A function to give what the Icon page offers; `ready` false until the screen has looked
+const SettingsIconChoices *settings_icon_choices(const SettingsState *state)
+{
+    return &state->icon;
+}
+
+// A function to tell whether the Icon page is on show, and which tile it is about: its menu's index and
+// the tile's place in it
+bool settings_icon_tile(const SettingsState *state, int *menu, int *tile)
+{
+    const PageRef *top = &state->stack[state->depth];
+    if (top->page != SETTINGS_PAGE_ICON)
+        return false;
+    *menu = top->menu;
+    *tile = top->tile;
+    return true;
+}
+
+// A function to end the Icon page's choice: chosen (`why` NULL), back to the tile's page; refused, the
+// page stays and the caption says why until the next key. Nothing happens off the Icon page.
+void settings_icon_done(SettingsState *state, const char *why)
+{
+    if (state->stack[state->depth].page != SETTINGS_PAGE_ICON)
+        return;
+    if (why != NULL) {
+        snprintf(state->notice, sizeof(state->notice), "%s", why);
+        return;
+    }
+    state->depth--;
+    fix_cursor(state);
+}
+
+// A function to put the cursor on the page's row that leads to `page` for `menu` (and, for a tile's page,
+// that `tile`; -1 for any) and press OK on it, as the remote would: a link row to it, or on the Tiles page
+// an ordinary tile's row, an OPEN_TILE action (Task 10a's tile_row() makes only a submenu tile's a link).
+// False when the page has no such row or the page did not open.
+static bool open_row(SettingsState *state, SettingsPage page, int menu, int tile)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        bool leads = rows[i].kind == SETTINGS_ROW_LINK ? rows[i].target == page
+                   : page == SETTINGS_PAGE_TILE && rows[i].kind == SETTINGS_ROW_ACTION &&
+                     rows[i].action == SETTINGS_ACTION_OPEN_TILE;
+        if (leads && rows[i].menu == menu && (tile < 0 || rows[i].tile == tile)) {
+            state->stack[state->depth].cursor = i;
+            settings_command(state, SETTINGS_OK);
+            return settings_page(state) == page;
+        }
+    }
+    return false;
+}
+
+// A function to open the pages at a tile, as the remote opens them from the top: Menus, the menu, its
+// Tiles page and the tile's page, each from the row that leads on, so Back walks up the same pages with
+// each cursor where it was. Tile -1 stops at the Tiles page (an empty menu's way in), and a menu or tile
+// that is not there stops at the last page that opened. A menu or tile its page has no row for (past the
+// rows the page has room for: its note counts it) has its page opened directly, the page under it keeping
+// its cursor where it opened (Fable review I4): the hold reaches what the remote cannot.
+void settings_show_tile(SettingsState *state, int menu, int tile)
+{
+    state->depth = 0;
+    fix_cursor(state);
+    if (!open_row(state, SETTINGS_PAGE_MENUS, -1, -1))
+        return;
+    if (!open_row(state, SETTINGS_PAGE_MENU, menu, -1)) {
+        if (menu < 0 || menu >= state->menu_count)
+            return;
+        open_page(state, SETTINGS_PAGE_MENU, menu, -1);
+    }
+    if (!open_row(state, SETTINGS_PAGE_TILES, menu, -1) || tile < 0)
+        return;
+    if (!open_row(state, SETTINGS_PAGE_TILE, menu, tile) && edit_tile(state, menu, tile) != NULL)
+        open_page(state, SETTINGS_PAGE_TILE, menu, tile);
 }

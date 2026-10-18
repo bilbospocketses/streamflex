@@ -218,7 +218,8 @@ typedef enum {
     SETTINGS_PAGE_ADD,           // What a new tile is: a submenu, a special command (Task 10b: an app, a program)
     SETTINGS_PAGE_SPECIAL,       // The special commands a tile can run
     SETTINGS_PAGE_REMOVE_MENU,   // A submenu tile's Remove: the menu with its tiles, or the tile alone
-    SETTINGS_PAGE_MOVE_TO        // The other menus a tile can be moved to
+    SETTINGS_PAGE_MOVE_TO,       // The other menus a tile can be moved to
+    SETTINGS_PAGE_ICON           // A tile's icon: the library match, its own icon, the library, an image
 } SettingsPage;
 
 typedef enum {
@@ -257,7 +258,11 @@ typedef enum {
     SETTINGS_ACTION_ADD_PROGRAM,        // The program browser, for a new tile
     SETTINGS_ACTION_EDIT_COMMAND,       // The tile's command: an app, a program, a special command, or typed
     SETTINGS_ACTION_MOVE,               // Pick the tile up, to move it through the grid
-    SETTINGS_ACTION_MOVE_TO             // Move to menu's rows: `menu` is the menu
+    SETTINGS_ACTION_MOVE_TO,            // Move to menu's rows: `menu` is the menu
+    SETTINGS_ACTION_ICON_SUGGESTED,     // The Icon page: the library icon offered first (the match, or the generic one)
+    SETTINGS_ACTION_ICON_OWN,           // ...the app's own icon, on a plate
+    SETTINGS_ACTION_ICON_GRID,          // ...the library grid
+    SETTINGS_ACTION_ICON_BROWSE         // ...the folder browser, for an image
 } SettingsAction;
 
 typedef struct {
@@ -311,7 +316,8 @@ typedef enum {
     SETTINGS_EVENT_TYPE_NAME,    // Open the keyboard for a new submenu's name, for the Add page's menu
     SETTINGS_EVENT_PICK_APP,     // Open the app list, for a new tile in the Add page's menu
     SETTINGS_EVENT_BROWSE_PROGRAM,   // Open the program browser, for a new tile there
-    SETTINGS_EVENT_PICK_TILE_COMMAND // Open the command list for tile `tile` of menu `menu`
+    SETTINGS_EVENT_PICK_TILE_COMMAND, // Open the command list for tile `tile` of menu `menu`
+    SETTINGS_EVENT_ICON          // The Icon page's row `action` was chosen: the screen acts, then calls settings_icon_done()
 } SettingsEventKind;
 
 typedef struct {
@@ -324,6 +330,7 @@ typedef struct {
     int menu;                    // Tiles events: the menu (the settings' index) and the tile they are about
     int tile;
     bool rebind;                 // MENUS: a rename rewrote bindings and the Startup and Quit commands
+    SettingsAction action;       // ICON: the row chosen
 } SettingsEvent;
 
 typedef struct SettingsState SettingsState;
@@ -366,6 +373,9 @@ SettingsEvent settings_add_submenu(SettingsState *state, const char *name);
 // A tile's command, chosen in its command list (an app's, a program's, a special one, or typed), and why
 // one cannot be written (the keyboard's validator); an app's or a file's name made a tile's title
 SettingsEvent settings_set_command(SettingsState *state, int menu, int tile, const char *command);
+// A tile's icon, as the Icon page chose it (a library name or an image's path); refused with the reason
+// as the notice when the tile's line could not hold it (Known integration work 8.2)
+SettingsEvent settings_set_icon(SettingsState *state, int menu, int tile, const char *icon);
 const char *settings_command_problem(const SettingsState *state, int menu, int tile, const char *command);
 void settings_tile_title(const char *name, char *out, size_t size);
 // Move (3c): the grid the preview lays the menu out in now, which the arrows move a picked-up tile through;
@@ -407,5 +417,24 @@ SettingsEvent settings_bind_command(SettingsState *state, const char *command);
 SettingsEvent settings_revert_binding(SettingsState *state);
 void settings_keep_binding(SettingsState *state);   // The 10 s were confirmed: nothing goes back
 const char *settings_binding_command(const SettingsState *state);   // The command the binding page shows
+
+// The Icon page (spec "Icons"). What it offers for its tile, found by the screen as it opens: the
+// library icon offered first (the match, or the generic one when the app has neither a match nor an
+// icon of its own; "" for none) and whether the app's own icon is offered. Its rows wait for them.
+#define SETTINGS_ICON_TEXT_MAX 64
+typedef struct {
+    bool ready;                                     // Found for the page on show
+    char suggested[SETTINGS_ICON_TEXT_MAX];         // A library icon's name, or ""
+    char suggested_title[SETTINGS_ICON_TEXT_MAX];   // Its title, which its row shows
+    bool matched;                                   // A match for the app's name; false: the generic icon
+    bool own;                                       // The app's own icon was read and plated
+} SettingsIconChoices;
+void settings_set_icon_choices(SettingsState *state, const SettingsIconChoices *choices);   // The cursor to the first row
+const SettingsIconChoices *settings_icon_choices(const SettingsState *state);
+bool settings_icon_tile(const SettingsState *state, int *menu, int *tile);   // The Icon page on show, and its tile
+void settings_icon_done(SettingsState *state, const char *why);   // NULL: chosen, back to the tile's page; else why
+// The pages opened at a tile, as the remote opens them: Menus, the menu, its Tiles page and the tile's
+// page (tile -1: the Tiles page); they stop at the last that opened when a menu or tile is not there
+void settings_show_tile(SettingsState *state, int menu, int tile);
 
 #endif
