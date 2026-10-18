@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 589 |
-| Row halves | 1030 |
-| Verdicts per release (row x desktop) | 2408 |
-| `streamflex-ctest` halves | 0 (0 verdicts) |
-| `streamflex-headless` halves | 277 (1108 verdicts) |
+| Rows | 691 |
+| Row halves | 1184 |
+| Verdicts per release (row x desktop) | 2858 |
+| `streamflex-ctest` halves | 9 (45 verdicts) |
+| `streamflex-headless` halves | 334 (1336 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 593 (1140 verdicts) |
-| **Automated today** | 437 of 1030 halves; 1268 of 2408 verdicts (52 %) |
+| `manual` halves | 681 (1317 verdicts) |
+| **Automated today** | 503 of 1184 halves; 1541 of 2858 verdicts (53 %) |
 
 <!-- summary:end -->
 
@@ -486,8 +486,6 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 6.15 | `[Win]` | manual | qa-harness item 75, planned |
 | 6.16 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-inherit` |
 | 6.16 | `[Win]` | manual | qa-harness item 75, planned |
-| 6.17 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-empty` |
-| 6.17 | `[Win]` | manual | qa-harness item 75, planned |
 | 6.18 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-empty` |
 | 6.18 | `[Win]` | manual | qa-harness item 75, planned |
 | 6.19 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-manymenus` |
@@ -1063,5 +1061,161 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 17.12 | `[Win]` | manual | needs a real pad that reports a low battery |
 | 17.13 | `[Linux]` | manual | needs a real pad passed into a Linux guest, with no udev rule for its hidraw node |
 | 17.14 | `[Linux]` | manual | needs a real pad passed into a Linux guest, with no udev rule for its hidraw node |
+| 18.1 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-empty`, with `50-settings.sh` run `f50-empty` |
+| 18.1 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.2 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-empty` |
+| 18.2 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.3 | `[All]` | manual | qa-harness item 75, planned |
+| 18.4 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-empty`, with `86-hold-ok.sh` run `f86-empty` |
+| 18.4 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.5 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-default-empty` |
+| 18.5 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.6 | `[Linux]` | streamflex-headless | `50-settings.sh` run `f50-empty` |
+| 18.6 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.7 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.8 | `[All]` | streamflex-ctest | `test_settings.c` `test_tiles_pages`, with `test_settings.c` `test_empty_menu_and_new_submenu` |
+| 18.9 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-special`, with `82-tiles.sh` run `f82-after` and `82-tiles.sh` run `f82-app` |
+| 18.9 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.10 | `[All]` | manual | qa-harness item 75, planned |
+| 18.11 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-submenu` |
+| 18.11 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.12 | `[All]` | manual | qa-harness item 75, planned |
+| 18.13 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-special` |
+| 18.13 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.14 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-semicolon` |
+| 18.14 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.15 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-rename` |
+| 18.15 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.16 | `[All]` | manual | qa-harness item 75, planned |
+| 18.17 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-submenu`, with `82-tiles.sh` run `f82-two` |
+| 18.17 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.18 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-submenu` |
+| 18.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.19 | `[All]` | manual | qa-harness item 75, planned |
+| 18.20 | `[All]` | streamflex-ctest | `test_settings.c` `test_remove_submenu` |
+| 18.21 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-special` |
+| 18.21 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.22 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-discard` |
+| 18.22 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.23 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-hand` |
+| 18.23 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.24 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-app` |
+| 18.24 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.25 | `[Linux]` | streamflex-headless | `81-apps.sh` run `f81-apps` |
+| 18.26 | `[Linux]` | streamflex-headless | `81-apps.sh` run `f81-apps` |
+| 18.27 | `[Ubuntu]` | manual | qa-harness item 75, planned |
+| 18.28 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.29 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.30 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.31 | `[GNOME]` | manual | qa-harness item 75, planned |
+| 18.32 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-app` |
+| 18.32 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.33 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-app`, with `82-tiles.sh` run `f82-browse` |
+| 18.33 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.34 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-scanfail`, with `81-apps.sh` run `f81-empty` |
+| 18.35 | `[Linux]` | streamflex-headless | `81-apps.sh` run `f81-closed` |
+| 18.35 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.36 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.37 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-browse` |
+| 18.38 | `[All]` | manual | qa-harness item 75, planned |
+| 18.39 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-browse` |
+| 18.39 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.40 | `[All]` | manual | qa-harness item 75, planned |
+| 18.41 | `[All]` | streamflex-ctest | `test_settings.c` `test_tile_commands` |
+| 18.42 | `[Linux]` | streamflex-headless | `83-move.sh` run `f83-move`, with `83-move.sh` run `f83-down` |
+| 18.42 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.43 | `[All]` | manual | qa-harness item 75, planned |
+| 18.44 | `[Linux]` | streamflex-headless | `83-move.sh` run `f83-cancel` |
+| 18.44 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.45 | `[All]` | manual | qa-harness item 75, planned |
+| 18.46 | `[Linux]` | streamflex-headless | `83-move.sh` run `f83-moveto` |
+| 18.46 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.47 | `[Linux]` | streamflex-headless | `83-move.sh` run `f83-refused` |
+| 18.47 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.48 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-osk` |
+| 18.48 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.49 | `[All]` | manual | qa-harness item 75, planned |
+| 18.50 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-osk` |
+| 18.50 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.51 | `[All]` | streamflex-ctest | `test_osk.c` `test_shift`, with `test_osk.c` `test_layouts_and_pages` |
+| 18.52 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-layout` |
+| 18.52 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.53 | `[All]` | streamflex-ctest | `test_settings.c` `test_keyboard_layout` |
+| 18.54 | `[All]` | streamflex-ctest | `test_osk.c` `test_back` |
+| 18.55 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-back` |
+| 18.55 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.56 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-done` |
+| 18.56 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.57 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-real` |
+| 18.57 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.58 | `[All]` | manual | qa-harness item 75, planned |
+| 18.59 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-german` |
+| 18.60 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-padstart`, with `84-keyboard.sh` run `f84-padx` and `84-keyboard.sh` run `f84-pady` |
+| 18.60 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.61 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-osk`, with `58-settings-pickers.sh` run `f58-page` and `82-tiles.sh` run `f82-command` |
+| 18.61 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.62 | `[All]` | manual | qa-harness item 75, planned |
+| 18.63 | `[All]` | streamflex-ctest | `test_browser.c` `test_type_row` |
+| 18.64 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-path` |
+| 18.64 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.65 | `[Linux]` | streamflex-headless | `84-keyboard.sh` run `f84-pathgone` |
+| 18.65 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.66 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.67 | `[GNOME]` | manual | qa-harness item 75, planned |
+| 18.68 | `[KDE]` | manual | qa-harness item 75, planned |
+| 18.69 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-match`, with `85-icons.sh` run `f85-own` |
+| 18.69 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.70 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-match`, with `85-icons.sh` run `f85-own` |
+| 18.70 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.71 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.72 | `[Linux]` | manual | qa-harness item 75, planned |
+| 18.73 | `[Linux]` | manual | qa-harness item 75, planned |
+| 18.74 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-own` |
+| 18.74 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.75 | `[All]` | manual | qa-harness item 75, planned |
+| 18.76 | `[All]` | streamflex-ctest | `test_plate.c` `test_new_path` |
+| 18.77 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-readonly` |
+| 18.77 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.78 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-plate` (offered first, highlighted), and `85-icons.sh` run `f85-grid` (offered) |
+| 18.78 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.79 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-grid` |
+| 18.79 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.80 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-browse` |
+| 18.80 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.81 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-discard` |
+| 18.81 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.82 | `[All]` | manual | qa-harness item 75, planned |
+| 18.83 | `[Linux]` | streamflex-headless | `86-hold-ok.sh` run `f86-tap`, with `86-hold-ok-timing.sh` run `f86-padtap` |
+| 18.83 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.84 | `[Linux]` | streamflex-headless | `86-hold-ok-timing.sh` run `f86-hold`, with `86-hold-ok-timing.sh` run `f86-padhold` |
+| 18.84 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.85 | `[Linux]` | streamflex-headless | `86-hold-ok-timing.sh` run `f86-hold` |
+| 18.85 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.86 | `[Linux]` | streamflex-headless | `86-hold-ok-timing.sh` run `f86-holdempty` |
+| 18.86 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.87 | `[All]` | manual | qa-harness item 75, planned |
+| 18.88 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.89 | `[Linux]` | streamflex-headless | `87-menus-log.sh` run `f87-add`, with `87-menus-log.sh` run `f87-rename` and `85-icons.sh` run `f85-browse` |
+| 18.89 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.90 | `[All]` | manual | qa-harness item 75, planned |
+| 18.91 | `[All]` | manual | qa-harness item 75, planned |
+| 18.92 | `[All]` | manual | qa-harness item 75, planned |
+| 18.93 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-stray` |
+| 18.93 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.94 | `[Linux]` | streamflex-headless | `82-tiles.sh` run `f82-meanwhile` |
+| 18.94 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.95 | `[All]` | manual | qa-harness item 75, planned |
+| 18.96 | `[Linux]` | streamflex-headless | `86-hold-ok-timing.sh` run `f86-keyopened`, with `86-hold-ok-timing.sh` run `f86-padopened` and `86-hold-ok-timing.sh` run `f86-rebuilt` |
+| 18.96 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.97 | `[All]` | manual | qa-harness item 75, planned |
+| 18.98 | `[All]` | streamflex-ctest | `test_settings.c` `test_show_tile_past_rows` |
+| 18.99 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-own` |
+| 18.99 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.100 | `[Linux]` | streamflex-headless | `80-menus-live.sh` run `f80-no-menus` |
+| 18.100 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.101 | `[Linux]` | streamflex-headless | `85-icons.sh` run `f85-changed` |
+| 18.101 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.102 | `[Win]` | manual | qa-harness item 75, planned |
+| 18.103 | `[Win]` | manual | qa-harness item 75, planned |
 
 ## Findings
