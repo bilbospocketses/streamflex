@@ -76,6 +76,19 @@ static Menu **menus = NULL;           // The launcher's menus, in the model's or
 static int menu_count = 0;
 static Menu *origin = NULL;           // The menu settings opened over
 static MenuEdit *menu_edit = NULL;    // The menus model, read from config.ini as settings open; NULL: unread
+static MenuEdit *menu_snapshot = NULL;   // The menus model as settings opened: what Discard puts back
+static MenuEdit *menu_taken = NULL;      // The menus model as the launcher last took it: what a change the
+                                         // launcher cannot take (out of memory) goes back to; NULL: none
+static char **plated = NULL;             // The icon files plated in this visit (settings_note_plated())...
+static int plated_count = 0;             // ...and how many
+
+// The tile whose title the keyboard edits (a new submenu's name needs none: settings_add_submenu() finds its
+// menu from the Add page)
+static struct {
+    int menu;        // The settings' menu the tile is in
+    int tile;
+    bool submenu;    // The tile opens a menu: its title is the menu's name, renamed at Done only
+} typing;
 static bool go_home = false;          // Go to the default menu after closing (:home)
 static char restart_names[256];       // What the restart prompt offers to apply: "the mappings file"
 static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the renderer has no targets
@@ -644,23 +657,34 @@ static void show_preview(Menu *menu)
     log_debug("Settings: the preview shows menu '%s' (%u ms)", menu->name, ticks_ms() - start);
 }
 
-// A function to show in the preview the menu the page is about: a menu being edited or highlighted,
-// else the one settings opened over. An empty menu shows too, with its note (plan ruling 2). In the
-// Menus list the preview waits for the cursor to rest (settings_draw() switches it), so moving down the
-// list never waits for the icons of every menu on the way.
+// A function to highlight in the preview the tile the page is about (settings_preview_tile())
+static void select_preview_tile(void)
+{
+    int tile = settings_preview_tile(model);
+    if (tile < 0 || current_menu == NULL || tile >= (int) current_menu->num_entries ||
+        tile == current_menu->position.selected)
+        return;
+    select_entry(tile);
+}
+
+// A function to show in the preview the menu the page is about: a menu being edited or highlighted, its tile
+// highlighted on a Tiles page, else the one settings opened over. An empty menu shows too, with its note
+// (plan ruling 2). In the Menus list the preview waits for the cursor to rest (settings_draw() switches it),
+// so moving down the list never waits for the icons of every menu on the way.
 static void follow_preview(void)
 {
     int index = settings_preview_menu(model);
     Menu *want = index >= 0 && index < menu_count ? menus[index] : origin;
     preview_wanted = NULL;
-    if (want == current_menu)
-        return;
-    if (settings_page(model) == SETTINGS_PAGE_MENUS) {
-        preview_wanted = want;
-        preview_asked = ticks_ms();
-    }
-    else
+    if (want != current_menu) {
+        if (settings_page(model) == SETTINGS_PAGE_MENUS) {
+            preview_wanted = want;
+            preview_asked = ticks_ms();
+            return;
+        }
         show_preview(want);
+    }
+    select_preview_tile();
 }
 
 // A function run on its own thread: decode one image for the preview
@@ -919,6 +943,15 @@ static void free_screen(void)
     model = NULL;
     menuedit_free(menu_edit);
     menu_edit = NULL;
+    menuedit_free(menu_snapshot);
+    menu_snapshot = NULL;
+    for (int i = 0; i < plated_count; i++)
+        free(plated[i]);
+    free(plated);
+    plated = NULL;
+    plated_count = 0;
+    menuedit_free(menu_taken);
+    menu_taken = NULL;
     bindings_free(bindings);
     bindings = NULL;
     free(menus);
@@ -943,10 +976,15 @@ static void close_settings(void)
 #endif
 }
 
+// The save's notes the menus model gave (apply_menus()), by their place among the result's notes: a tile's
+// "changed meanwhile" note says nothing of keys and buttons (log_save_notes())
+static bool menu_notes[CONFIG_SAVE_NOTES_SIZE / 2];
+
 // A function to log what the save could not make as asked (config_save's notes, one a line). A change
 // written as a new line beside a line changed by hand is not said to have taken effect: the first line
-// on a key or button is the one that runs. That is said of those notes only, by the kind config_save
-// gives each line, not of a removal skipped.
+// on a key or button is the one that runs. That is said of the bindings' such notes only, by the kind
+// config_save gives each line, not of a removal skipped, nor of a tile's (3c): a tile written as a new
+// line beside the hand's is one more tile, which the menu shows.
 static void log_save_notes(ConfigSaveResult *result)
 {
     int index = 0;
@@ -955,7 +993,8 @@ static void log_save_notes(ConfigSaveResult *result)
         if (end != NULL)
             *end = '\0';
         // A line past the kinds config_save gave (none can be, by how it counts) gets no words
-        if (index < result->note_count && result->note_kinds[index] == CONFIG_NOTE_CHANGED_MEANWHILE)
+        bool from_menus = index < (int) (sizeof(menu_notes) / sizeof(menu_notes[0])) && menu_notes[index];
+        if (index < result->note_count && result->note_kinds[index] == CONFIG_NOTE_CHANGED_MEANWHILE && !from_menus)
             log_debug("Settings: not saved as asked: %s; where two lines bind one key or button, the first in the file is the one that runs", line);
         else
             log_debug("Settings: not saved as asked: %s", line);
@@ -965,11 +1004,24 @@ static void log_save_notes(ConfigSaveResult *result)
     }
 }
 
+// A function to write the menus model into the fresh read of config.ini, as config_save_with() calls it,
+// marking the notes it adds as the menus model's
+static bool apply_menus(IniDoc *doc, void *context, ConfigSaveResult *result)
+{
+    int first = result->note_count;
+    bool ok = menuedit_apply(context, doc, result);
+    for (int i = first; i < result->note_count && i < (int) (sizeof(menu_notes) / sizeof(menu_notes[0])); i++)
+        menu_notes[i] = true;
+    return ok;
+}
+
 // A function to save every changed setting and binding into config.ini; on failure, show why. The
 // bindings' list edits are sized to their lists, which holds every edit they can make.
 static bool save_changes(void)
 {
     int count = settings_slot_count(model);
+    bool menus_edited = menu_edit != NULL && menuedit_changed(menu_edit);
+    memset(menu_notes, 0, sizeof(menu_notes));   // This save's notes alone
     int list_max = bindings != NULL ? bindings_count(bindings, BINDINGS_KEYBOARD) + bindings_count(bindings, BINDINGS_GAMEPAD) : 0;
     ConfigEdit *edits = calloc((size_t) count, sizeof(ConfigEdit));
     char (*values)[SETTING_TEXT_MAX] = calloc((size_t) count, SETTING_TEXT_MAX);
@@ -1012,10 +1064,11 @@ static bool save_changes(void)
     bool has_home = home_directory(home, sizeof(home));
     if (has_home)
         join_paths(user_config, sizeof(user_config), 4, home, ".config", EXECUTABLE_TITLE, FILENAME_DEFAULT_CONFIG);
-    ok = config_save_all(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, n, lists, list_count,
-                         &result);
+    ok = config_save_with(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, n, lists, list_count,
+                          menus_edited ? apply_menus : NULL, menu_edit, &result);
 #else
-    ok = config_save_all(config.config_path, NULL, NULL, edits, n, lists, list_count, &result);
+    ok = config_save_with(config.config_path, NULL, NULL, edits, n, lists, list_count,
+                          menus_edited ? apply_menus : NULL, menu_edit, &result);
 #endif
     test_fail("keep", false);
     free(edits);
@@ -1028,6 +1081,8 @@ static bool save_changes(void)
         if (result.warning[0] != '\0')
             log_error("Settings saved to %s, but %s", result.path, result.warning);
         log_save_notes(&result);
+        if (menus_edited)
+            log_debug("Settings: the menus were written to %s", result.path);
         if (strcmp(result.path, config.config_path) != 0) {
             free(config.config_path);
             config.config_path = strdup(result.path);
@@ -1045,7 +1100,7 @@ static bool save_changes(void)
 // that applies at next start asks first whether to restart StreamFlex now.
 static void save_and_close(void)
 {
-    if (!settings_any_changed(model)) {
+    if (!settings_any_changed(model) && !settings_menus_edited(model)) {
         log_debug("Settings: nothing changed");
         close_settings();
     }
@@ -1057,6 +1112,192 @@ static void save_and_close(void)
             settings_show_restart(model, restart_names);
         }
     }
+}
+
+static void handle_event(const SettingsEvent *event);
+static void keep_taken(void);
+
+// A function to tell whether a tile of the menus model uses a file as its icon
+static bool icon_in_use(const char *path)
+{
+    for (int m = 0; menu_edit != NULL && m < menuedit_count(menu_edit); m++) {
+        const MenuEditMenu *menu = menuedit_menu(menu_edit, m);
+        for (int t = 0; t < menu->count; t++) {
+            if (strcmp(menu->tiles[t].icon, path) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+// A function to keep an icon file plated in this visit, which Discard deletes when no tile uses it (spec
+// "Icons": StreamFlex deletes a plated file only so). Out of memory it is kept, and the log says so.
+void settings_note_plated(const char *path)
+{
+    char **grown = realloc(plated, (size_t) (plated_count + 1) * sizeof(char*));
+    char *copy = strdup(path);
+    if (grown != NULL)
+        plated = grown;
+    if (grown == NULL || copy == NULL) {
+        free(copy);
+        log_error("Settings: out of memory, so Discard will not delete %s", path);
+        return;
+    }
+    plated[plated_count++] = copy;
+}
+
+// A function to delete each icon file plated in this visit that no tile uses now
+static void delete_unused_plated(void)
+{
+    for (int i = 0; i < plated_count; i++) {
+        if (plated[i] == NULL || icon_in_use(plated[i]))
+            continue;
+        if (fileio_remove(plated[i]))
+            log_debug("Settings: deleted %s, an icon plated in this visit that no tile uses", plated[i]);
+        else
+            log_error("Settings: could not delete %s: %s", plated[i], fileio_last_error());
+        free(plated[i]);
+        plated[i] = NULL;
+    }
+}
+
+// A function to put the menus back as they were read, for Discard (spec "Saving and applying"): the menus
+// model becomes a copy of the snapshot taken as settings opened, and the launcher and the settings follow it.
+// Out of memory the menus stay as they are, and the log says so.
+static void discard_menus(void)
+{
+    if (menu_edit != NULL && menu_snapshot != NULL && menuedit_changed(menu_edit)) {
+        MenuEdit *copy = menuedit_copy(menu_snapshot);
+        MenuEdit *now = menu_edit;
+        if (copy == NULL) {
+            log_error("Settings: out of memory, so Discard leaves the menus as they are");
+            return;
+        }
+        menu_edit = copy;
+        settings_set_menus(model, copy);
+        if (!settings_menus_changed()) {
+            menu_edit = now;
+            settings_set_menus(model, now);
+            menuedit_free(copy);
+            return;   // settings_menus_changed() said why
+        }
+        menuedit_free(now);
+        keep_taken();
+        log_debug("Settings: the menus went back to how they were read");
+    }
+    delete_unused_plated();
+}
+
+// A function to keep a copy of the menus model as the launcher has just taken it, which a later change the
+// launcher cannot take goes back to (menus_taken()); out of memory there is none, and the log says so
+static void keep_taken(void)
+{
+    menuedit_free(menu_taken);
+    menu_taken = menu_edit != NULL ? menuedit_copy(menu_edit) : NULL;
+    if (menu_edit != NULL && menu_taken == NULL)
+        log_error("Settings: out of memory, so a menus change the launcher cannot take cannot be undone");
+}
+
+// A function to put a change to the menus model into the launcher (settings_menus_changed()). One the
+// launcher cannot take (out of memory) is undone in the menus model as well, back to the copy taken when the
+// launcher last followed it, so the two never part: a rename living in the menus model alone would file the
+// slot edits under the old section with a false "gone" note (Task 4's review). True when the launcher took it.
+static bool menus_taken(void)
+{
+    if (settings_menus_changed()) {
+        keep_taken();
+        return true;
+    }
+    if (menu_taken != NULL) {
+        menuedit_free(menu_edit);
+        menu_edit = menu_taken;
+        menu_taken = NULL;
+        settings_set_menus(model, menu_edit);
+        keep_taken();
+        log_error("Settings: the menus change is undone, as the launcher could not take it");
+    }
+    return false;
+}
+
+// A function to put a change to the menus model into the launcher (menus_taken()); after a
+// submenu's rename, the bindings and the Startup and Quit commands the model rewrote too
+static void menus_follow(bool rebind)
+{
+    if (!menus_taken())
+        return;
+    log_debug("Settings: the menus changed");
+    if (!rebind)
+        return;
+    if (bindings != NULL)
+        apply_bindings(bindings);
+    apply_slot(settings_slot(model, SET_ID_STARTUP_CMD, -1), false);
+    apply_slot(settings_slot(model, SET_ID_QUIT_CMD, -1), false);
+    log_debug("Settings: the bindings and the Startup and Quit commands follow the renamed menu");
+}
+
+// A function to say why a tile's title, as typed, cannot be written (the keyboard's validator)
+static const char *title_problem(const char *text, void *context)
+{
+    UNUSED(context);
+    return settings_title_problem(model, typing.menu, typing.tile, text);
+}
+
+// A function to take a typed title
+static void title_typed(const char *text, void *context)
+{
+    UNUSED(context);
+    SettingsEvent event = settings_set_title(model, typing.menu, typing.tile, text);
+    handle_event(&event);
+}
+
+// A function to show a plain tile's title in the preview as it is typed (spec "the preview updates as the
+// user types"), once it has rested, and the title it had once the keyboard is canceled. A submenu tile's
+// title is its menu's name, which changes at Done only: a rename makes the settings model again.
+static void title_follows(const char *text, void *context)
+{
+    UNUSED(context);
+    if (typing.submenu || settings_title_problem(model, typing.menu, typing.tile, text) != NULL)
+        return;
+    SettingsEvent event = settings_set_title(model, typing.menu, typing.tile, text);
+    if (event.kind == SETTINGS_EVENT_MENUS && menus_taken()) {
+        log_debug("Settings: the preview shows the title '%s'", text);
+        follow_preview();
+    }
+}
+
+// A function to open the keyboard on a tile's title: "Title for <title>"; a submenu tile's is its menu's
+// name, held to a section name's limit
+static void open_title_keyboard(int menu, int tile)
+{
+    const MenuEditMenu *m = menu >= 0 && menu < menu_count && menu_edit != NULL
+                          ? menuedit_menu(menu_edit, menuedit_find(menu_edit, menus[menu]->name)) : NULL;
+    if (m == NULL || tile < 0 || tile >= m->count)
+        return;
+    const MenuTile *t = &m->tiles[tile];
+    const char *opens = menuedit_submenu_of(t);
+    typing.menu = menu;
+    typing.tile = tile;
+    typing.submenu = opens != NULL && menuedit_find(menu_edit, opens) >= 0;
+    char label[MENUEDIT_TITLE_MAX + 32];
+    snprintf(label, sizeof(label), "Title for %s", t->title);
+    pickers_open_keyboard(label, t->title, typing.submenu ? INIDOC_MAX_SECTION : MENUEDIT_TITLE_MAX, title_problem,
+                          NULL, title_typed);
+    pickers_keyboard_follow(title_follows, PREVIEW_REST_MS);
+}
+
+// A function to say why a new submenu's name, as typed, cannot be written (the keyboard's validator)
+static const char *name_problem(const char *text, void *context)
+{
+    UNUSED(context);
+    return settings_name_problem(model, text);
+}
+
+// A function to take a typed name: the submenu is made
+static void name_typed(const char *text, void *context)
+{
+    UNUSED(context);
+    SettingsEvent event = settings_add_submenu(model, text);
+    handle_event(&event);
 }
 
 // A function to act on what a key did in the model
@@ -1074,6 +1315,7 @@ static void handle_event(const SettingsEvent *event)
             break;
         case SETTINGS_EVENT_DISCARD:
             log_debug("Settings: discarded the changes");
+            discard_menus();   // First: the slots are applied over the menus as they were
             apply_all();
             kind_waiting = false;
             window_follow_background();   // The Mode put back may want the window it had
@@ -1126,6 +1368,15 @@ static void handle_event(const SettingsEvent *event)
             // and a command. The mappings file is a browse row, which
             // SETTINGS_EVENT_BROWSE opens. The rows that step still step with Left and Right.
             pickers_open(event->slot);
+            return;
+        case SETTINGS_EVENT_MENUS:
+            menus_follow(event->rebind);
+            break;
+        case SETTINGS_EVENT_TYPE_TITLE:
+            open_title_keyboard(event->menu, event->tile);
+            return;
+        case SETTINGS_EVENT_TYPE_NAME:
+            pickers_open_keyboard("Name for the new submenu", "", INIDOC_MAX_SECTION, name_problem, NULL, name_typed);
             return;
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
@@ -1534,7 +1785,8 @@ static void row_value_text(const SettingsRow *row, bool highlighted, char *out, 
         snprintf(out, size, LEFT_ARROW " %s " RIGHT_ARROW, row->value);
     else if (row->kind == SETTINGS_ROW_LINK || row->kind == SETTINGS_ROW_BROWSE || row->kind == SETTINGS_ROW_PICK ||
              row->kind == SETTINGS_ROW_BINDING ||
-             (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_BIND_COMMAND))
+             (row->kind == SETTINGS_ROW_ACTION &&
+              (row->action == SETTINGS_ACTION_BIND_COMMAND || row->action == SETTINGS_ACTION_ADD_SUBMENU)))
         snprintf(out, size, "%s " RIGHT_ARROW, row->value);
     else
         snprintf(out, size, "%s", row->value);
@@ -2215,9 +2467,14 @@ void settings_open(void)
         log_debug("Menus: config.ini's menus are not the launcher's (edited by hand since StreamFlex started), so the launcher takes config.ini's");
         settings_menus_changed();
     }
+    // What Discard puts the menus back to: the file's menus, as the launcher now shows them
+    menu_snapshot = menu_edit != NULL ? menuedit_copy(menu_edit) : NULL;
+    if (menu_edit != NULL && menu_snapshot == NULL)
+        log_error("Settings: out of memory, so Discard cannot put the menus back");
 #ifdef STREAMFLEX_TEST_HOOKS
     test_menu_edit();
 #endif
+    keep_taken();   // The menus as the launcher shows them now, which a change it cannot take goes back to
 }
 
 // A function to let go of settings at quit, saving nothing

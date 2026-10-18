@@ -371,3 +371,4 @@ void reload_run_pending(void);        // After the drain, before drawing: geomet
 bool app_in_front(void);              // state.application_launching || state.application_running
 Menu *menu_for(const MenuEditMenu *menu);   // The live menu a menus model's menu stands for; NULL for one new to the launcher
 void menus_apply(const MenuEdit *edit);     // Rebuild the live Menu and Entry lists from the model; textures stale, layout recomputed
+void select_entry(int index);   // Select a tile of the menu on show, scrolled into view: the settings preview's

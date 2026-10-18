@@ -1,9 +1,8 @@
 # The menus as 3c shows and rebuilds them (plan rulings 2 and 5): a section with no lines is a menu of
 # its own, shown empty with a note, and the launcher's menus follow the settings' menus model as it
-# changes. The Tiles pages that change the model come later; STREAMFLEX_TEST_MENU_EDIT makes one change
-# as settings open, so the rebuild is watched now. Nothing here saves the menus model: it is written only
-# by the Tiles pages' save, so each config that opens settings must come back unchanged, but for the one
-# run that saves a menu's grid (f80-hand-grid).
+# changes. STREAMFLEX_TEST_MENU_EDIT makes one change as settings open, so the rebuild is watched without
+# the Tiles pages; since 3c Task 10a closing settings saves that change, which f80-remove, f80-rename and
+# f80-add read back line by line (the lines but the blank ones). f80-hand-grid saves a menu's grid.
 # Not timing-sensitive: every key waits for its frame, and every result is read from the log's lines and their order, never from a clock
 
 # A header alone ([Kids]) and a section of only a comment ([Notes]) are menus, listed where their sections
@@ -44,7 +43,8 @@ grep -q "Settings opened over menu 'Games'" "$log" \
     && grep -q "Menus: the launcher's menus were made again from the menus model: 1 menu(s), 1 kept, 0 new, 1 gone" "$log" \
     && grep -q "Settings: the menus changed, so their settings were made again over 1 menu(s)" "$log" \
     && sed -n '/^Settings closed/,$p' "$log" | grep -qx 'Title: Bye' \
-    && cmp -s "$FX/f80-remove.ini" "$cfg" && ran_clean f80-remove && ok=0
+    && [ "$(grep -v '^$' "$cfg" | tr '\n' '|')" = '[General]|DefaultMenu=Main|[Main]|Entry2=Bye;quit;:quit|' ] \
+    && grep -q 'Settings: the menus were written to ' "$log" && ran_clean f80-remove && ok=0
 result "menus live: a submenu removed under settings goes with its tile, and closing lands on the default menu (exit $(cat "$out/f80-remove.code"))" $ok
 grep -E "Loading menu|Menus:|Settings (opened|closed)|Test hook: the menu edit|^Title:" "$log" | sed 's/^/      /'
 
@@ -59,7 +59,8 @@ grep -q "Test hook: the menu edit 'rename-menu Main=Home' was made" "$log" \
     && sed -n '/^Key Home/,$p' "$log" | grep -q "^Loading menu 'Home'" \
     && sed -n '/^Key Home/,$p' "$log" | grep -qx 'Title: Bye' \
     && ! grep -q "Menu 'Main' not found" "$log" \
-    && cmp -s "$FX/f80-rename.ini" "$cfg" && ran_clean f80-rename && ok=0
+    && [ "$(grep -v '^$' "$cfg" | tr '\n' '|')" = '[General]|DefaultMenu=Home|[Hotkeys]|Hotkey1=#4000004A;:home|[Home]|Entry1=Games;games;:submenu Games|Entry2=Bye;quit;:quit|[Games]|Entry1=Retro;emulators;:back|' ] \
+    && grep -q 'Settings: the menus were written to ' "$log" && ran_clean f80-rename && ok=0
 result "menus live: the default menu renamed under settings stays the default under its new name (exit $(cat "$out/f80-rename.code"))" $ok
 grep -E "Loading menu|Menus:|Key Home|^Title:" "$log" | sed 's/^/      /'
 
@@ -75,7 +76,8 @@ grep -q "Test hook: the menu edit 'add-tile Main=Bye;quit;:quit' was made" "$log
     && in_range "$log" "Settings opened" "Settings closed" "Menu 'Main': rendered its buttons" \
     && ! grep -q "Settings: the menus changed" "$log" && ! grep -q 'no library icon named' "$log" \
     && sed -n '/^Settings closed/,$p' "$log" | grep -qx 'Title: Bye' \
-    && cmp -s "$FX/f80-add.ini" "$cfg" && ran_clean f80-add && ok=0
+    && [ "$(grep -v '^$' "$cfg" | tr '\n' '|')" = '[General]|DefaultMenu=Main|[Main]|Entry1=Stay;apps;:home|Entry2=Bye;quit;:quit|' ] \
+    && grep -q 'Settings: the menus were written to ' "$log" && ran_clean f80-add && ok=0
 result "menus live: a tile added under settings is in its menu at once, and runs (exit $(cat "$out/f80-add.code"))" $ok
 grep -E "Menus:|rendered its buttons|Settings (opened|closed)|^Title:" "$log" | sed 's/^/      /'
 

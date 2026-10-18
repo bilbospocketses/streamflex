@@ -1856,6 +1856,18 @@ static void move_selection(LayoutDirection direction)
     place_entries();
 }
 
+// A function to select a tile of the menu on show, scrolled into view, as the settings preview highlights
+// the tile a Tiles page is about; an index past its tiles does nothing
+void select_entry(int index)
+{
+    if (current_menu == NULL || index < 0 || index >= (int) current_menu->num_entries)
+        return;
+    current_menu->position.selected = index;
+    current_menu->position = layout_clamp(&layout, (int) current_menu->num_entries, current_menu->position);
+    place_entries();
+    log_debug("Menu '%s': tile %i selected", current_menu->name, index);
+}
+
 // A function to load a submenu
 static void load_submenu(const char *submenu)
 {

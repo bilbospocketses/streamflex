@@ -36,5 +36,7 @@ const AppList *settings_apps(int *found, const char **why);
 // coming, going, rename or move; a tile's change made with the keyboard open (a title) remakes nothing but
 // the menus, so the keyboard stays.
 bool settings_menus_changed(void);
+// An icon file plated in this visit (Task 13 registers each it writes): Discard deletes it when no tile uses it
+void settings_note_plated(const char *path);
 
 #endif
