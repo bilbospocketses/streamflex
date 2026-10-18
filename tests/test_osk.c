@@ -511,7 +511,7 @@ static void test_key_char(void)
     CHECK_STR(out, "A");
     CHECK(osk_key_char(' ', out));
     CHECK_STR(out, " ");
-    CHECK(osk_key_char('^', out));                               // A dead key types its own character
+    CHECK(osk_key_char('^', out));                               // A key whose character is ^ (a dead key comes masked: nothing)
     CHECK_STR(out, "^");
     CHECK(osk_key_char(0xE9, out));                              // e acute, on a French keyboard
     CHECK_STR(out, "\xC3\xA9");
@@ -534,6 +534,76 @@ static void test_key_char(void)
     }
 }
 
+// A function to test the keypad's keys (user ruling 2026-10-16, "Type the digit"): its digits, its point and
+// its four operators type their character, as the top row's keys do, though SDL masks their keycodes;
+// Keypad Enter (Done, which the screen gives it), Keypad =, the keypad's comma and the keys either side of
+// the range type nothing
+static void test_keypad_char(void)
+{
+    static const struct {
+        unsigned int keycode;
+        const char *text;
+    } typed[] = {
+        { 0x40000062, "0" }, { 0x40000059, "1" }, { 0x4000005A, "2" }, { 0x4000005B, "3" }, { 0x4000005C, "4" },
+        { 0x4000005D, "5" }, { 0x4000005E, "6" }, { 0x4000005F, "7" }, { 0x40000060, "8" }, { 0x40000061, "9" },
+        { 0x40000063, "." },
+        { 0x40000054, "/" }, { 0x40000055, "*" }, { 0x40000056, "-" }, { 0x40000057, "+" }
+    };
+    char out[5];
+    for (size_t i = 0; i < sizeof(typed) / sizeof(typed[0]); i++) {
+        CHECK(osk_key_char(typed[i].keycode, out));
+        CHECK_STR(out, typed[i].text);
+    }
+
+    // Keypad Enter, Keypad =, the keypad's comma, Num Lock (just below the range) and the non-US backslash
+    // (just past it)
+    static const unsigned int nothing[] = { 0x40000058, 0x40000067, 0x40000085, 0x40000053, 0x40000064 };
+    for (size_t i = 0; i < sizeof(nothing) / sizeof(nothing[0]); i++) {
+        CHECK(!osk_key_char(nothing[i], out));
+        CHECK_STR(out, "");
+    }
+
+    // What a keypad digit types goes into the field as a top-row digit's does
+    Osk *osk = osk_create("Command", "", 8, NULL, NULL, OSK_QWERTY);
+    CHECK(osk_key_char(0x40000059, out));
+    CHECK_INT(osk_insert(osk, out), OSK_CHANGED);
+    CHECK_STR(osk_text(osk), "1");
+    osk_free(osk);
+}
+
+// A function to test the modifiers a real keyboard's key is looked up with: Shift, Caps Lock and AltGr, and no
+// other; on Windows, where SDL reports AltGr as Right Alt, Right Alt or Ctrl+Alt is AltGr too (user ruling
+// 2026-10-17, "Right Alt and Ctrl+Alt")
+static void test_key_mods(void)
+{
+    static const struct {
+        unsigned int mod;
+        unsigned int elsewhere;  // osk_key_mods(mod, false): X11 and Wayland
+        unsigned int windows;    // osk_key_mods(mod, true)
+    } MODS[] = {
+        { 0, 0, 0 },
+        { 0x0001u, 0x0001u, 0x0001u },                                       // Left Shift
+        { 0x0002u, 0x0002u, 0x0002u },                                       // Right Shift
+        { OSK_MOD_CAPS, OSK_MOD_CAPS, OSK_MOD_CAPS },
+        { OSK_MOD_MODE, OSK_MOD_MODE, OSK_MOD_MODE },                        // AltGr, as X11 reports it
+        { 0x1000u, 0, 0 },                                                   // Num Lock
+        { 0x0040u, 0, 0 },                                                   // Left Ctrl alone
+        { 0x0080u, 0, 0 },                                                   // Right Ctrl alone
+        { 0x0100u, 0, 0 },                                                   // Left Alt alone
+        { 0x0400u, 0, 0 },                                                   // Left GUI
+        { OSK_MOD_RALT, 0, OSK_MOD_MODE },                                   // AltGr, as Windows reports it
+        { OSK_MOD_RALT | 0x0001u, 0x0001u, OSK_MOD_MODE | 0x0001u },         // Shift+AltGr
+        { OSK_MOD_RALT | OSK_MOD_CAPS, OSK_MOD_CAPS, OSK_MOD_MODE | OSK_MOD_CAPS },
+        { 0x0040u | 0x0100u, 0, OSK_MOD_MODE },                              // Left Ctrl + Left Alt
+        { 0x0080u | 0x0100u, 0, OSK_MOD_MODE },                              // Right Ctrl + Left Alt
+        { 0x0040u | 0x0100u | 0x0002u, 0x0002u, OSK_MOD_MODE | 0x0002u },    // ...with Shift
+    };
+    for (size_t i = 0; i < sizeof(MODS) / sizeof(MODS[0]); i++) {
+        CHECK_INT((int) osk_key_mods(MODS[i].mod, false), (int) MODS[i].elsewhere);
+        CHECK_INT((int) osk_key_mods(MODS[i].mod, true), (int) MODS[i].windows);
+    }
+}
+
 int main(void)
 {
     test_qwerty();
@@ -545,5 +615,7 @@ int main(void)
     test_validators();
     test_back();
     test_key_char();
+    test_keypad_char();
+    test_key_mods();
     return check_report();
 }

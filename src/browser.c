@@ -9,6 +9,7 @@ static const char *const IMAGE_EXTENSIONS[] = { ".jpg", ".jpeg", ".png", ".webp"
 static const char *const TOO_FEW = "a slideshow needs 2 or more images";
 static const char *const TOO_LONG = "the path is too long for the settings to hold (1023 bytes at most)";
 static const char *const OUT_OF_MEMORY = "out of memory";
+static const char *const TYPE_LABEL = "Type a path\xE2\x80\xA6";   // U+2026, the ellipsis
 
 typedef enum {
     LOAD_DONE,
@@ -29,6 +30,7 @@ struct Browser {
     int cursor;
     char chosen[BROWSER_PATH_MAX];
     const char *why;        // Why the last command did nothing because of the browser itself; NULL otherwise
+    bool typing;            // Every listing ends with a Type row (browser_offer_typing)
 };
 
 // A function to compare names without regard to ASCII case, then exactly
@@ -192,11 +194,15 @@ static void select_path(Browser *browser, const char *path)
 // out of memory, with what was on show left as it was.
 static bool load_places(Browser *browser, const char *selected)
 {
-    BrowserRow *rows = alloc_calloc((size_t) (browser->place_count > 0 ? browser->place_count : 1), sizeof(BrowserRow));
+    // A row's room more than the places, for the Type row, which browser_offer_typing() puts there when the
+    // places were shown before it was offered
+    BrowserRow *rows = alloc_calloc((size_t) browser->place_count + 1, sizeof(BrowserRow));
     int count = 0;
     bool ok = rows != NULL;
     for (int i = 0; ok && i < browser->place_count; i++)
         ok = add_row(rows, &count, BROWSER_ROW_PLACE, browser->places[i].label, alloc_strdup(browser->places[i].path), true, NULL);
+    if (ok && browser->typing)
+        ok = add_row(rows, &count, BROWSER_ROW_TYPE, TYPE_LABEL, alloc_strdup(""), true, NULL);
     if (!ok) {
         free_row_list(rows, count);
         browser->why = OUT_OF_MEMORY;
@@ -251,7 +257,9 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
     if (ok) {
         qsort(folders, (size_t) folder_count, sizeof(FileioEntry*), compare_entries);
         qsort(images, (size_t) image_count, sizeof(FileioEntry*), compare_entries);
-        rows = alloc_calloc((size_t) (folder_count + image_count + 1), sizeof(BrowserRow));
+        // A row's room for Use this folder and one for the Type row, which browser_offer_typing() puts there
+        // when the folder was shown before it was offered (the room is kept in every mode)
+        rows = alloc_calloc((size_t) (folder_count + image_count + 2), sizeof(BrowserRow));
         ok = rows != NULL;
     }
     if (ok && browser->mode == BROWSER_FOLDER) {
@@ -269,6 +277,8 @@ static LoadResult load_folder(Browser *browser, const char *folder, const char *
         ok = add_row(rows, &row_count, browser->mode == BROWSER_FILE ? BROWSER_ROW_FILE : BROWSER_ROW_IMAGE,
                      images[i]->name, path, choosable && why == NULL, why);
     }
+    if (ok && browser->typing)
+        ok = add_row(rows, &row_count, BROWSER_ROW_TYPE, TYPE_LABEL, alloc_strdup(copy), true, NULL);
     alloc_free(folders);
     alloc_free(images);
     fileio_free_list(entries, count);
@@ -402,6 +412,8 @@ BrowserResult browser_command(Browser *browser, BrowserCommand command, int page
             if (browser->cursor < 0 || browser->cursor > last)
                 return BROWSER_NONE;
             const BrowserRow *row = &browser->rows[browser->cursor];
+            if (row->kind == BROWSER_ROW_TYPE)
+                return BROWSER_TYPE;
             if (row->kind == BROWSER_ROW_PLACE || row->kind == BROWSER_ROW_FOLDER) {
                 char *path = alloc_strdup(row->path);   // The row goes when the folder opens
                 bool opened = path != NULL && load_folder(browser, path, NULL) == LOAD_DONE;
@@ -496,4 +508,15 @@ bool browser_first_image(const Browser *browser, const char *folder, char *out, 
     alloc_free(path);
     fileio_free_list(entries, count > 0 ? count : 0);
     return found;
+}
+
+// A function to end every listing with a "Type a path..." row from now on (3c: a path row's way to the
+// keyboard). The listing on show gets it in the room both loaders keep for it, so the folder is not listed
+// again, and the cursor stays. Out of memory, nothing is offered and the rows stay as they were.
+void browser_offer_typing(Browser *browser)
+{
+    if (browser->typing)
+        return;
+    browser->typing = add_row(browser->rows, &browser->row_count, BROWSER_ROW_TYPE, TYPE_LABEL,
+                              alloc_strdup(browser->folder != NULL ? browser->folder : ""), true, NULL);
 }

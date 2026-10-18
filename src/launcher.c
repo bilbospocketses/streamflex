@@ -615,6 +615,14 @@ static SDL_Window *make_window(const WindowPlan *plan, SDL_DisplayID display)
     }
     SDL_Window *made = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
+    // No OS keyboard, ever (spec): SDL 3.4 leaves a new window's text input off, but 3.2 leaves Windows' input
+    // context attached, so it is stopped on every window made, whatever the version and the platform
+    if (made != NULL) {
+        if (SDL_StopTextInput(made))
+            log_debug("Window: SDL text input is off for the window");
+        else
+            log_error("Window: SDL text input could not be stopped for the window: %s", SDL_GetError());
+    }
     return made;
 }
 
@@ -4069,8 +4077,12 @@ int main(int argc, char *argv[])
 #endif
                         break;
                     }
-                    // Every key code StreamFlex holds is SDL2's, as config.ini stores it (keycodes.h)
-                    handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat);
+                    // The on-screen keyboard takes a real keyboard's typing first, by the key's place and the
+                    // layout's character for it (spec "A real keyboard types into the field"); every other key,
+                    // the arrows always, goes on as before. Every key code StreamFlex holds is SDL2's, as
+                    // config.ini stores it (keycodes.h).
+                    if (!(settings_is_open() && settings_text_key(event.key.scancode, event.key.mod, event.key.repeat)))
+                        handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat);
 #ifdef STREAMFLEX_TEST_HOOKS
                     test_key_undrawn = true;
 #endif

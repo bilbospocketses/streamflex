@@ -28,6 +28,8 @@ static const char *const TIME_NAMES[] = { "24hr", "12hr", "Auto", NULL };
 static const char *const TIME_LABELS[] = { "14:05", "2:05 PM", "Auto" };
 static const char *const DATE_NAMES[] = { "Big", "Little", "Auto", NULL };
 static const char *const DATE_LABELS[] = { "Sep 28", "28 Sep", "Auto" };
+static const char *const KEYBOARD_NAMES[] = { "QWERTY", "ABC", NULL };   // osk.h's OskLayout, in its order
+static const char *const KEYBOARD_LABELS[] = { "QWERTY", "ABC" };
 #define MODE_IMAGE 1
 #define MODE_SLIDESHOW 2
 
@@ -97,6 +99,9 @@ static const SettingDef DEFS[SET_ID_COUNT] = {
         .key = SETTING_STARTUP_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
     [SET_ID_QUIT_CMD] = { .id = SET_ID_QUIT_CMD, .label = "Quit command", .section = "General",
         .key = SETTING_QUIT_CMD, .type = SET_TYPE_COMMAND, .can_inherit = true, .inherit_label = "None" },
+    [SET_ID_KEYBOARD_LAYOUT] = { .id = SET_ID_KEYBOARD_LAYOUT, .label = "Keyboard layout", .section = "General",
+        .key = SETTING_KEYBOARD_LAYOUT, .type = SET_TYPE_CHOICE, .lo = 0, .hi = 1, .names = KEYBOARD_NAMES,
+        .labels = KEYBOARD_LABELS },
 
     // Background, beyond 3a's
     [SET_ID_CHROMA_KEY_COLOR] = { .id = SET_ID_CHROMA_KEY_COLOR, .label = "See-through color", .section = "Background",
@@ -1325,7 +1330,7 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
         case SETTINGS_PAGE_GENERAL: {
             static const SettingId ids[] = { SET_ID_DEFAULT_MENU, SET_ID_WRAP_ENTRIES, SET_ID_RESET_ON_BACK,
                 SET_ID_MOUSE_SELECT, SET_ID_INHIBIT_OS_SCREENSAVER, SET_ID_VSYNC, SET_ID_FPS_LIMIT, SET_ID_ON_LAUNCH,
-                SET_ID_APPLICATION_TIMEOUT, SET_ID_STARTUP_CMD, SET_ID_QUIT_CMD };
+                SET_ID_APPLICATION_TIMEOUT, SET_ID_STARTUP_CMD, SET_ID_QUIT_CMD, SET_ID_KEYBOARD_LAYOUT };
             for (int i = 0; i < LENGTH(ids); i++) {
                 SettingsRow row = global_row(state, ids[i]);
                 if (ids[i] == SET_ID_FPS_LIMIT)

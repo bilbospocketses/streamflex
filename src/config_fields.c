@@ -103,6 +103,7 @@ void config_store(SettingId id, Menu *menu, const SettingValue *value)
         case SET_ID_APPLICATION_TIMEOUT: config.application_timeout = (Uint32) n * 1000; break;
         case SET_ID_STARTUP_CMD: store_text(&config.startup_cmd, value); break;
         case SET_ID_QUIT_CMD: store_text(&config.quit_cmd, value); break;
+        case SET_ID_KEYBOARD_LAYOUT: config.keyboard_layout = n; break;
         case SET_ID_CHROMA_KEY_COLOR: store_rgb(&config.chroma_key_color, value); break;
         case SET_ID_OVERLAY: config.background_overlay = on; break;
         case SET_ID_OVERLAY_COLOR: store_rgb(&config.background_overlay_color, value); break;
@@ -206,6 +207,7 @@ SettingValue config_read(SettingId id, const Menu *menu)
         case SET_ID_APPLICATION_TIMEOUT: v.number = (int) (config.application_timeout / 1000); break;
         case SET_ID_STARTUP_CMD: read_text(&v, config.startup_cmd, true); break;
         case SET_ID_QUIT_CMD: read_text(&v, config.quit_cmd, true); break;
+        case SET_ID_KEYBOARD_LAYOUT: v.number = config.keyboard_layout; break;
         case SET_ID_CHROMA_KEY_COLOR: read_rgb(&v, config.chroma_key_color); break;
         case SET_ID_OVERLAY: v.number = config.background_overlay; break;
         case SET_ID_OVERLAY_COLOR: read_rgb(&v, config.background_overlay_color); break;

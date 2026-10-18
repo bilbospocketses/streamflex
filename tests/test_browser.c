@@ -28,6 +28,7 @@ static const struct {
     { "/orphan/child", "a.png" },
     { "/nas", "far.png" },
     { "/home/me/pads", "old.txt|feed=|sub/|game.png=|a.txt" },
+    { "/home/me/pads/sub", "" },
     { "/home/me/piped", "a.png=|b.png" },
     { "/home/me/pipeonly", "a.png=" }
 };
@@ -564,6 +565,90 @@ static void test_images_are_regular_files(void)
     browser_free(browser);
 }
 
+// A function to test the Type a path... row (3c): offered, it ends every listing, a folder's with the
+// folder's path and the places' with none; OK on it answers BROWSER_TYPE; the cursor stays where it was,
+// and a row chosen before it is chosen as ever
+static void test_type_row(void)
+{
+    Browser *browser = browser_open(BROWSER_FILE, "/home/me/pads/old.txt", PLACES, 3, fake_list, NULL, NULL, NULL);
+    int before = browser_row_count(browser);
+    int cursor = browser_cursor(browser);
+    browser_offer_typing(browser);
+    CHECK_INT(browser_row_count(browser), before + 1);
+    CHECK_INT(browser_cursor(browser), cursor);
+    const BrowserRow *row = browser_row(browser, before);
+    CHECK_INT(row->kind, BROWSER_ROW_TYPE);
+    CHECK_STR(row->name, "Type a path\xE2\x80\xA6");
+    CHECK_STR(row->path, "/home/me/pads");
+    CHECK(row->enabled);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_CHOSEN);   // old.txt, where it opened
+    CHECK_STR(browser_chosen(browser), "/home/me/pads/old.txt");
+    for (int i = 0; i < 10; i++)
+        browser_command(browser, BROWSER_DOWN, 10);
+    CHECK_INT(browser_cursor(browser), before);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_TYPE);
+
+    // Into a folder and back out to the places: every listing ends with its own Type row
+    for (int i = 0; i < 10; i++)
+        browser_command(browser, BROWSER_UP, 10);
+    CHECK_INT(browser_command(browser, BROWSER_OK, 10), BROWSER_MOVED);   // sub/
+    CHECK_STR(browser_folder(browser), "/home/me/pads/sub");
+    CHECK_INT(browser_row_count(browser), 1);
+    CHECK_INT(browser_row(browser, 0)->kind, BROWSER_ROW_TYPE);
+    while (browser_folder(browser) != NULL)
+        browser_command(browser, BROWSER_BACK, 10);
+    CHECK_INT(browser_row_count(browser), 4);
+    CHECK_INT(browser_row(browser, 3)->kind, BROWSER_ROW_TYPE);
+    CHECK_STR(browser_row(browser, 3)->path, "");
+    browser_offer_typing(browser);                                          // Twice is once
+    CHECK_INT(browser_row_count(browser), 4);
+    browser_free(browser);
+}
+
+static int listings = 0;   // How many folders counting_list() has listed
+
+// A function to list a pretend folder as fake_list() does, counting the listings
+static int counting_list(const char *folder, FileioEntry **entries, void *context)
+{
+    listings++;
+    return fake_list(folder, entries, context);
+}
+
+// A function to test that offering Type a path... adds the row to the listing on show, in the room each
+// listing keeps for it, without listing the folder again: in each mode, a folder's row naming the folder,
+// and at the places, where it names none; the cursor stays where it was
+static void test_type_row_lists_nothing(void)
+{
+    static const BrowserPlace NOWHERE[] = { { "Nowhere", "/nowhere", false } };
+    static const struct {
+        BrowserMode mode;
+        const char *start;
+        const BrowserPlace *places;
+        int place_count;
+        const char *path;   // The Type row's
+        int rows;           // With it
+    } OFFERS[] = {
+        { BROWSER_FOLDER, "/home/me/Pictures/Autumn", PLACES, 3, "/home/me/Pictures/Autumn", 4 },   // Use this folder, 2 images
+        { BROWSER_IMAGE, "/home/me/Pictures/zebra.png", PLACES, 3, "/home/me/Pictures", 6 },
+        { BROWSER_FILE, "/home/me/pads/old.txt", PLACES, 3, "/home/me/pads", 4 },
+        { BROWSER_IMAGE, NULL, NOWHERE, 1, "", 2 }                                                  // At the places
+    };
+    for (size_t i = 0; i < sizeof(OFFERS) / sizeof(OFFERS[0]); i++) {
+        Browser *browser = browser_open(OFFERS[i].mode, OFFERS[i].start, OFFERS[i].places, OFFERS[i].place_count,
+                                        counting_list, NULL, NULL, NULL);
+        int cursor = browser_cursor(browser);
+        int listed = listings;
+        browser_offer_typing(browser);
+        CHECK_INT(listings, listed);
+        CHECK_INT(browser_row_count(browser), OFFERS[i].rows);
+        CHECK_INT(browser_cursor(browser), cursor);
+        const BrowserRow *row = browser_row(browser, OFFERS[i].rows - 1);
+        CHECK_INT(row->kind, BROWSER_ROW_TYPE);
+        CHECK_STR(row->path, OFFERS[i].path);
+        browser_free(browser);
+    }
+}
+
 int main(void)
 {
     test_rows_and_start();
@@ -588,5 +673,7 @@ int main(void)
     test_file_mode_refusals_and_row_kinds();
     test_file_mode_lists_only_regular_files();
     test_images_are_regular_files();
+    test_type_row();
+    test_type_row_lists_nothing();
     return check_report();
 }

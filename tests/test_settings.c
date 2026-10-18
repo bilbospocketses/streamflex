@@ -1024,11 +1024,11 @@ static void test_general_page(void)
     settings_path(state, path, sizeof(path));
     CHECK_STR(path, "Settings" ARROW "General");
     int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
-    CHECK_INT(count, 11);
+    CHECK_INT(count, 12);
     static const char *const labels[] = { "Default menu", "Wrap around", "Reset on Back", "Mouse select",
         "Block the OS screensaver", "VSync", "FPS limit", "After launching an app", "App timeout",
-        "Startup command", "Quit command" };
-    for (int i = 0; i < 11; i++)
+        "Startup command", "Quit command", "Keyboard layout" };
+    for (int i = 0; i < 12; i++)
         CHECK_STR(rows[i].label, labels[i]);
     CHECK_INT(rows[0].kind, SETTINGS_ROW_PICK);
     CHECK_INT(rows[9].kind, SETTINGS_ROW_PICK);
@@ -2286,6 +2286,34 @@ static void test_remodel_save_after_remove_and_rename(void)
     fileio_remove(REMODEL_CONFIG ".bak");
 }
 
+// A function to test the keyboard's layout setting (3c): QWERTY or ABC, as the file and the screen name
+// them, a choice the General page steps
+static void test_keyboard_layout(void)
+{
+    SettingValue value = parsed(SET_ID_KEYBOARD_LAYOUT, "ABC");
+    CHECK_INT(value.number, 1);
+    CHECK_STR(formatted(SET_ID_KEYBOARD_LAYOUT, &value), "ABC");
+    value = parsed(SET_ID_KEYBOARD_LAYOUT, "QWERTY");
+    CHECK_INT(value.number, 0);
+    CHECK_STR(described(SET_ID_KEYBOARD_LAYOUT, &value, NULL), "QWERTY");
+    SettingValue stepped_to = setting_step(setting_def(SET_ID_KEYBOARD_LAYOUT), &value, &value, 1);
+    CHECK_STR(formatted(SET_ID_KEYBOARD_LAYOUT, &stepped_to), "ABC");
+    CHECK(!setting_parse(setting_def(SET_ID_KEYBOARD_LAYOUT), "abc", &value));   // Names match exactly, as the parser's
+    CHECK(setting_find("General", "KeyboardLayout") == setting_def(SET_ID_KEYBOARD_LAYOUT));
+
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    entry(state, SET_ID_KEYBOARD_LAYOUT, "QWERTY");
+    open_page(state, "General");
+    const SettingsRow *row = row_labeled(state, rows, "Keyboard layout");
+    CHECK_INT(row->kind, SETTINGS_ROW_SETTING);
+    CHECK_STR(row->value, "QWERTY");
+    cursor_to(state, "Keyboard layout");
+    CHECK_INT(settings_command(state, SETTINGS_RIGHT).kind, SETTINGS_EVENT_CHANGED);
+    CHECK_STR(row_labeled(state, rows, "Keyboard layout")->value, "ABC");
+    settings_free(state);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -2323,6 +2351,7 @@ int main(void)
     test_restart_words();
     test_restart_tracking();
     test_restart_page();
+    test_keyboard_layout();
     test_remodel();
     test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
