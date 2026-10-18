@@ -532,3 +532,44 @@ bool applist_appsfolder_command(const char *app_id, char *out, size_t size)
                                                : snprintf(out, size, "explorer.exe shell:AppsFolder\\%s", app_id);
     return written > 0 && (size_t) written < size;
 }
+
+// A function to tell whether a text starts with a prefix written in lower case, ASCII letters compared
+// in either case
+static bool starts_folded(const char *text, const char *prefix)
+{
+    for (; *prefix != '\0'; text++, prefix++) {
+        if (fileio_lower(*text) != *prefix)
+            return false;
+    }
+    return true;
+}
+
+// A function to read an AppsFolder app's ID back out of its tile's command, in either form
+// applist_appsfolder_command() writes (the words in any case, as a config written by hand may have
+// them): the Icon page finds the app's own image by it. False for any other command, for an empty ID or
+// one holding a quote, and for an ID that does not fit.
+bool applist_appsfolder_id(const char *command, char *out, size_t size)
+{
+    static const char program[] = "explorer.exe ";
+    static const char folder[] = "shell:appsfolder\\";
+    if (command == NULL || !starts_folded(command, program))
+        return false;
+    const char *at = command + strlen(program);
+    bool quoted = *at == '"';
+    if (quoted)
+        at++;
+    if (!starts_folded(at, folder))
+        return false;
+    at += strlen(folder);
+    size_t length = strlen(at);
+    if (quoted) {
+        if (length == 0 || at[length - 1] != '"')
+            return false;
+        length--;
+    }
+    if (length == 0 || length >= size || memchr(at, '"', length) != NULL)
+        return false;
+    memcpy(out, at, length);
+    out[length] = '\0';
+    return true;
+}

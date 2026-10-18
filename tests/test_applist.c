@@ -378,6 +378,43 @@ static void test_appsfolder_command(void)
     applist_free(list);
 }
 
+// A function to test reading an app's ID back from its command: both forms the command is written in,
+// each the inverse of applist_appsfolder_command(); the words in any case; and the commands that are not
+// an AppsFolder app's, or whose ID is empty, holds a quote or does not fit
+static void test_appsfolder_id(void)
+{
+    static const char *const ids[] = {
+        "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", "MSEdge",
+        "{6D809377-6AF0-444B-8957-A3773F02200E}\\Mozilla Firefox\\firefox.exe", "Vendor.App,1"
+    };
+    char command[256];
+    char id[256];
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
+        CHECK(applist_appsfolder_command(ids[i], command, sizeof(command)));
+        CHECK(applist_appsfolder_id(command, id, sizeof(id)));
+        CHECK_STR(id, ids[i]);
+    }
+    CHECK(applist_appsfolder_id("EXPLORER.EXE Shell:AppsFolder\\MSEdge", id, sizeof(id)));
+    CHECK_STR(id, "MSEdge");
+    CHECK(applist_appsfolder_id("explorer.exe \"shell:appsfolder\\A B\"", id, sizeof(id)));
+    CHECK_STR(id, "A B");
+
+    CHECK(!applist_appsfolder_id(NULL, id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe C:\\Windows", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("notepad.exe shell:AppsFolder\\MSEdge", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("shell:AppsFolder\\MSEdge", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe shell:AppsFolder\\", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe \"shell:AppsFolder\\\"", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe \"shell:AppsFolder\\MSEdge", id, sizeof(id)));   // Its quote not closed
+    CHECK(!applist_appsfolder_id("explorer.exe shell:AppsFolder\\A\"B", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("/usr/share/applications/kodi.desktop", id, sizeof(id)));
+    CHECK(!applist_appsfolder_id("explorer.exe shell:AppsFolder\\MSEdge", id, 6));   // "MSEdge" needs 7
+    CHECK(applist_appsfolder_id("explorer.exe shell:AppsFolder\\MSEdge", id, 7));
+    CHECK_STR(id, "MSEdge");
+}
+
 int main(void)
 {
     test_parse();
@@ -388,5 +425,6 @@ int main(void)
     test_filter();
     test_data_dirs();
     test_appsfolder_command();
+    test_appsfolder_id();
     return check_report();
 }

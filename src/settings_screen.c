@@ -1740,6 +1740,8 @@ static void handle_event(const SettingsEvent *event)
         case SETTINGS_EVENT_PICK_TILE_COMMAND:
             open_tile_commands(event->menu, event->tile);
             return;
+        case SETTINGS_EVENT_ICON:
+            break;   // The Icon page's rows: 13b's screen acts on them
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
             break;

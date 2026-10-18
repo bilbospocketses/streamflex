@@ -2953,6 +2953,233 @@ static void test_move_to_menu(void)
     menuedit_free(edit);
 }
 
+// A function to open a model over Main and Games with the menus model Task 10a's pages read: Main's three
+// tiles and Games' two. The caller frees the menus model after the model.
+static SettingsState *tiles_model(MenuEdit **menus)
+{
+    static const char *const names[] = { "Main", "Games" };
+    static const char *const text = "[General]\nDefaultMenu=Main\n\n[Main]\nEntry1=Kodi;kodi;kodi\n"
+                                     "Entry2=Games;games;:submenu Games\nEntry3=Bye;quit;:quit\n\n"
+                                     "[Games]\nEntry1=Retro;emulators;retro\nEntry2=Steam;steam;steam\n";
+    SettingsState *state = settings_create(names, 2);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    *menus = doc != NULL ? menuedit_load(doc, "Main") : NULL;
+    inidoc_free(doc);
+    CHECK(state != NULL && *menus != NULL);
+    settings_set_menus(state, *menus);
+    return state;
+}
+
+// A function to name the row under the cursor on the page on show
+static const char *cursor_label(SettingsState *state)
+{
+    static SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    int cursor = settings_cursor(state);
+    return cursor >= 0 && cursor < count ? rows[cursor].label : "(no row)";
+}
+
+// A function to test opening the pages at a tile (the hold-OK shortcut's way in, and the harness's):
+// Menus, the menu, its Tiles page and the tile's page, each opened from the row that leads on, so Back
+// walks up them with each cursor where it was; tile -1 stops at the Tiles page; a tile or a menu that is
+// not there stops at the last page that opened
+static void test_show_tile(void)
+{
+    MenuEdit *menus = NULL;
+    SettingsState *state = tiles_model(&menus);
+    settings_show_tile(state, 1, 1);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(cursor_label(state), "Steam");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 1);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    CHECK_STR(cursor_label(state), "Games");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
+    CHECK_STR(cursor_label(state), "Menus");
+
+    settings_show_tile(state, 0, -1);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_INT(settings_preview_menu(state), 0);
+    settings_show_tile(state, 0, 7);              // Main has no tile 7: its Tiles page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    settings_show_tile(state, 5, 0);              // No menu 5: the Menus page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
+// A function to open a model over `count` menus named in `names`, with the menus model of `text`; the
+// caller frees the menus model after the model
+static SettingsState *text_model(const char *const *names, int count, const char *text, MenuEdit **menus)
+{
+    SettingsState *state = settings_create(names, count);
+    IniDoc *doc = inidoc_parse(text, strlen(text));
+    *menus = doc != NULL ? menuedit_load(doc, names[0]) : NULL;
+    inidoc_free(doc);
+    CHECK(state != NULL && *menus != NULL);
+    settings_set_menus(state, *menus);
+    return state;
+}
+
+// A function to test opening the pages at a tile the pages have no row for (Fable review I4): the 66th tile
+// of a 70-tile menu, past the Tiles page's rows (its note counts it), and the one tile of the 66th of 70
+// menus, past the Menus page's; each page opens all the same, and Back walks up the pages as ever
+static void test_show_tile_past_rows(void)
+{
+    static const char *const main_name[] = { "Main" };
+    char text[4096] = "[Main]\n";
+    for (int t = 0; t < 70; t++) {
+        size_t used = strlen(text);
+        snprintf(text + used, sizeof(text) - used, "Entry%d=T%d;apps;:home\n", t + 1, t);
+    }
+    MenuEdit *menus = NULL;
+    SettingsState *state = text_model(main_name, 1, text, &menus);
+    char path[256];
+    settings_show_tile(state, 0, 65);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "Main" ARROW "Tiles" ARROW "T65");
+    CHECK_INT(settings_preview_tile(state), 65);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILES);
+    CHECK_STR(cursor_label(state), "Add");                   // No row leads to T65: the cursor where it opened
+    settings_free(state);
+    menuedit_free(menus);
+
+    static char labels[70][8];
+    const char *names[70];
+    text[0] = '\0';
+    for (int m = 0; m < 70; m++) {
+        snprintf(labels[m], sizeof(labels[m]), "M%d", m);
+        names[m] = labels[m];
+        size_t used = strlen(text);
+        snprintf(text + used, sizeof(text) - used, "[M%d]\nEntry1=Only%d;apps;:home\n", m, m);
+    }
+    state = text_model(names, 70, text, &menus);
+    settings_show_tile(state, 65, 0);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Menus" ARROW "M65" ARROW "Tiles" ARROW "Only65");
+    settings_command(state, SETTINGS_BACK);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENU);
+    CHECK_INT(settings_preview_menu(state), 65);
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MENUS);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
+// A function to test the Icon page (spec "Icons"): opened from a tile's page, about that tile; until the
+// screen has looked, Library and Browse alone; then the choices in the spec's order with the cursor on
+// the first that applies (the library match, else its own icon, else the generic icon); OK on each row
+// hands the screen that row, the page staying; a choice made goes back to the tile's page, and one
+// refused stays with why
+static void test_icon_page(void)
+{
+    MenuEdit *menus = NULL;
+    SettingsState *state = tiles_model(&menus);
+    settings_show_tile(state, 1, 1);              // Games' Steam
+    cursor_to(state, "Icon");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);
+    int menu = -1;
+    int tile = -1;
+    CHECK(settings_icon_tile(state, &menu, &tile));
+    CHECK_INT(menu, 1);
+    CHECK_INT(tile, 1);
+    CHECK_INT(settings_preview_menu(state), 1);
+    char path[512];
+    settings_path(state, path, sizeof(path));
+    size_t length = strlen(path);
+    CHECK(length > strlen(ARROW "Icon") && strcmp(path + length - strlen(ARROW "Icon"), ARROW "Icon") == 0);
+    CHECK(!settings_icon_choices(state)->ready);
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Library");
+    CHECK_STR(rows[1].label, "Browse for an image");
+    CHECK_INT(settings_cursor(state), 0);
+
+    // A match and its own icon: the match first, and the cursor put back on it
+    SettingsIconChoices choices;
+    memset(&choices, 0, sizeof(choices));
+    snprintf(choices.suggested, sizeof(choices.suggested), "steam");
+    snprintf(choices.suggested_title, sizeof(choices.suggested_title), "Steam");
+    choices.matched = true;
+    choices.own = true;
+    settings_command(state, SETTINGS_DOWN);
+    settings_set_icon_choices(state, &choices);
+    CHECK(settings_icon_choices(state)->ready);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 4);
+    CHECK_STR(rows[0].label, "Steam");
+    CHECK_STR(rows[0].value, "Library match");
+    CHECK_STR(rows[1].label, "Its own icon");
+    CHECK_STR(rows[2].label, "Library");
+    CHECK_STR(rows[3].label, "Browse for an image");
+    CHECK_INT(settings_cursor(state), 0);
+    static const SettingsAction actions[] = { SETTINGS_ACTION_ICON_SUGGESTED, SETTINGS_ACTION_ICON_OWN,
+                                             SETTINGS_ACTION_ICON_GRID, SETTINGS_ACTION_ICON_BROWSE };
+    for (int i = 0; i < 4; i++) {
+        SettingsEvent event = settings_command(state, SETTINGS_OK);
+        CHECK_INT(event.kind, SETTINGS_EVENT_ICON);
+        CHECK_INT(event.action, actions[i]);
+        CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);   // The screen acts; the page waits for it
+        settings_command(state, SETTINGS_DOWN);
+    }
+
+    // The screen sets the icon it chose through the model (a library name or an image's path), as a tile's
+    // command is set: one the tile's line cannot hold is refused with the reason, the tile as it was
+    SettingsEvent set = settings_set_icon(state, 1, 1, "kodi");
+    CHECK_INT(set.kind, SETTINGS_EVENT_MENUS);
+    CHECK_INT(set.menu, 1);
+    CHECK_INT(set.tile, 1);
+    CHECK_STR(tile_of(menus, "Games", 1)->icon, "kodi");
+    CHECK_STR(tile_of(menus, "Games", 1)->title, "Steam");
+    set = settings_set_icon(state, 1, 1, "");
+    CHECK_INT(set.kind, SETTINGS_EVENT_MOVED);
+    CHECK_STR(settings_notice(state), "Choose an icon");
+    CHECK_STR(tile_of(menus, "Games", 1)->icon, "kodi");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);       // The page is the screen's to leave
+
+    // Refused: the page stays, its reason in the caption until the next key; chosen: the tile's page
+    settings_icon_done(state, "Couldn't save its icon");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_ICON);
+    CHECK_STR(settings_notice(state), "Couldn't save its icon");
+    settings_command(state, SETTINGS_UP);
+    CHECK_STR(settings_notice(state), "");
+    settings_icon_done(state, NULL);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    CHECK(!settings_icon_tile(state, &menu, &tile));
+    settings_icon_done(state, NULL);              // Not on the Icon page: nothing happens
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+
+    // Opened again, the screen looks again. Its own icon alone comes first; with neither, the generic icon
+    cursor_to(state, "Icon");
+    settings_command(state, SETTINGS_OK);
+    CHECK(!settings_icon_choices(state)->ready);
+    memset(&choices, 0, sizeof(choices));
+    choices.own = true;
+    settings_set_icon_choices(state, &choices);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_STR(rows[0].label, "Its own icon");
+    snprintf(choices.suggested, sizeof(choices.suggested), "apps");
+    snprintf(choices.suggested_title, sizeof(choices.suggested_title), "Apps");
+    choices.own = false;
+    settings_set_icon_choices(state, &choices);
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 3);
+    CHECK_STR(rows[0].label, "Apps");
+    CHECK_STR(rows[0].value, "Generic icon");
+    settings_command(state, SETTINGS_BACK);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TILE);
+    settings_free(state);
+    menuedit_free(menus);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -3004,6 +3231,9 @@ int main(void)
     test_move_target();
     test_move_tile();
     test_move_to_menu();
+    test_show_tile();
+    test_show_tile_past_rows();
+    test_icon_page();
     test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
     test_remodel_save_after_remove_and_rename();
