@@ -151,6 +151,18 @@ static BrowserMode browser_mode = BROWSER_IMAGE;   // The mode it was opened in
 static int browser_first = 0;            // Its first row on show
 static int browser_page = 1;             // How many of its rows fit: Left and Right move this far
 static char browser_note[128] = "";      // Why the last OK did nothing, for the caption
+static bool browsing_icon = false;       // It chooses the Icon page's tile's image, not a setting's path
+
+// The Icon page (spec "Icons"): the tile it is about, and that app's own icon on the plate, made as the
+// page opens and written to a file only when it is chosen (where it came from is Task 10b's icon_from)
+static int icon_menu = -1;                      // The tile's menu, the settings' index (menus[]); -1 with no Icon page open
+static int icon_tile = -1;                      // ...and its place there, the menus model's
+static SDL_Surface *icon_plated = NULL;         // Its own icon on the plate; NULL when it has none
+static char icon_previewed[SETTING_TEXT_MAX + 8];   // What the preview's tile shows in place of its icon
+                                                    // ("library:<name>", "own", "file:<path>"); "" for its icon
+static void show_on_tile(SDL_Surface *surface, const char *what);
+static void restore_tile_icon(void);
+static void close_icon_page(void);
 static void (*browser_chose)(const char *path) = NULL;   // A browser for no setting (programs): its choice goes here
 static char program_last[BROWSER_PATH_MAX];              // The program last chosen: the program browser opens on it next
 static char icon_from[SETTING_TEXT_MAX + 32];            // Where the last own icon read came from, for the log
@@ -749,6 +761,8 @@ static void start_decode(void)
 static void want_preview_image(const char *path)
 {
     copy_string(wanted_path, path, sizeof(wanted_path));
+    if (wanted_path[0] == '\0' && browsing_icon)
+        restore_tile_icon();   // The Icon page's browser off an image: the tile shows its own icon again
     if (wanted_path[0] == '\0' && background_override != NULL) {
         SDL_DestroyTexture(background_override);
         background_override = NULL;
@@ -782,6 +796,11 @@ static void poll_decode(bool wait)
         log_debug("Settings: could not open %s: %s", decode_path, decode_error);
         if (browser != NULL && strcmp(browser_caption(), CANNOT_OPEN) == 0)
             log_debug("Settings: the caption says %s for %s", CANNOT_OPEN, decode_path);
+    }
+    else if (strcmp(decode_path, wanted_path) == 0 && browsing_icon) {
+        // The Icon page's browser: the image goes on the tile, not behind the menu
+        show_on_tile(decode_surface, decode_path);
+        snprintf(icon_previewed, sizeof(icon_previewed), "file:%s", decode_path);
     }
     else if (strcmp(decode_path, wanted_path) == 0) {
         SDL_Texture *texture = surface_texture(decode_surface);
@@ -990,6 +1009,7 @@ static void close_browser(void)
     inidoc_free(browser_doc);
     browser_doc = NULL;
     want_preview_image("");
+    browsing_icon = false;
 }
 
 // A function to count a folder's images as the browser does (regular files with an image's
@@ -1040,6 +1060,7 @@ static void free_screen(void)
     stop_apps();
     if (browser != NULL)
         close_browser();
+    close_icon_page();
     stop_decoding();
     preview_wanted = NULL;
     kind_waiting = false;
@@ -1651,6 +1672,395 @@ static void name_typed(const char *text, void *context)
     handle_event(&event);
 }
 
+// A function to give the Icon page's tile, in the menus model, found by its menu's name (Task 10b's
+// screen_tile(): a name is what the settings and the menus model are both sure of); NULL while no Icon page
+// is open
+static const MenuTile *icon_page_tile(void)
+{
+    return icon_menu >= 0 ? screen_tile(icon_menu, icon_tile) : NULL;
+}
+
+// A function to give the launcher's menu the Icon page's tile is in, which the preview shows; NULL when
+// there is none
+static Menu *icon_page_menu(void)
+{
+    if (icon_page_tile() == NULL)
+        return NULL;
+    return menu_for(menuedit_menu(menu_edit, menuedit_find(menu_edit, menus[icon_menu]->name)));
+}
+
+// A function to show an icon on the Icon page's tile in the preview without choosing it (spec "Icons":
+// the preview shows each highlighted icon on the tile): the launcher's entry gets a texture of it, its
+// selected icon dropped so this one draws under the highlight too, until the menu's buttons are rendered
+// again. `what` names it for the log; the surface stays the caller's.
+static void show_on_tile(SDL_Surface *surface, const char *what)
+{
+    Menu *menu = icon_page_menu();
+    if (menu == NULL || surface == NULL || icon_tile >= (int) menu->num_entries)
+        return;
+    SDL_Texture *texture = surface_texture(surface);
+    if (texture == NULL) {
+        log_error("Settings: the preview cannot show %s: %s", what, SDL_GetError());
+        return;
+    }
+    Entry *entry = menu->items[icon_tile];
+    if (entry->icon != NULL)
+        SDL_DestroyTexture(entry->icon);
+    if (entry->icon_selected != NULL)
+        SDL_DestroyTexture(entry->icon_selected);
+    entry->icon = texture;
+    entry->icon_selected = NULL;
+    log_debug("Menus: the preview shows %s on '%s'", what, entry->title);
+}
+
+// A function to show the tile's own icon in the preview again: the menu's buttons are rendered again from
+// the launcher's entries, at once when it is on show, else when it next is
+static void restore_tile_icon(void)
+{
+    if (icon_previewed[0] == '\0')
+        return;
+    icon_previewed[0] = '\0';
+    Menu *menu = icon_page_menu();
+    if (menu == NULL)
+        return;
+    menu->rendered_size = 0;
+    if (menu == current_menu)
+        refresh_layout();
+}
+
+// A function to show a library icon on the tile in the preview, rendered from the library's file at the
+// button's size
+static void preview_library_icon(const char *name)
+{
+    char key[SETTING_TEXT_MAX + 8];
+    snprintf(key, sizeof(key), "library:%s", name);
+    if (strcmp(key, icon_previewed) == 0)
+        return;
+    const char *file = library_lookup(name);
+    SDL_Surface *surface = file != NULL ? load_icon_surface(file, layout.button > 0 ? layout.button : PLATE_SIZE) : NULL;
+    if (surface == NULL) {
+        log_error("Settings: the preview cannot show the library icon %s: %s", name,
+            file != NULL ? SDL_GetError() : "the library has no such icon");
+        return;
+    }
+    char what[96];
+    snprintf(what, sizeof(what), "the library icon %s", name);
+    show_on_tile(surface, what);
+    SDL_DestroySurface(surface);
+    snprintf(icon_previewed, sizeof(icon_previewed), "%s", key);
+}
+
+// A function to show in the preview the icon of the Icon page's row under the cursor: the library icon
+// it offers, or the app's own icon; on Library and Browse, the tile's own icon, until the grid's or the
+// folder's cursor rests on one
+static void preview_icon_row(void)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(model, rows, SETTINGS_MAX_ROWS);
+    int cursor = settings_cursor(model);
+    SettingsAction action = cursor >= 0 && cursor < count ? rows[cursor].action : SETTINGS_ACTION_NONE;
+    if (action == SETTINGS_ACTION_ICON_SUGGESTED)
+        preview_library_icon(settings_icon_choices(model)->suggested);
+    else if (action == SETTINGS_ACTION_ICON_OWN && strcmp(icon_previewed, "own") != 0) {
+        show_on_tile(icon_plated, "its own icon");
+        snprintf(icon_previewed, sizeof(icon_previewed), "own");
+    }
+    else if (action != SETTINGS_ACTION_ICON_OWN)
+        restore_tile_icon();
+}
+
+// A function to find a library icon by its name; NULL when the library has none of that name
+static const LibraryInfo *library_named(const char *name)
+{
+    for (int i = 0; i < library_count(); i++) {
+        if (strcmp(library_info(i)->name, name) == 0)
+            return library_info(i);
+    }
+    return NULL;
+}
+
+// A function to read a tile's app's own icon and put it on the library's plate (spec "Icons", choice 2),
+// in memory: it is written to a file only when it is chosen. What names it comes from the tile's command:
+// on Windows the app ID an AppsFolder command launches (applist_appsfolder_id()); on Linux the Icon= of
+// the .desktop file it runs, whatever its NoDisplay or Hidden say (Task 10b's desktop_icon_name()). Task
+// 10b's plated_icon() then finds, reads and plates it, as it does for a new tile. NULL for a tile that is
+// no such app, `why` left "", and for an icon that cannot be found, read or plated, with why. icon_from
+// says where it came from.
+static SDL_Surface *own_icon(const MenuTile *tile, char *why, size_t size)
+{
+    char named[SETTING_TEXT_MAX];
+#ifdef _WIN32
+    if (!applist_appsfolder_id(tile->command, named, sizeof(named)))
+        return NULL;
+#else
+    if (!desktop_icon_name(tile->command, named, sizeof(named), why, size))
+        return NULL;
+#endif
+    return plated_icon(named, why, size);
+}
+
+// A function to leave the Icon page: the preview's tile shows its own icon again, and its own icon on the
+// plate, never chosen, goes. Nothing happens with no Icon page open.
+static void close_icon_page(void)
+{
+    if (icon_menu < 0)
+        return;
+    restore_tile_icon();
+    if (icon_plated != NULL)
+        SDL_DestroySurface(icon_plated);
+    icon_plated = NULL;
+    icon_menu = -1;
+    icon_tile = -1;
+}
+
+// A function to find what the Icon page offers for its tile as it opens (spec "Icons"): the library icon
+// its title matches (iconmatch_find()), its app's own icon on a plate, and with neither the library's
+// generic icon. The model's rows follow, the cursor on the first. The preview's highlight goes to the
+// tile, so it is in view while its icons are tried on it. `menu` is the settings' index, as
+// settings_icon_tile() gives it.
+static void open_icon_page(int menu, int tile)
+{
+    close_icon_page();
+    icon_menu = menu;
+    icon_tile = tile;
+    const MenuTile *at = icon_page_tile();
+    if (at == NULL) {
+        icon_menu = -1;
+        icon_tile = -1;
+        return;
+    }
+    const char *menu_name = menus[menu]->name;
+    char why[2 * SETTING_TEXT_MAX] = "";
+    icon_plated = own_icon(at, why, sizeof(why));
+    int found = iconmatch_find(at->title, library_info(0), library_count());
+    const LibraryInfo *offered = found >= 0 ? library_info(found)
+                               : icon_plated == NULL ? library_named(LIBRARY_FALLBACK_ICON) : NULL;
+    SettingsIconChoices choices;
+    memset(&choices, 0, sizeof(choices));
+    choices.own = icon_plated != NULL;
+    choices.matched = found >= 0;
+    if (offered != NULL) {
+        snprintf(choices.suggested, sizeof(choices.suggested), "%s", offered->name);
+        snprintf(choices.suggested_title, sizeof(choices.suggested_title), "%s", offered->title);
+    }
+    if (found >= 0)
+        log_debug("Menus: '%s' in '%s': the library match is %s", at->title, menu_name, offered->name);
+    else
+        log_debug("Menus: '%s' in '%s': no library match", at->title, menu_name);
+    if (icon_plated != NULL)
+        log_debug("Menus: '%s' in '%s': its own icon is %s", at->title, menu_name, icon_from);
+    else if (why[0] != '\0')
+        log_debug("Menus: '%s' in '%s': its own icon cannot be used: %s", at->title, menu_name, why);
+    if (found < 0 && icon_plated == NULL && offered != NULL)
+        log_debug("Menus: '%s' in '%s': no match and no icon of its own, so the generic %s is offered", at->title,
+            menu_name, offered->name);
+    settings_set_icon_choices(model, &choices);
+    Menu *live = icon_page_menu();
+    if (live != NULL && live == current_menu && tile < (int) live->num_entries && live->position.selected != tile) {
+        live->position.selected = tile;
+        refresh_layout();   // apply_layout() scrolls the tile into view
+    }
+}
+
+// A function to give the Icon page's tile an icon (a library name or an image's path) and go back to its
+// page, through the model (13a's settings_set_icon(), fix pass R12): its MENUS event goes to handle_event(),
+// whose Task 10a case puts the change into the launcher (settings_menus_changed()), so the preview shows it
+// from its file; nothing here calls settings_menus_changed() again. One its line in config.ini could not
+// hold is refused: the page stays, and the caption says why (settings_icon_done()). `source` names where it
+// came from, for the log.
+static bool set_tile_icon(const char *icon, const char *source)
+{
+    const MenuTile *tile = icon_page_tile();
+    if (tile == NULL)
+        return false;
+    // Copies: `icon` may be the model's, and the tile's strings go when the model changes
+    char chosen[SETTING_TEXT_MAX];
+    char title[SETTING_TEXT_MAX];
+    char menu_name[SETTING_TEXT_MAX];
+    snprintf(chosen, sizeof(chosen), "%s", icon);
+    snprintf(title, sizeof(title), "%s", tile->title);
+    snprintf(menu_name, sizeof(menu_name), "%s", menus[icon_menu]->name);
+    SettingsEvent event = settings_set_icon(model, icon_menu, icon_tile, chosen);
+    if (event.kind != SETTINGS_EVENT_MENUS) {
+        char why[SETTING_TEXT_MAX + 512];   // A copy: settings_icon_done() writes the notice it is given
+        snprintf(why, sizeof(why), "%s", settings_notice(model));
+        log_debug("Menus: '%s' in '%s' cannot take the icon %s: %s", title, menu_name, chosen, why);
+        settings_icon_done(model, why);
+        return false;
+    }
+    log_debug("Menus: '%s' in '%s' now has the icon %s, from %s", title, menu_name, chosen, source);
+    icon_previewed[0] = '\0';   // The launcher's menus are made again from the model, this icon with them
+    handle_event(&event);
+    if (model != NULL)
+        settings_icon_done(model, NULL);
+    return true;
+}
+
+// A function to say why the Icon page's tile cannot take `icon`, or NULL: its line weighed as config.ini has
+// it, its comment and spacing counted (Task 3's menuedit_check_set(), Fable review M2), so a row the save
+// would refuse is refused before anything is written
+static const char *icon_problem(const MenuTile *tile, const char *icon)
+{
+    return menuedit_check_set(menu_edit, menuedit_find(menu_edit, menus[icon_menu]->name), icon_tile, tile->title, icon,
+        tile->command);
+}
+
+// A function to tell whether a tile's icon is a plated icon already written to the icons folder `dir`: a
+// file there, directly in it, where only an app's own icon is ever written
+static bool icon_in_folder(const char *icon, const char *dir)
+{
+    size_t length = strlen(dir);
+    if (strncmp(icon, dir, length) != 0 || (icon[length] != '/' && icon[length] != '\\'))
+        return false;
+    const char *name = icon + length + 1;
+    return name[0] != '\0' && strpbrk(name, "/\\") == NULL && fileio_is_file(icon);
+}
+
+// A function to tell whether an image file holds the own icon the Icon page plated as it opened, pixel for
+// pixel: its size, and each pixel's color and alpha, a clear pixel by its alpha alone, as Task 9's
+// png_roundtrip reads a plated icon back from its PNG (plate_icon() makes ARGB8888). A file that cannot be
+// read, or holds another picture (the tile's Command changed since it was written, the app's icon changed,
+// or the tile was given another tile's file), does not.
+static bool holds_own_icon(const char *path)
+{
+    if (icon_plated == NULL || icon_plated->format != SDL_PIXELFORMAT_ARGB8888)
+        return false;
+    SDL_Surface *loaded = load_image_file(path);
+    SDL_Surface *argb = loaded != NULL ? SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_ARGB8888) : NULL;
+    SDL_DestroySurface(loaded);
+    bool same = argb != NULL && argb->w == icon_plated->w && argb->h == icon_plated->h;
+    for (int y = 0; same && y < argb->h; y++) {
+        const Uint32 *on_file = (const Uint32 *) ((const Uint8 *) argb->pixels + (size_t) y * (size_t) argb->pitch);
+        const Uint32 *on_page = (const Uint32 *) ((const Uint8 *) icon_plated->pixels +
+                                                  (size_t) y * (size_t) icon_plated->pitch);
+        for (int x = 0; same && x < argb->w; x++)
+            same = (on_page[x] >> 24) == 0 ? (on_file[x] >> 24) == 0 : on_file[x] == on_page[x];
+    }
+    SDL_DestroySurface(argb);
+    return same;
+}
+
+// A function to write the tile's own icon, plated as the page opened it, as a new PNG in the icons folder
+// (named from its title, never over a file that is there), list it for Discard, and make it the tile's
+// icon. A tile whose icon is already that icon's file (a file directly in that folder holding the same
+// plated picture: written as the tile was added, or chosen here before) keeps it: nothing is written and
+// nothing changes (the controller's ruling, 2026-10-16). A file there holding another picture is not this
+// icon, so a new file is written (Opus re-review P3). A path the tile's line could not hold is refused
+// before anything is written (Fable review M15: a file left behind would wait for Discard), and a file
+// that cannot be written leaves the tile's icon as it was; the caption says why.
+static void save_own_icon(void)
+{
+    const MenuTile *tile = icon_page_tile();
+    char dir[SETTING_TEXT_MAX];
+    char path[SETTING_TEXT_MAX];
+    char why[SETTING_TEXT_MAX + 512];
+    const char *refused = NULL;
+    if (tile == NULL || icon_plated == NULL)
+        return;
+    if (!icons_dir(dir, sizeof(dir)))
+        snprintf(why, sizeof(why), "Couldn't make the icons folder: %s", fileio_last_error());
+    else if (icon_in_folder(tile->icon, dir) && holds_own_icon(tile->icon)) {
+        log_debug("Menus: '%s' in '%s' keeps its own icon %s, written already", tile->title, menus[icon_menu]->name,
+            tile->icon);
+        settings_icon_done(model, NULL);
+        return;
+    }
+    else if (!icons_new_path(dir, tile->title, path, sizeof(path)))
+        snprintf(why, sizeof(why), "Couldn't name a new icon file in %s", dir);
+    else if ((refused = icon_problem(tile, path)) != NULL)
+        snprintf(why, sizeof(why), "Couldn't use %s as its icon: %s", path, refused);
+    else if (!plate_save(icon_plated, path))
+        snprintf(why, sizeof(why), "Couldn't save its icon to %s: %s", path, SDL_GetError());
+    else {
+        log_debug("Menus: saved the own icon of '%s' to %s", tile->title, path);
+        settings_note_plated(path);
+        set_tile_icon(path, "its own icon");
+        return;
+    }
+    log_debug("Menus: %s", why);
+    settings_icon_done(model, why);
+}
+
+// The library grid's cursor moved: its icon on the tile in the preview
+static void icon_grid_shown(const char *name)
+{
+    preview_library_icon(name);
+}
+
+// The library grid closed: the icon chosen becomes the tile's; none (Back) leaves the Icon page as it was
+static void icon_grid_done(const char *name)
+{
+    if (name != NULL)
+        set_tile_icon(name, "the library");
+}
+
+// A function to tell the folder browser whether the Icon page's tile can take an image's path as its
+// icon: the rule its line in config.ini must keep (icon_problem())
+static const char *check_icon_path(const char *path, void *context)
+{
+    UNUSED(context);
+    const MenuTile *tile = icon_page_tile();
+    return tile != NULL ? icon_problem(tile, path) : NULL;
+}
+
+// The Icon page's folder browser chose an image (Task 10b's browser_chose, called once the browser has
+// closed, after handle_browser_command() waited for its decode): it becomes the tile's icon
+static void icon_browser_chose(const char *path)
+{
+    set_tile_icon(path, "an image file");
+}
+
+// A function to open the folder browser for the Icon page's tile (*Browse for an image ›*), in image mode,
+// at its icon when that is an image's path, else at the first place; each image the cursor rests on is
+// shown on the tile in the preview. Task 10b's start_browser() opens it with no slot (fix pass R2): it sets
+// the mode, logs the folder and previews the highlighted image.
+static void open_icon_browser(void)
+{
+    const MenuTile *tile = icon_page_tile();
+    const char *start = tile != NULL && !library_is_name(tile->icon) ? tile->icon : NULL;
+    browsing_icon = true;   // Before it opens: the first image it highlights goes on the tile
+    if (!start_browser(BROWSER_IMAGE, start, list_folder, check_icon_path, NULL)) {
+        browsing_icon = false;
+        return;
+    }
+    browser_slot = NULL;
+    browser_chose = icon_browser_chose;
+}
+
+// A function to act on the Icon page's row chosen: the library icon it offers and the app's own icon
+// become the tile's; Library and Browse open the grid or the folder browser over the page
+static void choose_icon(SettingsAction action)
+{
+    const SettingsIconChoices *choices = settings_icon_choices(model);
+    const MenuTile *tile = icon_page_tile();
+    if (action == SETTINGS_ACTION_ICON_SUGGESTED)
+        set_tile_icon(choices->suggested, choices->matched ? "the library match" : "the library's generic icon");
+    else if (action == SETTINGS_ACTION_ICON_OWN)
+        save_own_icon();
+    else if (action == SETTINGS_ACTION_ICON_GRID)
+        pickers_open_icons(tile != NULL ? tile->icon : NULL, icon_grid_shown, icon_grid_done);
+    else if (action == SETTINGS_ACTION_ICON_BROWSE)
+        open_icon_browser();
+}
+
+// A function to keep the Icon page's tile in step with the pages after every key: the page opened (find
+// what it offers), its cursor moved (its row's icon on the tile), or the page left (the tile's own icon
+// again, its own icon on the plate let go). While the grid or the browser is open over the page, they
+// show their own icons on the tile.
+static void follow_icon_page(void)
+{
+    int menu = -1;
+    int tile = -1;
+    if (model == NULL || !settings_icon_tile(model, &menu, &tile)) {
+        close_icon_page();
+        return;
+    }
+    if (menu != icon_menu || tile != icon_tile || !settings_icon_choices(model)->ready)
+        open_icon_page(menu, tile);
+    if (!pickers_active() && browser == NULL)
+        preview_icon_row();
+}
+
 // A function to act on what a key did in the model
 static void handle_event(const SettingsEvent *event)
 {
@@ -1741,7 +2151,10 @@ static void handle_event(const SettingsEvent *event)
             open_tile_commands(event->menu, event->tile);
             return;
         case SETTINGS_EVENT_ICON:
-            break;   // The Icon page's rows: 13b's screen acts on them
+            choose_icon(event->action);
+            if (pickers_active() || browser != NULL)
+                return;   // The grid or the browser is open over the page: they show their own icons
+            break;
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
             break;
@@ -1912,6 +2325,22 @@ static void handle_browser_command(const char *command)
         char chosen[BROWSER_PATH_MAX];
         copy_string(chosen, browser_chosen(browser), sizeof(chosen));
         if (browser_slot == NULL) {
+            if (browsing_icon) {
+                // The Icon page's image, as the Image setting's: OK can come before its decode has
+                // finished, so wait for it to know whether it opens (an image highlighted before may still
+                // be decoding, with this one next); one that cannot open stays, with the browser's note
+                if (decode_thread != NULL && strcmp(decode_path, chosen) != 0)
+                    poll_decode(true);
+                if (decode_thread != NULL && strcmp(decode_path, chosen) == 0) {
+                    log_debug("Settings: OK waited for the decode of %s", chosen);
+                    poll_decode(true);
+                }
+                if (strcmp(chosen, broken_path) == 0) {
+                    snprintf(browser_note, sizeof(browser_note), "%s", CANNOT_OPEN);
+                    log_debug("Settings: %s: %s", browser_note, chosen);
+                    return;
+                }
+            }
             // A browser for no setting: what it chose goes to whoever opened it, once it has closed
             void (*done)(const char *path) = browser_chose;
             close_browser();
@@ -2045,6 +2474,7 @@ void settings_handle_command(const char *command)
         text[strcspn(text, " ")] = '\0';
     Uint32 start = ticks_ms();
     handle_command(text);
+    follow_icon_page();   // The Icon page opened, moved or left; it closes with settings too
     Uint32 took = ticks_ms() - start;
     if (took >= SLOW_KEY_MS)
         log_debug("Settings: '%s' kept the screen waiting %u ms", text, took);
@@ -2152,7 +2582,8 @@ static int row_drawn_height(const SettingsRow *row, int note_room)
 
 // A function to write what a row shows on its right: under the cursor, Left and Right arrows round
 // the value of a row they step (the model says which) while it is not grayed; the › marker after
-// any row OK opens (a page, the browser, a picker, a binding, a binding's command); else the value alone
+// any row OK opens (a page, the browser, a picker, a binding, a binding's command, the Icon page's Library
+// and Browse); else the value alone
 static void row_value_text(const SettingsRow *row, bool highlighted, char *out, size_t size)
 {
     if (row->enabled && highlighted && row->steps)
@@ -2162,7 +2593,8 @@ static void row_value_text(const SettingsRow *row, bool highlighted, char *out, 
              (row->kind == SETTINGS_ROW_ACTION &&
               (row->action == SETTINGS_ACTION_BIND_COMMAND || row->action == SETTINGS_ACTION_ADD_SUBMENU ||
                row->action == SETTINGS_ACTION_ADD_APP || row->action == SETTINGS_ACTION_ADD_PROGRAM ||
-               row->action == SETTINGS_ACTION_EDIT_COMMAND)))
+               row->action == SETTINGS_ACTION_EDIT_COMMAND ||
+               row->action == SETTINGS_ACTION_ICON_GRID || row->action == SETTINGS_ACTION_ICON_BROWSE)))
         snprintf(out, size, "%s " RIGHT_ARROW, row->value);
     else
         snprintf(out, size, "%s", row->value);
@@ -2750,6 +3182,35 @@ static void test_menu_edit(void)
     else
         log_debug("Test hook: the menu edit '%s' was refused: %s", given, why);
 }
+
+// A function only the headless harness builds: STREAMFLEX_TEST_OPEN_TILE=<menu>:<tile> opens the pages at
+// that tile's page as settings open (tile -1: the menu's Tiles page), as the hold-OK shortcut opens them,
+// so a check reaches a tile's page however many rows lead there
+static void test_open_tile(void)
+{
+    const char *given = getenv("STREAMFLEX_TEST_OPEN_TILE");
+    if (given == NULL)
+        return;
+    char name[256];
+    snprintf(name, sizeof(name), "%s", given);
+    char *colon = strrchr(name, ':');
+    int menu = -1;
+    if (colon != NULL) {
+        *colon = '\0';
+        for (int m = 0; m < menu_count && menu < 0; m++) {
+            if (strcmp(menus[m]->name, name) == 0)
+                menu = m;
+        }
+    }
+    if (menu < 0) {
+        log_debug("Test hook: no menu for STREAMFLEX_TEST_OPEN_TILE=%s", given);
+        return;
+    }
+    settings_show_tile(model, menu, atoi(colon + 1));
+    follow_preview();
+    log_path();
+    log_debug("Test hook: settings opened at tile %s of menu '%s'", colon + 1, name);
+}
 #endif
 
 // A function to make the preview's texture at the screen's size, or none when the renderer has no render targets (the scene is then drawn behind the column)
@@ -2850,6 +3311,7 @@ void settings_open(void)
         log_error("Settings: out of memory, so Discard cannot put the menus back");
 #ifdef STREAMFLEX_TEST_HOOKS
     test_menu_edit();
+    test_open_tile();
 #endif
     keep_taken();   // The menus as the launcher shows them now, which a change it cannot take goes back to
 }
@@ -2904,6 +3366,7 @@ int settings_drop_textures(void)
         return 0;
     int count = clear_text_cache();
     count += fonts_clear_samples();
+    count += pickers_drop_icon_textures();
     if (preview != NULL) {
         SDL_DestroyTexture(preview);
         count++;

@@ -13,6 +13,8 @@
 #include "listpick.h"
 #include "settings_screen.h"
 #include "colorpick.h"
+#include "icongrid.h"
+#include "library.h"
 #include "fileio.h"
 #include "image.h"
 #include "test_hooks.h"
@@ -64,6 +66,8 @@ SDL_COMPILE_TIME_ASSERT(osk_mod_mode, OSK_MOD_MODE == SDL_KMOD_MODE);
 #define DOT " \xC2\xB7 "       // U+00B7 with a space either side
 #define ELLIPSIS "\xE2\x80\xA6" // U+2026
 #define ALPHA_MARK 230         // The outline round the swatch under the cursor
+#define ALPHA_GRID_TEXT 180    // The library grid's group headers and titles, but for the cursor's
+#define ICONS_COLUMNS 4        // The library grid's icons across the column
 #define TYPE_VALUE "\x1Ftype"  // The command picker's Type... row: a value no command in config.ini is
 #define ALPHA_KEY 26           // A key's face on the keyboard...
 #define ALPHA_KEY_LIT 90       // ...the highlighted one, and Shift while it is on
@@ -80,7 +84,8 @@ typedef enum {
     PICKER_LIST,
     PICKER_COLOR,
     PICKER_FONT,              // A list picker whose list is NULL while the fonts load
-    PICKER_APPS               // A list picker whose list is NULL while the apps are found, or when none were
+    PICKER_APPS,              // A list picker whose list is NULL while the apps are found, or when none were
+    PICKER_ICONS              // The library grid, for a tile's icon
 } PickerKind;
 
 static PickerHost host;
@@ -113,6 +118,13 @@ static char probation_command[BINDINGS_COMMAND_MAX];
 static bool picking_command = false;    // The list picker chooses a binding's command
 static unsigned int clock_now = 0;      // When the clocks last ran: the countdowns count from it, so they
                                         // never show a time the clocks have not acted on yet
+static IconGrid *icon_grid = NULL;               // The library grid, while it is open
+static void (*icon_shown)(const char *name) = NULL;   // Told the icon under the grid's cursor, for the preview
+static void (*icon_done)(const char *name) = NULL;    // Told the icon chosen, or NULL when Back left the grid
+static SDL_Texture **icon_textures = NULL;       // Each library icon's, by its place in the library, made at
+static int icon_texture_count = 0;               // icon_size px once a settings visit; NULL where it failed
+static int icon_size = 0;
+static int icon_first_line = 0;                  // The grid's first line on show: a group's header or a row of icons
 
 // The on-screen keyboard while it is open (NULL: closed), over a page or over the list it filters
 static Osk *keyboard = NULL;
@@ -189,6 +201,10 @@ static void close_picker(void)
         log_debug("Settings: closed the picker for [%s] %s", slot->def->section, slot->def->key);
     else if (picking_command)
         log_debug("Settings: closed the command picker for the binding");
+    else if (kind == PICKER_ICONS)
+        log_debug("Settings: closed the library grid");
+    icongrid_free(icon_grid);
+    icon_grid = NULL;
     fonts_clear_samples();
     listpick_free(list);
     list = NULL;
@@ -207,6 +223,7 @@ static void close_picker(void)
 void pickers_end(void)
 {
     close_picker();
+    pickers_drop_icon_textures();
     close_keyboard();
     capture_device = -1;
     probation.active = false;
@@ -813,6 +830,299 @@ void pickers_open_binding_command(void)
     kind = PICKER_LIST;
 }
 
+// A function to let go of the library grid's textures, before the renderer that made them goes or as
+// settings close; how many it destroyed, for a lost device's count. The grid makes them again when it
+// next draws.
+int pickers_drop_icon_textures(void)
+{
+    int count = 0;
+    for (int i = 0; i < icon_texture_count; i++) {
+        if (icon_textures[i] != NULL) {
+            SDL_DestroyTexture(icon_textures[i]);
+            count++;
+        }
+    }
+    free(icon_textures);
+    icon_textures = NULL;
+    icon_texture_count = 0;
+    icon_size = 0;
+    return count;
+}
+
+// A function to make every library icon's texture at `size` px for the grid, decoded on the icon threads
+// as a menu's icons are (iconload_batch()): once a settings visit, and again only at another size. An
+// icon that cannot be read shows its title alone, and is logged.
+static void load_icon_textures(int size)
+{
+    if (icon_textures != NULL && size == icon_size)
+        return;
+    pickers_drop_icon_textures();
+    int count = library_count();
+    Uint64 start = SDL_GetPerformanceCounter();
+    icon_textures = calloc((size_t) (count > 0 ? count : 1), sizeof(SDL_Texture*));
+    IconJob *jobs = calloc((size_t) (count > 0 ? count : 1), sizeof(IconJob));
+    int *from = calloc((size_t) (count > 0 ? count : 1), sizeof(int));
+    if (icon_textures == NULL || jobs == NULL || from == NULL) {
+        free(icon_textures);
+        free(jobs);
+        free(from);
+        icon_textures = NULL;
+        log_error("Settings: the library grid's icons cannot be made: out of memory, so it shows their titles");
+        return;
+    }
+    icon_texture_count = count;
+    icon_size = size;
+    int work = 0;
+    for (int i = 0; i < count; i++) {
+        const char *path = library_lookup(library_info(i)->name);
+        if (path == NULL || fileio_not_a_file(path))
+            continue;
+        size_t length = strlen(path);
+        jobs[work].path = path;
+        jobs[work].size = size;
+        jobs[work].svg = length > 4 && SDL_strcasecmp(path + length - 4, ".svg") == 0;
+        from[work++] = i;
+    }
+    iconload_batch(jobs, work, iconload_workers(), decode_icon_job, icon_worker_start, icon_worker_end);
+    int made = 0;
+    for (int j = 0; j < work; j++) {
+        if (jobs[j].surface == NULL) {
+            log_error("Settings: the library grid cannot show %s: %s", library_info(from[j])->name, jobs[j].error);
+            continue;
+        }
+        icon_textures[from[j]] = load_texture(jobs[j].surface);   // Frees the surface
+        made += icon_textures[from[j]] != NULL ? 1 : 0;
+    }
+    free(jobs);
+    free(from);
+    log_debug("Settings: the library grid made %i of %i icons at %i px in %u ms", made, count, size,
+        timing_ms(SDL_GetPerformanceCounter() - start));
+}
+
+// A function to tell the screen which icon is under the grid's cursor, for the preview, and log it
+static void tell_shown(void)
+{
+    const LibraryInfo *icon = icongrid_icon(icon_grid, icongrid_cursor(icon_grid));
+    if (icon == NULL)
+        return;
+    log_debug("Settings: the library grid's cursor is on %s", icon->name);
+    if (icon_shown != NULL)
+        icon_shown(icon->name);
+}
+
+// A function to open the library grid over the library's icons, filtered by `query`, the cursor on the
+// icon `at` when it is shown (else the first). Out of memory it does not open, and says so.
+static bool open_grid(const char *at, const char *query)
+{
+    close_picker();
+    icon_grid = icongrid_create(library_info(0), library_count());
+    if (icon_grid == NULL || !icongrid_filter(icon_grid, query)) {
+        icongrid_free(icon_grid);
+        icon_grid = NULL;
+        log_error("Settings: the library grid cannot open: out of memory");
+        return false;
+    }
+    if (at != NULL)
+        icongrid_select(icon_grid, at);
+    icon_first_line = 0;
+    kind = PICKER_ICONS;
+    return true;
+}
+
+// A function to filter the open library grid in place as the keyboard's text changes (Task 12's follower,
+// at once), the cursor kept on its icon while that is still shown; a cancel after a change gives it the
+// text the keyboard opened with, which puts the old filter back. It never opens the grid again: the grid
+// stays open under the keyboard, so Back lands on it. Out of memory the grid closes, and says so.
+static void icons_filter_changed(const char *text, void *context)
+{
+    UNUSED(context);
+    if (kind != PICKER_ICONS || icon_grid == NULL)
+        return;
+    if (!icongrid_filter(icon_grid, text)) {
+        log_error("Settings: the library grid cannot be filtered: out of memory");
+        close_picker();
+        return;
+    }
+    log_debug("Settings: the library grid shows %i icons for '%s'", icongrid_count(icon_grid), icongrid_query(icon_grid));
+    tell_shown();
+}
+
+// A function to open the keyboard on the library grid's filter, over the grid (Task 12's way into it for a
+// filtered list, as Task 10b's app list does): `first` is the character a real keyboard's key typed to
+// open it, or NULL (Up from the grid's first row). Done keeps the filter, already applied as it was typed.
+static void open_icon_filter(const char *first)
+{
+    log_debug("Settings: the keyboard filters the library grid");
+    pickers_open_keyboard("Filter the icons", icongrid_query(icon_grid), ICONGRID_QUERY_MAX - 1, NULL, NULL,
+                          icons_filter_changed);
+    pickers_keyboard_follow(icons_filter_changed, 0);
+    if (first != NULL)
+        pickers_keyboard_type(first);
+}
+
+// A function to open the library grid for a tile's icon (spec "Icons", choice 3): every library icon with
+// its title, grouped, the cursor on `current` when it names one. Typing on a real keyboard opens its filter.
+void pickers_open_icons(const char *current, void (*shown)(const char *name), void (*done)(const char *name))
+{
+    icon_shown = shown;
+    icon_done = done;
+    if (!open_grid(current, ""))
+        return;
+    pickers_set_typing(open_icon_filter);   // After open_grid(): its close_picker() clears the opener
+    log_debug("Settings: opened the library grid: %i icons in %i groups", icongrid_count(icon_grid), icongrid_groups(icon_grid));
+    tell_shown();
+}
+
+// A function to act on a key in the library grid: the arrows move (Up from the first row opens the
+// keyboard to filter it), OK chooses and Back leaves, each telling the screen
+static void icons_command(const char *command)
+{
+    IconGridCommand key;
+    if (MATCH(command, SCMD_UP))
+        key = ICONGRID_UP;
+    else if (MATCH(command, SCMD_DOWN))
+        key = ICONGRID_DOWN;
+    else if (MATCH(command, SCMD_LEFT))
+        key = ICONGRID_LEFT;
+    else if (MATCH(command, SCMD_RIGHT))
+        key = ICONGRID_RIGHT;
+    else if (MATCH(command, SCMD_SELECT))
+        key = ICONGRID_OK;
+    else
+        key = ICONGRID_BACK;
+    IconGridResult result = icongrid_command(icon_grid, key, ICONS_COLUMNS);
+    void (*done)(const char *name) = icon_done;
+    if (result == ICONGRID_MOVED)
+        tell_shown();
+    else if (result == ICONGRID_FILTER)
+        open_icon_filter(NULL);
+    else if (result == ICONGRID_CANCELED) {
+        close_picker();
+        if (done != NULL)
+            done(NULL);
+    }
+    else if (result == ICONGRID_CHOSEN) {
+        char name[LIBRARY_NAME_MAX + 1];   // Copied: the grid goes before `done` runs
+        snprintf(name, sizeof(name), "%s", icongrid_chosen(icon_grid)->name);
+        close_picker();
+        log_debug("Settings: chose the library icon %s", name);
+        if (done != NULL)
+            done(name);
+    }
+}
+
+// A function to name a group for its header: its name with a capital first letter; "Other" for none
+static void group_label(const char *group, char *out, size_t size)
+{
+    if (group == NULL || group[0] == '\0') {
+        snprintf(out, size, "Other");
+        return;
+    }
+    snprintf(out, size, "%s", group);
+    if (out[0] >= 'a' && out[0] <= 'z')
+        out[0] = (char) (out[0] - 'a' + 'A');
+}
+
+// A function to tell whether the grid's line `line` is a group's header (else a row of its icons)
+static bool header_line(int line)
+{
+    for (int g = 0, at = 0; g < icongrid_groups(icon_grid); g++) {
+        if (line == at)
+            return true;
+        at += 1 + (icongrid_group_size(icon_grid, g) + ICONS_COLUMNS - 1) / ICONS_COLUMNS;
+        if (line < at)
+            return false;
+    }
+    return false;
+}
+
+// A function to draw one icon of the grid in its cell: the icon, its title under it, and an outline round
+// the cell under the cursor
+static void draw_icon_cell(int shown, int x, int y, int cell, int title_height)
+{
+    const LibraryInfo *icon = icongrid_icon(icon_grid, shown);
+    bool cursor = shown == icongrid_cursor(icon_grid);
+    int pad = host.margin / 2;
+    int index = (int) (icon - library_info(0));
+    SDL_Rect box = { x + pad / 2, y + pad / 2, cell - pad, cell - pad };
+    if (index >= 0 && index < icon_texture_count && icon_textures[index] != NULL)
+        draw_texture(renderer, icon_textures[index], NULL, &box);
+    host.text(host.font_small, icon->title, x + 2, y + cell - pad / 2, cell - 4, (Uint8) (cursor ? 255 : ALPHA_GRID_TEXT), false);
+    if (!cursor)
+        return;
+    SDL_Rect outline = { x, y, cell, cell + title_height };
+    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, ALPHA_MARK);
+    outline_rect(renderer, &outline);
+    SDL_Rect inner = { outline.x + 1, outline.y + 1, outline.w - 2, outline.h - 2 };
+    outline_rect(renderer, &inner);
+}
+
+// A function to draw the library grid: each group's header, then its icons four across, each with its
+// title, the one under the cursor outlined; scrolled so the cursor's row (with its group's header, for a
+// group's first row) is on show. With no icon shown it says so.
+static void draw_icons(int x, int top, int bottom)
+{
+    int pad = host.margin / 2;
+    int cell = (host.column_width - 2 * pad) / ICONS_COLUMNS;
+    int title_height = TTF_GetFontHeight(host.font_small);
+    int row_height = cell + title_height;
+    load_icon_textures(cell - pad);
+    int cursor = icongrid_cursor(icon_grid);
+    if (cursor < 0) {
+        host.text(host.font_row, "No icon matches. Up types another filter.", x + pad, top, host.column_width - 2 * pad, 255, false);
+        return;
+    }
+
+    // The cursor's line: each group a header, then its rows
+    int groups = icongrid_groups(icon_grid);
+    int cursor_group = icongrid_group_of(icon_grid, cursor);
+    int cursor_place = cursor - icongrid_group_first(icon_grid, cursor_group);
+    int cursor_line = 0;
+    for (int g = 0; g < cursor_group; g++)
+        cursor_line += 1 + (icongrid_group_size(icon_grid, g) + ICONS_COLUMNS - 1) / ICONS_COLUMNS;
+    cursor_line += 1 + cursor_place / ICONS_COLUMNS;
+    int from = cursor_place < ICONS_COLUMNS ? cursor_line - 1 : cursor_line;   // A first row shows its header
+    if (from < icon_first_line)
+        icon_first_line = from;
+    for (;;) {
+        int y = top;
+        for (int line = icon_first_line; line <= cursor_line; line++)
+            y += header_line(line) ? host.row_height : row_height;
+        if (y <= bottom || icon_first_line >= cursor_line)
+            break;
+        icon_first_line++;
+    }
+
+    int y = top;
+    int line = 0;
+    for (int g = 0; g < groups && y < bottom; g++) {
+        int first = icongrid_group_first(icon_grid, g);
+        int size = icongrid_group_size(icon_grid, g);
+        int rows = (size + ICONS_COLUMNS - 1) / ICONS_COLUMNS;
+        if (line >= icon_first_line) {
+            if (y + host.row_height > bottom)
+                break;
+            char label[64];
+            group_label(icongrid_group(icon_grid, g), label, sizeof(label));
+            host.text(host.font_row, label, x + pad, y + (host.row_height - TTF_GetFontHeight(host.font_row)) / 2,
+                      host.column_width - 2 * pad, ALPHA_GRID_TEXT, false);
+            y += host.row_height;
+        }
+        line++;
+        for (int r = 0; r < rows; r++, line++) {
+            if (line < icon_first_line)
+                continue;
+            if (y + row_height > bottom) {
+                y = bottom;
+                break;
+            }
+            for (int c = 0; c < ICONS_COLUMNS && r * ICONS_COLUMNS + c < size; c++)
+                draw_icon_cell(first + r * ICONS_COLUMNS + c, x + pad + c * cell, y, cell, title_height);
+            y += row_height;
+        }
+    }
+}
+
 // A function to name a key as it shows now: a character key's shifted text while Shift or caps lock is on;
 // the shapes' keys by what they stand for
 static const char *key_face(const OskKey *key)
@@ -1363,6 +1673,7 @@ void pickers_tick(void)
 void pickers_quit(void)
 {
     close_picker();
+    pickers_drop_icon_textures();
     fonts_quit();
 }
 
@@ -1693,6 +2004,8 @@ void pickers_command(const char *command)
         apps_command(command);
     else if (kind == PICKER_COLOR)
         color_command(command);
+    else if (kind == PICKER_ICONS)
+        icons_command(command);
 }
 
 // A function to close the keyboard and the picker on show as Back closes them at their top, the color
@@ -1859,6 +2172,8 @@ void pickers_draw(int x, int top, int bottom)
         draw_color(x, top, bottom);
     else if (kind == PICKER_FONT)
         draw_fonts(x, top, bottom);
+    else if (kind == PICKER_ICONS)
+        draw_icons(x, top, bottom);
     else if (kind == PICKER_APPS)
         draw_apps(x, top, bottom);
 }
@@ -1871,6 +2186,8 @@ void pickers_path(char *out, size_t size)
     size_t used = strlen(out);
     if (slot != NULL)
         snprintf(out + used, size - used, " \xE2\x80\xBA %s", slot->def->label);
+    else if (kind == PICKER_ICONS)
+        snprintf(out + used, size - used, " \xE2\x80\xBA Library");
     used = strlen(out);
     if (list_label[0] != '\0')
         snprintf(out + used, size - used, " \xE2\x80\xBA %s", list_label);
@@ -1897,6 +2214,8 @@ const char *pickers_hint(void)
         return "Arrows move" DOT "OK chooses" DOT "Back cancels";
     if (kind == PICKER_FONT && list == NULL)
         return "Back cancels";
+    if (kind == PICKER_ICONS)
+        return "Arrows move" DOT "Up at the top filters" DOT "OK chooses";
     return "Left and right page" DOT "OK chooses" DOT "Back cancels";
 }
 
@@ -1942,6 +2261,11 @@ const char *pickers_note(void)
     }
     else if ((kind == PICKER_LIST || kind == PICKER_APPS) && listpick_why(list) != NULL)
         snprintf(note, sizeof(note), "%s", listpick_why(list));
+    else if (kind == PICKER_ICONS && icongrid_why(icon_grid) != NULL)
+        snprintf(note, sizeof(note), "%s", icongrid_why(icon_grid));
+    else if (kind == PICKER_ICONS && icongrid_query(icon_grid)[0] != '\0')
+        snprintf(note, sizeof(note), "%i of %i icons hold \"%s\"", icongrid_count(icon_grid), library_count(),
+            icongrid_query(icon_grid));
     else if (kind == PICKER_COLOR) {
         SettingColor shown = colorpick_shown(&color_pick);
         int index = color_pick.editing ? -1 : colorpick_find(shown);
