@@ -116,18 +116,9 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # about 3 s, with a little more for the leak pass; Task 1.13: two icons read on screen, about 5 s, the
 # two menus again with no decode thread, about 10 s, and two menus of 48 XPM icons, about 4 s each;
 # Task 1.17: a menu of one broken SVG icon, about 3 s), until a set measures it. 72-fallback-fonts.sh's
-# is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each). 80-menus-live.sh's is an
-# estimate from its runs (3c Task 4: eight runs of 5 to 10 s each, the leak pass's a little longer, and its
-# fix round's ninth, f80-hand-grid, 13 s on its own), until a set measures it. 84-keyboard.sh's is its
-# twenty runs' 512 s in one plain Debian pass of that file alone (3c Task 12), until a set measures it.
-# 82-tiles.sh's is an estimate from its runs (3c Task 10a: nine runs of 25 to 45 s each; Task 10b adds
-# four), until a set measures it. 81-apps.sh's is an estimate from its seven runs (3c Task 10b, where check 81
-# moved from Task 7: about 9 s each to open settings, reach Add > App, list and close), until a set measures it.
-# 83-move.sh's is an estimate from its runs (3c Task 11: five runs of 20 to 30 s each), until a set measures it.
-# 85-icons.sh's is an estimate from its eight runs (3c Task 13: about 10 s each, the grid's typing and the
-# Pictures folder's decode a little longer), until a set measures it. 86-hold-ok.sh's and 86-hold-ok-timing.sh's
-# are estimates from their runs (3c Task 14: four quick runs, and thirteen of up to 10 s), until a set measures them.
-# 87-menus-log.sh's is an estimate from its five runs (3c Task 15: about 8 s each), until a set measures it.
+# is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each). The menu-editing
+# checks' (80-menus-live.sh to 87-menus-log.sh) are the mean of the four passes in CI's build.yml run
+# 39162761021 at 2acc058, on 2026-10-18 (each file's SHARD BEGIN to SHARD END, by the job log's times).
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
     [40-titles.sh]=11 [41-parse.sh]=18 [42-features.sh]=18 [45-shadows.sh]=3 [46-region.sh]=2
@@ -140,8 +131,8 @@ declare -A shard_seconds=(
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
     [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6
-    [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=68 [84-keyboard.sh]=512
-    [82-tiles.sh]=660 [81-apps.sh]=65 [83-move.sh]=150 [85-icons.sh]=100 [86-hold-ok.sh]=25 [86-hold-ok-timing.sh]=120 [87-menus-log.sh]=45
+    [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=47 [84-keyboard.sh]=543
+    [82-tiles.sh]=463 [81-apps.sh]=103 [83-move.sh]=158 [85-icons.sh]=109 [86-hold-ok.sh]=14 [86-hold-ok-timing.sh]=87 [87-menus-log.sh]=25
 )
 
 # The check files with a line "# Timing-sensitive". A mark lost would move its file into the rest
