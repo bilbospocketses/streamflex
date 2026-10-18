@@ -387,6 +387,42 @@ static void test_repeat_wall_time(void)
     CHECK_INT((int) derive_next_repeat(1000 + 600, 1000, 500, 25), 625);
 }
 
+// A function to say when a hold first reaches HOLD_OK_MS, frame by frame at `fps` (ms after its press),
+// or -1 when a hold of `hold_ms` never does; each pressed at its own time across the ticks' wrap
+static int hold_fires_at(int fps, int hold_ms)
+{
+    unsigned int pressed = next_start;
+    next_start += 7;
+    for (int frame = 1;; frame++) {
+        int held = frame * 1000 / fps;
+        if (held > hold_ms)
+            return -1;
+        if (derive_hold_fired(pressed + (unsigned int) held, pressed))
+            return held;
+    }
+}
+
+// A function to test the hold that opens settings at OK's tile (plan ruling 1): due at HOLD_OK_MS to the
+// millisecond, across the ticks' wrap, within a frame of it at 30, 60 and 144 fps, and never for a hold a
+// millisecond shorter; a press stamped a little after `now` (an event's time, read against a clock read
+// before it) is a hold of no time, not one of 49 days
+static void test_hold_ok(void)
+{
+    CHECK(!derive_hold_fired(1000 + HOLD_OK_MS - 1, 1000));
+    CHECK(derive_hold_fired(1000 + HOLD_OK_MS, 1000));
+    CHECK(derive_hold_fired(1000 + 60000, 1000));
+    CHECK(!derive_hold_fired(0xFFFFFF00u + HOLD_OK_MS - 1, 0xFFFFFF00u));
+    CHECK(derive_hold_fired(0xFFFFFF00u + HOLD_OK_MS, 0xFFFFFF00u));
+    CHECK(!derive_hold_fired(1000, 1003));
+    CHECK(!derive_hold_fired(5, 14));
+    static const int rates[] = { 30, 60, 144 };
+    for (int i = 0; i < 3; i++) {
+        int fired = hold_fires_at(rates[i], 1000);
+        CHECK(fired >= HOLD_OK_MS && fired <= HOLD_OK_MS + frame_ms(rates[i]));
+        CHECK_INT(hold_fires_at(rates[i], HOLD_OK_MS - 1), -1);
+    }
+}
+
 // A fade run frame by frame as update_slideshow() and update_screensaver() run it: begun on frame 0 (SDL's
 // ticks, at next_fade_start), at `fps` frames a second, each frame at its whole millisecond, and run on to
 // twice its duration. When its alpha first reached end_value (ms after its start; -1 for never), its alpha
@@ -565,6 +601,7 @@ int main(void)
 {
     test_exit_retry_due();
     test_repeat_wall_time();
+    test_hold_ok();
     test_fade_wall_time();
     test_defaults();
     test_twice();

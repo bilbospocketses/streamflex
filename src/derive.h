@@ -15,6 +15,7 @@
 #define DERIVE_EXIT_RETRY_MS 5000             // A refused Windows exit hotkey is tried again this often
 #define DERIVE_REPEAT_DELAY_MS 500            // A held pad control first repeats this long after its press
 #define DERIVE_REPEAT_INTERVAL_MS 25          // and then this often, at most once a frame
+#define HOLD_OK_MS 800                        // OK held this long in the launcher's menus opens settings at its tile
 #define DERIVE_SCREENSAVER_DIM_MS 1500        // The screensaver dims to its intensity over this long
 #define DERIVE_DEFAULT_REFRESH_RATE 60        // Hz, when the display reports none
 #define DERIVE_MIN_REFRESH_RATE 1.0F          // Hz: a display that reports less reports none
@@ -102,6 +103,7 @@ int derive_alpha(int hundredths);
 void derive_settings(const DeriveInput *in, Effective *out);
 bool derive_repeat_due(unsigned int now, unsigned int pressed, unsigned int due);
 unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned int due, unsigned int interval);
+bool derive_hold_fired(unsigned int now, unsigned int pressed_at);
 int derive_fade_alpha(unsigned int now, unsigned int start, unsigned int duration, int end_value);
 bool derive_exit_retry_due(bool refused, bool at_once, unsigned int now, unsigned int last_try);
 ScreenGeometry geometry_from_pixels(int width, int height);

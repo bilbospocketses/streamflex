@@ -166,6 +166,8 @@ typedef struct {
     bool   held;
     Uint32 pressed_at;
     Uint32 repeat_due;
+    bool   ok;           // 3c: a press taken as OK in the menus (it runs :select, settings closed): it never
+                         // repeats until let go, in the menus or in the settings its hold opened
 } ControlHold;
 
 // Linked list of gamepad controls

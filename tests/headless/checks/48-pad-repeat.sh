@@ -45,24 +45,27 @@ p48_slow f48-slowtap && [ "$(p48_count f48-slowtap 'Gamepad ButtonDPadRight dete
 result "pad: at 25 fps a D-pad tapped, let go 0.1-0.3 s after its press, presses once (pressed $(p48_count f48-slowtap 'Gamepad ButtonDPadRight detected') times, repeated $(p48_count f48-slowtap 'Test hook: pad ButtonDPadRight repeated') times; exit $(cat "$out/f48-slowtap.code"))" $ok
 grep -h 'Test hook: [0-9]* frames in' "$out/f48-slowhold.log" "$out/f48-slowtap.log" | sed 's/^/      /'
 
-# A control held through a gap in polling does not repeat the moment polling resumes: A selects the
-# first button, which launches `sleep 1`; the launcher does not poll the pad until the launch's 3 s
-# timeout, and A is held on through it. Its hold is timed again from the resume, which the test hook
-# logs, and A is let go 0.1 s after that line (wait_line sees it up to 0.2 s late, so 0.1-0.3 s after
-# the resume), short of the next repeat, 500 ms after the resume. Timed from the press, as it was, it
-# would have repeated at once, launching again.
+# A control held through a gap in polling does not repeat the moment polling resumes: Y is held, then
+# Return launches `sleep 1` as it is let go (A, which selects as it is let go since 3c, cannot be held
+# through its own launch); the launcher does not poll the pad until the launch's 3 s timeout, and Y is
+# held on through it. Its hold is timed again from the resume, which the test hook logs, and Y is let go
+# 0.1 s after that line (wait_line sees it up to 0.2 s late, so 0.1-0.3 s after the resume), short of the
+# next repeat, 500 ms after the resume. Timed from the press, as it was, it would have repeated at once.
+# Y's repeats before the launch are its own: only those after the resume count.
 p48_launch() {
-    : > /tmp/pad-a
-    wait_line 'Test hook: pad ButtonA held through a gap in polling' "$2" && sleep 0.1
-    rm -f /tmp/pad-a; sleep 1
+    : > /tmp/pad-y
+    wait_line 'Gamepad ButtonY detected' "$2" && xdotool key Return
+    wait_line 'Test hook: pad ButtonY held through a gap in polling' "$2" && sleep 0.1
+    rm -f /tmp/pad-y; sleep 1
 }
-rm -f /tmp/pad-a
-STREAMFLEX_TEST_PAD=/tmp/pad-a STREAMFLEX_TEST_PAD_BUTTON=a WAIT_FOR='Gamepad connected' CFG=$FX/f48-pad.ini \
+rm -f /tmp/pad-y
+STREAMFLEX_TEST_PAD=/tmp/pad-y STREAMFLEX_TEST_PAD_BUTTON=y WAIT_FOR='Gamepad connected' CFG=$FX/f48-gap.ini \
     run_keys f48-launchhold +p48_launch
-rm -f /tmp/pad-a
+rm -f /tmp/pad-y
 ok=1
-[ "$(p48_count f48-launchhold 'Gamepad ButtonA detected')" = 1 ] \
-    && grep -q 'Test hook: pad ButtonA held through a gap in polling, timed from now' "$out/f48-launchhold.log" \
-    && [ "$(p48_count f48-launchhold 'Test hook: pad ButtonA repeated')" = 0 ] && ran_clean f48-launchhold && ok=0
-result "pad: A held through a launch's timeout is timed again from the resume, and does not repeat at once (pressed $(p48_count f48-launchhold 'Gamepad ButtonA detected') times, repeated $(p48_count f48-launchhold 'Test hook: pad ButtonA repeated') times; exit $(cat "$out/f48-launchhold.code"))" $ok
-grep -E 'Test hook: pad ButtonA|Gamepad ButtonA' "$out/f48-launchhold.log" | sed 's/^/      /'
+[ "$(p48_count f48-launchhold 'Gamepad ButtonY detected')" = 1 ] \
+    && grep -q 'Test hook: pad ButtonY held through a gap in polling, timed from now' "$out/f48-launchhold.log" \
+    && [ "$(sed -n '/Test hook: pad ButtonY held through a gap in polling/,$p' "$out/f48-launchhold.log" | grep -c 'Test hook: pad ButtonY repeated')" = 0 ] \
+    && ran_clean f48-launchhold && ok=0
+result "pad: Y held through a launch's timeout is timed again from the resume, and does not repeat at once (pressed $(p48_count f48-launchhold 'Gamepad ButtonY detected') times, repeated after the resume $(sed -n '/Test hook: pad ButtonY held through a gap in polling/,$p' "$out/f48-launchhold.log" | grep -c 'Test hook: pad ButtonY repeated') times; exit $(cat "$out/f48-launchhold.code"))" $ok
+grep -E 'Test hook: pad ButtonY|Gamepad ButtonY|Hold OK' "$out/f48-launchhold.log" | sed 's/^/      /'

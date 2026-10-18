@@ -20,6 +20,9 @@ void settings_remake_textures(void);      // On a reset or new renderer: drop, t
 bool settings_raw_key(int code, bool repeat);  // A key while settings are open: true when capture or the 10 s took it
 void settings_raw_release(int code);
 bool settings_raw_pad(int label);              // Each frame: the gamepad label held, -1 for none; true when taken
+// For the hold-OK shortcut: settings open over the menu named, at its tile's page (tile -1: its Tiles
+// page), the pages above it open so Back walks up them
+void settings_open_at_tile(const char *menu, int tile);
 bool settings_text_key(SDL_Scancode scancode, SDL_Keymod mod, bool repeat);   // From KEY_DOWN, before handle_keypress; true when the keyboard took it
 // The installed apps, for Add > App (spec "Installed apps"). settings_apps_start() starts this visit's
 // scan on its own thread, and does nothing once this visit has started one; Task 10b's App page calls it,
