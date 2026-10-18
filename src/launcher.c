@@ -92,7 +92,7 @@ static void move_selection(LayoutDirection direction);
 static void load_submenu(const char *submenu);
 static void load_back_menu(Menu *menu);
 static void draw_screen(void);
-static void handle_keypress(SDL_Keycode key, bool repeat);
+static void handle_keypress(SDL_Keycode key, bool repeat, Uint32 at);
 static bool hotkey_bound(SDL_Keycode keycode);
 static bool menu_key(SDL_Keycode keycode);
 static void execute_command(const char *command);
@@ -990,12 +990,180 @@ static bool nothing_to_select(void)
     return true;
 }
 
+// OK in the launcher's menus (plan ruling 1): the press of the key or the pad control that runs :select,
+// until it is let go. Let go before HOLD_OK_MS it selects; held that long it opens settings at its tile,
+// and its release then does nothing. Only the first press counts, and it never repeats.
+typedef struct {
+    bool held;             // A press is held
+    bool fired;            // It was held HOLD_OK_MS and opened settings
+    Uint32 pressed_at;     // When it was pressed, in SDL's ticks: a key's event's time, a pad's poll
+    SDL_Keycode key;       // The key (its stored code); 0 for a pad control
+    const char *pad;       // The pad control (its label, from the labels' table); NULL for a key
+    unsigned int version;  // gamepad_controls_version() at the press: a pad's release after another does nothing
+} OkHold;
+static OkHold ok_hold = { false, false, 0, 0, NULL, 0 };
+static SDL_Keycode ok_ignored_key = 0;   // A second OK key pressed while one was held: its repeats do nothing
+                                         // until it is let go, in the menus or the settings the hold opened
+
+// A function to tell whether a command is :select, read by its first word as execute_command() reads it
+static bool runs_select(const char *command)
+{
+    size_t length = strlen(SCMD_SELECT);
+    return strncmp(command, SCMD_SELECT, length) == 0 && (command[length] == '\0' || command[length] == ' ');
+}
+
+// A function to tell whether OK's press is held by this key (`pad` NULL) or by this pad control
+static bool ok_holds(SDL_Keycode key, const char *pad)
+{
+    if (!ok_hold.held)
+        return false;
+    if (pad != NULL || ok_hold.pad != NULL)
+        return pad != NULL && ok_hold.pad != NULL && strcmp(pad, ok_hold.pad) == 0;
+    return key == ok_hold.key;
+}
+
+// A function to select the tile on show, as OK does once it is let go: its command runs, or nothing in
+// an empty menu, which says so (Task 10a's select_entry(int) only moves the highlight, for the preview)
+static void select_highlighted(void)
+{
+    if (nothing_to_select())
+        return;
+    log_debug("Selected Entry:\n"
+        "Title: %s\n"
+        "Icon Path: %s\n"
+        "Command: %s",
+        current_entry->title,
+        current_entry->icon_path,
+        current_entry->cmd
+    );
+    execute_command(current_entry->cmd);
+}
+
+// A function to start OK's press: nothing runs yet. A press while one is held is not counted, nor are its
+// repeats until it is let go (a key's here; a pad control's by its ControlHold.ok, poll_gamepad()).
+static void ok_press(SDL_Keycode key, const char *pad, Uint32 at)
+{
+    if (ok_hold.held) {
+        if (key != 0)
+            ok_ignored_key = key;
+        log_debug("Hold OK: a second OK while the first is held does nothing");
+        return;
+    }
+    ok_hold = (OkHold) { true, false, at, key, pad, gamepad_controls_version() };
+}
+
+// A function to forget OK's press without selecting or opening anything, as the launcher loses track of it
+// (the window lost the keyboard, or a pad was pulled out, while it was held), so the next OK is a press of
+// its own. Nothing happens with no press held.
+static void ok_cancel(const char *why)
+{
+    if (!ok_hold.held)
+        return;
+    ok_hold.held = false;
+    log_debug("Hold OK: %s, so the hold is canceled", why);
+}
+
+// A function to cancel OK's press as settings open another way during it (the Menu key, or a :settings
+// hotkey, pad control or tile; user ruling 2026-10-16): the hold never fires, not even as those settings
+// close with OK still down, and its release does nothing. A held key's repeats are ignored until it is let
+// go, as a second OK's are, so none reaches the settings it did not open; a pad control's ControlHold.ok
+// already keeps its own from repeating.
+static void ok_settings_opened(void)
+{
+    if (!ok_hold.held)
+        return;
+    if (ok_hold.pad == NULL)
+        ok_ignored_key = ok_hold.key;
+    ok_cancel("settings opened another way");
+}
+
+// A function to open settings at the tile OK was held on (spec "The hold-OK shortcut"), or at an empty
+// menu's Tiles page: the tile highlighted when the hold came due
+static void ok_fire(Uint32 held)
+{
+    ok_hold.fired = true;
+    int tile = current_menu->num_entries > 0 ? current_menu->position.selected : -1;
+    log_debug("Hold OK: held %u ms, so settings open at tile %i of menu '%s'", (unsigned int) held, tile, current_menu->name);
+    settings_open_at_tile(current_menu->name, tile);
+}
+
+// A function to run each frame while no app is in front: OK held HOLD_OK_MS opens settings at its tile on
+// the frame it comes due. Settings opened another way cancel the press as they open (ok_settings_opened());
+// a pad's press whose controls were made again since never fires (Fable review C1: the press it began is
+// not the one going on).
+static void ok_tick(void)
+{
+    Uint32 now = ticks_ms();
+    if (ok_hold.held && !ok_hold.fired && !settings_is_open() && derive_hold_fired(now, ok_hold.pressed_at) &&
+        (ok_hold.pad == NULL || gamepad_controls_version() == ok_hold.version))
+        ok_fire(now - ok_hold.pressed_at);
+}
+
+// A function to end OK's press as its key or control is let go (`at`: the release's time): held under
+// HOLD_OK_MS it selects; held longer (a frame drawn late saw it only now), it opens settings as the hold
+// would have; after the hold opened them, nothing. Only the key or control that pressed it ends it; a pad's
+// release after its controls were made again does nothing (the press it began is not the one ending); and
+// with settings open, opened by a way that did not cancel the press, nothing is selected under them.
+static void ok_release(SDL_Keycode key, const char *pad, Uint32 at)
+{
+    if (!ok_holds(key, pad))
+        return;
+    OkHold was = ok_hold;
+    ok_hold.held = false;
+    if (was.fired) {
+        log_debug("Hold OK: let go after the hold opened settings, so it does nothing");
+        return;
+    }
+    if (was.pad != NULL && gamepad_controls_version() != was.version) {
+        log_debug("Hold OK: the pad's controls were made again during the hold, so its release does nothing");
+        return;
+    }
+    if (settings_is_open())
+        return;
+    Uint32 held = at - was.pressed_at;
+    if (derive_hold_fired(at, was.pressed_at)) {
+        ok_fire(held);
+        return;
+    }
+    log_debug("Hold OK: let go after %u ms, so it selects", held < 0x80000000u ? (unsigned int) held : 0u);
+    select_highlighted();
+}
+
+// A function to end OK's press as a key is let go. SDL lets every held key go just before it says the
+// window lost the keyboard (its focus event comes right behind, in the same batch): such a release is no
+// one's choice, so the hold is canceled, as that focus event would cancel it, and nothing is selected.
+static void ok_key_up(SDL_Keycode key, Uint32 at)
+{
+    if (key == ok_ignored_key)
+        ok_ignored_key = 0;
+    SDL_Event next;
+    if (ok_holds(key, NULL) &&
+        SDL_PeepEvents(&next, 1, SDL_PEEKEVENT, SDL_EVENT_WINDOW_FOCUS_LOST, SDL_EVENT_WINDOW_FOCUS_LOST) == 1 &&
+        next.window.windowID == window_id) {
+        ok_cancel("the window lost the keyboard");
+        return;
+    }
+    ok_release(key, NULL, at);
+}
+
 // A function to handle key presses from keyboard; `key` is the stored code (keycodes.h), SDL2's
-// numbering as config.ini holds it, and `repeat` marks the keyboard's own repeats of a held key
-static void handle_keypress(SDL_Keycode key, bool repeat)
+// numbering as config.ini holds it, `repeat` marks the keyboard's own repeats of a held key, and `at` is
+// the press's time (its event's, in SDL's ticks), which OK's hold is timed from
+static void handle_keypress(SDL_Keycode key, bool repeat, Uint32 at)
 {
     if (config.debug)
         log_debug("Key %s (#%X) detected", SDL_GetKeyName((SDL_Keycode) keycode_from_stored(key)), key);
+    // OK's own key while OK is held: its repeats never act, in the menus or in the settings its hold
+    // opened. A press of it with no release between (one lost to another window) starts it over.
+    if (ok_holds(key, NULL)) {
+        if (repeat)
+            return;
+        ok_hold.held = false;
+    }
+    // A second OK pressed while the first was held: its repeats do nothing either, until it is let go
+    // (ok_key_up()), so none reaches the settings the first one's hold opened
+    if (repeat && key != 0 && key == ok_ignored_key)
+        return;
 
     // A capture takes every key, and the 10 s the key that confirms them, before any other meaning
     if (settings_is_open() && settings_raw_key((int) key, repeat))
@@ -1047,18 +1215,10 @@ static void handle_keypress(SDL_Keycode key, bool repeat)
         move_selection(LAYOUT_RIGHT);
     else if ((key == SDLK_UP || key == SDLK_DOWN) && !hotkey_bound(key))
         move_selection(key == SDLK_UP ? LAYOUT_UP : LAYOUT_DOWN);
+    // OK acts when it is let go, or opens settings at its tile once held HOLD_OK_MS (plan ruling 1)
     else if (key == SDLK_RETURN) {
-        if (!nothing_to_select()) {
-            log_debug("Selected Entry:\n"
-                "Title: %s\n"
-                "Icon Path: %s\n"
-                "Command: %s",
-                current_entry->title,
-                current_entry->icon_path,
-                current_entry->cmd
-            );
-            execute_command(current_entry->cmd);
-        }
+        if (!repeat)
+            ok_press(key, NULL, at);
     }
     else if (key == SDLK_BACKSPACE)
         load_back_menu(current_menu);
@@ -1071,8 +1231,13 @@ static void handle_keypress(SDL_Keycode key, bool repeat)
     else {
         for (Hotkey *i = hotkeys; i != NULL; i = i->next) {
             if (key == i->keycode) {
+                // A hotkey for :select is OK in the menus, as Return is; in settings it acts at once
+                if (runs_select(i->cmd) && !settings_is_open()) {
+                    if (!repeat)
+                        ok_press(key, NULL, at);
+                }
                 // A hotkey for :settings acts once however long it is held, as the Menu key does
-                if (!repeat || strcmp(i->cmd, SCMD_SETTINGS) != 0)
+                else if (!repeat || strcmp(i->cmd, SCMD_SETTINGS) != 0)
                     execute_command(i->cmd);
                 break;
             }
@@ -2548,8 +2713,10 @@ static void execute_command(const char *command)
             // screen: no application runs behind them
             if (state.application_launching || state.application_running)
                 log_debug("Settings: not opened while an application is launching or running");
-            else
+            else {
+                ok_settings_opened();   // A press of OK held now is canceled: these settings are not its hold's
                 settings_open();
+            }
         }
     }
 
@@ -2765,6 +2932,10 @@ static SDL_JoystickID test_plug = 0;    // STREAMFLEX_TEST_PAD_PLUG's pad, while
 static int test_swap_step = 0;
 static bool test_pad_file = false;      // STREAMFLEX_TEST_PAD's file was there last frame
 static int test_pad_frames = 0;         // Frames STREAMFLEX_TEST_PAD_FRAMES's press has left
+static int test_pad_after = -1;         // Frames left until STREAMFLEX_TEST_PAD_UNPLUG or STREAMFLEX_TEST_UNFOCUS
+                                        // acts; -1 before the button's first press, -2 once it has acted
+static bool test_pad_gone = false;      // STREAMFLEX_TEST_PAD_UNPLUG pulled the pad out: it is not attached again
+static bool test_unfocused = false;     // STREAMFLEX_TEST_UNFOCUS took the keyboard away: it comes back next frame
 
 // A function only the headless harness builds: attach a virtual gamepad with every button and axis
 // SDL3 has, which SDL maps to them in their order (its masks left 0, SDL_virtualjoystick.c:201-222 at
@@ -2916,6 +3087,36 @@ static void test_pad_power()
         log_error("Test hook: the battery event was not pushed\n%s", SDL_GetError());
 }
 
+// A function only the headless harness builds: the window loses the keyboard as SDL reports a real focus
+// change (Xvfb has no window manager to move it, and an X focus change may never reach SDL there): each key
+// held is let go first, as SDL's own keyboard reset sends it, then the focus event, both queued before
+// the next events are read. test_pad_update() gives it back the frame after.
+static void test_unfocus(void)
+{
+    int count = 0;
+    const bool *keys = SDL_GetKeyboardState(&count);
+    log_debug("Test hook: the window loses the keyboard");
+    for (int code = 0; code < count; code++) {
+        if (!keys[code])
+            continue;
+        SDL_Event release;
+        SDL_zero(release);
+        release.type = SDL_EVENT_KEY_UP;
+        release.key.windowID = window_id;
+        release.key.scancode = (SDL_Scancode) code;
+        release.key.key = SDL_GetKeyFromScancode((SDL_Scancode) code, SDL_KMOD_NONE, false);
+        if (!SDL_PushEvent(&release))
+            log_error("Test hook: a key's release was not pushed\n%s", SDL_GetError());
+    }
+    SDL_Event focus;
+    SDL_zero(focus);
+    focus.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    focus.window.windowID = window_id;
+    if (!SDL_PushEvent(&focus))
+        log_error("Test hook: the focus event was not pushed\n%s", SDL_GetError());
+    test_unfocused = true;
+}
+
 // A function only the headless harness builds, since it has no gamepad: with STREAMFLEX_TEST_PAD
 // set, it attaches a virtual one while the gamepad runs, and holds a button while the file that
 // names exists: the one STREAMFLEX_TEST_PAD_BUTTON names (SDL's name for it, "b"), else Start. A name
@@ -2928,7 +3129,17 @@ static void test_pad_update()
     test_pad_plug();
     test_pad_power();
     const char *held = getenv("STREAMFLEX_TEST_PAD");
-    if (held == NULL || !gamepad_on)
+    if (test_unfocused) {
+        test_unfocused = false;
+        SDL_Event focus;
+        SDL_zero(focus);
+        focus.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
+        focus.window.windowID = window_id;
+        log_debug("Test hook: the window gets the keyboard back");
+        if (!SDL_PushEvent(&focus))
+            log_error("Test hook: the focus event was not pushed\n%s", SDL_GetError());
+    }
+    if (held == NULL || !gamepad_on || test_pad_gone)
         return;
     test_pad_attach();
     bool there = file_exists(held);
@@ -2942,6 +3153,28 @@ static void test_pad_update()
             test_pad_frames--;
     }
     test_pad_file = there;
+    // STREAMFLEX_TEST_PAD_UNPLUG=N or STREAMFLEX_TEST_UNFOCUS=N: N frames after the button is first pressed,
+    // the pad is pulled out with it still held (and stays out), or the window loses the keyboard
+    const char *unplug = getenv("STREAMFLEX_TEST_PAD_UNPLUG");
+    const char *unfocus = getenv("STREAMFLEX_TEST_UNFOCUS");
+    if ((unplug != NULL || unfocus != NULL) && pressed && test_pad_after == -1)
+        test_pad_after = atoi(unplug != NULL ? unplug : unfocus);
+    if (test_pad_after == 0) {
+        test_pad_after = -2;
+        if (unfocus != NULL)
+            test_unfocus();
+        if (unplug != NULL && test_pad != NULL) {
+            SDL_CloseJoystick(test_pad);
+            SDL_DetachVirtualJoystick(test_pad_id);
+            test_pad = NULL;
+            test_pad_id = 0;
+            test_pad_gone = true;
+            log_debug("Test hook: the pad is pulled out, its button held");
+            return;
+        }
+    }
+    else if (test_pad_after > 0)
+        test_pad_after--;
     const char *name = getenv("STREAMFLEX_TEST_PAD_BUTTON");
     SDL_GamepadButton button = name != NULL ? SDL_GetGamepadButtonFromString(name) : SDL_GAMEPAD_BUTTON_START;
     SDL_GamepadAxis axis = button == SDL_GAMEPAD_BUTTON_INVALID ? SDL_GetGamepadAxisFromString(name)
@@ -3304,20 +3537,35 @@ static void poll_gamepad()
             }
         }
         if (!pressed) {
+            // A control let go. OK's selects, or its hold already opened settings (ok_release() says which);
+            // a command that select runs can make the controls again, freeing this one, so it is let go
+            // first and the loop then stops, as after a press
+            bool was_held = i->hold.held;
             i->hold.held = false;
+            if (was_held)
+                ok_release(0, i->label, ticks.main);
+            if (gamepad_controls_version() != version)
+                return;
             continue;
         }
 
-        // Execute the command at the press, and repeat it GAMEPAD_REPEAT_DELAY ms later, then every
-        // GAMEPAD_REPEAT_INTERVAL ms (at most once a frame): wall time, so the frame rate cannot change
-        // either. The hold is set before the command runs, since the command can free this control.
+        // OK's control in the menus acts when let go, or once held HOLD_OK_MS (plan ruling 1), and never
+        // repeats until let go, nor into the settings its hold opened; a second OK pressed while one is held
+        // does nothing and never repeats either (ControlHold.ok). In settings it acts at once and repeats, as
+        // every control does. Any other control acts at the press, and repeats GAMEPAD_REPEAT_DELAY ms later,
+        // then every GAMEPAD_REPEAT_INTERVAL ms (at most once a frame): wall time, so the frame rate cannot
+        // change either. The hold is set before the command runs, since the command can free this control.
         if (!i->hold.held) {
-            i->hold = (ControlHold) { true, ticks.main, GAMEPAD_REPEAT_DELAY };
+            bool ok_control = runs_select(i->cmd) && !settings_is_open();
+            i->hold = (ControlHold) { true, ticks.main, GAMEPAD_REPEAT_DELAY, ok_control };
             log_debug("Gamepad %s detected", i->label);
             ticks.last_input = ticks.main;
-            execute_command(i->cmd);
+            if (ok_control)
+                ok_press(0, i->label, ticks.main);
+            else
+                execute_command(i->cmd);
         }
-        else if (derive_repeat_due(ticks.main, i->hold.pressed_at, i->hold.repeat_due)) {
+        else if (!i->hold.ok && derive_repeat_due(ticks.main, i->hold.pressed_at, i->hold.repeat_due)) {
             ticks.last_input = ticks.main;
 #ifdef STREAMFLEX_TEST_HOOKS
             log_debug("Test hook: pad %s repeated", i->label);   // Only the headless harness builds this
@@ -4125,16 +4373,22 @@ int main(int argc, char *argv[])
                     // the arrows always, goes on as before. Every key code StreamFlex holds is SDL2's, as
                     // config.ini stores it (keycodes.h).
                     if (!(settings_is_open() && settings_text_key(event.key.scancode, event.key.mod, event.key.repeat)))
-                        handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat);
+                        handle_keypress((SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS), event.key.repeat,
+                                        (Uint32) SDL_NS_TO_MS(event.key.timestamp));
 #ifdef STREAMFLEX_TEST_HOOKS
                     test_key_undrawn = true;
 #endif
                     break;
 
-                case SDL_EVENT_KEY_UP:
+                case SDL_EVENT_KEY_UP: {
+                    // OK's release selects in the menus (plan ruling 1), unless SDL sent it as the window
+                    // lost the keyboard (ok_key_up()); settings see every release
+                    SDL_Keycode released = (SDL_Keycode) keycode_to_stored(event.key.key, KEYCODES_WINDOWS);
+                    ok_key_up(released, (Uint32) SDL_NS_TO_MS(event.key.timestamp));
                     if (settings_is_open())
-                        settings_raw_release((int) keycode_to_stored(event.key.key, KEYCODES_WINDOWS));
+                        settings_raw_release((int) released);
                     break;
+                }
 
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
                     if (renderer != NULL && config.mouse_select && !settings_is_open() && event.button.button == SDL_BUTTON_LEFT) {
@@ -4163,6 +4417,10 @@ int main(int argc, char *argv[])
                     // `which` is the instance id here: only a pad in the list is removed, whatever Device says
                     log_debug("Gamepad disconnected");
                     disconnect_gamepad((int) event.jdevice.which, true, true);
+                    // A pad pulled out while its control holds OK: the release may never come (with no pad
+                    // left the pad is not polled), so the hold is canceled, not left to fire on its own
+                    if (ok_hold.held && ok_hold.pad != NULL)
+                        ok_cancel("a pad was pulled out");
                     settings_pads_changed();
                     break;
 
@@ -4173,6 +4431,7 @@ int main(int argc, char *argv[])
                 case SDL_EVENT_WINDOW_FOCUS_LOST:
                     log_debug("Lost keyboard focus");
                     state.has_focus = false;
+                    ok_cancel("the window lost the keyboard");   // OK held now is no one's to finish
                     if (state.application_launching) {
                         log_debug("Application detected");
                         state.application_launching = false;
@@ -4275,6 +4534,7 @@ int main(int argc, char *argv[])
             // A capture or the 10 s take the pad before its controls run
             if (gamepads != NULL && !(settings_is_open() && settings_raw_pad(gamepad_pressed_label())))
                 poll_gamepad();
+            ok_tick();   // OK held HOLD_OK_MS opens settings at its tile
             if (background_shown == BACKGROUND_SLIDESHOW)
                 update_slideshow();
             // Settings never start the screensaver, but the key that opened them must still end it

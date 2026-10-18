@@ -103,6 +103,17 @@ unsigned int derive_next_repeat(unsigned int now, unsigned int pressed, unsigned
     return due + interval > held ? due + interval : held + interval;
 }
 
+// A function to decide whether OK, pressed at `pressed_at`, has been held long enough by `now` to open
+// settings at its tile (plan ruling 1): HOLD_OK_MS or more. The times are SDL's ticks, so the subtraction
+// is unsigned and holds across their wrap. A press stamped after `now` (an event's time, read against a
+// clock read just before it) is a hold of no time, not one of 49 days: any difference past half the
+// ticks' range is.
+bool derive_hold_fired(unsigned int now, unsigned int pressed_at)
+{
+    unsigned int held = now - pressed_at;
+    return held >= HOLD_OK_MS && held < 0x80000000u;
+}
+
 // A function to work out a fade's alpha now (the slideshow's fade, the screensaver's dim): begun at
 // `start`, it rises to end_value over `duration` ms in step with the time passed, and is end_value from
 // then on, or at once for a fade of no time. Timed in wall time, never in frames, so the frame rate cannot

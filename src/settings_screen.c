@@ -3213,6 +3213,41 @@ static void test_open_tile(void)
 }
 #endif
 
+// A function to open settings at a tile's page, for OK held on it in the launcher's menus (spec "The
+// hold-OK shortcut"): over the menu named, through Menus, the menu and its Tiles page to the tile's page
+// (settings_show_tile()), so Back goes to the Tiles page and then up through settings as usual; tile -1
+// (an empty menu) opens the menu's Tiles page. The menu keeps its highlight through settings (the preview
+// shows it, and show_menu() keeps a menu's place), so closing settings lands on the tile.
+void settings_open_at_tile(const char *menu, int tile)
+{
+    char name[256];   // A copy: settings_open() may make the launcher's menus again, the name with them
+    snprintf(name, sizeof(name), "%s", menu);
+    for (Menu *over = config.first_menu; over != NULL; over = over->next) {
+        if (strcmp(over->name, name) == 0 && over != current_menu)
+            show_menu(over);
+    }
+    settings_open();
+    if (model == NULL)
+        return;   // settings_open() said why
+    int index = -1;
+    for (int m = 0; m < menu_count && index < 0; m++) {
+        if (strcmp(menus[m]->name, name) == 0)
+            index = m;
+    }
+    if (index < 0) {
+        log_debug("Hold OK: the menu '%s' is not in config.ini any more, so settings open at their top", name);
+        return;
+    }
+    settings_show_tile(model, index, tile);
+    follow_preview();
+    log_path();
+    // The page that opened, not the one asked for (Fable review I4): a menu with no menus model stops short
+    SettingsPage page = settings_page(model);
+    log_debug("Hold OK: settings opened at %s of menu '%s'", page == SETTINGS_PAGE_TILE ? "a tile's page"
+              : page == SETTINGS_PAGE_TILES ? "the Tiles page" : page == SETTINGS_PAGE_MENU ? "the menu's page"
+              : "the Menus page", name);
+}
+
 // A function to make the preview's texture at the screen's size, or none when the renderer has no render targets (the scene is then drawn behind the column)
 static void make_preview(void)
 {
