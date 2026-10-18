@@ -845,10 +845,10 @@ static void log_keyboard(void)
         copy_string(keyboard_key_logged, face, sizeof(keyboard_key_logged));
         log_debug("Settings: the keyboard's highlight is on %s", face);
     }
-    const char *note = keyboard_note();
-    if (strcmp(note, keyboard_note_logged) != 0) {
-        copy_string(keyboard_note_logged, note, sizeof(keyboard_note_logged));
-        log_debug("Settings: the keyboard says %s", note);
+    const char *says = keyboard_note();
+    if (strcmp(says, keyboard_note_logged) != 0) {
+        copy_string(keyboard_note_logged, says, sizeof(keyboard_note_logged));
+        log_debug("Settings: the keyboard says %s", says);
     }
 }
 
