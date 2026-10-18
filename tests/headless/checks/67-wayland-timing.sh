@@ -78,11 +78,14 @@ t67_kill() {
 
 if [ "${t67_major:-0}" -ge 15 ]; then
     # A launch: the client takes the keyboard as it maps, and the launcher gets it back when the
-    # client is killed, within 2 s
+    # client is killed, within 2 s. Mesa's Vulkan present runs in mailbox mode here: on this headless
+    # Weston its FIFO present (VSync) of an unchanged frame blocks about 3 s (measured 2026-10-18:
+    # 2963 to 3042 ms on every idle frame; OpenGL, mailbox and VSync off all present in under 20 ms),
+    # so the pad's 5-frame press of A read as a 3 s hold and opened settings instead of launching
     ok=1
     if t67_start wayland-sft; then
         rm -f /tmp/t67-pad
-        STREAMFLEX_TEST_PAD=/tmp/t67-pad STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=5 \
+        MESA_VK_WSI_PRESENT_MODE=mailbox STREAMFLEX_TEST_PAD=/tmp/t67-pad STREAMFLEX_TEST_PAD_BUTTON=a STREAMFLEX_TEST_PAD_FRAMES=5 \
             WAIT_FOR='Gained keyboard focus' CFG=$FX/f67-wayland.ini t67_on wayland-sft run_keys f67-launch +t67_launch +t67_kill
         log=$out/f67-launch.log
         sed -n '/^Application detected$/,$p' "$log" > "$out/f67-launch.after"
