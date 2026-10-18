@@ -415,6 +415,19 @@ OskResult osk_insert(Osk *osk, const char *utf8)
     return insert(osk, utf8, strlen(utf8)) ? OSK_CHANGED : OSK_NONE;
 }
 
+// A function to give the modifiers a real keyboard's key is looked up with (SDL_GetKeyFromScancode()'s
+// `modstate`): Shift, Caps Lock and AltGr, and no other. SDL on Windows reports AltGr as Right Alt while its
+// keymap keeps the AltGr characters under SDL_KMOD_MODE, so on Windows (`windows`) Right Alt, or Ctrl and Alt
+// held together as Windows itself takes them, is AltGr too (user ruling 2026-10-17, "Right Alt and
+// Ctrl+Alt"). X11 and Wayland report AltGr as SDL_KMOD_MODE.
+unsigned int osk_key_mods(unsigned int mod, bool windows)
+{
+    unsigned int mods = mod & (OSK_MOD_SHIFT | OSK_MOD_CAPS | OSK_MOD_MODE);
+    if (windows && ((mod & OSK_MOD_RALT) != 0 || ((mod & OSK_MOD_CTRL) != 0 && (mod & OSK_MOD_ALT) != 0)))
+        mods |= OSK_MOD_MODE;
+    return mods;
+}
+
 // A function to give the character a real keyboard's key types, as UTF-8 in `out` (spec, "A real keyboard
 // types into the field"): `keycode` is SDL_GetKeyFromScancode()'s, with Shift, Caps Lock and AltGr applied.
 // The keypad's digits, point and operators type their character as the top row's keys do (user ruling

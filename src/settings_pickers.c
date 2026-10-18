@@ -46,6 +46,19 @@ SDL_COMPILE_TIME_ASSERT(osk_keypad_enter, OSK_KEYPAD_FIRST + 4 == SDLK_KP_ENTER)
 SDL_COMPILE_TIME_ASSERT(osk_keypad_one, OSK_KEYPAD_FIRST + 5 == SDLK_KP_1);
 SDL_COMPILE_TIME_ASSERT(osk_keypad_zero, OSK_KEYPAD_FIRST + 14 == SDLK_KP_0);
 SDL_COMPILE_TIME_ASSERT(osk_keypad_last, OSK_KEYPAD_LAST == SDLK_KP_PERIOD);
+// The modifiers osk_key_mods() reads, as SDL has them
+SDL_COMPILE_TIME_ASSERT(osk_mod_shift, OSK_MOD_SHIFT == SDL_KMOD_SHIFT);
+SDL_COMPILE_TIME_ASSERT(osk_mod_ctrl, OSK_MOD_CTRL == SDL_KMOD_CTRL);
+SDL_COMPILE_TIME_ASSERT(osk_mod_alt, OSK_MOD_ALT == SDL_KMOD_ALT);
+SDL_COMPILE_TIME_ASSERT(osk_mod_ralt, OSK_MOD_RALT == SDL_KMOD_RALT);
+SDL_COMPILE_TIME_ASSERT(osk_mod_caps, OSK_MOD_CAPS == SDL_KMOD_CAPS);
+SDL_COMPILE_TIME_ASSERT(osk_mod_mode, OSK_MOD_MODE == SDL_KMOD_MODE);
+
+#ifdef _WIN32
+#define ALTGR_IS_RIGHT_ALT true    // SDL on Windows reports AltGr as Right Alt (osk_key_mods())
+#else
+#define ALTGR_IS_RIGHT_ALT false
+#endif
 
 #define DOT " \xC2\xB7 "       // U+00B7 with a space either side
 #define ELLIPSIS "\xE2\x80\xA6" // U+2026
@@ -983,8 +996,9 @@ static void keyboard_command(const char *command)
 // gives while Done is off. It opens in the layout KeyboardLayout names, over the page or the list under it,
 // which stays open. `done` gets the text at Done, once the keyboard has closed; Back with no change, or
 // twice after one, closes it with nothing said. Opened from `done` with that `done` and `context`, it is the
-// same field again, so a real keyboard that typed into it keeps its Enter as Done and Backspace as delete. Out of memory it does not open, and says so: the keys stay
-// with what is under it. The harness can make it fail (STREAMFLEX_TEST_FAIL=keyboard).
+// same field again, so a real keyboard that typed into it keeps its Enter as Done and Backspace as delete.
+// Out of memory it does not open, and says so: the keys stay with what is under it. The harness can make it
+// fail (STREAMFLEX_TEST_FAIL=keyboard).
 void pickers_open_keyboard(const char *label, const char *initial, int max_bytes, OskCheck check, void *context,
                            void (*done)(const char *text, void *context))
 {
@@ -1032,7 +1046,8 @@ void pickers_set_typing(void (*open)(const char *first))
 
 // A function to take a real keyboard's key while settings are open, before handle_keypress() (spec "A real
 // keyboard types into the field"). The character is the layout's own for the key's place, with Shift, Caps
-// Lock and AltGr applied (SDL_GetKeyFromScancode() with only those modifiers), never event.key.key, which
+// Lock and AltGr applied (SDL_GetKeyFromScancode() with only those modifiers, osk_key_mods(), which on
+// Windows takes Right Alt or Ctrl+Alt as AltGr), never event.key.key, which
 // SDL3 gives unshifted; the keypad's digits, point and operators type theirs too (osk_key_char()). While the
 // keyboard is open, a printing key types it, Esc is Back and the keypad's Enter is Done; Enter and Backspace
 // are the remote's OK and Back (KEYBOARD_NOTE) until a printing key has been typed into this field, and Done
@@ -1042,7 +1057,7 @@ void pickers_set_typing(void (*open)(const char *first))
 bool pickers_text_key(SDL_Scancode scancode, SDL_Keymod mod, bool repeat)
 {
     char typed[5];
-    SDL_Keycode code = SDL_GetKeyFromScancode(scancode, (SDL_Keymod) (mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS | SDL_KMOD_MODE)), false);
+    SDL_Keycode code = SDL_GetKeyFromScancode(scancode, (SDL_Keymod) osk_key_mods((unsigned int) mod, ALTGR_IS_RIGHT_ALT), false);
     bool printing = osk_key_char((unsigned int) code, typed);
     if (keyboard == NULL) {
         if (typing_opens == NULL || !printing || repeat)

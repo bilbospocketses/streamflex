@@ -571,6 +571,39 @@ static void test_keypad_char(void)
     osk_free(osk);
 }
 
+// A function to test the modifiers a real keyboard's key is looked up with: Shift, Caps Lock and AltGr, and no
+// other; on Windows, where SDL reports AltGr as Right Alt, Right Alt or Ctrl+Alt is AltGr too (user ruling
+// 2026-10-17, "Right Alt and Ctrl+Alt")
+static void test_key_mods(void)
+{
+    static const struct {
+        unsigned int mod;
+        unsigned int elsewhere;  // osk_key_mods(mod, false): X11 and Wayland
+        unsigned int windows;    // osk_key_mods(mod, true)
+    } MODS[] = {
+        { 0, 0, 0 },
+        { 0x0001u, 0x0001u, 0x0001u },                                       // Left Shift
+        { 0x0002u, 0x0002u, 0x0002u },                                       // Right Shift
+        { OSK_MOD_CAPS, OSK_MOD_CAPS, OSK_MOD_CAPS },
+        { OSK_MOD_MODE, OSK_MOD_MODE, OSK_MOD_MODE },                        // AltGr, as X11 reports it
+        { 0x1000u, 0, 0 },                                                   // Num Lock
+        { 0x0040u, 0, 0 },                                                   // Left Ctrl alone
+        { 0x0080u, 0, 0 },                                                   // Right Ctrl alone
+        { 0x0100u, 0, 0 },                                                   // Left Alt alone
+        { 0x0400u, 0, 0 },                                                   // Left GUI
+        { OSK_MOD_RALT, 0, OSK_MOD_MODE },                                   // AltGr, as Windows reports it
+        { OSK_MOD_RALT | 0x0001u, 0x0001u, OSK_MOD_MODE | 0x0001u },         // Shift+AltGr
+        { OSK_MOD_RALT | OSK_MOD_CAPS, OSK_MOD_CAPS, OSK_MOD_MODE | OSK_MOD_CAPS },
+        { 0x0040u | 0x0100u, 0, OSK_MOD_MODE },                              // Left Ctrl + Left Alt
+        { 0x0080u | 0x0100u, 0, OSK_MOD_MODE },                              // Right Ctrl + Left Alt
+        { 0x0040u | 0x0100u | 0x0002u, 0x0002u, OSK_MOD_MODE | 0x0002u },    // ...with Shift
+    };
+    for (size_t i = 0; i < sizeof(MODS) / sizeof(MODS[0]); i++) {
+        CHECK_INT((int) osk_key_mods(MODS[i].mod, false), (int) MODS[i].elsewhere);
+        CHECK_INT((int) osk_key_mods(MODS[i].mod, true), (int) MODS[i].windows);
+    }
+}
+
 int main(void)
 {
     test_qwerty();
@@ -583,5 +616,6 @@ int main(void)
     test_back();
     test_key_char();
     test_keypad_char();
+    test_key_mods();
     return check_report();
 }

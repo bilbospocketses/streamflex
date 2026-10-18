@@ -14,6 +14,13 @@
 // character all the same (user ruling 2026-10-16, "Type the digit"), all but Keypad Enter
 #define OSK_KEYPAD_FIRST (OSK_SCANCODE_MASK | 0x54u)
 #define OSK_KEYPAD_LAST (OSK_SCANCODE_MASK | 0x63u)
+// SDL3's SDL_Keymod bits osk_key_mods() reads (settings_pickers.c asserts each against SDL's)
+#define OSK_MOD_SHIFT 0x0003u   // SDL_KMOD_SHIFT, either Shift
+#define OSK_MOD_CTRL 0x00C0u    // SDL_KMOD_CTRL, either Ctrl
+#define OSK_MOD_ALT 0x0300u     // SDL_KMOD_ALT, either Alt
+#define OSK_MOD_RALT 0x0200u    // SDL_KMOD_RALT
+#define OSK_MOD_CAPS 0x2000u    // SDL_KMOD_CAPS
+#define OSK_MOD_MODE 0x4000u    // SDL_KMOD_MODE: AltGr, as X11 and Wayland report it
 
 typedef enum { OSK_QWERTY, OSK_ABC } OskLayout;   // The remembered choice; ?123 and àé are pages over either
 typedef enum { OSK_PAGE_LETTERS, OSK_PAGE_SYMBOLS, OSK_PAGE_ACCENTS } OskPage;
@@ -36,6 +43,7 @@ void osk_free(Osk *osk);
 OskResult osk_command(Osk *osk, OskCommand command);
 OskResult osk_insert(Osk *osk, const char *utf8);
 bool osk_key_char(unsigned int keycode, char out[5]);   // The real-keyboard rule: false for masked (but the keypad's), control, U+007F, U+FFFD
+unsigned int osk_key_mods(unsigned int mod, bool windows);   // The modifiers a key is looked up with: Shift, Caps Lock, AltGr
 const char *osk_text(const Osk *osk);
 int osk_cursor(const Osk *osk);                          // A byte offset on a character boundary
 const char *osk_label(const Osk *osk);
