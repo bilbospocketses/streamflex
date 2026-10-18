@@ -94,6 +94,9 @@ static Menu **menus = NULL;           // The launcher's menus, in the model's or
 static int menu_count = 0;
 static Menu *origin = NULL;           // The menu settings opened over
 static MenuEdit *menu_edit = NULL;    // The menus model, read from config.ini as settings open; NULL: unread
+static MenuEdit *menus_logged = NULL;   // The menus model as the log last described it; each change is logged against it
+static MenuEdit *menus_opened = NULL;   // The menus model as settings opened, which the save's steps are told against
+static void log_menu_save(void);
 static MenuEdit *menu_snapshot = NULL;   // The menus model as settings opened: what Discard puts back
 static MenuEdit *menu_taken = NULL;      // The menus model as the launcher last took it: what a change the
                                          // launcher cannot take (out of memory) goes back to; NULL: none
@@ -1073,6 +1076,10 @@ static void free_screen(void)
     model = NULL;
     menuedit_free(menu_edit);
     menu_edit = NULL;
+    menuedit_free(menus_logged);
+    menus_logged = NULL;
+    menuedit_free(menus_opened);
+    menus_opened = NULL;
     menuedit_free(menu_snapshot);
     menu_snapshot = NULL;
     for (int i = 0; i < plated_count; i++)
@@ -1151,6 +1158,7 @@ static bool apply_menus(IniDoc *doc, void *context, ConfigSaveResult *result)
 // bindings' list edits are sized to their lists, which holds every edit they can make.
 static bool save_changes(void)
 {
+    log_menu_save();
     int count = settings_slot_count(model);
     bool menus_edited = menu_edit != NULL && menuedit_changed(menu_edit);
     memset(menu_notes, 0, sizeof(menu_notes));   // This save's notes alone
@@ -2997,6 +3005,10 @@ static void load_menus(const IniDoc *doc)
     }
     settings_set_menus(model, menu_edit);
     log_debug("Menus: read %i menu(s) from %s", menuedit_count(menu_edit), config.config_path);
+    menus_opened = menuedit_copy(menu_edit);
+    menus_logged = menuedit_copy(menu_edit);
+    if (menus_opened == NULL || menus_logged == NULL)
+        log_error("Menus: out of memory, so menu edits and the save's steps may go unlogged");
 }
 
 // A function to tell whether the menus model and the launcher's menus are the same menus by name, in the
@@ -3010,6 +3022,86 @@ static bool menus_in_step(void)
             return false;
     }
     return true;
+}
+
+// A function to find the menu a menus model's menu is in another state of the model: the one read from
+// the same section, or for a menu made in settings (read from none) the one of its name; -1 for none
+static int same_menu(const MenuEdit *in, const MenuEditMenu *menu)
+{
+    for (int m = 0; in != NULL && m < menuedit_count(in); m++) {
+        const MenuEditMenu *other = menuedit_menu(in, m);
+        bool same = menu->original_name != NULL
+                    ? other->original_name != NULL && strcmp(other->original_name, menu->original_name) == 0
+                    : other->original_name == NULL && strcmp(other->name, menu->name) == 0;
+        if (same)
+            return m;
+    }
+    return -1;
+}
+
+// A function to tell whether two tiles say the same: their title, icon and command
+static bool same_tile(const MenuTile *a, const MenuTile *b)
+{
+    return strcmp(a->title, b->title) == 0 && strcmp(a->icon, b->icon) == 0 && strcmp(a->command, b->command) == 0;
+}
+
+// A function to log every change to the menus model since the log last described it (spec, Errors and
+// limits: every menu edit), place by place: each tile added, removed or now another. A menu that came,
+// went or was renamed the rebuild logs itself (menus_apply()). The model as it is now is then the one the
+// next change is logged against.
+static void log_menu_edits(void)
+{
+    for (int m = 0; menus_logged != NULL && m < menuedit_count(menu_edit); m++) {
+        const MenuEditMenu *now = menuedit_menu(menu_edit, m);
+        int at = same_menu(menus_logged, now);
+        const MenuEditMenu *was = at >= 0 ? menuedit_menu(menus_logged, at) : NULL;
+        int was_count = was != NULL ? was->count : 0;
+        for (int t = 0; t < now->count || t < was_count; t++) {
+            const MenuTile *a = t < was_count ? &was->tiles[t] : NULL;
+            const MenuTile *b = t < now->count ? &now->tiles[t] : NULL;
+            if (a == NULL)
+                log_debug("Menus: '%s': tile %i added: %s;%s;%s", now->name, t, b->title, b->icon, b->command);
+            else if (b == NULL)
+                log_debug("Menus: '%s': tile %i removed: %s", now->name, t, a->title);
+            else if (!same_tile(a, b))
+                log_debug("Menus: '%s': tile %i is now %s;%s;%s, was %s;%s;%s", now->name, t, b->title, b->icon,
+                    b->command, a->title, a->icon, a->command);
+        }
+    }
+    menuedit_free(menus_logged);
+    menus_logged = menuedit_copy(menu_edit);
+    if (menus_logged == NULL)
+        log_error("Menus: out of memory, so the next menu edit goes unlogged");
+}
+
+// A function to log the steps the save is asked to take for the menus (spec, Errors and limits: each save
+// step), against the model as settings opened: each menu removed, renamed or added, and each whose tiles
+// are written again. What the save could not do as asked it logs itself, a line a note.
+static void log_menu_save(void)
+{
+    if (menu_edit == NULL || menus_opened == NULL || !menuedit_changed(menu_edit))
+        return;
+    for (int m = 0; m < menuedit_count(menus_opened); m++) {
+        const MenuEditMenu *was = menuedit_menu(menus_opened, m);
+        if (same_menu(menu_edit, was) < 0)
+            log_debug("Menus: saving: [%s] is removed", was->name);
+    }
+    for (int m = 0; m < menuedit_count(menu_edit); m++) {
+        const MenuEditMenu *now = menuedit_menu(menu_edit, m);
+        int at = same_menu(menus_opened, now);
+        const MenuEditMenu *was = at >= 0 ? menuedit_menu(menus_opened, at) : NULL;
+        if (was == NULL) {
+            log_debug("Menus: saving: [%s] is added, with %i tile(s)", now->name, now->count);
+            continue;
+        }
+        if (strcmp(was->name, now->name) != 0)
+            log_debug("Menus: saving: [%s] is renamed [%s]", was->name, now->name);
+        bool changed = was->count != now->count;
+        for (int t = 0; !changed && t < now->count; t++)
+            changed = !same_tile(&was->tiles[t], &now->tiles[t]);
+        if (changed)
+            log_debug("Menus: saving: [%s]'s tiles are written again, %i of them", now->name, now->count);
+    }
 }
 
 // A function to hand the pickers what they draw with: the model, the menus, the fonts, and the sizes
@@ -3037,6 +3129,7 @@ bool settings_menus_changed(void)
 {
     if (model == NULL || menu_edit == NULL)
         return false;
+    log_menu_edits();
     int count = menuedit_count(menu_edit);
     if (count == 0) {
         log_error("Settings: the menus model holds no menu, so the launcher keeps its menus");
