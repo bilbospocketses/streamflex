@@ -8,6 +8,8 @@ This project started from complexlogic's Flex Launcher at v2.2 and is developed 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-18
+
 v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SDL3 and needs Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10 (or a newer release of each), Arch Linux, or Windows. Debian bookworm, Ubuntu 24.04 LTS and older releases package no SDL3, so users there stay on v0.4.1, which stays downloadable; there is no backport.
 
 ### Added
