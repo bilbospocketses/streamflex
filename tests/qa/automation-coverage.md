@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 691 |
-| Row halves | 1184 |
-| Verdicts per release (row x desktop) | 2858 |
+| Rows | 709 |
+| Row halves | 1202 |
+| Verdicts per release (row x desktop) | 2876 |
 | `streamflex-ctest` halves | 9 (45 verdicts) |
 | `streamflex-headless` halves | 334 (1336 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 681 (1317 verdicts) |
-| **Automated today** | 503 of 1184 halves; 1541 of 2858 verdicts (53 %) |
+| `manual` halves | 699 (1335 verdicts) |
+| **Automated today** | 503 of 1202 halves; 1541 of 2876 verdicts (53 %) |
 
 <!-- summary:end -->
 
@@ -104,6 +104,24 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 1.34 | `[Win]` | manual | qa-harness item 75, planned |
 | 1.35 | `[Linux]` | streamflex-headless | `60-timing.sh` run `f60-icons` |
 | 1.35 | `[Win]` | manual | qa-harness item 75, planned |
+| 1.36 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.37 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.38 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.39 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.40 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.41 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.42 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.43 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.44 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.45 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.46 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.47 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.48 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.49 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
+| 1.50 | `[Fedora]` | manual | not automatable, as 1.16: a desktop keeps the icon it loaded, so a frame cannot tell the shipped icon from another (spike S4 2026-10-11, on GNOME and Plasma) |
+| 1.51 | `[Fedora-KDE]` | manual | not automatable, as 1.17: a desktop keeps the icon it loaded, so a frame cannot tell the shipped icon from another (spike S4 2026-10-11, on GNOME and Plasma) |
+| 1.52 | `[Fedora]` | manual | qa-harness item 75, planned |
+| 1.53 | `[Fedora-KDE]` | manual | qa-harness item 75, planned |
 | 2.1 | `[Linux]` | streamflex-headless | `10-grid.sh` run `f13-selfsub` |
 | 2.1 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |
 | 2.2 | `[Win]` | qa-harness | five-desktop lane, arc m02-home |

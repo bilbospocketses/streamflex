@@ -49,7 +49,7 @@ Executables are available for Windows 64 bit, Linux x86-64, and Raspberry Pi. Yo
 Download the win64 .zip file from the [latest release](https://github.com/bilbospocketses/streamflex/releases/latest) and extract the contents to a directory of your choice. StreamFlex should be run on an up-to-date Windows 10 system, or Windows 11.
 
 ### Linux
-Binary packages for APT and pacman based distributions are available from the [latest release](https://github.com/bilbospocketses/streamflex/releases/latest) and the [download page](https://bilbospocketses.github.io/streamflex/download). Download the package for your system, then install it from the directory you saved it to.
+Binary packages for APT and pacman based distributions, and a tarball for Fedora 44, are available from the [latest release](https://github.com/bilbospocketses/streamflex/releases/latest) and the [download page](https://bilbospocketses.github.io/streamflex/download). Download the package for your system, then install it from the directory you saved it to.
 
 v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex needs SDL3, and with it Debian trixie, Raspberry Pi OS trixie or Ubuntu 25.10, or newer; on Debian bookworm, Ubuntu 24.04 LTS or older, stay on [v0.4.1](https://github.com/bilbospocketses/streamflex/releases/tag/v0.4.1).
 
@@ -62,6 +62,13 @@ sudo apt install ./streamflex_*_amd64.deb
 ```bash
 sudo pacman -U streamflex-*-x86_64.pkg.tar.zst
 ```
+#### Fedora 44 x86-64
+StreamFlex has no `.rpm`: Fedora gets a tarball, from v0.6.0. It lists the packages it needs in `usr/share/streamflex/REQUIRES-fedora44.txt`; install those, then unpack the tarball onto `/`.
+```bash
+sudo dnf install $(tar -xzOf streamflex-*-fedora44-x86_64.tar.gz usr/share/streamflex/REQUIRES-fedora44.txt)
+sudo tar -xzf streamflex-*-fedora44-x86_64.tar.gz -C / --no-same-owner
+```
+dnf does not know about the files the tarball installs, so `dnf remove` cannot remove them and a new version is installed by unpacking its tarball over the old one. To remove StreamFlex, list the tarball's files with `tar -tzf` and delete them.
 #### Raspberry Pi
 This package needs Raspberry Pi OS trixie or newer, 64 bit only.
 ```bash

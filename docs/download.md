@@ -29,6 +29,11 @@ Binary packages are available for Windows 64 bit, Linux x86-64, and Raspberry Pi
         <h4>Pacman-based (Arch, Manjaro):</h4>
         <ul><li><a href="{{ release.arch.url }}">{{ release.arch.name }}</a> (x86-64 package)</li>
         </ul>
+        {% if release.fedora %}
+        <h4>Fedora 44 (Workstation, KDE Plasma):</h4>
+        <ul><li><a href="{{ release.fedora.url }}">{{ release.fedora.name }}</a> (x86-64 tarball, see the <a href="https://github.com/{{ site.repository }}#fedora-44-x86-64">install steps</a>)</li>
+        </ul>
+        {% endif %}
       </td>
     </tr>
     <tr>

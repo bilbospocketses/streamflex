@@ -360,6 +360,136 @@ jobs:
           path: build/*.pkg.tar.zst
           if-no-files-found: error
 
+  # Fedora 44 x86-64, published as a tarball rooted at /: usr/bin/streamflex and the rest, as the
+  # .deb installs them, unpacked as root with `tar -xzf <tar> -C / --no-same-owner`. Beside them,
+  # usr/share/streamflex/REQUIRES-fedora44.txt names the rpm package of each library the binary
+  # links, one per line (dnf installs what those need in turn), and BUILD-INFO.txt the commit and the
+  # run that built it. qa-harness installs this artifact on its Fedora guests, so its name and shape
+  # are qa-harness's: one file in an artifact named streamflex-fedora44-x86_64, which the release job
+  # fetches by that name. The build dependencies come from Fedora 44's release repo only, never
+  # updates, so the binary needs nothing newer than the frozen repo a fresh install has.
+  # The image is the headless Fedora image's own, through mirror.gcr.io as above.
+  build_fedora:
+    name: Fedora
+    runs-on: ubuntu-24.04
+    container:
+      image: mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    env:
+      CMAKE_BUILD_TYPE: Release
+      # The commit the run is for: a PR's head, which github.sha (the PR's merge with its base) is not
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          bash .github/scripts/stall-watch.sh --name "dnf install" -- \
+            dnf install -y --repo=fedora --setopt=install_weak_deps=False \
+            gcc make cmake pkgconf-pkg-config binutils SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel
+
+      - name: Build
+        run: |
+          bash .github/scripts/stall-watch.sh --name Configure -- \
+            cmake -B build -DCMAKE_BUILD_TYPE=${{env.CMAKE_BUILD_TYPE}} -DCMAKE_INSTALL_PREFIX=/usr
+          bash .github/scripts/stall-watch.sh --name Build -- cmake --build build --config ${{env.CMAKE_BUILD_TYPE}}
+          bash .github/scripts/stall-watch.sh --name "Unit tests" -- ctest --test-dir build --output-on-failure
+
+      # Each library the binary links (its NEEDED entries) is found where the loader finds it, and
+      # named by the rpm package that owns it. The tarball's paths start at usr/, so it unpacks onto /.
+      # It holds files only, no directories: a usr/ entry would reset the mode and time of /usr
+      # itself on unpacking, and tar makes each missing directory on its own
+      - name: Make the tarball
+        run: |
+          version=$(grep -m1 -oE '^[[:space:]]*VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $2}')
+          if [ -z "$version" ]; then echo "::error::No project VERSION found in CMakeLists.txt"; exit 1; fi
+          DESTDIR="$PWD/stage" cmake --install build
+          share=stage/usr/share/streamflex
+          readelf -d stage/usr/bin/streamflex | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' > needed.txt
+          if [ ! -s needed.txt ]; then echo "::error::readelf found no NEEDED entries in usr/bin/streamflex"; exit 1; fi
+          : > owners.txt
+          while read -r soname; do
+            path=$(ldconfig -p | awk -v s="$soname" '$1 == s && /x86-64/ { print $NF; exit }')
+            if [ -z "$path" ]; then echo "::error::The loader does not find $soname"; exit 1; fi
+            owner=$(rpm -qf --qf '%{NAME}\n' "$(realpath "$path")") || { echo "::error::No package owns $path ($soname)"; exit 1; }
+            echo "$soname -> $path -> $owner"
+            echo "$owner" >> owners.txt
+          done < needed.txt
+          sort -u owners.txt > "$share/REQUIRES-fedora44.txt"
+          printf 'commit=%s\nrun=%s\n' "$COMMIT" "$GITHUB_RUN_ID" > "$share/BUILD-INFO.txt"
+          echo "REQUIRES-fedora44.txt:"; cat "$share/REQUIRES-fedora44.txt"
+          echo "BUILD-INFO.txt:"; cat "$share/BUILD-INFO.txt"
+          mkdir dist
+          (cd stage && find usr ! -type d | LC_ALL=C sort) > files.txt
+          tar -C stage --no-recursion -T files.txt --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
+            -czf "dist/streamflex-$version-fedora44-x86_64.tar.gz"
+          tar -tzvf dist/*.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        name: Upload package
+        with:
+          name: streamflex-fedora44-x86_64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # The Fedora tarball installed as a user (and qa-harness) installs it, in a fresh Fedora 44 with
+  # nothing added: REQUIRES-fedora44.txt's packages from the release repo, then the tarball onto /.
+  # It fails when the list leaves out a library the binary needs, names a package the repo does not
+  # have, or the tarball misses a file the .deb installs.
+  fedora_install:
+    name: Fedora install
+    runs-on: ubuntu-24.04
+    needs: [build_fedora]
+    container:
+      image: mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    env:
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: streamflex-fedora44-x86_64
+          path: dist
+
+      - name: Install the packages it requires
+        run: |
+          count=$(find dist -maxdepth 1 -type f | wc -l)
+          if [ "$count" -ne 1 ]; then echo "::error::The artifact holds $count files, not one tarball"; ls -l dist; exit 1; fi
+          tar -xzOf dist/*.tar.gz usr/share/streamflex/REQUIRES-fedora44.txt > requires.txt
+          if [ ! -s requires.txt ]; then echo "::error::REQUIRES-fedora44.txt is empty"; exit 1; fi
+          mapfile -t requires < requires.txt
+          bash .github/scripts/stall-watch.sh --name "dnf install" -- \
+            dnf install -y --repo=fedora --setopt=install_weak_deps=False "${requires[@]}"
+          rpm -q "${requires[@]}"
+
+      - name: Install the tarball and check it
+        run: |
+          version=$(grep -m1 -oE '^[[:space:]]*VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $2}')
+          tarball=dist/streamflex-$version-fedora44-x86_64.tar.gz
+          if [ ! -f "$tarball" ]; then echo "::error::No $tarball"; ls -l dist; exit 1; fi
+          if tar -tzf "$tarball" | grep -v '^usr/'; then echo "::error::The tarball holds paths outside usr/"; exit 1; fi
+          if tar -tzf "$tarball" | grep '/$'; then echo "::error::The tarball holds directory entries, which reset existing directories"; exit 1; fi
+          tar -xzf "$tarball" -C / --no-same-owner
+          if ldd /usr/bin/streamflex | grep 'not found'; then echo "::error::A library the binary needs is not installed"; exit 1; fi
+          out=$(/usr/bin/streamflex --version)
+          echo "$out"
+          grep -qF "version $version," <<< "$out" || { echo "::error::streamflex --version does not report $version"; exit 1; }
+          for want in /usr/share/streamflex/config.ini /usr/share/applications/streamflex.desktop \
+              /usr/share/icons/hicolor/scalable/apps/streamflex.svg /usr/share/licenses/streamflex/LICENSE \
+              /usr/share/streamflex/assets/icons/library/icons.ini /usr/share/streamflex/assets/icons/library/brands/NOTICE.md \
+              /usr/share/streamflex/assets/icons/library/generic/apps.svg; do
+            [ -f "$want" ] || { echo "::error::$want is not in the tarball"; exit 1; }
+          done
+          info=$(cat /usr/share/streamflex/BUILD-INFO.txt)
+          [ "$info" = "$(printf 'commit=%s\nrun=%s' "$COMMIT" "$GITHUB_RUN_ID")" ] || { echo "::error::BUILD-INFO.txt is not this run's: $info"; exit 1; }
+
   # Generated library files are current, every file is listed, and brand art fits the shared outline
   library_check:
     name: Icon library
@@ -589,7 +719,7 @@ jobs:
             python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
 
   # Single required status check for the master branch ruleset. It passes only when promote,
-  # every platform build, the icon library check, the spelling check, the sanitized unit tests,
+  # every platform build, the Fedora install check, the icon library check, the spelling check, the sanitized unit tests,
   # every headless shard and every merge succeeded. The one exception: the sanitized unit tests,
   # the shards and the merges may be skipped on a push run when promote succeeded and said
   # `promoted=true`, because their PR passed them on the same files; the log and the summary name
@@ -599,7 +729,7 @@ jobs:
   # canceled.
   build-and-test:
     runs-on: ubuntu-24.04
-    needs: [promote, build_windows, build_linux, build_rpi, build_arch, library_check, spelling, unit_sanitizers, headless, headless_merge]
+    needs: [promote, build_windows, build_linux, build_rpi, build_arch, build_fedora, fedora_install, library_check, spelling, unit_sanitizers, headless, headless_merge]
     if: always()
     steps:
       - name: Check the jobs
@@ -671,13 +801,19 @@ jobs:
           persist-credentials: false
 
       # The packages only: each package's artifact is named "<platform> build", and the headless
-      # shard consoles are artifacts of this run too
+      # shard consoles are artifacts of this run too. Fedora's has qa-harness's name (build_fedora)
       - name: Download packages
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "* build"
           path: dist
           merge-multiple: true
+
+      - name: Download the Fedora package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: streamflex-fedora44-x86_64
+          path: dist
 
       # The project version in CMakeLists.txt is what the packages are named
       # after. On a tag it must equal the tag; on a dry run it is the version
@@ -693,8 +829,8 @@ jobs:
           fi
           ls -l dist
           count=$(find dist -maxdepth 1 -type f | wc -l)
-          if [ "$count" -ne 4 ]; then
-            echo "::error::Expected 4 packages (Windows, Debian, Raspberry Pi, Arch), found $count"
+          if [ "$count" -ne 5 ]; then
+            echo "::error::Expected 5 packages (Windows, Debian, Raspberry Pi, Arch, Fedora), found $count"
             exit 1
           fi
           for f in dist/*; do
