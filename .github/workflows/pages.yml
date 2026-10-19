@@ -85,12 +85,18 @@ jobs:
             def pick($re): [$assets[] | select(.name | test($re))]
               | if length == 1 then .[0]
                 else error("release \($tag) needs exactly one asset matching \($re), found \(length)") end;
+            # The Fedora tarball, first published with v0.6.0: null for a release before it, which
+            # download.md then leaves out
+            def pick_since($re): [$assets[] | select(.name | test($re))]
+              | if length == 0 then null elif length == 1 then .[0]
+                else error("release \($tag) has \(length) assets matching \($re), not one") end;
             { tag: $tag,
               version: ($tag | ltrimstr("v")),
               windows: pick("-win64\\.zip$"),
               deb_amd64: pick("_amd64\\.deb$"),
               arch: pick("-x86_64\\.pkg\\.tar\\.zst$"),
-              deb_arm64: pick("_arm64\\.deb$") }' > docs/_data/release.json
+              deb_arm64: pick("_arm64\\.deb$"),
+              fedora: pick_since("-fedora44-x86_64\\.tar\\.gz$") }' > docs/_data/release.json
           cat docs/_data/release.json
 
       # Writes docs/icons.md and copies the icons into the site; both are gitignored
