@@ -214,11 +214,36 @@ class WindowsSetupTest(unittest.TestCase):
     def setUp(self):
         self.ids = write_ids(tempfile.mkdtemp())
         self.manifests = tempfile.mkdtemp()
+        self.locked = []
 
     def tearDown(self):
+        # A locked key is opened up again first (its owner may always change its ACL), or it outlives the cleanup.
+        unlock = "".join(
+            f"$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('{self.SUB}\\{sub}', 'ReadWriteSubTree', "
+            "'ChangePermissions'); $a = New-Object System.Security.AccessControl.RegistrySecurity; "
+            "$a.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule("
+            "[Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'ContainerInherit', 'None', "
+            "'Allow'))); $k.SetAccessControl($a); $k.Close(); "
+            for sub in self.locked)
         subprocess.run(["powershell", "-NoProfile", "-Command",
-                        f"Remove-Item -LiteralPath '{self.TEST_ROOT}' -Recurse -ErrorAction SilentlyContinue"],
+                        unlock + f"Remove-Item -LiteralPath '{self.TEST_ROOT}' -Recurse -ErrorAction SilentlyContinue"],
                        timeout=120)
+
+    def lock(self, sub):
+        """Leaves this user only ReadKey on the stand-in key, as a stock Windows 11 does on HKCU\\Software\\Policies."""
+        # .NET, not Set-Acl: 5.1 cannot load Set-Acl's module when PowerShell 7's modules come first on the path.
+        self.locked.append(sub)
+        key = f"{self.SUB}\\{sub}"
+        script = (f"[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('{key}').Close(); "
+                  f"$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('{key}', 'ReadWriteSubTree', "
+                  "'ChangePermissions'); $a = New-Object System.Security.AccessControl.RegistrySecurity; "
+                  "$a.SetAccessRuleProtection($true, $false); "
+                  "$a.AddAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule("
+                  "[Security.Principal.WindowsIdentity]::GetCurrent().User, 'ReadKey', 'ContainerInherit', 'None', "
+                  "'Allow'))); $k.SetAccessControl($a); $k.Close()")
+        proc = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True,
+                              timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def ps(self, *extra, ids=None, host=HOST_EXE, manifests=None, root=TEST_ROOT, cwd=None):
         cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(KIT / "setup" / "windows.ps1"),
@@ -348,6 +373,31 @@ class WindowsSetupTest(unittest.TestCase):
             self.assertIn("ids file", proc.stderr)
         self.assertFalse(self.exists())
         self.assertEqual(os.listdir(self.manifests), [])
+
+    def test_a_read_only_policy_key_stops_setup_before_any_write(self):
+        self.lock("Policies")
+        proc = self.ps()
+        self.assertEqual(proc.returncode, 1, f"stderr: {proc.stderr}\nstdout: {proc.stdout}")
+        self.assertIn(rf"setup: {self.TEST_ROOT}\Policies\Google\Chrome\ExtensionInstallForcelist is not writable "
+                      "from this shell; run it from a PowerShell opened with Run as administrator", proc.stderr)
+        self.assertEqual(os.listdir(self.manifests), [])
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.SUB) as k:
+            self.assertEqual([winreg.EnumKey(k, i) for i in range(winreg.QueryInfoKey(k)[0])], ["Policies"])
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"{self.SUB}\Policies") as k:
+            self.assertEqual(winreg.QueryInfoKey(k)[:2], (0, 0))
+
+    def test_a_read_only_policy_key_stops_remove_before_any_change(self):
+        chrome = r"Policies\Google\Chrome\ExtensionInstallForcelist"
+        edge = r"Policies\Microsoft\Edge\ExtensionInstallForcelist"
+        self.ok()
+        self.lock(chrome)
+        proc = self.ps("-Remove")
+        self.assertEqual(proc.returncode, 1, f"stderr: {proc.stderr}\nstdout: {proc.stdout}")
+        self.assertIn(rf"setup: {self.TEST_ROOT}\{chrome} is not writable from this shell", proc.stderr)
+        self.assertEqual(self.values(chrome), {"1": CWS_ENTRY})
+        self.assertEqual(self.values(edge), {"1": EDGE_ENTRY})
+        self.assertTrue(self.exists(r"Mozilla\NativeMessagingHosts\app.cptk.overlay"))
+        self.assertIn("setup-state.json", os.listdir(self.manifests))
 
     def test_hklm_scope_puts_policy_and_host_keys_under_its_root(self):
         # The stand-in for HKLM:\Software; under -Scope HKLM the host keys share the policy root.

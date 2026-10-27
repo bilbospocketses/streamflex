@@ -9,6 +9,9 @@ Setup records what it changes in "<ManifestDir>\setup-state.json": every value's
 and data), the forcelist entries it created and the keys it created. -Remove reads that file, puts each prior value
 back, deletes only the entries and keys it created, and deletes the file. With no state file (an install made before
 the file existed) -Remove removes by name, as it used to, and says so.
+Before its first write, setup (and -Remove) checks that every key it will change is writable from this shell, and
+otherwise stops, naming the key: a stock Windows 11 gives a user only read access to HKCU\Software\Policies, so the
+HKCU setup then needs a PowerShell opened with Run as administrator on the same account.
 Windows PowerShell 5.1 compatible.
 #>
 [CmdletBinding()]
@@ -154,11 +157,33 @@ function Remove-IfEmpty([string]$Key) {
     }
 }
 
+function Test-Writable([string]$Key) {
+    # Opens $Key, or the nearest key above it that exists, for writing, and writes nothing. A stock Windows 11 gives
+    # a user only ReadKey on HKCU\Software\Policies, and HKLM is read-only to a shell that is not elevated.
+    $hive, $sub = $Key -split ':\\', 2
+    $base = if ($hive -eq 'HKLM') { [Microsoft.Win32.Registry]::LocalMachine } else { [Microsoft.Win32.Registry]::CurrentUser }
+    while ($sub) {
+        try { $rk = $base.OpenSubKey($sub, $true) } catch { return $false }
+        if ($rk) { $rk.Close(); return $true }
+        $cut = $sub.LastIndexOf('\')
+        $sub = if ($cut -gt 0) { $sub.Substring(0, $cut) } else { '' }
+    }
+    return $true
+}
+
 function Find-Forcelist([string]$Key, [string]$Id) {
     # The value names under $Key whose entry is for $Id.
     if (-not (Test-Path -LiteralPath $Key)) { return }
     $item = Get-Item -LiteralPath $Key
     foreach ($n in @($item.GetValueNames())) { if ([string]$item.GetValue($n) -like "$Id;*") { $n } }
+}
+
+# Every key this run would change is checked before the first write, so a refusal leaves nothing half done. -Remove
+# changes only keys that are there.
+$targets = @($forcelists | ForEach-Object { $_.Key }) + "$pol\Microsoft\Edge" + @($hostKeys | ForEach-Object { $_.Key })
+foreach ($k in $targets) {
+    if ($Remove -and -not (Test-Path -LiteralPath $k)) { continue }
+    if (-not (Test-Writable $k)) { Fail "$k is not writable from this shell; run it from a PowerShell opened with Run as administrator" }
 }
 
 if ($Remove -and $hadState) {
