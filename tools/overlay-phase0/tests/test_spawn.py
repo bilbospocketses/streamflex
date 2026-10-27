@@ -255,5 +255,33 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(events(proc.stdout)[-1]["event"], "keylog_end")
 
 
+@unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
+class SdlProbeTest(unittest.TestCase):
+    def test_pad_runs_without_a_display(self):
+        env = dict(os.environ, SDL_VIDEO_DRIVER="dummy")
+        proc = subprocess.run([SPAWN, "pad", "1", "default"], capture_output=True, text=True, env=env, timeout=120)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(events(proc.stdout)[-1]["event"], "pad_end")
+
+    def test_pad_refuses_an_unknown_backend(self):
+        proc = subprocess.run([SPAWN, "pad", "1", "dinput"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(events(proc.stdout), [])
+        self.assertIn("usage:", proc.stderr)
+
+    def test_pad_refuses_a_bad_seconds_value(self):
+        for seconds in ["x", "1x", "", "-1", "86401"]:
+            with self.subTest(seconds=seconds):
+                try:
+                    proc = subprocess.run(
+                        [SPAWN, "pad", seconds, "default"], capture_output=True, text=True, timeout=120
+                    )
+                except subprocess.TimeoutExpired:
+                    self.fail("HUNG: pad %r did not refuse its seconds value" % seconds)
+                self.assertEqual(proc.returncode, 2)
+                self.assertEqual(events(proc.stdout), [])
+                self.assertIn("usage:", proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

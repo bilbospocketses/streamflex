@@ -49,6 +49,3 @@ int main(int argc, char **argv)
         return probe_focus(argc - 2, argv + 2);
     return usage();
 }
-
-int probe_pad(int argc, char **argv) { (void)argc; (void)argv; return 2; }
-int probe_focus(int argc, char **argv) { (void)argc; (void)argv; return 2; }
