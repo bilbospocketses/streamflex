@@ -11,7 +11,10 @@ $listener.Start()
 Write-Output "serving $root at http://127.0.0.1:$Port/"
 try {
     while ($listener.IsListening) {
-        $ctx = $listener.GetContext()
+        # A blocking GetContext() ignores Ctrl+C; waiting in 500 ms slices lets PowerShell stop between them.
+        $pending = $listener.GetContextAsync()
+        while (-not $pending.Wait(500)) { }
+        $ctx = $pending.Result
         $name = [IO.Path]::GetFileName($ctx.Request.Url.AbsolutePath)
         if (-not $name) { $name = 'probe.html' }
         $file = Join-Path $root $name

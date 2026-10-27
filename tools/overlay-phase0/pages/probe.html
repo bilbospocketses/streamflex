@@ -30,7 +30,12 @@
   tone.start();
   const stream = canvas.captureStream(10);
   stream.addTrack(sink.stream.getAudioTracks()[0]);
-  document.querySelector("video").srcObject = stream;
+  const video = document.querySelector("video");
+  video.srcObject = stream;
+  // The AudioContext starts suspended before any gesture; resume it once the user's P key has started the video.
+  video.addEventListener("play", () => {
+    audio.resume().catch((err) => console.warn("CPTK probe page: the tone could not resume:", err));
+  });
 </script>
 </body>
 </html>
