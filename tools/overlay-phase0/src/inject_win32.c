@@ -9,6 +9,8 @@
 #include "keys.h"
 #include "spawn.h"
 
+static int g_send_failed;
+
 static void send_key(const probe_key *k, int up)
 {
     INPUT in;
@@ -17,7 +19,13 @@ static void send_key(const probe_key *k, int up)
     in.ki.wVk = k->vk;
     in.ki.wScan = (WORD)MapVirtualKeyW(k->vk, MAPVK_VK_TO_VSC);
     in.ki.dwFlags = (k->extended ? KEYEVENTF_EXTENDEDKEY : 0) | (up ? KEYEVENTF_KEYUP : 0);
-    SendInput(1, &in, sizeof in);
+    if (SendInput(1, &in, sizeof in) != 1) {
+        char fields[160];
+        snprintf(fields, sizeof fields, "\"event\":\"send_failed\",\"name\":\"%s\",\"up\":%s,\"error\":%lu", k->name,
+                 up ? "true" : "false", GetLastError());
+        probe_emit(fields);
+        g_send_failed = 1;
+    }
 }
 
 static void sleep_ms(long ms)
@@ -29,7 +37,8 @@ static const probe_key_sender sender = { NULL, send_key, sleep_ms, NULL };
 
 int probe_keys(int argc, char **argv)
 {
-    return probe_keys_main(argc, argv, &sender);
+    int rc = probe_keys_main(argc, argv, &sender);
+    return rc ? rc : g_send_failed;
 }
 
 static LRESULT CALLBACK keylog_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -43,10 +52,8 @@ static LRESULT CALLBACK keylog_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     UINT size = 0;
     GetRawInputData((HRAWINPUT)lp, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER));
     RAWINPUT *ri = malloc(size);
-    if (!ri)
-        return 0;
     char fields[512];
-    if (GetRawInputData((HRAWINPUT)lp, RID_INPUT, ri, &size, sizeof(RAWINPUTHEADER)) == size) {
+    if (ri && GetRawInputData((HRAWINPUT)lp, RID_INPUT, ri, &size, sizeof(RAWINPUTHEADER)) == size) {
         if (ri->header.dwType == RIM_TYPEKEYBOARD) {
             snprintf(fields, sizeof fields, "\"event\":\"raw_key\",\"vk\":%u,\"scan\":%u,\"flags\":%u,\"message\":%u",
                      ri->data.keyboard.VKey, ri->data.keyboard.MakeCode, ri->data.keyboard.Flags,
@@ -64,16 +71,16 @@ static LRESULT CALLBACK keylog_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
     }
     free(ri);
-    return 0;
+    return DefWindowProcW(hwnd, msg, wp, lp); /* lets the system clean up the WM_INPUT */
 }
 
 int probe_keylog(int argc, char **argv)
 {
-    if (argc < 1) {
+    long seconds;
+    if (argc < 1 || probe_parse_count(argv[0], PROBE_KEYLOG_MAX_S, &seconds) < 0) {
         fputs("usage: probe_spawn keylog <seconds>\n", stderr);
         return 2;
     }
-    int seconds = atoi(argv[0]);
     WNDCLASSW wc;
     memset(&wc, 0, sizeof wc);
     wc.lpfnWndProc = keylog_proc;
@@ -90,13 +97,19 @@ int probe_keylog(int argc, char **argv)
     rid[1].usUsage = 0x01;     /* consumer control */
     rid[1].dwFlags = RIDEV_INPUTSINK;
     rid[1].hwndTarget = hwnd;
+    char fields[128];
     if (!RegisterRawInputDevices(rid, 2, sizeof rid[0])) {
-        char fields[96];
-        snprintf(fields, sizeof fields, "\"event\":\"keylog_failed\",\"error\":%lu", GetLastError());
+        snprintf(fields, sizeof fields, "\"event\":\"keylog_failed\",\"step\":\"RegisterRawInputDevices\",\"error\":%lu",
+                 GetLastError());
         probe_emit(fields);
         return 1;
     }
-    SetTimer(hwnd, 1, (UINT)seconds * 1000u, NULL);
+    if (!SetTimer(hwnd, 1, (UINT)seconds * 1000u, NULL)) {
+        snprintf(fields, sizeof fields, "\"event\":\"keylog_failed\",\"step\":\"SetTimer\",\"error\":%lu",
+                 GetLastError());
+        probe_emit(fields);
+        return 1;
+    }
     MSG m;
     while (GetMessageW(&m, NULL, 0, 0) > 0)
         DispatchMessageW(&m);

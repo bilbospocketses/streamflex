@@ -24,49 +24,72 @@ static void sleep_ms(long ms)
     nanosleep(&ts, NULL);
 }
 
-static void emit_ev(int fd, int type, int code, int value)
+static int g_send_failed;
+
+/* Returns 0, or -1 with errno set. */
+static int emit_ev(int fd, int type, int code, int value)
 {
     struct input_event ie;
     memset(&ie, 0, sizeof ie);
     ie.type = (unsigned short)type;
     ie.code = (unsigned short)code;
     ie.value = value;
-    if (write(fd, &ie, sizeof ie) != (ssize_t)sizeof ie)
-        perror("uinput write");
+    return write(fd, &ie, sizeof ie) == (ssize_t)sizeof ie ? 0 : -1;
+}
+
+/* Prints uinput_failed for the step that failed, with its errno, and closes the device. */
+static int uinput_fail(const char *step)
+{
+    int err = errno;
+    char fields[128];
+    snprintf(fields, sizeof fields, "\"event\":\"uinput_failed\",\"step\":\"%s\",\"error\":%d", step, err);
+    probe_emit(fields);
+    if (g_fd >= 0)
+        close(g_fd);
+    g_fd = -1;
+    return 1;
 }
 
 static int uinput_open(void)
 {
     g_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (g_fd < 0) {
-        char fields[96];
-        snprintf(fields, sizeof fields, "\"event\":\"uinput_failed\",\"error\":%d", errno);
-        probe_emit(fields);
-        return 1;
+    if (g_fd < 0)
+        return uinput_fail("open");
+    if (ioctl(g_fd, UI_SET_EVBIT, EV_KEY) < 0)
+        return uinput_fail("UI_SET_EVBIT");
+    for (unsigned i = 0; i < probe_keys_count; i++) {
+        if (ioctl(g_fd, UI_SET_KEYBIT, probe_keys_table[i].evdev) < 0)
+            return uinput_fail("UI_SET_KEYBIT");
     }
-    ioctl(g_fd, UI_SET_EVBIT, EV_KEY);
-    for (unsigned i = 0; i < probe_keys_count; i++)
-        ioctl(g_fd, UI_SET_KEYBIT, probe_keys_table[i].evdev);
     struct uinput_setup us;
     memset(&us, 0, sizeof us);
     us.id.bustype = BUS_USB;
     us.id.vendor = 0x1209;
     us.id.product = 0x0001;
     snprintf(us.name, sizeof us.name, "CPTK probe keyboard");
-    ioctl(g_fd, UI_DEV_SETUP, &us);
-    ioctl(g_fd, UI_DEV_CREATE);
+    if (ioctl(g_fd, UI_DEV_SETUP, &us) < 0)
+        return uinput_fail("UI_DEV_SETUP");
+    if (ioctl(g_fd, UI_DEV_CREATE) < 0)
+        return uinput_fail("UI_DEV_CREATE");
     sleep_ms(1000); /* let the desktop pick up the new device */
     return 0;
 }
 
 static void send_key(const probe_key *k, int up)
 {
-    emit_ev(g_fd, EV_KEY, k->evdev, up ? 0 : 1);
-    emit_ev(g_fd, EV_SYN, SYN_REPORT, 0);
+    if (emit_ev(g_fd, EV_KEY, k->evdev, up ? 0 : 1) == 0 && emit_ev(g_fd, EV_SYN, SYN_REPORT, 0) == 0)
+        return;
+    int err = errno;
+    char fields[160];
+    snprintf(fields, sizeof fields, "\"event\":\"send_failed\",\"name\":\"%s\",\"up\":%s,\"error\":%d", k->name,
+             up ? "true" : "false", err);
+    probe_emit(fields);
+    g_send_failed = 1;
 }
 
 static void uinput_close(void)
 {
+    sleep_ms(500); /* let the desktop read the last key-up before the device goes away */
     ioctl(g_fd, UI_DEV_DESTROY);
     close(g_fd);
     g_fd = -1;
@@ -76,12 +99,14 @@ static const probe_key_sender sender = { uinput_open, send_key, sleep_ms, uinput
 
 int probe_keys(int argc, char **argv)
 {
-    return probe_keys_main(argc, argv, &sender);
+    int rc = probe_keys_main(argc, argv, &sender);
+    return rc ? rc : g_send_failed;
 }
 
 int probe_keylog(int argc, char **argv)
 {
-    if (argc < 1) {
+    long seconds;
+    if (argc < 1 || probe_parse_count(argv[0], PROBE_KEYLOG_MAX_S, &seconds) < 0) {
         fputs("usage: probe_spawn keylog <seconds>\n", stderr);
         return 2;
     }
@@ -102,7 +127,7 @@ int probe_keylog(int argc, char **argv)
     char fields[160];
     snprintf(fields, sizeof fields, "\"event\":\"keylog_devices\",\"count\":%u", (unsigned)n);
     probe_emit(fields);
-    int64_t end = probe_now_ms() + (int64_t)atoi(argv[0]) * 1000;
+    int64_t end = probe_now_ms() + (int64_t)seconds * 1000;
     while (probe_now_ms() < end) {
         if (n == 0) {
             sleep_ms(50);

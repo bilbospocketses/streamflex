@@ -1,5 +1,7 @@
 #include "keys.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +48,17 @@ int probe_parse_chord(const char *arg, const probe_key **out, char *bad, size_t 
     }
 }
 
+int probe_parse_count(const char *s, long max, long *out)
+{
+    char *end;
+    errno = 0;
+    long v = strtol(s, &end, 10);
+    if (end == s || *end != '\0' || errno || v < 0 || v > max)
+        return -1;
+    *out = v;
+    return 0;
+}
+
 int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
 {
     int i = 0, dry = 0;
@@ -53,8 +66,8 @@ int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
         dry = 1;
         i = 1;
     }
-    long delay = argc - i < 2 ? -1 : atol(argv[i++]);
-    if (delay < 0) { /* a negative delay is Sleep(INFINITE) on Windows */
+    long delay; /* never negative: that is Sleep(INFINITE) on Windows */
+    if (argc - i < 2 || probe_parse_count(argv[i++], LONG_MAX, &delay) < 0) {
         fputs("usage: probe_spawn keys [--dry-run] <delay_ms> <chord>...\n", stderr);
         return 2;
     }
@@ -69,9 +82,8 @@ int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
         }
     }
     if (!dry) {
-        int rc = sender->open ? sender->open() : 0;
-        if (rc)
-            return rc;
+        if (sender->open && sender->open() != 0)
+            return 1;
         sender->sleep_ms(delay);
     }
     for (int a = i; a < argc; a++) {

@@ -214,6 +214,27 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertEqual(events(proc.stdout), [])
 
+    def test_non_numeric_delay_is_refused(self):
+        for delay in ["Up", "5x", ""]:
+            with self.subTest(delay=delay):
+                proc = subprocess.run(
+                    [SPAWN, "keys", "--dry-run", delay, "Down"], capture_output=True, text=True, timeout=120
+                )
+                self.assertEqual(proc.returncode, 2)
+                self.assertEqual(events(proc.stdout), [])
+                self.assertIn("usage:", proc.stderr)
+
+    def test_keylog_refuses_a_bad_seconds_value(self):
+        for seconds in ["x", "1x", "", "-1"]:
+            with self.subTest(seconds=seconds):
+                try:
+                    proc = subprocess.run([SPAWN, "keylog", seconds], capture_output=True, text=True, timeout=120)
+                except subprocess.TimeoutExpired:
+                    self.fail("HUNG: keylog %r did not refuse its seconds value" % seconds)
+                self.assertEqual(proc.returncode, 2)
+                self.assertEqual(events(proc.stdout), [])
+                self.assertIn("usage:", proc.stderr)
+
     def test_keylog_ends_on_time(self):
         proc = subprocess.run([SPAWN, "keylog", "1"], capture_output=True, text=True, timeout=120)
         self.assertEqual(events(proc.stdout)[-1]["event"], "keylog_end")
