@@ -121,6 +121,9 @@ class ExtensionBehaviorTest(unittest.TestCase):
     def test_a_closed_tab_is_forgotten(self):
         self.scenario("closed-tab-is-forgotten")
 
+    def test_the_token_is_stripped_on_a_double_slash_path(self):
+        self.scenario("token-is-stripped-on-a-double-slash-path")
+
     def test_the_token_is_stripped_from_the_fragment_only(self):
         self.scenario("token-is-stripped-from-the-fragment-only")
 

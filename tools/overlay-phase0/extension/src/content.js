@@ -85,12 +85,15 @@
     }
   }
 
-  // Removes the token from the fragment only, on the same boundary the match uses, and keeps the rest of it.
+  // Removes the token from the fragment only, on the same boundary the match uses, and keeps the rest of it. The
+  // full URL is passed: a path-only one starting with "//" would parse as protocol-relative and throw.
   function stripToken() {
     let hash = location.hash.replace(TOKEN_IN_HASH, (found) => (found[0] === "#" ? "#" : ""));
     hash = hash.replace(/^#&/, "#");
     if (hash === "#") hash = "";
-    history.replaceState(null, "", location.pathname + location.search + hash);
+    const url = new URL(location.href);
+    url.hash = hash;
+    history.replaceState(null, "", url.href);
   }
 
   async function main() {

@@ -140,9 +140,12 @@ function makeBrowser({ allUrls = true, host = "ack" } = {}) {
     };
     const history = {
       state: null,
+      // Like a browser: a URL that resolves to another origin throws SecurityError and changes nothing.
       replaceState: (state, title, next) => {
+        const resolved = new URL(next, page.url);
+        if (resolved.origin !== page.url.origin) throw new Error(`SecurityError: replaceState to ${resolved.href}`);
         page.replaced.push(next);
-        page.url = new URL(next, page.url);
+        page.url = resolved;
       },
     };
     const contentApi = {
@@ -159,7 +162,8 @@ function makeBrowser({ allUrls = true, host = "ack" } = {}) {
     };
     const navigator = { webdriver, userActivation: { isActive: true } };
     pages.set(tabId, page);
-    vm.runInNewContext(CONTENT, { chrome: contentApi, location, history, document: doc, window, navigator, console });
+    const globals = { chrome: contentApi, location, history, document: doc, window, navigator, console, URL };
+    vm.runInNewContext(CONTENT, globals);
     page.load = () => {
       doc.readyState = "interactive";
       doc.body = body;
@@ -208,7 +212,7 @@ const SCENARIOS = {
   async "token-activates-only-its-tab"() {
     const b = makeBrowser();
     const page = await openLoaded(b, 1, `https://site.example/watch?v=1#cptk=${TOKEN}&t=30`);
-    assert.deepEqual(page.replaced, ["/watch?v=1#t=30"]);
+    assert.deepEqual(page.replaced, ["https://site.example/watch?v=1#t=30"]);
     assert.equal(b.session.get("active:1"), true);
     assert.equal(b.posted.length, 1);
     const start = b.posted[0];
@@ -331,6 +335,24 @@ const SCENARIOS = {
     assert.equal(page.keydown.length, 0);
   },
 
+  // "//evil.com/x" as a path-only URL would be protocol-relative: another origin, so replaceState would throw.
+  async "token-is-stripped-on-a-double-slash-path"() {
+    const cases = [
+      [`//evil.com/x#cptk=${TOKEN}&a=1`, "//evil.com/x#a=1"],
+      [`//evil.com/x?q=1#cptk=${TOKEN}`, "//evil.com/x?q=1"],
+    ];
+    for (const [given, expected] of cases) {
+      const b = makeBrowser();
+      const page = await openLoaded(b, 1, `https://site.example${given}`);
+      assert.deepEqual(page.replaced, [`https://site.example${expected}`], given);
+      assert.equal(page.url.href, `https://site.example${expected}`, given);
+      assert.equal(b.session.get("active:1"), true, given);
+      assert.equal(b.posted[0].event, "start", given);
+      assert.equal(page.keydown.length, 1, given);
+      assert.doesNotMatch(page.boxText(), /error/, given);
+    }
+  },
+
   async "token-is-stripped-from-the-fragment-only"() {
     const cases = [
       [`/p#cptk=${TOKEN}`, "/p"],
@@ -341,7 +363,7 @@ const SCENARIOS = {
     for (const [given, expected] of cases) {
       const b = makeBrowser();
       const page = await openLoaded(b, 1, `https://site.example${given}`);
-      assert.deepEqual(page.replaced, [expected], given);
+      assert.deepEqual(page.replaced, [`https://site.example${expected}`], given);
       assert.equal(b.session.get("active:1"), true, given);
     }
     const ignored = [
