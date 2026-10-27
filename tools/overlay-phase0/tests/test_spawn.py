@@ -30,6 +30,16 @@ def read_until_exited(proc, lines):
     return reader
 
 
+def close_pipes(proc):
+    """Closes proc's pipes. communicate() closes them too, but a test that fails before it never gets there."""
+    for stream in (proc.stdin, proc.stdout, proc.stderr):
+        if stream:
+            try:
+                stream.close()
+            except OSError:
+                pass  # a flush into a pipe whose child is gone; the close is all that was wanted
+
+
 def wait_for_file(path, what):
     end = time.monotonic() + 120
     while not os.path.exists(path):
@@ -84,6 +94,7 @@ class RunTest(unittest.TestCase):
             if proc.poll() is None:
                 proc.kill()  # on Windows the job closes with it and ends the child
                 proc.wait(timeout=120)
+            close_pipes(proc)
             if child and os.name == "posix":
                 try:
                     os.killpg(child, signal.SIGKILL)
@@ -117,6 +128,7 @@ class RunTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
                     proc.wait(timeout=120)
+                close_pipes(proc)
         self.assertTrue(ran)
         lines += rest.splitlines(True)
         self.assertEqual([line for line in lines if not line.startswith("{")], [])
@@ -152,31 +164,32 @@ class RunTest(unittest.TestCase):
                      % (release, marker))
             leader = ("import subprocess, sys; subprocess.Popen([sys.executable, '-c', %r], start_new_session=True); "
                       "sys.exit(4)" % stray)
-            proc = subprocess.Popen(
+            # The with block closes both pipes and waits for probe_spawn on every path, a failed one included.
+            with subprocess.Popen(
                 [SPAWN, "run", sys.executable, "-c", leader], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
-            )
-            try:
-                lines = []
-                reader = read_until_exited(proc, lines)
-                end = time.monotonic() + 120
-                while not any('"group_empty"' in line for line in list(lines)):
-                    if not reader.is_alive():
-                        self.fail("run ended with no group_empty line: " + "".join(lines))
-                    if time.monotonic() > end:
-                        self.fail("HUNG: no group_empty line while the stray descendant waited")
-                    time.sleep(0.05)
-                early = [e["event"] for e in events("".join(list(lines)))]
-                stray_done_early = os.path.exists(marker)
-                open(release, "w").close()
-                reader.join(120)
-                if reader.is_alive():
-                    self.fail("HUNG: no exited line after the stray descendant was released")
-                stray_done = os.path.exists(marker)
-            finally:
-                open(release, "w").close()  # never leave the stray waiting
-                if proc.poll() is None:
-                    proc.kill()
-                    proc.wait(timeout=120)
+            ) as proc:
+                try:
+                    lines = []
+                    reader = read_until_exited(proc, lines)
+                    end = time.monotonic() + 120
+                    while not any('"group_empty"' in line for line in list(lines)):
+                        if not reader.is_alive():
+                            self.fail("run ended with no group_empty line: " + "".join(lines))
+                        if time.monotonic() > end:
+                            self.fail("HUNG: no group_empty line while the stray descendant waited")
+                        time.sleep(0.05)
+                    early = [e["event"] for e in events("".join(list(lines)))]
+                    stray_done_early = os.path.exists(marker)
+                    open(release, "w").close()
+                    reader.join(120)
+                    if reader.is_alive():
+                        self.fail("HUNG: no exited line after the stray descendant was released")
+                    stray_done = os.path.exists(marker)
+                finally:
+                    open(release, "w").close()  # never leave the stray waiting
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait(timeout=120)
         self.assertEqual(early, ["started", "leader_exited", "group_empty"])
         self.assertFalse(stray_done_early, "the stray finished before group_empty was read")
         evs = events("".join(lines))
@@ -202,6 +215,7 @@ class RunTest(unittest.TestCase):
             if proc.poll() is None:
                 proc.kill()  # on Windows the job closes with it and ends the child
                 proc.wait(timeout=120)
+            close_pipes(proc)
         return events(out)
 
     @unittest.skipUnless(os.name == "nt", "a Windows close posts WM_CLOSE to the child's windows")
