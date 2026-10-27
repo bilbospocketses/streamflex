@@ -77,8 +77,8 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
    powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\pages\serve.ps1"
    ```
 
-3. In Chrome, open `http://127.0.0.1:8765/#cptk=0123456789abcdef0123456789abcdef` and press a few arrow keys. The
-   probe's box, headed "CPTK Overlay Probe 0.0.1", appears in the bottom-left corner.
+3. In Chrome, open a new tab, go to `http://127.0.0.1:8765/#cptk=0123456789abcdef0123456789abcdef` and press a few
+   arrow keys. The probe's box, headed "CPTK Overlay Probe 0.0.1", appears in the bottom-left corner.
 4. Take a screenshot with Win+Shift+S and save it.
 5. Fit it to 1280 x 800. In your first PowerShell window, set `$shot` to the file you saved, then paste the rest:
 
@@ -149,7 +149,7 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
    *No, I am not using remote code*, the same two data types (web history, user activity) and the certifications,
    and the privacy policy URL.
 5. **Store listings:** click *Edit details* on the English row.
-   - Description: paste it. Edge wants at least 250 characters; this one has about 1,600.
+   - Description: paste it. Edge wants at least 250 characters; this one has about 1,800.
    - Extension logo: `icon128.png`, the same file as the Chrome store icon.
    - Screenshot: `cptk-overlay-probe-1280x800.png` (optional here, but use it).
    - The name and the short description come from the package. That is expected.
@@ -170,12 +170,13 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
 ## 8. Sign the Firefox build
 
 A signed file cannot be changed, and AMO will not sign version 0.0.1 a second time. So check first that the build
-carries the probe's id and its data declaration. This must print `True`:
+is version 0.0.1 and carries the probe's id and its data declaration. This must print `True`:
 
 ```powershell
 $m = Get-Content -Raw "$repo\tools\overlay-phase0\extension\dist\firefox\manifest.json" | ConvertFrom-Json
 $g = $m.browser_specific_settings.gecko
-$g.id -eq 'overlay-probe@cptk.app' -and (($g.data_collection_permissions.required -join ',') -eq 'browsingActivity,websiteActivity')
+$req = @($g.data_collection_permissions.required)
+$m.version -ceq '0.0.1' -and $g.id -ceq 'overlay-probe@cptk.app' -and $req.Count -eq 2 -and $req[0] -ceq 'browsingActivity' -and $req[1] -ceq 'websiteActivity'
 ```
 
 `False` means the build is not the reviewed one. Stop and ask the streamflex tab.
@@ -236,10 +237,11 @@ The signed XPI is now at
 
    ```powershell
    $ids = Get-Content -Raw "$repo\tools\overlay-phase0\ids.json" | ConvertFrom-Json
-   $ids.chrome_web_store -match '^[a-p]{32}$' -and $ids.edge_addons -match '^[a-p]{32}$'
+   $ids.chrome_web_store -cmatch '^[a-p]{32}$' -and $ids.edge_addons -cmatch '^[a-p]{32}$' -and $ids.gecko -ceq 'overlay-probe@cptk.app'
    ```
 
-   `False` means an id is mistyped, or an Edge Product ID or Store ID was copied by mistake.
+   `False` means an id is mistyped, an Edge Product ID or Store ID was copied by mistake, or the `gecko` line is not
+   `overlay-probe@cptk.app`.
 3. Do not commit the file yourself. The streamflex tab commits it with `listing.md`.
 
 ## 10. Tell the streamflex tab
@@ -266,3 +268,8 @@ powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\make-kit.ps
 
 Each store emails you when the item is published. Tell the streamflex tab when each one goes live. Guest rows G1, G10
 and G13 need both live. The other rows do not.
+
+If you submitted with the PR #73 permalink for the privacy policy, then once PR #73 has merged, replace the privacy
+policy URL in both stores with
+`https://github.com/bilbospocketses/streamflex/blob/master/tools/overlay-phase0/privacy-policy.md`. The permalink keeps
+working, but it freezes the policy at that commit.

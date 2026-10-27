@@ -28,10 +28,10 @@ created in Phase 0, and the gecko id `overlay@cptk.app` stays unclaimed on AMO.
 
 **Name:** CPTK Overlay Probe
 
-**Summary (132 characters max):** A measurement probe for CPTK's TV-remote overlay. It runs only in CPTK's own browser
-profiles and does nothing anywhere else.
+**Summary (132 characters max):** A measurement probe for CPTK's TV-remote overlay. It acts only in tabs opened with
+CPTK's launch code, and does nothing elsewhere.
 
-Both stores take the summary from the manifest's `description` (125 characters), and neither lets you edit it in
+Both stores take the summary from the manifest's `description` (130 characters), and neither lets you edit it in
 the dashboard. Changing it means changing `build.py` and uploading a new package.
 
 **Visibility:** Unlisted (Chrome Web Store), Hidden (Edge Add-ons), unlisted self-distribution (AMO).
@@ -40,7 +40,7 @@ the dashboard. Changing it means changing `build.py` and uploading a new package
 
 **Language:** English (United States).
 
-**Description** (Edge requires 250 to 10,000 characters; this is about 1,600):
+**Description** (Edge requires 250 to 10,000 characters; this is about 1,800):
 
 > CPTK Overlay Probe is a measurement tool, not a finished product. CPTK is a 10-foot launcher for living-room PCs,
 > and its developers are planning a separate extension, CPTK Overlay, that will let a TV remote work on streaming
@@ -48,14 +48,17 @@ the dashboard. Changing it means changing `build.py` and uploading a new package
 > and reachable, which remote keys reach a page, and whether full screen and video playback can start from a key
 > press.
 >
-> The probe does nothing in a tab unless CPTK opened that tab. CPTK adds a launch code to the end of the address, and
-> the probe removes it from the address bar at once. Only that tab becomes active, and only until the tab closes or
-> the browser quits. Every other tab, including your everyday browsing, is left alone.
+> The probe does nothing in a tab unless the tab was opened with CPTK's launch code at the end of its address (CPTK
+> adds the code when it opens a tab). The probe removes the code from the address bar at once. Only that tab becomes
+> active, and only until the tab closes or the browser quits. Every other tab, including your everyday browsing, is
+> left alone.
 >
 > In an active tab, the probe shows its own box in the bottom-left corner of the page, headed "CPTK Overlay Probe
 > 0.0.1", with its last few readings. It passes the remote's key presses to the CPTK program on the same computer. It
-> passes named keys, such as the arrow keys, Enter and the media keys. It never passes the characters you type: a
-> letter or a digit is reported only as "char". The F key enters full screen and the P key starts the page's video,
+> passes named keys, such as the arrow keys, Enter and the media keys. Except on CPTK's own local test pages, it never
+> passes the characters you type: a letter, a digit, an accent key, or a key pressed while an input method is
+> composing text is reported only as "char", with no key code. The F key enters full screen and the P key starts the
+> page's video,
 > and the probe reports whether each one worked. If the CPTK program cannot be reached, the box says why.
 >
 > The probe talks only to the CPTK program, through the browser's native messaging. The CPTK program writes each
@@ -78,23 +81,24 @@ The Chrome Web Store's *Privacy practices* tab and Edge's *Privacy* page ask the
 
 **Single purpose:**
 
-> Measures how a TV remote can work on web pages in browser tabs that the CPTK launcher opens. In those tabs only, it
-> passes the remote's key presses and the results of full screen and video playback to the CPTK program on the same
-> computer, and shows them in an on-page box. It does nothing in any other tab.
+> Measures how a TV remote can work on web pages in browser tabs opened with CPTK's launch code in their address
+> (CPTK adds it when it opens a tab). In those tabs only, it passes the remote's key presses and the results of full
+> screen and video playback to the CPTK program on the same computer, and shows them in an on-page box. It does
+> nothing in any other tab.
 
 **Permission justifications:**
 
 - *nativeMessaging:* to talk to the CPTK program on the same computer (native host `app.cptk.overlay`). The probe
   passes its readings to it, and shows the connection state in the probe's on-page box.
-- *storage:* to remember, for this browser session only, which tabs CPTK opened, so the probe stays inactive in
-  every other tab. It uses `storage.session`, which the browser clears when it closes. A tab's entry is removed when
-  the tab closes. The probe also keeps the CPTK program's last connection error there, to show it in the box. It
-  keeps nothing on disk.
+- *storage:* to remember, for this browser session only, which tabs were opened with CPTK's launch code, so the probe
+  stays inactive in every other tab. It uses `storage.session`, which the browser clears when it closes. A tab's
+  entry is removed when the tab closes. The probe also keeps the CPTK program's last connection error there, to show
+  it in the box. It keeps nothing on disk.
 - *Host permission (`<all_urls>`, and the content script on `<all_urls>`):* CPTK users add their own streaming sites
   and media servers (Jellyfin, Emby) at addresses that are not known in advance, often on the home network, and the
   probe has to measure the same pages. The content script runs at `document_start` so it can remove CPTK's launch
-  code from the address bar before the page reads it. On any page CPTK did not open, it does nothing: it asks the
-  background whether the tab is active, gets "no", and stops.
+  code from the address bar before the page reads it. In any tab not opened with the launch code, it does nothing: it
+  asks the background whether the tab is active, gets "no", and stops.
 
 **Remote code:** No, I am not using remote code.
 
@@ -107,11 +111,13 @@ The Chrome Web Store's *Privacy practices* tab and Edge's *Privacy* page ask the
 handle user data, even though none of it leaves the computer.
 
 Check these two:
-- **Web history:** the origin (scheme, host and port, not the full address) of a page in a tab CPTK opened.
-- **User activity:** in a tab CPTK opened, the key presses, and whether full screen and video playback worked after
-  F or P. Named keys (ArrowUp, Enter, MediaPlayPause, F5) are passed by value. Any other key, which means any typed
-  character, is passed only as `char`, with no key code. The one exception is the kit's own test pages at
-  `http://127.0.0.1:8765`, which CPTK serves on the same computer: there, keys are passed in full.
+- **Web history:** the origin (scheme, host and port, not the full address) of a page in a tab opened with CPTK's
+  launch code in its address (CPTK adds it when it opens a tab).
+- **User activity:** in such a tab, the key presses, and whether full screen and video playback worked after F or P.
+  Named keys (ArrowUp, Enter, MediaPlayPause, F5) are passed by value. Every other key is passed only as `char`, with
+  no key code: any typed character, any key pressed while an input method is composing text, and any accent (dead)
+  or unidentified key. The one exception is the kit's own test pages at `http://127.0.0.1:8765`, which CPTK serves
+  on the same computer: there, keys are passed in full.
 
 Leave every other type unchecked: personally identifiable information, health, financial and payment,
 authentication, personal communications, location and website content. The probe checks whether a page has a video
@@ -121,7 +127,7 @@ Where a store has a box for how the data is used, paste:
 
 > Passed only to the CPTK program on the same computer (native host `app.cptk.overlay`), which writes it to a log
 > file on that computer. Nothing leaves the computer. Nothing is sold or shared. Typed characters are redacted to
-> "char".
+> "char", except on CPTK's own local test pages.
 
 Check all three certifications: the data is not sold or transferred to third parties, is not used for anything
 outside the single purpose, and is not used to decide creditworthiness or for lending.
@@ -139,11 +145,12 @@ The Chrome Web Store's *Test instructions* tab and Edge's *Notes for certificati
 optional. They are worth filling in here, because the probe does nothing on an ordinary page.
 
 > CPTK Overlay Probe is a measurement tool for a planned product. It does nothing until CPTK, a desktop launcher,
-> opens a tab with its launch code. To see it work without CPTK, open any web page with
-> `#cptk=0123456789abcdef0123456789abcdef` added to the end of the address. A box appears in the bottom-left corner,
-> headed "CPTK Overlay Probe 0.0.1". Its "host:" line says the native messaging host was not found, because the CPTK
-> program is not installed. Press an arrow key and a `key` line appears. Press a letter and the line shows
-> `"key":"char"`. F enters full screen. Open the same page without the code and nothing happens.
+> opens a tab with its launch code. To see it work without CPTK, open this complete address in a new tab:
+> `https://example.com/#cptk=0123456789abcdef0123456789abcdef`. A box appears in the bottom-left corner, headed
+> "CPTK Overlay Probe 0.0.1". Its "host:" line says the native messaging host was not found, because the CPTK program
+> is not installed. Press an arrow key and a `key` line appears. Press a letter and the line shows `"key":"char"`.
+> F enters full screen. Then open `https://example.com/` in a second new tab: nothing happens there and no box
+> appears. (A tab stays active until it closes, so the check without the code needs its own new tab.)
 
 ## Firefox (AMO, unlisted)
 

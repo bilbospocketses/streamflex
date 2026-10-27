@@ -5,15 +5,19 @@ launcher for living-room PCs. It is not CPTK Overlay, the planned product.
 
 ## What the probe handles
 
-Only in a browser tab that CPTK opened, and only while that tab is open:
+Only in a browser tab opened with CPTK's launch code in its address (CPTK adds the code when it opens a tab), and only
+while that tab is open:
 
 - **The page's origin:** its scheme, host and port, not its full address.
 - **Key presses on the page.** Named keys, such as the arrow keys, Enter and the media keys, are recorded by name.
-  A typed character, such as a letter or a digit, is recorded only as "char". The one exception is CPTK's own test
-  pages at `http://127.0.0.1:8765`, which run on your computer: there, keys are recorded in full.
+  Every other key is recorded only as "char", with no key code: a typed character such as a letter or a digit, a key
+  pressed while an input method is composing text, and an accent (dead) or unidentified key. The one exception is
+  CPTK's own test pages at `http://127.0.0.1:8765`, which run on your computer: there, keys are recorded in full.
 - **Full screen and playback results:** whether full screen and video playback worked when you pressed F or P.
-- **Technical details:** the browser's tab and frame numbers, a time stamp, whether the extension may run on all
-  sites, and whether the browser reports that it is under automation.
+- **Technical details:** the browser's tab and frame numbers, a time stamp, the probe's version, whether the extension
+  may run on all sites, whether the browser reports that it is under automation, whether the launch code was in the
+  page's address, and for each key press, whether it came from the user rather than a script and whether the page had
+  seen a recent user gesture.
 
 In any other tab the probe does nothing and handles nothing.
 
