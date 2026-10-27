@@ -3,9 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the throwaway probe kit Phase 0 measures with, publish the probe extension as CPTK Overlay 0.0.1
-(unlisted) in all three stores, and write the guest protocol (G1-G16) and the user's run sheet (H1-H4), so that
-qa-harness-sf and the user can produce every result the spec's Phase 0 asks for.
+**Goal:** Build the throwaway probe kit Phase 0 measures with, publish the probe extension as its own listing, CPTK
+Overlay Probe 0.0.1 (unlisted), in all three stores, and write the guest protocol (G1-G16) and the user's run sheet
+(H1-H4), so that qa-harness-sf and the user can produce every result the spec's Phase 0 asks for. The real CPTK
+Overlay listing is not created until R1.
 
 **Architecture:** A self-contained kit under `tools/overlay-phase0/`, never built by the root `CMakeLists.txt` and
 never shipped: a C native-messaging probe host, a C spawner (process supervision, key injection, key logging, SDL3
@@ -23,8 +24,9 @@ Windows, WebExtensions MV3, `web-ext` for AMO signing.
 
 - **No product code:** nothing under `src/`, `assets/`, `config/` or the root `CMakeLists.txt` changes. The kit is
   `tools/overlay-phase0/` only, plus documents in `design/research/overlay/phase0/`.
-- **Names are final from day one:** native host `app.cptk.overlay`; extension name `CPTK Overlay`; gecko id
-  `overlay@cptk.app`; the probe is version `0.0.1` of the real store listings.
+- **Names are final from day one:** the probe is published as its own listing, extension name `CPTK Overlay Probe`,
+  gecko id `overlay-probe@cptk.app`, version `0.0.1`. The real CPTK Overlay listing (gecko id `overlay@cptk.app`)
+  is not created until R1. The native host `app.cptk.overlay` is unchanged.
 - **Store update URLs:** Chrome `https://clients2.google.com/service/update2/crx`; Edge
   `https://edge.microsoft.com/extensionwebstorebase/v1/crx`.
 - **The launch token** is 32 lowercase hex characters in the first URL's fragment as `cptk=<token>`.
@@ -480,7 +482,7 @@ PROBE_HOST=build-phase0/probe_host PROBE_SPAWN=build-phase0/probe_spawn python3 
 |---|---|
 | `probe_host` | The native-messaging host `app.cptk.overlay`: logs every message to `probe.log` and acknowledges it. |
 | `probe_spawn` | `run` (supervise a browser), `keys` (inject keys), `keylog` (log raw keys), `pad` (gamepad in the background), `focus` (does the launcher get focus back). |
-| `extension/` | CPTK Overlay 0.0.1, the probe extension, and `build.py`, which makes the Chromium and Firefox packages. |
+| `extension/` | CPTK Overlay Probe 0.0.1, the probe extension, and `build.py`, which makes the Chromium and Firefox packages. |
 | `pages/` | `probe.html` (fullscreen and media-start targets), `keylog.html` (what a page sees), `serve.ps1` (a page server for Windows guests). |
 | `setup/` | `windows.ps1`, `linux_setup.py`: policy and host registration. `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |
 | `ids.json` | The three store ids, recorded when the probe is published. |
@@ -1752,7 +1754,7 @@ class ExtensionBuildTest(unittest.TestCase):
         for flavor in ("chromium", "firefox"):
             m = self.manifest(flavor)
             self.assertEqual(m["manifest_version"], 3)
-            self.assertEqual(m["name"], "CPTK Overlay")
+            self.assertEqual(m["name"], "CPTK Overlay Probe")
             self.assertEqual(m["version"], "0.0.1")
             self.assertEqual(m["permissions"], ["nativeMessaging", "storage"])
             self.assertEqual(m["host_permissions"], ["<all_urls>"])
@@ -1764,13 +1766,13 @@ class ExtensionBuildTest(unittest.TestCase):
         ff = self.manifest("firefox")
         self.assertEqual(ff["background"], {"scripts": ["background.js"]})
         gecko = ff["browser_specific_settings"]["gecko"]
-        self.assertEqual(gecko["id"], "overlay@cptk.app")
+        self.assertEqual(gecko["id"], "overlay-probe@cptk.app")
         self.assertEqual(gecko["strict_min_version"], "140.0")
         self.assertEqual(gecko["data_collection_permissions"], {"required": ["none"]})
 
     def test_zips_hold_the_manifest_at_the_root(self):
         for flavor in ("chromium", "firefox"):
-            with zipfile.ZipFile(DIST / f"cptk-overlay-{flavor}-0.0.1.zip") as z:
+            with zipfile.ZipFile(DIST / f"cptk-overlay-probe-{flavor}-0.0.1.zip") as z:
                 self.assertIn("manifest.json", z.namelist())
                 self.assertIn("content.js", z.namelist())
 
@@ -1796,7 +1798,7 @@ the 4 tests runs.
 `tools/overlay-phase0/extension/src/content.js`:
 
 ```js
-// CPTK Overlay 0.0.1, the Phase 0 probe. It does nothing unless this browser profile was started with a CPTK token.
+// CPTK Overlay Probe 0.0.1, the Phase 0 probe. It does nothing unless this browser profile was started with a CPTK token.
 (() => {
   "use strict";
   const api = globalThis.browser ?? globalThis.chrome;
@@ -1814,7 +1816,7 @@ the 4 tests runs.
         "font:16px monospace;padding:8px;white-space:pre;pointer-events:none";
       document.body.appendChild(box);
     }
-    if (box) box.textContent = `CPTK probe ${VERSION}\n` + lines.join("\n");
+    if (box) box.textContent = `CPTK Overlay Probe ${VERSION}\n` + lines.join("\n");
   }
 
   function report(event, data) {
@@ -1878,7 +1880,7 @@ the 4 tests runs.
 `tools/overlay-phase0/extension/src/background.js`:
 
 ```js
-// CPTK Overlay 0.0.1, the Phase 0 probe: relays the content script's reports to the native host.
+// CPTK Overlay Probe 0.0.1, the Phase 0 probe: relays the content script's reports to the native host.
 const api = globalThis.browser ?? globalThis.chrome;
 let port = null;
 
@@ -1914,7 +1916,7 @@ api.permissions.contains({ origins: ["<all_urls>"] }).then((granted) => {
 
 ```python
 #!/usr/bin/env python3
-"""Builds CPTK Overlay 0.0.1 (the Phase 0 probe) for Chromium (Chrome, Edge) and Firefox."""
+"""Builds CPTK Overlay Probe 0.0.1 (the Phase 0 probe) for Chromium (Chrome, Edge) and Firefox."""
 import json
 import pathlib
 import shutil
@@ -1927,7 +1929,7 @@ VERSION = "0.0.1"
 
 BASE = {
     "manifest_version": 3,
-    "name": "CPTK Overlay",
+    "name": "CPTK Overlay Probe",
     "version": VERSION,
     "description": (
         "Drives streaming sites with a TV remote inside CPTK's own browser profiles. "
@@ -1945,7 +1947,7 @@ FLAVORS = {
         "background": {"scripts": ["background.js"]},
         "browser_specific_settings": {
             "gecko": {
-                "id": "overlay@cptk.app",
+                "id": "overlay-probe@cptk.app",
                 "strict_min_version": "140.0",
                 "data_collection_permissions": {"required": ["none"]},
             }
@@ -1979,7 +1981,7 @@ def build():
         (out / "icon128.png").write_bytes(icon_png())
         manifest = {**BASE, **extra}
         (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        archive = dist / f"cptk-overlay-{flavor}-{VERSION}.zip"
+        archive = dist / f"cptk-overlay-probe-{flavor}-{VERSION}.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
             for path in sorted(out.iterdir()):
                 z.write(path, path.name)
@@ -2145,7 +2147,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 - Create: `tools/overlay-phase0/tests/test_setup.py`
 
 **Interfaces:**
-- Consumes: an ids file (`{"chrome_web_store": "<32 a-p>", "edge_addons": "<32 a-p>", "gecko": "overlay@cptk.app"}`;
+- Consumes: an ids file (`{"chrome_web_store": "<32 a-p>", "edge_addons": "<32 a-p>", "gecko": "overlay-probe@cptk.app"}`;
   the real one is Task 7's `tools/overlay-phase0/ids.json`), the absolute path of `probe_host`, the signed XPI.
 - Produces:
   - `windows.ps1 -IdsFile <f> -HostPath <abs> -ManifestDir <dir> [-Scope HKCU|HKLM] [-RegistryRoot <PS path>]
@@ -2158,7 +2160,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
     sets `ExtensionInstallForcelist`.
   - `firefox_profile.py --profile <dir> --xpi <file> [--no-scan-scopes]` and
     `firefox-profile.ps1 -ProfileDir <dir> -Xpi <file> [-NoScanScopes]`: write the CPTK lines of `user.js` (each ends
-    with `// cptk-overlay`; other lines are kept; the file is read and written as UTF-8) and copy the XPI to `extensions/overlay@cptk.app.xpi` when it
+    with `// cptk-overlay`; other lines are kept; the file is read and written as UTF-8) and copy the XPI to `extensions/overlay-probe@cptk.app.xpi` when it
     differs. Both print `copied` or `unchanged`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2181,7 +2183,7 @@ sys.path.insert(0, str(KIT / "setup"))
 import firefox_profile  # noqa: E402
 import linux_setup  # noqa: E402
 
-IDS = {"chrome_web_store": "a" * 32, "edge_addons": "b" * 32, "gecko": "overlay@cptk.app"}
+IDS = {"chrome_web_store": "a" * 32, "edge_addons": "b" * 32, "gecko": "overlay-probe@cptk.app"}
 # A user line with a non-ASCII character: the profile scripts must keep it byte for byte.
 USER_LINE = 'user_pref("browser.startup.homepage", "https://example.org/café");'
 
@@ -2213,7 +2215,7 @@ class LinuxSetupTest(unittest.TestCase):
         host = json.loads((self.root / "etc/opt/edge/native-messaging-hosts/app.cptk.overlay.json").read_text())
         self.assertEqual(host["allowed_origins"], ["chrome-extension://" + "a" * 32 + "/", "chrome-extension://" + "b" * 32 + "/"])
         ff = json.loads((self.home / ".mozilla/native-messaging-hosts/app.cptk.overlay.json").read_text())
-        self.assertEqual(ff["allowed_extensions"], ["overlay@cptk.app"])
+        self.assertEqual(ff["allowed_extensions"], ["overlay-probe@cptk.app"])
         self.assertEqual(ff["path"], "/usr/libexec/cptk/probe_host")
 
     def test_setup_is_idempotent_and_keeps_foreign_entries(self):
@@ -2270,7 +2272,7 @@ class FirefoxProfileTest(unittest.TestCase):
         self.assertFalse(firefox_profile.prepare(self.profile, self.xpi))
         self.xpi.write_bytes(b"version-2")
         self.assertTrue(firefox_profile.prepare(self.profile, self.xpi))
-        self.assertEqual((self.profile / "extensions/overlay@cptk.app.xpi").read_bytes(), b"version-2")
+        self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
         firefox_profile.prepare(self.profile, self.xpi, scan_scopes=False)
@@ -2309,7 +2311,7 @@ class FirefoxProfilePsTest(unittest.TestCase):
         self.assertEqual(self.prepare(), "unchanged")
         self.xpi.write_bytes(b"version-2")
         self.assertEqual(self.prepare(), "copied")
-        self.assertEqual((self.profile / "extensions/overlay@cptk.app.xpi").read_bytes(), b"version-2")
+        self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
         self.prepare("-NoScanScopes")
@@ -2397,7 +2399,7 @@ OURS = "cptk-overlay.json"
 def plan(ids, host_path, root, home):
     r = pathlib.Path(root)
     origins = [f"chrome-extension://{ids['chrome_web_store']}/", f"chrome-extension://{ids['edge_addons']}/"]
-    base = {"name": HOST, "description": "CPTK Overlay probe host", "path": host_path, "type": "stdio"}
+    base = {"name": HOST, "description": "CPTK Overlay Probe host", "path": host_path, "type": "stdio"}
     return {
         r / "etc/opt/chrome/policies/managed" / OURS: {
             "ExtensionInstallForcelist": [f"{ids['chrome_web_store']};{CWS_UPDATE}"],
@@ -2522,7 +2524,7 @@ def prepare(profile, xpi, scan_scopes=True):
     userjs.write_text("\n".join(kept + ours) + "\n", encoding="utf-8")
     extensions = profile / "extensions"
     extensions.mkdir(exist_ok=True)
-    dest = extensions / "overlay@cptk.app.xpi"
+    dest = extensions / "overlay-probe@cptk.app.xpi"
     data = pathlib.Path(xpi).read_bytes()
     if dest.exists() and dest.read_bytes() == data:
         return False
@@ -2620,11 +2622,11 @@ if ($Remove) {
     New-Item -ItemType Directory -Path $ManifestDir -Force | Out-Null
     $utf8 = New-Object System.Text.UTF8Encoding $false
     $chromium = [ordered]@{
-        name = 'app.cptk.overlay'; description = 'CPTK Overlay probe host'; path = $HostPath; type = 'stdio'
+        name = 'app.cptk.overlay'; description = 'CPTK Overlay Probe host'; path = $HostPath; type = 'stdio'
         allowed_origins = @("chrome-extension://$($ids.chrome_web_store)/", "chrome-extension://$($ids.edge_addons)/")
     }
     $firefox = [ordered]@{
-        name = 'app.cptk.overlay'; description = 'CPTK Overlay probe host'; path = $HostPath; type = 'stdio'
+        name = 'app.cptk.overlay'; description = 'CPTK Overlay Probe host'; path = $HostPath; type = 'stdio'
         allowed_extensions = @($ids.gecko)
     }
     [IO.File]::WriteAllText($chromiumManifest, ($chromium | ConvertTo-Json), $utf8)
@@ -2683,7 +2685,7 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 [IO.File]::WriteAllText($userJs, (($kept + $ours) -join "`n") + "`n", $utf8)
 $extensions = Join-Path $ProfileDir 'extensions'
 New-Item -ItemType Directory -Path $extensions -Force | Out-Null
-$dest = Join-Path $extensions 'overlay@cptk.app.xpi'
+$dest = Join-Path $extensions 'overlay-probe@cptk.app.xpi'
 # Compare the bytes, as firefox_profile.py does. Not Get-FileHash: 5.1 defines it in a script module, and a
 # PSModulePath that lists PowerShell 7's modules first hides it.
 $new = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Xpi).ProviderPath)
@@ -2707,7 +2709,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 
 ---
 
-### Task 7: The store accounts and CPTK Overlay 0.0.1 (the user's steps, then the record)
+### Task 7: The store accounts and CPTK Overlay Probe 0.0.1 (the user's steps, then the record)
 
 This task is mostly the user's: three accounts, three uploads. Start it as soon as Task 5 is done, because store
 review can take days and G1, G10 and G13 cannot run before the listings are live.
@@ -2717,25 +2719,25 @@ review can take days and G1, G10 and G13 cannot run before the listings are live
 - Create: `tools/overlay-phase0/listing.md` (the listing text, so all three stores say the same thing)
 
 **Interfaces:**
-- Consumes: `extension/dist/cptk-overlay-chromium-0.0.1.zip`, `extension/dist/firefox/` (Task 5).
+- Consumes: `extension/dist/cptk-overlay-probe-chromium-0.0.1.zip`, `extension/dist/firefox/` (Task 5).
 - Produces: `ids.json` with `chrome_web_store`, `edge_addons` and `gecko`; the signed XPI at
-  `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/cptk-overlay-0.0.1.xpi`.
+  `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/cptk-overlay-probe-0.0.1.xpi`.
 
 - [ ] **Step 1: Write the listing text**
 
 `tools/overlay-phase0/listing.md`:
 
 ```markdown
-# CPTK Overlay: store listing text
+# CPTK Overlay Probe: store listing text
 
-**Name:** CPTK Overlay
+**Name:** CPTK Overlay Probe
 **Summary (132 characters max):** Drives streaming sites with a TV remote inside CPTK's own browser profiles. It does
 nothing anywhere else.
 **Visibility:** Unlisted (Chrome Web Store), Hidden (Edge Add-ons), unlisted self-distribution (AMO).
 **Category:** Accessibility.
 
 **Description:**
-CPTK Overlay is part of CPTK, a 10-foot launcher for living-room PCs. CPTK opens streaming sites in a browser
+CPTK Overlay Probe is part of CPTK, a 10-foot launcher for living-room PCs. CPTK opens streaming sites in a browser
 profile of its own and installs this extension there, so a TV remote or a gamepad can move around the site.
 
 The extension stays inactive in every other profile, including your everyday browsing. It talks only to the CPTK
@@ -2771,11 +2773,11 @@ program on the same computer, through the browser's native messaging, and sends 
 python C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/extension/build.py
 ```
 
-Expected: `built ...cptk-overlay-chromium-0.0.1.zip` and `built ...cptk-overlay-firefox-0.0.1.zip`.
+Expected: `built ...cptk-overlay-probe-chromium-0.0.1.zip` and `built ...cptk-overlay-probe-firefox-0.0.1.zip`.
 
 - [ ] **Step 4: (The user) Upload to the Chrome Web Store**
 
-In the developer console: *New item*, upload `cptk-overlay-chromium-0.0.1.zip`, fill the listing from
+In the developer console: *New item*, upload `cptk-overlay-probe-chromium-0.0.1.zip`, fill the listing from
 `listing.md`, set **Visibility: Unlisted**, fill *Privacy practices* from its single-purpose, permission and
 data-use lines, and submit for review. The item id (32 characters, `a` to `p`) shows on the item's page at once.
 
@@ -2794,7 +2796,7 @@ $env:WEB_EXT_API_SECRET = '<the JWT secret>'
 npx --yes web-ext@8 sign --source-dir C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/extension/dist/firefox --channel unlisted --artifacts-dir C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0
 ```
 
-Expected: a signed `.xpi` in that folder. Rename it to `cptk-overlay-0.0.1.xpi`.
+Expected: a signed `.xpi` in that folder. Rename it to `cptk-overlay-probe-0.0.1.xpi`.
 
 - [ ] **Step 7: Record the ids**
 
@@ -2804,7 +2806,7 @@ Expected: a signed `.xpi` in that folder. Rename it to `cptk-overlay-0.0.1.xpi`.
 {
   "chrome_web_store": "<the 32-character id from the Chrome Web Store>",
   "edge_addons": "<the 32-character id from Edge Add-ons>",
-  "gecko": "overlay@cptk.app"
+  "gecko": "overlay-probe@cptk.app"
 }
 ```
 
@@ -2825,7 +2827,7 @@ Each store emails when the item is published. G1, G10 and G13 need both live; th
 
 ```powershell
 git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec add tools/overlay-phase0/ids.json tools/overlay-phase0/listing.md
-git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools: record CPTK Overlay's store ids and listing text"
+git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools: record CPTK Overlay Probe's store ids and listing text"
 ```
 
 ---
@@ -2855,7 +2857,7 @@ guests; this file says what to set up, what to do, what to read, and what passes
 
 - **The kit:** build `tools/overlay-phase0/` in the guest (README there) or copy the built `probe_host`,
   `probe_spawn` (with its SDL3 library), `pages/`, `setup/` and `ids.json` in. The signed XPI is in
-  `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/cptk-overlay-0.0.1.xpi` on the host.
+  `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/cptk-overlay-probe-0.0.1.xpi` on the host.
 - **The page server:** Windows `powershell -File pages\serve.ps1`; Linux
   `python3 -m http.server 8765 --bind 127.0.0.1 --directory pages`. The probe page is
   `http://127.0.0.1:8765/probe.html`.
@@ -3060,7 +3062,7 @@ Vision**, and the **audio** codec and channels.
 |---|---|---|---|
 | H1.4 | Edge | as H1.3 | |
 | H1.6b | Chrome | as H1.6a | |
-| H1.8 | Firefox | prepared profile: `powershell -File <kit>\setup\firefox-profile.ps1 -ProfileDir %LOCALAPPDATA%\cptk-probe\f1 -Xpi <kit>\cptk-overlay-0.0.1.xpi`, then `firefox.exe -kiosk https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef -profile %LOCALAPPDATA%\cptk-probe\f1 -no-remote -wait-for-browser` | |
+| H1.8 | Firefox | prepared profile: `powershell -File <kit>\setup\firefox-profile.ps1 -ProfileDir %LOCALAPPDATA%\cptk-probe\f1 -Xpi <kit>\cptk-overlay-probe-0.0.1.xpi`, then `firefox.exe -kiosk https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef -profile %LOCALAPPDATA%\cptk-probe\f1 -no-remote -wait-for-browser` | |
 | H1.9 | Edge | as H1.4, on Disney+ and on Prime Video (1080p expected) | |
 
 ## H2. What does your remote send? (about 10 minutes)
@@ -3091,7 +3093,7 @@ Startup Boost and background mode turned off. This puts them back.
    `powershell -File <kit>\setup\windows.ps1 -IdsFile <kit>\ids.json -HostPath <kit>\probe_host.exe -ManifestDir $env:LOCALAPPDATA\cptk-probe\hosts -Remove`
    It prints `setup: removed`.
 3. Open Edge and Chrome normally. `edge://policy` and `chrome://policy` list nothing from CPTK, "Managed by your
-   organization" is gone from the menu, and CPTK Overlay is gone from the extensions page. If any of it is still
+   organization" is gone from the menu, and CPTK Overlay Probe is gone from the extensions page. If any of it is still
    there, close the browser and open it once more, then note it in the table's Cleanup row.
 4. Delete the folder `%LOCALAPPDATA%\cptk-probe` (the test profiles and host files).
 
