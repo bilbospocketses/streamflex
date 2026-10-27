@@ -4,6 +4,28 @@
 
 #include "spawn.h"
 
+void probe_lines_feed(probe_lines *l, const char *data, size_t n, probe_command_fn on_command, void *ctx)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (data[i] != '\n') {
+            if (l->len + 1 < sizeof l->buf)
+                l->buf[l->len++] = data[i];
+            else
+                l->overlong = 1;
+            continue;
+        }
+        if (l->len && l->buf[l->len - 1] == '\r')
+            l->len--;
+        l->buf[l->len] = '\0';
+        if (!l->overlong && strcmp(l->buf, "close") == 0)
+            on_command(PROBE_CMD_CLOSE, ctx);
+        else if (!l->overlong && strcmp(l->buf, "kill") == 0)
+            on_command(PROBE_CMD_KILL, ctx);
+        l->len = 0;
+        l->overlong = 0;
+    }
+}
+
 static int usage(void)
 {
     fputs("usage: probe_spawn run|keys|keylog|pad|focus ...\n", stderr);
