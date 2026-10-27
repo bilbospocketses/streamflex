@@ -5,45 +5,72 @@ For qa-harness-sf. Each item below is one measurement from the spec's Phase 0
 guests; this file says what to set up, what to do, what to read, and what passes. Every result goes into
 `results.md` beside this file, one row per item, with the evidence path.
 
+Every Windows command below is typed in a Windows PowerShell window, from the kit folder, unless the step says
+otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase0/`.
+
 ## Common setup
 
-- **The kit:** build `tools/overlay-phase0/` in the guest (README there) or copy the built `probe_host`,
-  `probe_spawn` (with its SDL3 library), `pages/`, `setup/` and `ids.json` in. The signed XPI is in
-  `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/cptk-overlay-0.0.1.xpi` on the host.
-- **The page server:** Windows `powershell -File pages\serve.ps1`; Linux
+- **The kit (Windows):** on the host, after building `tools/overlay-phase0/` (README there), run
+  `powershell -ExecutionPolicy Bypass -File tools\overlay-phase0\make-kit.ps1 -Build build-phase0\Release -Xpi
+  C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi` from the repo root. It
+  copies `probe_host.exe`, `probe_spawn.exe` with every DLL beside it (SDL3.dll), `setup\`, `pages\`, `extension\`
+  (`src\` and `build.py`), `ids.json` and the signed XPI into one folder, `$env:USERPROFILE\cptk-kit` by default,
+  and prints what it copied. Copy that folder into the guest.
+- **The kit (Linux):** build `tools/overlay-phase0/` in the guest (README there) and copy the signed XPI in.
+  `probe_host` and `probe_spawn` are the absolute paths of `build-phase0/probe_host` and `build-phase0/probe_spawn`.
+- **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and the absolute path of
+  `build-phase0/probe_spawn` on Linux.
+- **Store listings:** G1, G5, G10 and G15's Chrome and Edge runs force-install the published Chrome Web Store and
+  Edge Add-ons items, so they wait until both listings are live. G13 needs only the AMO-signed XPI and no Chrome or
+  Edge listing; no other item needs a listing.
+- **The page server:** Windows `powershell -ExecutionPolicy Bypass -File pages\serve.ps1`; Linux
   `python3 -m http.server 8765 --bind 127.0.0.1 --directory pages`. The probe page is
   `http://127.0.0.1:8765/probe.html`.
 - **A launch token** is any 32 lowercase hex characters, for example `0123456789abcdef0123456789abcdef`, appended
   as `#cptk=<token>`.
-- **Evidence:** the probe host's `probe.log` (`%LOCALAPPDATA%\cptk-probe\probe.log`, `~/.cptk-probe/probe.log`),
+- **Evidence:** the probe host's `probe.log` (`$env:LOCALAPPDATA\cptk-probe\probe.log`, `~/.cptk-probe/probe.log`),
   `probe_spawn`'s JSON lines, and a screenshot where a line says so.
+- **Two kinds of `start` in `probe.log`:**
+  - The **host start line** is `{"event":"start",...,"argv":[...]}`, written by `probe_host` when a browser launches
+    it; its `argv` carries the calling extension's origin (Chrome, Edge) or id (Firefox).
+  - The **extension start report** is a `{"event":"msg",...}` line whose `body.event` is `start`; its `body.data`
+    holds `webdriver`, `tokenFromUrl`, `allUrls`, `origin` and `version`.
+  - The extension's other reports (`key`, `fullscreen`, `play`) are `msg` lines the same way, named by `body.event`.
 - **Browsers:** Windows Edge `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, Chrome
   `C:\Program Files\Google\Chrome\Application\chrome.exe`, Firefox `C:\Program Files\Mozilla Firefox\firefox.exe`;
   Linux `/opt/microsoft/msedge/msedge`, `/opt/google/chrome/chrome`, and the full Firefox's own path. Record each
   browser's version with every result.
 - **Fresh profiles:** every run uses a new, empty profile directory unless the item says otherwise.
 - **Chromium launch line:** `<exe> --user-data-dir=<profile> --app=<url> --start-fullscreen --no-first-run
-  --disable-session-crashed-bubble`. **Firefox:** run `setup/firefox-profile.ps1` (Windows) or
-  `setup/firefox_profile.py` (Linux) on the profile first, then `<exe> -kiosk <url> -profile <profile> -no-remote`
-  (Windows adds `-wait-for-browser`).
+  --disable-session-crashed-bubble`. **Firefox:** run
+  `powershell -ExecutionPolicy Bypass -File setup\firefox-profile.ps1 -ProfileDir <profile> -Xpi <xpi>` (Windows) or
+  `python3 setup/firefox_profile.py --profile <profile> --xpi <xpi>` (Linux) on the profile first, then
+  `<exe> -kiosk <url> -profile <profile> -no-remote` (Windows adds `-wait-for-browser`). Started on its own in
+  PowerShell, a launch line is `& '<exe>' <arguments>`; after `probe_spawn run` or `probe_spawn focus`, `<exe>` is
+  the first argument.
 
 ## The items
 
 ### G1. Store force-install from HKCU policy (Windows 11 Home)
 
-1. As the standard user: `powershell -File setup\windows.ps1 -IdsFile ids.json -HostPath <abs probe_host.exe>
-   -ManifestDir %LOCALAPPDATA%\cptk-probe\hosts`.
+1. As the test user: `powershell -ExecutionPolicy Bypass -File setup\windows.ps1 -IdsFile ids.json -HostPath
+   "$PWD\probe_host.exe" -ManifestDir "$env:LOCALAPPDATA\cptk-probe\hosts"`.
 2. Start Edge with the Chromium launch line on `http://127.0.0.1:8765/probe.html#cptk=<token>`; wait 60 s.
 3. Repeat for Chrome.
-4. Repeat 1-3 with `-Scope HKLM` from an elevated shell, after `-Remove` of the HKCU setup.
+4. Run step 1 again with `-Remove`, then repeat 1-3 with `-Scope HKLM` from a **Run as administrator** PowerShell in
+   the same user's session (an administrator account in Admin Approval Mode). `windows.ps1` always writes the host
+   keys under the running account's HKCU, so that account must be the one that starts the browsers. If the test
+   user is a standard user, run `-Scope HKCU -Remove` as that user, then do the HKLM run and steps 2-3 signed in as
+   the administrator.
 
-**Read:** `probe.log` has a `start` line from each browser's origin; `edge://policy` / `chrome://policy` list the
-forcelist with status OK (screenshot). **Pass:** both browsers, HKCU, first launch, no prompt.
+**Read:** `probe.log` has a host start line from each browser (its `argv` names the extension's origin) and an
+extension start report; `edge://policy` / `chrome://policy` list the forcelist with status OK (screenshot).
+**Pass:** both browsers, HKCU, first launch, no prompt.
 
 ### G2. A standard user writes HKCU\Software\Policies
 
 As a standard (non-admin) user: `reg add "HKCU\Software\Policies\Google\Chrome" /v CptkProbe /t REG_DWORD /d 1`,
-then delete it. **Pass:** exit code 0. (If G1's HKCU step succeeded, G2 passed with it.)
+then delete it. **Pass:** exit code 0. (If G1's HKCU step succeeded as a standard user, G2 passed with it.)
 
 ### G3. UAC by remote
 
@@ -60,10 +87,11 @@ seen within 2000 ms. Record Edge without the hygiene policies too, as informatio
 
 ### G5. Trusted injection
 
-With the probe page open in each browser (setup as G1 on Windows, `linux_setup.py` on Linux), run
+With the probe page open in each browser (setup as G1 on Windows, `linux_setup.py` as in G10 on Linux), run
 `probe_spawn keys 3000 F` and, after reloading, `probe_spawn keys 3000 P`. On Linux run it on GNOME Wayland and KDE
-Wayland. **Read:** `probe.log` `key` lines (`trusted`, `activation`), `fullscreen` and `play` lines. **Pass:**
-`trusted: true`, `fullscreen ok`, `play ok`, on every browser and desktop.
+Wayland, with `sudo` or as a user in the `input` group (uinput needs it). **Read:** the extension's `key` reports
+(`trusted`, `activation`) and its `fullscreen` and `play` reports in `probe.log`. **Pass:** `trusted: true`,
+`fullscreen ok`, `play ok`, on every browser and desktop.
 
 ### G6. Focus after the browser closes
 
@@ -75,8 +103,8 @@ the guest's keyboard. Twenty times per OS and desktop (Windows 11, GNOME Wayland
 
 `probe_spawn keylog 60` while pressing, through the guest's keyboard and a USB-forwarded or emulated consumer-control
 device where the guest has one: Home (Browser Home), Back (Browser Back), Menu (Apps), Play/Pause, the arrows,
-Enter, Backspace. **Read:** the `raw_key` / `raw_hid` lines. **Pass:** every key appears. (The user's real remote
-is run sheet H2.)
+Enter, Backspace. On Linux run it with `sudo` or as a user in the `input` group (evdev needs it). **Read:** the
+`raw_key` / `raw_hid` lines. **Pass:** every key appears. (The user's real remote is run sheet H2.)
 
 ### G8. Gamepads in the background
 
@@ -89,16 +117,17 @@ backend's result.
 ### G9. Windows Firefox native messaging and exit
 
 Profile prepared with `firefox-profile.ps1`; `windows.ps1` run for the host keys. `probe_spawn run <firefox launch
-line on probe.html>`; press F once; then Alt+F4. **Read:** `probe.log` `start` from Firefox; `exited` seen.
-**Pass:** both.
+line on probe.html>`; press F once; then Alt+F4. **Read:** a host start line from Firefox in `probe.log`; `exited`
+seen. **Pass:** both.
 
 ### G10. Linux Chrome and Edge policy
 
 `sudo python3 setup/linux_setup.py --ids ids.json --host <abs probe_host>`, then start each browser on the probe
-page. Add a second managed file `zz-other.json` that sets `ExtensionInstallForcelist` to another id and start
-again. **Read:** `chrome://policy`, `edge://policy` (screenshots), `probe.log` `start` lines, the script's conflict
-line. **Pass:** both browsers install and report on the first launch; with `zz-other.json` the extension is gone
-and the script names the file.
+page. Then add a second managed file, `/etc/opt/chrome/policies/managed/zz-other.json`, that sets
+`ExtensionInstallForcelist` to another id, run the same `linux_setup.py` command again, and start Chrome again.
+**Read:** `chrome://policy`, `edge://policy` (screenshots), the host start lines and extension start reports in
+`probe.log`, and the re-run's conflict line. **Pass:** both browsers install and report on the first launch; with
+`zz-other.json` the extension is gone from Chrome and the re-run names the file.
 
 ### G11. Linux browser discovery
 
@@ -118,10 +147,11 @@ with the flag too, as information.
 ### G13. The Firefox profile sideload
 
 Windows and Linux, current release Firefox, with an everyday Firefox installed:
-1. Prepare a fresh profile; start Firefox `-kiosk` on the probe page. **Read:** `probe.log` `start` with
-   `allUrls: true`.
-2. Close it, rebuild the XPI as version 0.0.2 (change `VERSION` in `build.py` locally, sign it the same way), copy
-   it in with the profile script, start again. **Read:** the `start` line's `version` is 0.0.2.
+1. Prepare a fresh profile; start Firefox `-kiosk` on the probe page. **Read:** an extension start report with
+   `allUrls: true` in `probe.log`.
+2. Close it, rebuild the XPI as version 0.0.2 (change `VERSION` in the kit's `extension/build.py` locally, sign it
+   the same way), copy it in with the profile script, start again. **Read:** the extension start report's `version`
+   is 0.0.2.
 3. Repeat 2 with `--no-scan-scopes` (`-NoScanScopes`), on a profile that already ran 0.0.1.
 4. Open the everyday Firefox: `about:addons` and `about:policies` (screenshots).
 
@@ -140,9 +170,14 @@ sent through `probe_spawn keys` every 5 minutes. **Pass:** no playback error, no
 
 ### G16. Chrome and Edge `Extensions.loadUnpacked` (the development loop)
 
-Start each browser with `--user-data-dir=<fresh> --remote-debugging-pipe --enable-unsafe-extension-debugging` from a
-small CDP client and send `Extensions.loadUnpacked` with `extension/dist/chromium`. **Read:** the extension list
-(screenshot), any banner, `navigator.webdriver` in the `start` line. **Pass:** it loads. (Development only.)
+Build the unpacked extension first: `python extension/build.py` in the kit (Python 3), or build it on the host and
+copy `extension/dist/chromium` in. Start each browser with `--user-data-dir=<fresh> --remote-debugging-pipe
+--enable-unsafe-extension-debugging` from a small CDP client, send `Extensions.loadUnpacked` with the absolute path
+of `extension/dist/chromium`, then open `http://127.0.0.1:8765/probe.html#cptk=0123456789abcdef0123456789abcdef`.
+**Read:** the extension list (screenshot), any banner, and the probe box in the page's bottom-left corner
+(screenshot), whose `start` line shows `webdriver`. Expect **no** host start line in `probe.log`: the unpacked build
+has its own extension id, which is not in the host manifests' `allowed_origins`, so the browser refuses the native
+port. **Pass:** it loads in both browsers and the probe box appears. (Development only.)
 
 ## Results format
 
