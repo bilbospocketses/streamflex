@@ -5,6 +5,7 @@ This is the research for a later StreamFlex sub-project: it would make a Windows
 - `00-original-dpad-streaming-overlay-research.md` is the user's starting research, copied from C:\Temp (the original is deleted).
 - Files `1x-*.md` are the deeper research, one per topic, written by research agents on 2026-09-28.
 - `SYNTHESIS.md` combines them into findings, open questions, and a recommended prototype path.
+- Files `26-` to `29-` are the 2026-10-27 refresh, written for the design (`design/specs/2026-10-27-streaming-overlay-design.md`): `26` re-checks the time-sensitive facts and the store policies, `27` closes the Firefox gaps, `28` covers the native side (libraries, Native Messaging, SDL3, supervision, injection, Windows policy without an installer), and `29` covers Emby and the adapter format.
 
 Background, from the StreamFlex session: an Android-in-a-VM approach was rejected. An AOSP guest cannot reach Widevine L1.
 
