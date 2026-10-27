@@ -2038,7 +2038,8 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
   - `windows.ps1 -IdsFile <f> -HostPath <abs> -ManifestDir <dir> [-Scope HKCU|HKLM] [-RegistryRoot <PS path>]
     [-Remove]`: adds one `ExtensionInstallForcelist` value per browser beside any others (never twice), the Edge
     hygiene DWORDs, two host manifests, and the three host keys (always under `HKCU:\Software` unless
-    `-RegistryRoot` is given). `-RegistryRoot` replaces `<Scope>:\Software` for tests.
+    `-RegistryRoot` is given). `-RegistryRoot` replaces `<Scope>:\Software` for tests. `-Remove` takes out only what
+    it added (a foreign forcelist entry stays) and prunes the Chrome and Edge policy keys it leaves empty.
   - `linux_setup.py --ids <f> --host <abs> [--root /] [--home <dir>] [--remove]`: five JSON files (the two policy
     files, the two Chromium host manifests, the per-user Firefox host manifest); prints any other managed file that
     sets `ExtensionInstallForcelist`.
@@ -2185,6 +2186,18 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertEqual(self.ps(*args, "-Remove").returncode, 0)
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
             self.assertEqual(winreg.QueryInfoKey(k)[1], 1)
+
+    def test_remove_leaves_no_policy_keys_behind(self):
+        import winreg
+        ids = write_ids(tempfile.mkdtemp())
+        args = ["-IdsFile", str(ids), "-HostPath", r"C:\cptk\probe_host.exe", "-ManifestDir", tempfile.mkdtemp(),
+                "-RegistryRoot", self.TEST_ROOT]
+        self.assertEqual(self.ps(*args).returncode, 0)
+        self.assertEqual(self.ps(*args, "-Remove").returncode, 0)
+        for gone in (r"Policies\Google", r"Policies\Microsoft\Edge",
+                     r"Microsoft\Edge\NativeMessagingHosts\app.cptk.overlay"):
+            with self.assertRaises(FileNotFoundError, msg=gone):
+                winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"Software\CPTK-Phase0-Test\{gone}")
 
 
 if __name__ == "__main__":
@@ -2447,6 +2460,17 @@ Set-DwordPolicy "$pol\Microsoft\Edge" 'BackgroundModeEnabled' 0
 Set-HostKey "$hostRoot\Google\Chrome\NativeMessagingHosts\app.cptk.overlay" $chromiumManifest
 Set-HostKey "$hostRoot\Microsoft\Edge\NativeMessagingHosts\app.cptk.overlay" $chromiumManifest
 Set-HostKey "$hostRoot\Mozilla\NativeMessagingHosts\app.cptk.overlay" $firefoxManifest
+if ($Remove) {
+    # An empty policy key left behind can keep a browser "Managed by your organization"; prune the ones this script
+    # creates once they hold nothing, deepest first. Policies and Policies\Microsoft are shared and never pruned.
+    foreach ($k in @("$pol\Google\Chrome\ExtensionInstallForcelist", "$pol\Google\Chrome", "$pol\Google",
+                     "$pol\Microsoft\Edge\ExtensionInstallForcelist", "$pol\Microsoft\Edge")) {
+        if (Test-Path -LiteralPath $k) {
+            $item = Get-Item -LiteralPath $k
+            if ($item.ValueCount -eq 0 -and $item.SubKeyCount -eq 0) { Remove-Item -LiteralPath $k }
+        }
+    }
+}
 Write-Output ("setup: {0} (policy under {1}, host keys under {2})" -f ($(if ($Remove) { 'removed' } else { 'wrote' })), $policyRoot, $hostRoot)
 ```
 
@@ -2487,8 +2511,8 @@ if ($same) { Write-Output 'unchanged' } else { Copy-Item -LiteralPath $Xpi -Dest
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_setup.py -v`
-Expected on Windows: 8 tests PASS (4 Linux setup, 3 Firefox profile, 1 Windows setup). On Linux the Windows test is
-skipped.
+Expected on Windows: 9 tests PASS (4 Linux setup, 3 Firefox profile, 2 Windows setup). On Linux the Windows tests
+are skipped.
 
 - [ ] **Step 6: Commit**
 
@@ -2820,11 +2844,8 @@ Four checks only a real GPU, display chain and remote can answer. Use your HTPC,
 for watching, and your real remote. Write each answer in the table at the end. Nothing here needs a keyboard
 after setup except where it says so.
 
-**Before you start** (with a keyboard, once):
-1. Close every browser window.
-2. Run the setup, as yourself, in a PowerShell window:
-   `powershell -File <kit>\setup\windows.ps1 -IdsFile <kit>\ids.json -HostPath <kit>\probe_host.exe -ManifestDir $env:LOCALAPPDATA\cptk-probe\hosts`
-3. Have the Netflix, Disney+ and Prime Video logins ready.
+**Before you start:** have the Netflix, Disney+ and Prime Video logins ready. The setup comes partway through H1, not
+here: it installs the probe into every Chrome and Edge profile, so the rows before it must run without it.
 
 ## H1. Does anything we add lower the picture or sound? (about 35 minutes)
 
@@ -2833,15 +2854,28 @@ Netflix's stats overlay is **Ctrl+Shift+Alt+D** while a title plays. Use one 4K 
 reading, and read: **Playing bitrate (video)** resolution, the **DRM** line, whether it says **HDR** or **Dolby
 Vision**, and the **audio** codec and channels.
 
+**Part A: without the probe.** Run these rows first, in this order.
+
 | Row | Browser | How to start it | Fill in |
 |---|---|---|---|
 | H1.1 | Edge | normally, your usual profile | baseline |
 | H1.2 | Edge | `msedge.exe --user-data-dir=%LOCALAPPDATA%\cptk-probe\p1 --no-first-run https://www.netflix.com` (sign in once) | |
 | H1.3 | Edge | `msedge.exe --user-data-dir=%LOCALAPPDATA%\cptk-probe\p1 --app=https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef --start-fullscreen --no-first-run` | |
-| H1.4 | Edge | as H1.3, after the setup above installed the probe (check the probe box shows in the bottom-left corner) | |
 | H1.5 | Chrome | normally | baseline |
-| H1.6 | Chrome | as H1.3 and H1.4, with `chrome.exe` | |
+| H1.6a | Chrome | as H1.3, with `chrome.exe` and `--user-data-dir=%LOCALAPPDATA%\cptk-probe\c1` (sign in once) | |
 | H1.7 | Firefox | normally | baseline (1080p expected) |
+
+**Setup** (with a keyboard, once, after Part A):
+1. Close every browser window.
+2. Run the setup, as yourself, in a PowerShell window:
+   `powershell -File <kit>\setup\windows.ps1 -IdsFile <kit>\ids.json -HostPath <kit>\probe_host.exe -ManifestDir $env:LOCALAPPDATA\cptk-probe\hosts`
+
+**Part B: with the probe.** Check that the probe box shows in the bottom-left corner on each row.
+
+| Row | Browser | How to start it | Fill in |
+|---|---|---|---|
+| H1.4 | Edge | as H1.3 | |
+| H1.6b | Chrome | as H1.6a | |
 | H1.8 | Firefox | prepared profile: `powershell -File <kit>\setup\firefox-profile.ps1 -ProfileDir %LOCALAPPDATA%\cptk-probe\f1 -Xpi <kit>\cptk-overlay-0.0.1.xpi`, then `firefox.exe -kiosk https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef -profile %LOCALAPPDATA%\cptk-probe\f1 -no-remote -wait-for-browser` | |
 | H1.9 | Edge | as H1.4, on Disney+ and on Prime Video (1080p expected) | |
 
@@ -2863,6 +2897,20 @@ Digital Plus 5.1, PCM 2.0).
 2. Put the PC to sleep for one minute with the title paused, wake it, and press play with the remote. Note whether it
    plays, errors or goes black.
 
+## Cleanup: put your browsers back (about 5 minutes)
+
+The setup left your everyday Chrome and Edge "Managed by your organization", with the probe installed and Edge's
+Startup Boost and background mode turned off. This puts them back.
+
+1. Close every browser window.
+2. Run the setup again with `-Remove`, in a PowerShell window:
+   `powershell -File <kit>\setup\windows.ps1 -IdsFile <kit>\ids.json -HostPath <kit>\probe_host.exe -ManifestDir $env:LOCALAPPDATA\cptk-probe\hosts -Remove`
+   It prints `setup: removed`.
+3. Open Edge and Chrome normally. `edge://policy` and `chrome://policy` list nothing from CPTK, "Managed by your
+   organization" is gone from the menu, and CPTK Overlay is gone from the extensions page. If any of it is still
+   there, close the browser and open it once more, then note it in the table's Cleanup row.
+4. Delete the folder `%LOCALAPPDATA%\cptk-probe` (the test profiles and host files).
+
 ## Your answers
 
 | Row | Resolution | DRM line | HDR / DV | Audio | Notes |
@@ -2872,13 +2920,15 @@ Digital Plus 5.1, PCM 2.0).
 | H1.3 | | | | | |
 | H1.4 | | | | | |
 | H1.5 | | | | | |
-| H1.6 | | | | | |
+| H1.6a | | | | | |
+| H1.6b | | | | | |
 | H1.7 | | | | | |
 | H1.8 | | | | | |
 | H1.9 Disney+ | | | | | |
 | H1.9 Prime | | | | | |
 | H3 | | | | | |
 | H4 | | | | | |
+| Cleanup | | | | | |
 
 Send the filled table, the H2 files and any screenshots back to the streamflex tab.
 ````
