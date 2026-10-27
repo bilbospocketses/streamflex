@@ -154,8 +154,12 @@ class FirefoxProfileTest(unittest.TestCase):
         self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
+        # An explicit 0, not a missing line: a profile that ran the default way keeps the 1 in prefs.js otherwise.
+        firefox_profile.prepare(self.profile, self.xpi)
         firefox_profile.prepare(self.profile, self.xpi, scan_scopes=False)
-        self.assertNotIn("startupScanScopes", (self.profile / "user.js").read_text(encoding="utf-8"))
+        text = (self.profile / "user.js").read_text(encoding="utf-8")
+        self.assertIn('user_pref("extensions.startupScanScopes", 0); // cptk-overlay', text)
+        self.assertNotIn('user_pref("extensions.startupScanScopes", 1)', text)
 
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "Windows PowerShell only")
@@ -193,8 +197,11 @@ class FirefoxProfilePsTest(unittest.TestCase):
         self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
+        self.prepare()
         self.prepare("-NoScanScopes")
-        self.assertNotIn("startupScanScopes", (self.profile / "user.js").read_text(encoding="utf-8"))
+        text = (self.profile / "user.js").read_text(encoding="utf-8")
+        self.assertIn('user_pref("extensions.startupScanScopes", 0); // cptk-overlay', text)
+        self.assertNotIn('user_pref("extensions.startupScanScopes", 1)', text)
 
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "Windows PowerShell only")

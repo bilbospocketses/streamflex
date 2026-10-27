@@ -19,7 +19,10 @@ if (Test-Path -LiteralPath $userJs) {
 $ours = @(
     "user_pref(""extensions.autoDisableScopes"", 0); $mark"
 )
-if (-not $NoScanScopes) { $ours += "user_pref(""extensions.startupScanScopes"", 1); $mark" }
+# -NoScanScopes writes 0, Firefox's default, rather than leaving the line out: Firefox keeps a user.js value in
+# prefs.js, so a profile that once ran with 1 would otherwise keep rescanning.
+$scan = if ($NoScanScopes) { 0 } else { 1 }
+$ours += "user_pref(""extensions.startupScanScopes"", $scan); $mark"
 $ours += "user_pref(""media.autoplay.default"", 0); $mark"
 $utf8 = New-Object System.Text.UTF8Encoding $false
 [IO.File]::WriteAllText($userJs, (($kept + $ours) -join "`n") + "`n", $utf8)

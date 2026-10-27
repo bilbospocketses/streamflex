@@ -14,16 +14,18 @@ PREFS = [
 
 
 def prepare(profile, xpi, scan_scopes=True):
-    """Returns True when the XPI was copied, False when the profile already had the same file."""
+    """Returns True when the XPI was copied, False when the profile already had the same file.
+
+    Without scan_scopes the rescan pref is written as 0, Firefox's default, rather than left out: Firefox keeps a
+    user.js value in prefs.js, so a profile that once ran with 1 would otherwise keep rescanning."""
     profile = pathlib.Path(profile)
     profile.mkdir(parents=True, exist_ok=True)
     userjs = profile / "user.js"
     old = userjs.read_text(encoding="utf-8").splitlines() if userjs.exists() else []
     kept = [line for line in old if not line.rstrip().endswith(MARK)]
     ours = [
-        f'user_pref("{name}", {value}); {MARK}'
+        f'user_pref("{name}", {"0" if name == "extensions.startupScanScopes" and not scan_scopes else value}); {MARK}'
         for name, value in PREFS
-        if scan_scopes or name != "extensions.startupScanScopes"
     ]
     userjs.write_text("\n".join(kept + ours) + "\n", encoding="utf-8")
     extensions = profile / "extensions"
