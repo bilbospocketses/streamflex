@@ -34,8 +34,9 @@ Windows, WebExtensions MV3, `web-ext` for AMO signing.
 - **Windows scripts run in Windows PowerShell 5.1** (a guest may have no PowerShell 7). Linux scripts are Python 3.
 - **American spelling** everywhere (the pre-push gate checks added lines and commit messages).
 - **Test hang guards are generous** (120 s or more) and a timeout names what hung; no test asserts a duration.
-- **Heavy work goes through the box queue:** building the kit is light; any VM or guest run is qa-harness-sf's, booked
-  by it.
+- **Heavy work goes through the box queue:** building the kit is light, except its first configure, which installs
+  the root manifest's vcpkg packages and is declared first (Task 1 Step 3); any VM or guest run is qa-harness-sf's,
+  booked by it.
 
 ## Review Focus
 
@@ -46,7 +47,8 @@ Windows, WebExtensions MV3, `web-ext` for AMO signing.
 3. **Setup run twice, or beside another product's force-install entry:** no duplicate entry, and the other entry
    survives (Task 6 tests `test_setup_is_idempotent_and_keeps_foreign_entries` and the Windows twin).
 4. **A `user.js` the user already wrote:** profile preparation keeps every line that is not its own
-   (Task 6 test `test_profile_keeps_user_lines`).
+   (Task 6 test `test_profile_keeps_user_lines`, in `FirefoxProfileTest` and its PowerShell twin
+   `FirefoxProfilePsTest`).
 5. **The child exits before any `close`:** the spawner reports the exit with `ms_since_close` of -1, not a garbage
    interval (Task 2 test `test_run_reports_exit_code`).
 
@@ -60,13 +62,18 @@ Windows, WebExtensions MV3, `web-ext` for AMO signing.
 - Create: `tools/overlay-phase0/src/probe_host.c`
 - Create: `tools/overlay-phase0/tests/test_host.py`
 - Create: `tools/overlay-phase0/README.md`
+- Modify: `.gitignore` (the kit's build tree, extension packages and Python caches)
 
 **Interfaces:**
 - Produces: `int64_t probe_now_ms(void)` (wall clock, ms since the epoch); `void probe_emit(const char *fields)`
-  (prints `{"t":<ms>,<fields>}` and a newline to stdout, flushed). The executable `probe_host`, which logs to
+  (prints `{"t":<ms>,<fields>}` and a newline to stdout, flushed); `void probe_json_string(char *out, size_t cap,
+  const char *s)` (writes `s` into `out` as a quoted JSON string; a NULL `s` is `""`; it stops early rather than
+  overflow, and `out` is always a whole quoted string). Every string the kit prints that it did not write itself
+  goes through `probe_json_string`. The executable `probe_host`, which logs to
   `<dir>/probe.log`, where `<dir>` is `CPTK_PROBE_LOG_DIR` if set, else `%LOCALAPPDATA%\cptk-probe` (Windows) or
   `~/.cptk-probe` (Linux). Log lines: `{"t","pid","event":"start","argv":[...]}`, `{"t","pid","event":"msg","seq",
-  "body":<the message>}`, `{"t","pid","event":"oversize","len"}`, `{"t","pid","event":"end"}`. Reply per message:
+  "body":<the message>}`, `{"t","pid","event":"oversize","len"}`, `{"t","pid","event":"empty"}` (a zero-length
+  frame), `{"t","pid","event":"end"}`. After `oversize` or `empty` the host exits 1. Reply per message:
   `{"type":"ack","seq":<n>,"pid":<pid>}`.
 
 - [ ] **Step 1: Write the failing test**
@@ -130,6 +137,12 @@ class HostTest(unittest.TestCase):
         self.assertEqual(lines[-1]["event"], "oversize")
         self.assertEqual(lines[-1]["len"], 0x7FFFFFFF)
 
+    def test_refuses_an_empty_frame(self):
+        proc, lines = self.run_host(struct.pack("=I", 0))
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(lines[-1]["event"], "empty")
+        self.assertNotIn("len", lines[-1])
+
     def test_truncated_frame_ends_cleanly(self):
         proc, lines = self.run_host(struct.pack("=I", 100) + b'{"type":')
         self.assertEqual(proc.returncode, 0)
@@ -168,6 +181,7 @@ target_link_libraries(probe_host PRIVATE probe_common)
 #ifndef PROBE_COMMON_H
 #define PROBE_COMMON_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Wall-clock time in milliseconds since the Unix epoch. */
@@ -175,6 +189,10 @@ int64_t probe_now_ms(void);
 
 /* Print one JSON event line, {"t":<now>,<fields>}, to stdout and flush it. */
 void probe_emit(const char *fields);
+
+/* Write s into out as a quoted JSON string (a NULL s is ""). Stops early rather than overflow, so out is always a
+   whole quoted string; cap must be at least 3. */
+void probe_json_string(char *out, size_t cap, const char *s);
 
 #endif
 ```
@@ -188,6 +206,7 @@ void probe_emit(const char *fields);
 #include "common.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -217,19 +236,75 @@ void probe_emit(const char *fields)
     printf("{\"t\":%lld,%s}\n", (long long)probe_now_ms(), fields);
     fflush(stdout);
 }
+
+void probe_json_string(char *out, size_t cap, const char *s)
+{
+    size_t n = 0;
+    if (cap < 3) {
+        if (cap)
+            out[0] = '\0';
+        return;
+    }
+    out[n++] = '"';
+    for (const unsigned char *p = (const unsigned char *)(s ? s : ""); *p; p++) {
+        char esc[8];
+        size_t len = 1;
+        if (*p == '"' || *p == '\\') {
+            esc[0] = '\\';
+            esc[1] = (char)*p;
+            len = 2;
+        } else if (*p < 0x20) {
+            len = (size_t)snprintf(esc, sizeof esc, "\\u%04x", *p);
+        } else {
+            esc[0] = (char)*p;
+        }
+        if (n + len + 2 > cap)
+            break; /* room for the closing quote and the NUL */
+        memcpy(out + n, esc, len);
+        n += len;
+    }
+    out[n++] = '"';
+    out[n] = '\0';
+}
 ```
 
-- [ ] **Step 3: Build, run the test to verify it fails**
+Append to the repo root's `.gitignore`:
 
-Windows:
+```
+# The Phase 0 probe kit's build tree, extension packages and Python caches
+/build-phase0/
+tools/overlay-phase0/extension/dist/
+tools/overlay-phase0/tests/__pycache__/
+tools/overlay-phase0/setup/__pycache__/
+```
+
+- [ ] **Step 3: Declare the first configure to the box queue**
+
+The first configure runs vcpkg in manifest mode on the repo root's `vcpkg.json`, so it installs every package there
+(SDL3 among them) for the default `x64-windows` triplet. That can take 10 minutes or more, which the box queue counts
+as BIG. Declare it before Step 4 runs it, with this session's id:
 
 ```powershell
-cmake -S C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0 -B C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0
+python C:/Users/jscha/.claude/hooks/box_queue.py request --session <session id> --work "vcpkg configure of the overlay Phase 0 kit (first install of the root manifest)" --overlap ok --touches workdir:C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec --big
 ```
 
-Expected: FAIL at configure: `Cannot find source file: src/probe_host.c`.
+Expected: `START`. A `WAIT` answer holds a place in line: run the same command with `--wait` added, alone and in the
+background, and run Step 4's configure in the next call once it answers `START`. Later configures reuse the installed
+packages and need no declaration.
 
-- [ ] **Step 4: Write the host**
+- [ ] **Step 4: Configure, to verify the build fails**
+
+Windows (the one configure command this plan uses; Step 6 repeats it, and Tasks 2-4 only rebuild):
+
+```powershell
+$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+cmake -S C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0 -B C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_MANIFEST_DIR=C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec
+```
+
+Expected: vcpkg installs the root manifest's packages (the first time only), then FAIL at configure:
+`Cannot find source file: src/probe_host.c`.
+
+- [ ] **Step 5: Write the host**
 
 `tools/overlay-phase0/src/probe_host.c`:
 
@@ -284,22 +359,6 @@ static FILE *open_log(void)
     return fopen(path, "ab");
 }
 
-static void put_json_string(FILE *f, const char *s)
-{
-    fputc('"', f);
-    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
-        if (*p == '"' || *p == '\\') {
-            fputc('\\', f);
-            fputc(*p, f);
-        } else if (*p < 0x20) {
-            fprintf(f, "\\u%04x", *p);
-        } else {
-            fputc(*p, f);
-        }
-    }
-    fputc('"', f);
-}
-
 static void log_start(FILE *f, const char *event)
 {
     fprintf(f, "{\"t\":%lld,\"pid\":%lu,\"event\":\"%s\"", (long long)probe_now_ms(), PROBE_PID, event);
@@ -318,9 +377,11 @@ int main(int argc, char **argv)
     log_start(log, "start");
     fputs(",\"argv\":[", log);
     for (int i = 0; i < argc; i++) {
+        char arg[4096];
+        probe_json_string(arg, sizeof arg, argv[i]);
         if (i)
             fputc(',', log);
-        put_json_string(log, argv[i]);
+        fputs(arg, log);
     }
     fputs("]}\n", log);
     fflush(log);
@@ -331,8 +392,10 @@ int main(int argc, char **argv)
         if (fread(&len, sizeof len, 1, stdin) != 1)
             break; /* the port closed */
         if (len == 0 || len > PROBE_MAX_IN) {
-            log_start(log, "oversize");
-            fprintf(log, ",\"len\":%lu}\n", (unsigned long)len);
+            log_start(log, len == 0 ? "empty" : "oversize");
+            if (len)
+                fprintf(log, ",\"len\":%lu", (unsigned long)len);
+            fputs("}\n", log);
             fclose(log);
             return 1;
         }
@@ -363,20 +426,22 @@ int main(int argc, char **argv)
 }
 ```
 
-- [ ] **Step 5: Build and run the tests to verify they pass**
+- [ ] **Step 6: Build and run the tests to verify they pass**
 
-Windows (Visual Studio generator; the configure step from Step 3):
+Windows (Visual Studio generator; Step 4's configure command, unchanged):
 
 ```powershell
-cmake -S C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0 -B C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0
+$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+cmake -S C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0 -B C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_MANIFEST_DIR=C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec
 cmake --build C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 --config Release --target probe_host
 $env:PROBE_HOST = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_host.exe'
 python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_host.py -v
 ```
 
-Expected: 3 tests, all PASS.
+Run all five lines in one call: each call starts a new shell, and without `PROBE_HOST` every test skips.
+Expected: `Ran 4 tests`, then `OK` with no `skipped=` (nothing skips on Windows).
 
-- [ ] **Step 6: Write the kit's README**
+- [ ] **Step 7: Write the kit's README**
 
 `tools/overlay-phase0/README.md`:
 
@@ -421,10 +486,10 @@ PROBE_HOST=build-phase0/probe_host PROBE_SPAWN=build-phase0/probe_spawn python3 
 | `ids.json` | The three store ids, recorded when the probe is published. |
 ````
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```powershell
-git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec add tools/overlay-phase0/CMakeLists.txt tools/overlay-phase0/src/common.h tools/overlay-phase0/src/common.c tools/overlay-phase0/src/probe_host.c tools/overlay-phase0/tests/test_host.py tools/overlay-phase0/README.md
+git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec add .gitignore tools/overlay-phase0/CMakeLists.txt tools/overlay-phase0/src/common.h tools/overlay-phase0/src/common.c tools/overlay-phase0/src/probe_host.c tools/overlay-phase0/tests/test_host.py tools/overlay-phase0/README.md
 git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools: add the Phase 0 probe host"
 ```
 
@@ -456,8 +521,10 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 """Tests for probe_spawn. PROBE_SPAWN names the built executable."""
 import json
 import os
+import signal
 import subprocess
 import sys
+import threading
 import unittest
 
 SPAWN = os.environ.get("PROBE_SPAWN", "")
@@ -484,18 +551,35 @@ class RunTest(unittest.TestCase):
             [SPAWN, "run", sys.executable, "-c", "import time; time.sleep(600)"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
         )
-        first = json.loads(proc.stdout.readline())
-        self.assertEqual(first["event"], "started")
-        proc.stdin.write("kill\n")
-        proc.stdin.flush()
+        child = None
         try:
-            out, _ = proc.communicate(timeout=120)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            self.fail("HUNG: probe_spawn run did not report the killed child's exit")
-        evs = events(out)
-        self.assertEqual([e["event"] for e in evs], ["kill_sent", "exited"])
-        self.assertEqual(evs[1]["code"], 137)
+            first = []
+            reader = threading.Thread(target=lambda: first.append(proc.stdout.readline()), daemon=True)
+            reader.start()
+            reader.join(120)
+            if reader.is_alive():
+                self.fail("HUNG: probe_spawn run printed no started line")
+            started = json.loads(first[0])
+            self.assertEqual(started["event"], "started")
+            child = started["pid"]
+            proc.stdin.write("kill\n")
+            proc.stdin.flush()
+            try:
+                out, _ = proc.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                self.fail("HUNG: probe_spawn run did not report the killed child's exit")
+            evs = events(out)
+            self.assertEqual([e["event"] for e in evs], ["kill_sent", "exited"])
+            self.assertEqual(evs[1]["code"], 137)
+        finally:
+            if proc.poll() is None:
+                proc.kill()  # on Windows the job closes with it and ends the child
+                proc.wait(timeout=120)
+            if child and os.name == "posix":
+                try:
+                    os.killpg(child, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     def test_run_needs_a_program(self):
         proc = subprocess.run([SPAWN, "run"], capture_output=True, text=True, timeout=120)
@@ -508,9 +592,13 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `python -m unittest discover -s tools/overlay-phase0/tests -p test_spawn.py -v` with `PROBE_SPAWN` set to
-`build-phase0/Release/probe_spawn.exe`.
-Expected: FAIL (`FileNotFoundError`: the executable does not exist yet).
+```powershell
+$env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
+python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_spawn.py -v
+```
+
+Run both lines in one call. Expected: `Ran 3 tests`, then `FAILED (errors=3)`: each test ERRORS with
+`FileNotFoundError`, because the executable does not exist yet. No `skipped=`.
 
 - [ ] **Step 3: Write the header and the command dispatcher**
 
@@ -817,13 +905,15 @@ target_link_libraries(probe_spawn PRIVATE probe_common)
 - [ ] **Step 7: Build and run the tests to verify they pass**
 
 ```powershell
+$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 cmake --build C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 --config Release
 $env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
 python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_spawn.py -v
 ```
 
-Expected: 3 tests PASS. On Linux the same suite runs with `PROBE_SPAWN=build-phase0/probe_spawn` (the kill test's
-code is `128 + 9 = 137` there).
+Run all four lines in one call. Expected: `Ran 3 tests`, then `OK` with no `skipped=`. On Linux the same suite runs
+with `PROBE_SPAWN` set to the absolute path of `build-phase0/probe_spawn` (the kill test's code is `128 + 9 = 137`
+there).
 
 - [ ] **Step 8: Commit**
 
@@ -844,17 +934,23 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 - Modify: `tools/overlay-phase0/tests/test_spawn.py`
 
 **Interfaces:**
-- Consumes: `probe_emit`, `probe_now_ms` (Task 1); `spawn.h` (Task 2).
+- Consumes: `probe_emit`, `probe_now_ms`, `probe_json_string` (Task 1); `spawn.h` (Task 2).
 - Produces: `typedef struct { const char *name; unsigned short vk; unsigned short evdev; int extended; } probe_key;`
   `const probe_key *probe_key_find(const char *name);` `extern const probe_key probe_keys_table[];`
-  `extern const unsigned probe_keys_count;` Commands: `keys [--dry-run] <delay_ms> <chord>...` (a chord is names
-  joined by `+`, pressed in order and released in reverse; every chord is validated before anything is sent; prints
+  `extern const unsigned probe_keys_count;` `PROBE_MAX_CHORD` (4); `int probe_parse_chord(const char *arg,
+  const probe_key **out, char *bad, size_t bad_cap);` `typedef struct { int (*open)(void); void (*send)(const
+  probe_key *k, int up); void (*sleep_ms)(long ms); void (*close)(void); } probe_key_sender;` and `int
+  probe_keys_main(int argc, char **argv, const probe_key_sender *sender);`, which holds the whole `keys` command
+  (arguments, the check of every chord, the key lines) so each platform supplies only its sender. Commands:
+  `keys [--dry-run] <delay_ms> <chord>...` (a chord is names
+  joined by `+`, pressed in order and released in reverse; every chord is validated before anything is sent; an
+  unknown or empty part prints `{"event":"unknown_key","name"}` and exits 2; prints
   one `{"event":"key","name","vk","evdev","dry"}` per key pressed) and `keylog <seconds>` (prints one line per raw key
   or consumer-control report until the time is up, then `{"event":"keylog_end"}`).
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tools/overlay-phase0/tests/test_spawn.py`, inside the module (a new class):
+Insert this new class into `tools/overlay-phase0/tests/test_spawn.py`, above the `if __name__ == "__main__":` guard:
 
 ```python
 @unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
@@ -877,6 +973,13 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertEqual([e["event"] for e in events(proc.stdout)], ["unknown_key"])
 
+    def test_unknown_key_name_is_json_escaped(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "0", 'Up+Fo"o\\'], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual([e.get("name") for e in events(proc.stdout)], ['Fo"o\\'])
+
     def test_keylog_ends_on_time(self):
         proc = subprocess.run([SPAWN, "keylog", "1"], capture_output=True, text=True, timeout=120)
         self.assertEqual(events(proc.stdout)[-1]["event"], "keylog_end")
@@ -884,8 +987,14 @@ class KeysTest(unittest.TestCase):
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `python -m unittest discover -s tools/overlay-phase0/tests -p test_spawn.py -v`
-Expected: the three new tests FAIL (the stubs return 2 and print nothing).
+```powershell
+$env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
+python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_spawn.py -v
+```
+
+Run both lines in one call. Expected: `Ran 7 tests`, then `FAILED (failures=3, errors=1)`, no `skipped=`. The three
+`RunTest` tests pass; the four new ones FAIL or ERROR, because the stubs return 2 and print nothing
+(`test_keylog_ends_on_time` ERRORS on the empty list).
 
 - [ ] **Step 3: Write the key table, then delete the two stubs from `spawn_main.c`**
 
@@ -896,6 +1005,10 @@ Expected: the three new tests FAIL (the stubs return 2 and print nothing).
 #ifndef PROBE_KEYS_H
 #define PROBE_KEYS_H
 
+#include <stddef.h>
+
+#define PROBE_MAX_CHORD 4
+
 typedef struct {
     const char *name;
     unsigned short vk;
@@ -903,10 +1016,26 @@ typedef struct {
     int extended; /* Windows: send with KEYEVENTF_EXTENDEDKEY */
 } probe_key;
 
+/* What a platform gives probe_keys_main. open runs only for a real send, after every chord has been checked; it
+   returns 0, or prints its own failure line and returns the exit code. open and close may be NULL. */
+typedef struct {
+    int (*open)(void);
+    void (*send)(const probe_key *k, int up);
+    void (*sleep_ms)(long ms);
+    void (*close)(void);
+} probe_key_sender;
+
 extern const probe_key probe_keys_table[];
 extern const unsigned probe_keys_count;
 
 const probe_key *probe_key_find(const char *name);
+
+/* Splits "Alt+F4" into keys; returns the count, or -1 with bad set to the unknown (or empty, or fifth) part. */
+int probe_parse_chord(const char *arg, const probe_key **out, char *bad, size_t bad_cap);
+
+/* The keys command, [--dry-run] <delay_ms> <chord>...: refuses the whole command before sending anything when any
+   chord has an unknown part. */
+int probe_keys_main(int argc, char **argv, const probe_key_sender *sender);
 
 #endif
 ```
@@ -916,7 +1045,11 @@ const probe_key *probe_key_find(const char *name);
 ```c
 #include "keys.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "common.h"
 
 const probe_key probe_keys_table[] = {
     { "Up", 0x26, 103, 1 },          { "Down", 0x28, 108, 1 },     { "Left", 0x25, 105, 1 },
@@ -935,6 +1068,76 @@ const probe_key *probe_key_find(const char *name)
             return &probe_keys_table[i];
     }
     return NULL;
+}
+
+int probe_parse_chord(const char *arg, const probe_key **out, char *bad, size_t bad_cap)
+{
+    int n = 0;
+    const char *part = arg;
+    for (;;) {
+        const char *plus = strchr(part, '+');
+        size_t len = plus ? (size_t)(plus - part) : strlen(part);
+        char name[64];
+        snprintf(name, sizeof name, "%.*s", (int)len, part);
+        const probe_key *k = probe_key_find(name);
+        if (!k || n == PROBE_MAX_CHORD) {
+            snprintf(bad, bad_cap, "%s", name);
+            return -1;
+        }
+        out[n++] = k;
+        if (!plus)
+            return n;
+        part = plus + 1;
+    }
+}
+
+int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
+{
+    int i = 0, dry = 0;
+    if (argc > 0 && strcmp(argv[0], "--dry-run") == 0) {
+        dry = 1;
+        i = 1;
+    }
+    if (argc - i < 2) {
+        fputs("usage: probe_spawn keys [--dry-run] <delay_ms> <chord>...\n", stderr);
+        return 2;
+    }
+    long delay = atol(argv[i++]);
+    const probe_key *chord[PROBE_MAX_CHORD];
+    char bad[64], name[400], fields[512];
+    for (int a = i; a < argc; a++) {
+        if (probe_parse_chord(argv[a], chord, bad, sizeof bad) < 0) {
+            probe_json_string(name, sizeof name, bad);
+            snprintf(fields, sizeof fields, "\"event\":\"unknown_key\",\"name\":%s", name);
+            probe_emit(fields);
+            return 2;
+        }
+    }
+    if (!dry) {
+        int rc = sender->open ? sender->open() : 0;
+        if (rc)
+            return rc;
+        sender->sleep_ms(delay);
+    }
+    for (int a = i; a < argc; a++) {
+        int n = probe_parse_chord(argv[a], chord, bad, sizeof bad);
+        for (int k = 0; k < n; k++) {
+            if (!dry)
+                sender->send(chord[k], 0);
+            snprintf(fields, sizeof fields, "\"event\":\"key\",\"name\":\"%s\",\"vk\":%u,\"evdev\":%u,\"dry\":%s",
+                     chord[k]->name, chord[k]->vk, chord[k]->evdev, dry ? "true" : "false");
+            probe_emit(fields);
+        }
+        for (int k = n - 1; k >= 0; k--) {
+            if (!dry)
+                sender->send(chord[k], 1);
+        }
+        if (!dry)
+            sender->sleep_ms(50);
+    }
+    if (!dry && sender->close)
+        sender->close();
+    return 0;
 }
 ```
 
@@ -961,25 +1164,6 @@ int probe_keylog(int argc, char **argv) { (void)argc; (void)argv; return 2; }
 #include "keys.h"
 #include "spawn.h"
 
-#define MAX_CHORD 4
-
-/* Splits "Alt+F4" into keys; returns the count, or -1 with *bad set to the unknown part. */
-static int parse_chord(const char *arg, const probe_key **out, char *bad, size_t bad_cap)
-{
-    char buf[128];
-    snprintf(buf, sizeof buf, "%s", arg);
-    int n = 0;
-    for (char *part = strtok(buf, "+"); part; part = strtok(NULL, "+")) {
-        const probe_key *k = probe_key_find(part);
-        if (!k || n == MAX_CHORD) {
-            snprintf(bad, bad_cap, "%s", part);
-            return -1;
-        }
-        out[n++] = k;
-    }
-    return n;
-}
-
 static void send_key(const probe_key *k, int up)
 {
     INPUT in;
@@ -991,46 +1175,16 @@ static void send_key(const probe_key *k, int up)
     SendInput(1, &in, sizeof in);
 }
 
+static void sleep_ms(long ms)
+{
+    Sleep((DWORD)ms);
+}
+
+static const probe_key_sender sender = { NULL, send_key, sleep_ms, NULL };
+
 int probe_keys(int argc, char **argv)
 {
-    int i = 0, dry = 0;
-    if (argc > 0 && strcmp(argv[0], "--dry-run") == 0) {
-        dry = 1;
-        i = 1;
-    }
-    if (argc - i < 2) {
-        fputs("usage: probe_spawn keys [--dry-run] <delay_ms> <chord>...\n", stderr);
-        return 2;
-    }
-    int delay = atoi(argv[i++]);
-    const probe_key *chord[MAX_CHORD];
-    char bad[64], fields[160];
-    for (int a = i; a < argc; a++) {
-        if (parse_chord(argv[a], chord, bad, sizeof bad) < 0) {
-            snprintf(fields, sizeof fields, "\"event\":\"unknown_key\",\"name\":\"%s\"", bad);
-            probe_emit(fields);
-            return 2;
-        }
-    }
-    if (!dry)
-        Sleep((DWORD)delay);
-    for (int a = i; a < argc; a++) {
-        int n = parse_chord(argv[a], chord, bad, sizeof bad);
-        for (int k = 0; k < n; k++) {
-            if (!dry)
-                send_key(chord[k], 0);
-            snprintf(fields, sizeof fields, "\"event\":\"key\",\"name\":\"%s\",\"vk\":%u,\"evdev\":%u,\"dry\":%s",
-                     chord[k]->name, chord[k]->vk, chord[k]->evdev, dry ? "true" : "false");
-            probe_emit(fields);
-        }
-        for (int k = n - 1; k >= 0; k--) {
-            if (!dry)
-                send_key(chord[k], 1);
-        }
-        if (!dry)
-            Sleep(50);
-    }
-    return 0;
+    return probe_keys_main(argc, argv, &sender);
 }
 
 static LRESULT CALLBACK keylog_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1129,29 +1283,12 @@ int probe_keylog(int argc, char **argv)
 #include "keys.h"
 #include "spawn.h"
 
-#define MAX_CHORD 4
+static int g_fd = -1;
 
 static void sleep_ms(long ms)
 {
     struct timespec ts = { ms / 1000, (ms % 1000) * 1000000L };
     nanosleep(&ts, NULL);
-}
-
-static int parse_chord(const char *arg, const probe_key **out, char *bad, size_t bad_cap)
-{
-    char buf[128];
-    char *save = NULL;
-    snprintf(buf, sizeof buf, "%s", arg);
-    int n = 0;
-    for (char *part = strtok_r(buf, "+", &save); part; part = strtok_r(NULL, "+", &save)) {
-        const probe_key *k = probe_key_find(part);
-        if (!k || n == MAX_CHORD) {
-            snprintf(bad, bad_cap, "%s", part);
-            return -1;
-        }
-        out[n++] = k;
-    }
-    return n;
 }
 
 static void emit_ev(int fd, int type, int code, int value)
@@ -1167,80 +1304,46 @@ static void emit_ev(int fd, int type, int code, int value)
 
 static int uinput_open(void)
 {
-    int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (fd < 0)
-        return -1;
-    ioctl(fd, UI_SET_EVBIT, EV_KEY);
+    g_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (g_fd < 0) {
+        char fields[96];
+        snprintf(fields, sizeof fields, "\"event\":\"uinput_failed\",\"error\":%d", errno);
+        probe_emit(fields);
+        return 1;
+    }
+    ioctl(g_fd, UI_SET_EVBIT, EV_KEY);
     for (unsigned i = 0; i < probe_keys_count; i++)
-        ioctl(fd, UI_SET_KEYBIT, probe_keys_table[i].evdev);
+        ioctl(g_fd, UI_SET_KEYBIT, probe_keys_table[i].evdev);
     struct uinput_setup us;
     memset(&us, 0, sizeof us);
     us.id.bustype = BUS_USB;
     us.id.vendor = 0x1209;
     us.id.product = 0x0001;
     snprintf(us.name, sizeof us.name, "CPTK probe keyboard");
-    ioctl(fd, UI_DEV_SETUP, &us);
-    ioctl(fd, UI_DEV_CREATE);
+    ioctl(g_fd, UI_DEV_SETUP, &us);
+    ioctl(g_fd, UI_DEV_CREATE);
     sleep_ms(1000); /* let the desktop pick up the new device */
-    return fd;
+    return 0;
 }
+
+static void send_key(const probe_key *k, int up)
+{
+    emit_ev(g_fd, EV_KEY, k->evdev, up ? 0 : 1);
+    emit_ev(g_fd, EV_SYN, SYN_REPORT, 0);
+}
+
+static void uinput_close(void)
+{
+    ioctl(g_fd, UI_DEV_DESTROY);
+    close(g_fd);
+    g_fd = -1;
+}
+
+static const probe_key_sender sender = { uinput_open, send_key, sleep_ms, uinput_close };
 
 int probe_keys(int argc, char **argv)
 {
-    int i = 0, dry = 0;
-    if (argc > 0 && strcmp(argv[0], "--dry-run") == 0) {
-        dry = 1;
-        i = 1;
-    }
-    if (argc - i < 2) {
-        fputs("usage: probe_spawn keys [--dry-run] <delay_ms> <chord>...\n", stderr);
-        return 2;
-    }
-    long delay = atol(argv[i++]);
-    const probe_key *chord[MAX_CHORD];
-    char bad[64], fields[160];
-    for (int a = i; a < argc; a++) {
-        if (parse_chord(argv[a], chord, bad, sizeof bad) < 0) {
-            snprintf(fields, sizeof fields, "\"event\":\"unknown_key\",\"name\":\"%s\"", bad);
-            probe_emit(fields);
-            return 2;
-        }
-    }
-    int fd = -1;
-    if (!dry) {
-        fd = uinput_open();
-        if (fd < 0) {
-            snprintf(fields, sizeof fields, "\"event\":\"uinput_failed\",\"error\":%d", errno);
-            probe_emit(fields);
-            return 1;
-        }
-        sleep_ms(delay);
-    }
-    for (int a = i; a < argc; a++) {
-        int n = parse_chord(argv[a], chord, bad, sizeof bad);
-        for (int k = 0; k < n; k++) {
-            if (!dry) {
-                emit_ev(fd, EV_KEY, chord[k]->evdev, 1);
-                emit_ev(fd, EV_SYN, SYN_REPORT, 0);
-            }
-            snprintf(fields, sizeof fields, "\"event\":\"key\",\"name\":\"%s\",\"vk\":%u,\"evdev\":%u,\"dry\":%s",
-                     chord[k]->name, chord[k]->vk, chord[k]->evdev, dry ? "true" : "false");
-            probe_emit(fields);
-        }
-        for (int k = n - 1; k >= 0; k--) {
-            if (!dry) {
-                emit_ev(fd, EV_KEY, chord[k]->evdev, 0);
-                emit_ev(fd, EV_SYN, SYN_REPORT, 0);
-            }
-        }
-        if (!dry)
-            sleep_ms(50);
-    }
-    if (fd >= 0) {
-        ioctl(fd, UI_DEV_DESTROY);
-        close(fd);
-    }
-    return 0;
+    return probe_keys_main(argc, argv, &sender);
 }
 
 int probe_keylog(int argc, char **argv)
@@ -1317,12 +1420,14 @@ and in its `else ()` block:
 - [ ] **Step 7: Build and run the tests to verify they pass**
 
 ```powershell
+$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 cmake --build C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 --config Release
+$env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
 python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_spawn.py -v
 ```
 
-Expected: 6 tests PASS. (The key logger test only checks that the command ends on time; what it logs is measured in
-the guests.)
+Run all four lines in one call. Expected: `Ran 7 tests`, then `OK` with no `skipped=`. (The key logger test only
+checks that the command ends on time; what it logs is measured in the guests.)
 
 - [ ] **Step 8: Commit**
 
@@ -1342,16 +1447,18 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 - Modify: `tools/overlay-phase0/tests/test_spawn.py`
 
 **Interfaces:**
-- Consumes: `probe_emit`, `probe_now_ms` (Task 1).
+- Consumes: `probe_emit`, `probe_now_ms`, `probe_json_string` (Task 1).
 - Produces: `pad <seconds> <default|xinput|rawinput|wgi>`: a 320 x 240 window, background gamepad events on, the
   Windows backend chosen by hints; prints `pad_added`, `focus` (with `focused`), and `button` lines carrying
   `focused`, then `pad_end`. `focus <program> [args...]`: a fullscreen window, starts the program with
   `SDL_CreateProcess`, waits for it to exit, calls `SDL_RaiseWindow`, then prints `focus_after_exit` with
-  `gained` and `ms`, and `key_after_exit` with `ms` (or `-1` after 10 s with no key).
+  `gained` and `ms`, and `key_after_exit` with `ms` (or `-1` after 10 s with no key). When SDL cannot start, either
+  command prints `{"event":"sdl_failed","error"}` and exits 1; `focus` does the same when its window or renderer
+  cannot be created, so it never prints focus results nothing measured.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tools/overlay-phase0/tests/test_spawn.py`:
+Insert this new class into `tools/overlay-phase0/tests/test_spawn.py`, above the `if __name__ == "__main__":` guard:
 
 ```python
 @unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
@@ -1369,8 +1476,13 @@ class SdlProbeTest(unittest.TestCase):
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `python -m unittest discover -s tools/overlay-phase0/tests -p test_spawn.py -v`
-Expected: `test_pad_runs_without_a_display` FAILS (the stub prints nothing); `test_pad_refuses_an_unknown_backend`
+```powershell
+$env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
+python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_spawn.py -v
+```
+
+Run both lines in one call. Expected: `Ran 9 tests`, then `FAILED (failures=1)`, no `skipped=`.
+`test_pad_runs_without_a_display` FAILS (the stub returns 2 and prints nothing); `test_pad_refuses_an_unknown_backend`
 passes by accident (the stub returns 2), which is fine.
 
 - [ ] **Step 3: Write the probes, then delete the two remaining stubs from `spawn_main.c`**
@@ -1387,6 +1499,16 @@ passes by accident (the stub returns 2), which is fine.
 
 #include "common.h"
 #include "spawn.h"
+
+/* Prints {"event":<event>,"error":<SDL's last error>} and returns 1. */
+static int emit_sdl_error(const char *event)
+{
+    char error[256], fields[320];
+    probe_json_string(error, sizeof error, SDL_GetError());
+    snprintf(fields, sizeof fields, "\"event\":\"%s\",\"error\":%s", event, error);
+    probe_emit(fields);
+    return 1;
+}
 
 static int set_backend(const char *backend)
 {
@@ -1419,13 +1541,10 @@ int probe_pad(int argc, char **argv)
         fputs("usage: probe_spawn pad <seconds> <default|xinput|rawinput|wgi>\n", stderr);
         return 2;
     }
-    char fields[256];
+    char fields[512], text[256];
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
-        snprintf(fields, sizeof fields, "\"event\":\"sdl_failed\",\"error\":\"%s\"", SDL_GetError());
-        probe_emit(fields);
-        return 1;
-    }
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
+        return emit_sdl_error("sdl_failed");
     SDL_Window *w = SDL_CreateWindow("CPTK probe pad", 320, 240, 0);
     int focused = w && (SDL_GetWindowFlags(w) & SDL_WINDOW_INPUT_FOCUS) != 0;
     Uint64 end = SDL_GetTicks() + (Uint64)atoi(argv[0]) * 1000u;
@@ -1436,14 +1555,15 @@ int probe_pad(int argc, char **argv)
         switch (e.type) {
         case SDL_EVENT_GAMEPAD_ADDED: {
             SDL_Gamepad *pad = SDL_OpenGamepad(e.gdevice.which);
-            snprintf(fields, sizeof fields, "\"event\":\"pad_added\",\"name\":\"%s\"",
-                     pad ? SDL_GetGamepadName(pad) : "?");
+            probe_json_string(text, sizeof text, pad ? SDL_GetGamepadName(pad) : "?");
+            snprintf(fields, sizeof fields, "\"event\":\"pad_added\",\"name\":%s", text);
             probe_emit(fields);
             break;
         }
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-            snprintf(fields, sizeof fields, "\"event\":\"button\",\"button\":\"%s\",\"focused\":%s",
-                     SDL_GetGamepadStringForButton((SDL_GamepadButton)e.gbutton.button), focused ? "true" : "false");
+            probe_json_string(text, sizeof text, SDL_GetGamepadStringForButton((SDL_GamepadButton)e.gbutton.button));
+            snprintf(fields, sizeof fields, "\"event\":\"button\",\"button\":%s,\"focused\":%s", text,
+                     focused ? "true" : "false");
             probe_emit(fields);
             break;
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -1472,24 +1592,26 @@ int probe_focus(int argc, char **argv)
         return 2;
     }
     char fields[256];
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        snprintf(fields, sizeof fields, "\"event\":\"sdl_failed\",\"error\":\"%s\"", SDL_GetError());
-        probe_emit(fields);
-        return 1;
-    }
+    if (!SDL_Init(SDL_INIT_VIDEO))
+        return emit_sdl_error("sdl_failed");
     SDL_Window *w = SDL_CreateWindow("CPTK probe focus", 0, 0, SDL_WINDOW_FULLSCREEN);
-    SDL_Renderer *r = SDL_CreateRenderer(w, NULL);
+    SDL_Renderer *r = w ? SDL_CreateRenderer(w, NULL) : NULL;
+    if (!r) {
+        /* Report it rather than print focus results nothing measured. */
+        int rc = emit_sdl_error("sdl_failed");
+        if (w)
+            SDL_DestroyWindow(w);
+        SDL_Quit();
+        return rc;
+    }
     SDL_SetRenderDrawColor(r, 32, 32, 32, 255);
     SDL_RenderClear(r);
     SDL_RenderPresent(r);
 
     /* argv is the tail of main's argv, so argv[argc] is the NULL that SDL_CreateProcess needs. */
     SDL_Process *p = SDL_CreateProcess((const char *const *)argv, false);
-    if (!p) {
-        snprintf(fields, sizeof fields, "\"event\":\"spawn_failed\",\"error\":\"%s\"", SDL_GetError());
-        probe_emit(fields);
-        return 1;
-    }
+    if (!p)
+        return emit_sdl_error("spawn_failed");
     probe_emit("\"event\":\"started\"");
     int code = 0;
     while (!SDL_WaitProcess(p, false, &code)) {
@@ -1556,22 +1678,22 @@ and change its last line to:
 target_link_libraries(probe_spawn PRIVATE probe_common SDL3::SDL3)
 ```
 
-Reconfigure with the vcpkg toolchain (Windows):
-
-```powershell
-cmake -S C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0 -B C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_MANIFEST_DIR=C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec
-```
-
-The SDL3 DLL lands beside `probe_spawn.exe` through vcpkg's app-local copy.
+No reconfigure is needed: `build-phase0` was configured with the vcpkg toolchain in Task 1 Step 4, which already
+installed SDL3, and the build below re-runs CMake on its own because `CMakeLists.txt` changed. The SDL3 DLL lands
+beside `probe_spawn.exe` through vcpkg's app-local copy.
 
 - [ ] **Step 5: Build and run the tests to verify they pass**
 
 ```powershell
+$env:Path += ";C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
 cmake --build C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0 --config Release
+$env:PROBE_HOST = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_host.exe'
+$env:PROBE_SPAWN = 'C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/build-phase0/Release/probe_spawn.exe'
 python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -v
 ```
 
-Expected: every test in `test_host.py` and `test_spawn.py` PASSES (11).
+Run all five lines in one call. Expected: `Ran 13 tests` (4 in `test_host.py`, 9 in `test_spawn.py`), then `OK`
+with no `skipped=`.
 
 - [ ] **Step 6: Commit**
 
@@ -1591,7 +1713,6 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 - Create: `tools/overlay-phase0/pages/probe.html`, `tools/overlay-phase0/pages/keylog.html`,
   `tools/overlay-phase0/pages/serve.ps1`
 - Create: `tools/overlay-phase0/tests/test_extension_build.py`
-- Modify: `.gitignore` (add `tools/overlay-phase0/extension/dist/` and `build-phase0/`)
 
 **Interfaces:**
 - Consumes: the host name `app.cptk.overlay` and the host's ack (Task 1).
@@ -1666,8 +1787,9 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `python -m unittest discover -s tools/overlay-phase0/tests -p test_extension_build.py -v`
-Expected: ERROR in `setUpClass` (`build.py` does not exist).
+Run: `python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_extension_build.py -v`
+Expected: `Ran 0 tests`, then `FAILED (errors=1)`: ERROR in `setUpClass` (`build.py` does not exist), so none of
+the 4 tests runs.
 
 - [ ] **Step 3: Write the extension's scripts**
 
@@ -1995,28 +2117,19 @@ try {
 }
 ```
 
-Append to `.gitignore`:
-
-```
-build-phase0/
-tools/overlay-phase0/extension/dist/
-```
+`extension/dist/` is already ignored (Task 1 Step 2).
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_extension_build.py -v`
-Expected: 4 tests PASS.
+Expected: `Ran 4 tests`, then `OK` with no `skipped=`.
 
-- [ ] **Step 7: Load the unpacked Chromium build once by hand to check it parses**
+Whether a browser accepts the unpacked Chromium build is checked by guest protocol G16 (Task 8), not here.
 
-This is a parse check, not a measurement. Open Edge at `edge://extensions`, turn on Developer mode, choose
-*Load unpacked*, and pick `tools/overlay-phase0/extension/dist/chromium`. Expected: it loads with no error badge.
-Remove it again.
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```powershell
-git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec add .gitignore tools/overlay-phase0/extension/src/content.js tools/overlay-phase0/extension/src/background.js tools/overlay-phase0/extension/build.py tools/overlay-phase0/pages/probe.html tools/overlay-phase0/pages/keylog.html tools/overlay-phase0/pages/serve.ps1 tools/overlay-phase0/tests/test_extension_build.py
+git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec add tools/overlay-phase0/extension/src/content.js tools/overlay-phase0/extension/src/background.js tools/overlay-phase0/extension/build.py tools/overlay-phase0/pages/probe.html tools/overlay-phase0/pages/keylog.html tools/overlay-phase0/pages/serve.ps1 tools/overlay-phase0/tests/test_extension_build.py
 git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools: add the probe extension, its build and the probe pages"
 ```
 
@@ -2045,7 +2158,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
     sets `ExtensionInstallForcelist`.
   - `firefox_profile.py --profile <dir> --xpi <file> [--no-scan-scopes]` and
     `firefox-profile.ps1 -ProfileDir <dir> -Xpi <file> [-NoScanScopes]`: write the CPTK lines of `user.js` (each ends
-    with `// cptk-overlay`; other lines are kept) and copy the XPI to `extensions/overlay@cptk.app.xpi` when it
+    with `// cptk-overlay`; other lines are kept; the file is read and written as UTF-8) and copy the XPI to `extensions/overlay@cptk.app.xpi` when it
     differs. Both print `copied` or `unchanged`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2069,6 +2182,8 @@ import firefox_profile  # noqa: E402
 import linux_setup  # noqa: E402
 
 IDS = {"chrome_web_store": "a" * 32, "edge_addons": "b" * 32, "gecko": "overlay@cptk.app"}
+# A user line with a non-ASCII character: the profile scripts must keep it byte for byte.
+USER_LINE = 'user_pref("browser.startup.homepage", "https://example.org/café");'
 
 
 def write_ids(folder):
@@ -2113,10 +2228,20 @@ class LinuxSetupTest(unittest.TestCase):
         self.assertEqual(linux_setup.conflicts(self.root, "cptk-overlay.json"), [str(other)])
 
     def test_remove_deletes_only_its_files(self):
+        other = self.root / "etc/opt/chrome/policies/managed/zz-it.json"
+        other.parent.mkdir(parents=True)
+        other.write_text(json.dumps({"ExtensionInstallForcelist": ["c" * 32 + ";https://x"]}))
         self.run_setup()
         self.run_setup("--remove")
         self.assertFalse((self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").exists())
         self.assertFalse((self.home / ".mozilla/native-messaging-hosts/app.cptk.overlay.json").exists())
+        self.assertTrue(other.exists())
+
+    def test_lists_the_folders_it_will_create(self):
+        target = self.home / ".mozilla/native-messaging-hosts"
+        self.assertEqual(linux_setup.missing_dirs(target), [self.home / ".mozilla", target])
+        target.mkdir(parents=True)
+        self.assertEqual(linux_setup.missing_dirs(target), [])
 
     def test_refuses_a_relative_host_path(self):
         with self.assertRaises(SystemExit):
@@ -2131,14 +2256,14 @@ class FirefoxProfileTest(unittest.TestCase):
         self.xpi.write_bytes(b"version-1")
 
     def test_profile_keeps_user_lines(self):
-        (self.profile / "user.js").write_text('user_pref("browser.startup.homepage", "about:blank");\n')
+        (self.profile / "user.js").write_text(USER_LINE + "\n", encoding="utf-8")
         firefox_profile.prepare(self.profile, self.xpi)
-        text = (self.profile / "user.js").read_text()
-        self.assertIn('user_pref("browser.startup.homepage", "about:blank");', text)
+        text = (self.profile / "user.js").read_text(encoding="utf-8")
+        self.assertIn(USER_LINE, text)
         self.assertIn('user_pref("extensions.autoDisableScopes", 0); // cptk-overlay', text)
         self.assertIn('user_pref("extensions.startupScanScopes", 1); // cptk-overlay', text)
         firefox_profile.prepare(self.profile, self.xpi)
-        self.assertEqual((self.profile / "user.js").read_text(), text)
+        self.assertEqual((self.profile / "user.js").read_text(encoding="utf-8"), text)
 
     def test_copies_only_when_the_xpi_differs(self):
         self.assertTrue(firefox_profile.prepare(self.profile, self.xpi))
@@ -2149,7 +2274,46 @@ class FirefoxProfileTest(unittest.TestCase):
 
     def test_no_scan_scopes_variant(self):
         firefox_profile.prepare(self.profile, self.xpi, scan_scopes=False)
-        self.assertNotIn("startupScanScopes", (self.profile / "user.js").read_text())
+        self.assertNotIn("startupScanScopes", (self.profile / "user.js").read_text(encoding="utf-8"))
+
+
+@unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "Windows PowerShell only")
+class FirefoxProfilePsTest(unittest.TestCase):
+    """The Windows twin of FirefoxProfileTest: setup/firefox-profile.ps1, for guests with no Python."""
+
+    def setUp(self):
+        self.profile = pathlib.Path(tempfile.mkdtemp())
+        self.xpi = pathlib.Path(tempfile.mkdtemp()) / "probe.xpi"
+        self.xpi.write_bytes(b"version-1")
+
+    def prepare(self, *extra):
+        cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+               str(KIT / "setup" / "firefox-profile.ps1"), "-ProfileDir", str(self.profile), "-Xpi", str(self.xpi),
+               *extra]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.strip()
+
+    def test_profile_keeps_user_lines(self):
+        (self.profile / "user.js").write_text(USER_LINE + "\n", encoding="utf-8")
+        self.prepare()
+        text = (self.profile / "user.js").read_text(encoding="utf-8")
+        self.assertIn(USER_LINE, text)
+        self.assertIn('user_pref("extensions.autoDisableScopes", 0); // cptk-overlay', text)
+        self.assertIn('user_pref("extensions.startupScanScopes", 1); // cptk-overlay', text)
+        self.prepare()
+        self.assertEqual((self.profile / "user.js").read_text(encoding="utf-8"), text)
+
+    def test_copies_only_when_the_xpi_differs(self):
+        self.assertEqual(self.prepare(), "copied")
+        self.assertEqual(self.prepare(), "unchanged")
+        self.xpi.write_bytes(b"version-2")
+        self.assertEqual(self.prepare(), "copied")
+        self.assertEqual((self.profile / "extensions/overlay@cptk.app.xpi").read_bytes(), b"version-2")
+
+    def test_no_scan_scopes_variant(self):
+        self.prepare("-NoScanScopes")
+        self.assertNotIn("startupScanScopes", (self.profile / "user.js").read_text(encoding="utf-8"))
 
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "Windows PowerShell only")
@@ -2206,8 +2370,9 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `python -m unittest discover -s tools/overlay-phase0/tests -p test_setup.py -v`
-Expected: ERROR at import (`No module named 'firefox_profile'`).
+Run: `python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_setup.py -v`
+Expected: `Ran 1 test`, then `FAILED (errors=1)`: the module fails at import (`No module named 'firefox_profile'`),
+which unittest reports as one failed test, so none of its 13 tests runs.
 
 - [ ] **Step 3: Write the Linux setup and the Firefox profile scripts**
 
@@ -2220,6 +2385,7 @@ import argparse
 import json
 import os
 import pathlib
+import posixpath
 import sys
 
 CWS_UPDATE = "https://clients2.google.com/service/update2/crx"
@@ -2266,6 +2432,16 @@ def conflicts(root, ours):
     return found
 
 
+def missing_dirs(folder):
+    """The folders mkdir(parents=True) would create for folder, outermost first."""
+    missing = []
+    folder = pathlib.Path(folder)
+    while not folder.exists():
+        missing.append(folder)
+        folder = folder.parent
+    return list(reversed(missing))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ids", required=True)
@@ -2274,7 +2450,7 @@ def main(argv=None):
     ap.add_argument("--home", default=None)
     ap.add_argument("--remove", action="store_true")
     args = ap.parse_args(argv)
-    if not os.path.isabs(args.host):
+    if not posixpath.isabs(args.host):  # a Linux path, even when the tests run on Windows
         ap.error("--host must be an absolute path")
     ids = json.loads(pathlib.Path(args.ids).read_text())
     owner = None
@@ -2294,12 +2470,15 @@ def main(argv=None):
             if path.exists():
                 path.unlink()
             continue
+        made = missing_dirs(path.parent)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(content, indent=2) + "\n")
         os.chmod(path, 0o644)
         if owner and str(path).startswith(str(home)):
+            # Under sudo every folder mkdir made is root's; give the user back each one it made in their home.
+            for folder in made:
+                os.chown(folder, *owner)
             os.chown(path, *owner)
-            os.chown(path.parent, *owner)
     for other in conflicts(args.root, OURS):
         print(f"setup: another policy file also sets ExtensionInstallForcelist: {other}")
     print(f"setup: {'removed' if args.remove else 'wrote'} {len(files)} files")
@@ -2333,14 +2512,14 @@ def prepare(profile, xpi, scan_scopes=True):
     profile = pathlib.Path(profile)
     profile.mkdir(parents=True, exist_ok=True)
     userjs = profile / "user.js"
-    old = userjs.read_text().splitlines() if userjs.exists() else []
+    old = userjs.read_text(encoding="utf-8").splitlines() if userjs.exists() else []
     kept = [line for line in old if not line.rstrip().endswith(MARK)]
     ours = [
         f'user_pref("{name}", {value}); {MARK}'
         for name, value in PREFS
         if scan_scopes or name != "extensions.startupScanScopes"
     ]
-    userjs.write_text("\n".join(kept + ours) + "\n")
+    userjs.write_text("\n".join(kept + ours) + "\n", encoding="utf-8")
     extensions = profile / "extensions"
     extensions.mkdir(exist_ok=True)
     dest = extensions / "overlay@cptk.app.xpi"
@@ -2492,7 +2671,8 @@ New-Item -ItemType Directory -Path $ProfileDir -Force | Out-Null
 $userJs = Join-Path $ProfileDir 'user.js'
 $kept = @()
 if (Test-Path -LiteralPath $userJs) {
-    $kept = @(Get-Content -LiteralPath $userJs | Where-Object { -not $_.TrimEnd().EndsWith($mark) })
+    # -Encoding UTF8: Windows PowerShell 5.1 would read the file as ANSI and change a non-ASCII line on write.
+    $kept = @(Get-Content -LiteralPath $userJs -Encoding UTF8 | Where-Object { -not $_.TrimEnd().EndsWith($mark) })
 }
 $ours = @(
     "user_pref(""extensions.autoDisableScopes"", 0); $mark"
@@ -2504,15 +2684,19 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 $extensions = Join-Path $ProfileDir 'extensions'
 New-Item -ItemType Directory -Path $extensions -Force | Out-Null
 $dest = Join-Path $extensions 'overlay@cptk.app.xpi'
-$same = (Test-Path -LiteralPath $dest) -and ((Get-FileHash -LiteralPath $dest).Hash -eq (Get-FileHash -LiteralPath $Xpi).Hash)
+# Compare the bytes, as firefox_profile.py does. Not Get-FileHash: 5.1 defines it in a script module, and a
+# PSModulePath that lists PowerShell 7's modules first hides it.
+$new = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Xpi).ProviderPath)
+$same = (Test-Path -LiteralPath $dest) -and
+    ([Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $dest).ProviderPath)) -eq [Convert]::ToBase64String($new))
 if ($same) { Write-Output 'unchanged' } else { Copy-Item -LiteralPath $Xpi -Destination $dest -Force; Write-Output 'copied' }
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m unittest discover -s C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/tools/overlay-phase0/tests -p test_setup.py -v`
-Expected on Windows: 9 tests PASS (4 Linux setup, 3 Firefox profile, 2 Windows setup). On Linux the Windows tests
-are skipped.
+Expected on Windows: `Ran 13 tests` (5 Linux setup, 3 Firefox profile, 3 Firefox profile through PowerShell, 2
+Windows setup), then `OK` with no `skipped=`. On Linux the 5 Windows tests are skipped.
 
 - [ ] **Step 6: Commit**
 
