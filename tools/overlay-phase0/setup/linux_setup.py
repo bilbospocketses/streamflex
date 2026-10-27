@@ -16,7 +16,7 @@ OURS = "cptk-overlay.json"
 def plan(ids, host_path, root, home):
     r = pathlib.Path(root)
     origins = [f"chrome-extension://{ids['chrome_web_store']}/", f"chrome-extension://{ids['edge_addons']}/"]
-    base = {"name": HOST, "description": "CPTK Overlay probe host", "path": host_path, "type": "stdio"}
+    base = {"name": HOST, "description": "CPTK Overlay Probe host", "path": host_path, "type": "stdio"}
     return {
         r / "etc/opt/chrome/policies/managed" / OURS: {
             "ExtensionInstallForcelist": [f"{ids['chrome_web_store']};{CWS_UPDATE}"],

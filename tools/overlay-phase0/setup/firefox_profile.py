@@ -28,7 +28,7 @@ def prepare(profile, xpi, scan_scopes=True):
     userjs.write_text("\n".join(kept + ours) + "\n", encoding="utf-8")
     extensions = profile / "extensions"
     extensions.mkdir(exist_ok=True)
-    dest = extensions / "overlay@cptk.app.xpi"
+    dest = extensions / "overlay-probe@cptk.app.xpi"
     data = pathlib.Path(xpi).read_bytes()
     if dest.exists() and dest.read_bytes() == data:
         return False

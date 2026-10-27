@@ -25,7 +25,7 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 [IO.File]::WriteAllText($userJs, (($kept + $ours) -join "`n") + "`n", $utf8)
 $extensions = Join-Path $ProfileDir 'extensions'
 New-Item -ItemType Directory -Path $extensions -Force | Out-Null
-$dest = Join-Path $extensions 'overlay@cptk.app.xpi'
+$dest = Join-Path $extensions 'overlay-probe@cptk.app.xpi'
 # Compare the bytes, as firefox_profile.py does. Not Get-FileHash: 5.1 defines it in a script module, and a
 # PSModulePath that lists PowerShell 7's modules first hides it.
 $new = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Xpi).ProviderPath)

@@ -32,7 +32,8 @@ $ids = Get-Content -Raw -LiteralPath $IdsFile | ConvertFrom-Json
 foreach ($field in 'chrome_web_store', 'edge_addons') {
     if (-not ([string]$ids.$field -cmatch '^[a-p]{32}$')) { Fail "ids file ${IdsFile}: $field must be 32 letters a-p, got '$($ids.$field)'" }
 }
-if (-not ([string]$ids.gecko).Trim()) { Fail "ids file ${IdsFile}: gecko is missing" }
+# The profile scripts name the sideloaded XPI after this id, and Firefox loads it only under that name.
+if ([string]$ids.gecko -cne 'overlay-probe@cptk.app') { Fail "ids file ${IdsFile}: gecko must be overlay-probe@cptk.app, got '$($ids.gecko)'" }
 if ($HostPath -notmatch '^([A-Za-z]:\\|\\\\[^\\])') { Fail "-HostPath must be an absolute path (C:\... or \\server\...), got '$HostPath'" }
 if ($RegistryRoot -and $RegistryRoot -notmatch '^(HKCU|HKLM):\\.') { Fail "-RegistryRoot must start with HKCU:\ or HKLM:\, got '$RegistryRoot'" }
 $ManifestDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ManifestDir)
@@ -183,11 +184,11 @@ if ($Remove -and $hadState) {
 } else {
     New-Item -ItemType Directory -Path $ManifestDir -Force | Out-Null
     $chromium = [ordered]@{
-        name = 'app.cptk.overlay'; description = 'CPTK Overlay probe host'; path = $HostPath; type = 'stdio'
+        name = 'app.cptk.overlay'; description = 'CPTK Overlay Probe host'; path = $HostPath; type = 'stdio'
         allowed_origins = @("chrome-extension://$($ids.chrome_web_store)/", "chrome-extension://$($ids.edge_addons)/")
     }
     $firefox = [ordered]@{
-        name = 'app.cptk.overlay'; description = 'CPTK Overlay probe host'; path = $HostPath; type = 'stdio'
+        name = 'app.cptk.overlay'; description = 'CPTK Overlay Probe host'; path = $HostPath; type = 'stdio'
         allowed_extensions = @($ids.gecko)
     }
     [IO.File]::WriteAllText($chromiumManifest, ($chromium | ConvertTo-Json), $utf8)

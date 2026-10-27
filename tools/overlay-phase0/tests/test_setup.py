@@ -18,7 +18,7 @@ sys.path.insert(0, str(KIT / "setup"))
 import firefox_profile  # noqa: E402
 import linux_setup  # noqa: E402
 
-IDS = {"chrome_web_store": "a" * 32, "edge_addons": "b" * 32, "gecko": "overlay@cptk.app"}
+IDS = {"chrome_web_store": "a" * 32, "edge_addons": "b" * 32, "gecko": "overlay-probe@cptk.app"}
 CWS_ENTRY = "a" * 32 + ";https://clients2.google.com/service/update2/crx"
 EDGE_ENTRY = "b" * 32 + ";https://edge.microsoft.com/extensionwebstorebase/v1/crx"
 HOST_EXE = r"C:\cptk\probe_host.exe"
@@ -61,7 +61,7 @@ class LinuxSetupTest(unittest.TestCase):
         host = json.loads((self.root / "etc/opt/edge/native-messaging-hosts/app.cptk.overlay.json").read_text())
         self.assertEqual(host["allowed_origins"], ["chrome-extension://" + "a" * 32 + "/", "chrome-extension://" + "b" * 32 + "/"])
         ff = json.loads((self.home / ".mozilla/native-messaging-hosts/app.cptk.overlay.json").read_text())
-        self.assertEqual(ff["allowed_extensions"], ["overlay@cptk.app"])
+        self.assertEqual(ff["allowed_extensions"], ["overlay-probe@cptk.app"])
         self.assertEqual(ff["path"], "/usr/libexec/cptk/probe_host")
 
     def test_setup_is_idempotent_and_keeps_foreign_entries(self):
@@ -138,7 +138,7 @@ class FirefoxProfileTest(unittest.TestCase):
         self.assertFalse(firefox_profile.prepare(self.profile, self.xpi))
         self.xpi.write_bytes(b"version-2")
         self.assertTrue(firefox_profile.prepare(self.profile, self.xpi))
-        self.assertEqual((self.profile / "extensions/overlay@cptk.app.xpi").read_bytes(), b"version-2")
+        self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
         firefox_profile.prepare(self.profile, self.xpi, scan_scopes=False)
@@ -177,7 +177,7 @@ class FirefoxProfilePsTest(unittest.TestCase):
         self.assertEqual(self.prepare(), "unchanged")
         self.xpi.write_bytes(b"version-2")
         self.assertEqual(self.prepare(), "copied")
-        self.assertEqual((self.profile / "extensions/overlay@cptk.app.xpi").read_bytes(), b"version-2")
+        self.assertEqual((self.profile / "extensions/overlay-probe@cptk.app.xpi").read_bytes(), b"version-2")
 
     def test_no_scan_scopes_variant(self):
         self.prepare("-NoScanScopes")
@@ -261,7 +261,7 @@ class WindowsSetupTest(unittest.TestCase):
         path, manifest = self.manifest_of(r"Mozilla\NativeMessagingHosts\app.cptk.overlay")
         self.assertEqual(pathlib.Path(path), pathlib.Path(self.manifests) / "app.cptk.overlay.firefox.json")
         self.assertEqual(manifest["path"], HOST_EXE)
-        self.assertEqual(manifest["allowed_extensions"], ["overlay@cptk.app"])
+        self.assertEqual(manifest["allowed_extensions"], ["overlay-probe@cptk.app"])
 
     def test_remove_leaves_no_policy_keys_behind(self):
         self.ok()
@@ -322,7 +322,7 @@ class WindowsSetupTest(unittest.TestCase):
 
     def test_refuses_bad_ids(self):
         for bad in ({**IDS, "chrome_web_store": "A" * 32}, {**IDS, "edge_addons": "b" * 31},
-                    {k: v for k, v in IDS.items() if k != "gecko"}):
+                    {k: v for k, v in IDS.items() if k != "gecko"}, {**IDS, "gecko": "overlay@cptk.app"}):
             proc = self.ps(ids=write_ids(tempfile.mkdtemp(), bad))
             self.assertEqual(proc.returncode, 1, f"{bad}\nstderr: {proc.stderr}\nstdout: {proc.stdout}")
             self.assertIn("ids file", proc.stderr)
