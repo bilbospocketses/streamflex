@@ -1932,8 +1932,8 @@ BASE = {
     "name": "CPTK Overlay Probe",
     "version": VERSION,
     "description": (
-        "Drives streaming sites with a TV remote inside CPTK's own browser profiles. "
-        "It does nothing anywhere else."
+        "A measurement probe for CPTK's TV-remote overlay. "
+        "It acts only in tabs opened with CPTK's launch code, and does nothing elsewhere."
     ),
     "permissions": ["nativeMessaging", "storage"],
     "host_permissions": ["<all_urls>"],
@@ -2731,8 +2731,8 @@ review can take days and G1, G10 and G13 cannot run before the listings are live
 # CPTK Overlay Probe: store listing text
 
 **Name:** CPTK Overlay Probe
-**Summary (132 characters max):** Drives streaming sites with a TV remote inside CPTK's own browser profiles. It does
-nothing anywhere else.
+**Summary (132 characters max):** A measurement probe for CPTK's TV-remote overlay. It acts only in tabs opened with
+CPTK's launch code, and does nothing elsewhere.
 **Visibility:** Unlisted (Chrome Web Store), Hidden (Edge Add-ons), unlisted self-distribution (AMO).
 **Category:** Accessibility.
 
