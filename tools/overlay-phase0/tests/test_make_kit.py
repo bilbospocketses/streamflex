@@ -63,15 +63,15 @@ class MakeKitTest(unittest.TestCase):
         return {p.relative_to(kit).as_posix() for p in kit.rglob("*") if p.is_file()}
 
     def test_copies_the_kit_layout(self):
-        (self.source / "ids.json").write_text('{"gecko": "overlay@cptk.app"}', encoding="utf-8")
-        xpi = self.temp_dir() / "cptk-overlay-0.0.1.xpi"
+        (self.source / "ids.json").write_text('{"gecko": "overlay-probe@cptk.app"}', encoding="utf-8")
+        xpi = self.temp_dir() / "cptk-overlay-probe-0.0.1.xpi"
         xpi.write_bytes(b"signed")
         proc = self.make_kit("-Xpi", str(xpi))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(self.layout(self.kit), KIT_FILES | {"ids.json", "cptk-overlay-0.0.1.xpi"})
+        self.assertEqual(self.layout(self.kit), KIT_FILES | {"ids.json", "cptk-overlay-probe-0.0.1.xpi"})
         self.assertEqual((self.kit / "SDL3.dll").read_bytes(), b"SDL3.dll")
         self.assertEqual((self.kit / "vcruntime140.dll").read_bytes(), b"system vcruntime140.dll")
-        self.assertEqual((self.kit / "cptk-overlay-0.0.1.xpi").read_bytes(), b"signed")
+        self.assertEqual((self.kit / "cptk-overlay-probe-0.0.1.xpi").read_bytes(), b"signed")
         lines = proc.stdout.splitlines()
         self.assertIn(f"kit: {self.kit}", lines)
         self.assertIn("  extension\\src\\content.js", lines)

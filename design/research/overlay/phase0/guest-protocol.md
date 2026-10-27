@@ -10,9 +10,13 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
 
 ## Common setup
 
+- **The probe** is **CPTK Overlay Probe** 0.0.1, published under its own store listings (Gecko id
+  `overlay-probe@cptk.app`); the product's CPTK Overlay listing is not created until R1. Its native host is still
+  `app.cptk.overlay`. Its signed Firefox package is `cptk-overlay-probe-0.0.1.xpi` (the `web-ext` artifact, renamed
+  to that).
 - **The kit (Windows):** on the host, after building `tools/overlay-phase0/` (README there), run
   `powershell -ExecutionPolicy Bypass -File tools\overlay-phase0\make-kit.ps1 -Build build-phase0\Release -Xpi
-  C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi` from the repo root. It
+  C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi` from the repo root. It
   copies `probe_host.exe`, `probe_spawn.exe` with every DLL beside it (SDL3.dll), `setup\`, `pages\`, `extension\`
   (`src\` and `build.py`), `ids.json` and the signed XPI into one folder, `$env:USERPROFILE\cptk-kit` by default,
   and prints what it copied. Copy that folder into the guest. The kit carries the Visual C++ runtime DLLs
@@ -22,8 +26,8 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
   `probe_host` and `probe_spawn` are the absolute paths of `build-phase0/probe_host` and `build-phase0/probe_spawn`.
 - **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and the absolute path of
   `build-phase0/probe_spawn` on Linux.
-- **Store listings:** G1, G5, G10 and G15's Chrome and Edge runs force-install the published Chrome Web Store and
-  Edge Add-ons items, so they wait until both listings are live. G13 needs only the AMO-signed XPI and no Chrome or
+- **Store listings:** G1, G5, G10 and G15's Chrome and Edge runs force-install the probe's published Chrome Web
+  Store and Edge Add-ons items, so they wait until both listings are live. G13 needs only the AMO-signed XPI and no Chrome or
   Edge listing; no other item needs a listing.
 - **The page server:** Windows `powershell -ExecutionPolicy Bypass -File pages\serve.ps1`; Linux
   `python3 -m http.server 8765 --bind 127.0.0.1 --directory pages`. The probe page is
@@ -188,7 +192,7 @@ in G9: on Windows `windows.ps1` as in G1 step 1, on Linux `sudo python3 setup/li
 3. Repeat 2 with `--no-scan-scopes` (`-NoScanScopes`), on a profile that already ran 0.0.1.
 4. Open the everyday Firefox: `about:addons` and `about:policies` (screenshots).
 
-**Pass:** 1 runs with no prompt; 2 shows 0.0.2; the everyday Firefox has no CPTK add-on and no CPTK policy. Step 3's
+**Pass:** 1 runs with no prompt; 2 shows 0.0.2; the everyday Firefox has no CPTK Overlay Probe add-on and no CPTK policy. Step 3's
 result says whether `startupScanScopes` is needed.
 
 ### G14. Widevine in a fresh Firefox profile
