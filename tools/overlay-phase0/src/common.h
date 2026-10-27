@@ -12,7 +12,7 @@ int64_t probe_now_ms(void);
 void probe_emit(const char *fields);
 
 /* Write s into out as a quoted JSON string (a NULL s is ""). Stops early rather than overflow, so out is always a
-   whole quoted string; cap must be at least 3. */
+   whole quoted string, cut between UTF-8 characters, never inside one; cap must be at least 3. */
 void probe_json_string(char *out, size_t cap, const char *s);
 
 #endif

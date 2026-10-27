@@ -56,8 +56,15 @@ void probe_json_string(char *out, size_t cap, const char *s)
         } else {
             esc[0] = (char)*p;
         }
-        if (n + len + 2 > cap)
-            break; /* room for the closing quote and the NUL */
+        if (n + len + 2 > cap) { /* room for the closing quote and the NUL */
+            if ((*p & 0xC0) == 0x80) { /* mid-character: drop its leading bytes too, so out stays UTF-8 */
+                while (n > 1 && ((unsigned char)out[n - 1] & 0xC0) == 0x80)
+                    n--;
+                if (n > 1 && (unsigned char)out[n - 1] >= 0xC0)
+                    n--;
+            }
+            break;
+        }
         memcpy(out + n, esc, len);
         n += len;
     }

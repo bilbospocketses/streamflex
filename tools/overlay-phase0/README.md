@@ -22,6 +22,14 @@ cmake --build build-phase0
 
 ## Test
 
+Windows (PowerShell, from the repo root; set the variables in the same command, or every test skips):
+
+```powershell
+$env:PROBE_HOST = "$PWD\build-phase0\Release\probe_host.exe"; $env:PROBE_SPAWN = "$PWD\build-phase0\Release\probe_spawn.exe"; python -m unittest discover -s tools/overlay-phase0/tests -v
+```
+
+Linux:
+
 ```sh
 PROBE_HOST=build-phase0/probe_host PROBE_SPAWN=build-phase0/probe_spawn python3 -m unittest discover -s tools/overlay-phase0/tests -v
 ```

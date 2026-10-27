@@ -16,6 +16,7 @@
 #define PROBE_PID ((unsigned long)GetCurrentProcessId())
 #define PROBE_SEP "\\"
 #else
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #define PROBE_PID ((unsigned long)getpid())
@@ -24,27 +25,26 @@
 
 #define PROBE_MAX_IN (64u * 1024u * 1024u)
 
-static FILE *open_log(void)
+static FILE *open_log(char *path, size_t cap)
 {
     char dir[1024];
-    char path[1100];
     const char *override = getenv("CPTK_PROBE_LOG_DIR");
 #ifdef _WIN32
     const char *base = getenv("LOCALAPPDATA");
-    if (override)
+    if (override && *override)
         snprintf(dir, sizeof dir, "%s", override);
     else
         snprintf(dir, sizeof dir, "%s\\cptk-probe", base ? base : ".");
     CreateDirectoryA(dir, NULL);
 #else
     const char *base = getenv("HOME");
-    if (override)
+    if (override && *override)
         snprintf(dir, sizeof dir, "%s", override);
     else
         snprintf(dir, sizeof dir, "%s/.cptk-probe", base ? base : ".");
     mkdir(dir, 0700);
 #endif
-    snprintf(path, sizeof path, "%s" PROBE_SEP "probe.log", dir);
+    snprintf(path, cap, "%s" PROBE_SEP "probe.log", dir);
     return fopen(path, "ab");
 }
 
@@ -53,26 +53,59 @@ static void log_start(FILE *f, const char *event)
     fprintf(f, "{\"t\":%lld,\"pid\":%lu,\"event\":\"%s\"", (long long)probe_now_ms(), PROBE_PID, event);
 }
 
+static void log_arg(FILE *f, int i, const char *s)
+{
+    char arg[4096];
+    probe_json_string(arg, sizeof arg, s);
+    if (i)
+        fputc(',', f);
+    fputs(arg, f);
+}
+
+/* The argv field. On Windows argv is in the ANSI code page, not UTF-8, so it is rebuilt from the wide command line. */
+static void log_argv(FILE *f, int argc, char **argv)
+{
+    fputs(",\"argv\":[", f);
+#ifdef _WIN32
+    int wargc = 0;
+    LPWSTR *wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+    if (wargv) {
+        for (int i = 0; i < wargc; i++) {
+            int len = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, NULL, 0, NULL, NULL);
+            char *utf8 = len > 0 ? malloc((size_t)len) : NULL;
+            if (utf8 && WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, utf8, len, NULL, NULL) > 0)
+                log_arg(f, i, utf8);
+            else
+                log_arg(f, i, "");
+            free(utf8);
+        }
+        LocalFree(wargv);
+        fputs("]}\n", f);
+        return;
+    }
+#endif
+    for (int i = 0; i < argc; i++)
+        log_arg(f, i, argv[i]);
+    fputs("]}\n", f);
+}
+
 int main(int argc, char **argv)
 {
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
+#else
+    signal(SIGPIPE, SIG_IGN); /* a browser that closes the port early must not cost the end line */
 #endif
-    FILE *log = open_log();
-    if (!log)
+    char path[1100];
+    FILE *log = open_log(path, sizeof path);
+    if (!log) {
+        fprintf(stderr, "probe_host: cannot open %s\n", path);
         return 2;
+    }
 
     log_start(log, "start");
-    fputs(",\"argv\":[", log);
-    for (int i = 0; i < argc; i++) {
-        char arg[4096];
-        probe_json_string(arg, sizeof arg, argv[i]);
-        if (i)
-            fputc(',', log);
-        fputs(arg, log);
-    }
-    fputs("]}\n", log);
+    log_argv(log, argc, argv);
     fflush(log);
 
     unsigned long seq = 0;
