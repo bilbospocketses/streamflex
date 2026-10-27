@@ -526,7 +526,7 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
 
 - **C unit tests (ctest):** recipe command lines and profile preparation per browser and OS (`user.js` content, the
   XPI copy rule, the fragment token); catalog resolution and the plays-here rules; discovery against fake trees; the
-  cache with a fixed clock (signature, hash, the adapter-bytes cut, replay refusal, expiry, last good copy, `401` and
+  cache with a fixed clock (signature, hash, the adapter-bytes cut, replay refusal, a rollback to a lower version, expiry, last good copy, `401` and
   `403`); channel framing and limits; the token table; the host's relay against a fake launcher; QR output against
   known vectors.
 - **Extension (vitest):** candidate collection and direction scoring on fixed layouts; route and initial-focus
