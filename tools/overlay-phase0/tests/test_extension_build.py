@@ -39,6 +39,9 @@ class ExtensionBuildTest(unittest.TestCase):
             self.assertEqual(m["name"], "CPTK Overlay Probe")
             self.assertLessEqual(len(m["description"]), 132, "Chrome's description limit")
             self.assertIn("measurement probe", m["description"])
+            # The gate is per tab, by the launch code; there is no profile check.
+            self.assertIn("launch code", m["description"])
+            self.assertNotIn("profile", m["description"])
             self.assertEqual(m["version"], "0.0.1")
             self.assertEqual(m["permissions"], ["nativeMessaging", "storage"])
             self.assertEqual(m["host_permissions"], ["<all_urls>"])
@@ -104,11 +107,17 @@ class ExtensionBehaviorTest(unittest.TestCase):
     def test_typed_characters_are_redacted(self):
         self.scenario("keys-are-redacted")
 
+    def test_ime_and_dead_keys_are_redacted(self):
+        self.scenario("ime-and-dead-keys-are-redacted")
+
     def test_the_probe_pages_keep_full_key_values(self):
         self.scenario("probe-pages-keep-full-keys")
 
     def test_the_background_redacts_again_and_drops_inactive_tabs(self):
         self.scenario("background-redacts-again")
+
+    def test_the_background_redacts_ime_and_dead_keys(self):
+        self.scenario("background-redacts-ime-and-dead-keys")
 
     def test_all_urls_is_read_at_relay_time(self):
         self.scenario("allurls-is-read-at-relay-time")

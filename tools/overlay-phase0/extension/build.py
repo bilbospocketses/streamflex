@@ -17,7 +17,7 @@ BASE = {
     "version": VERSION,
     "description": (
         "A measurement probe for CPTK's TV-remote overlay. "
-        "It runs only in CPTK's own browser profiles and does nothing anywhere else."
+        "It acts only in tabs opened with CPTK's launch code, and does nothing elsewhere."
     ),
     "permissions": ["nativeMessaging", "storage"],
     "host_permissions": ["<all_urls>"],

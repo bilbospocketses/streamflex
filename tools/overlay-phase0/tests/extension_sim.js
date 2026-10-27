@@ -169,7 +169,8 @@ function makeBrowser({ allUrls = true, host = "ack" } = {}) {
       doc.body = body;
       page.ready.forEach((fn) => fn());
     };
-    page.press = (key, code) => page.keydown.forEach((fn) => fn({ key, code, isTrusted: true }));
+    page.press = (key, code, { isComposing = false } = {}) =>
+      page.keydown.forEach((fn) => fn({ key, code, isTrusted: true, isComposing }));
     page.boxText = () => (page.box ? page.box.textContent : "");
     return page;
   }
@@ -269,13 +270,72 @@ const SCENARIOS = {
     }
   },
 
+  // An IME reports a composing keydown as "Process" (or with isComposing set) and keeps the physical key's code, and a
+  // dead key keeps its code too; each could spell out what is typed, so none is passed.
+  async "ime-and-dead-keys-are-redacted"() {
+    const b = makeBrowser();
+    const page = await openLoaded(b, 1, `https://site.example/#cptk=${TOKEN}`);
+    page.press("Process", "KeyA");
+    page.press("ArrowDown", "ArrowDown", { isComposing: true });
+    page.press("Dead", "Quote");
+    page.press("Unidentified", "KeyQ");
+    page.press("ArrowDown", "ArrowDown");
+    page.press("Enter", "Enter");
+    page.press("Escape", "Escape");
+    await idle();
+    assert.deepEqual(keys(b), [
+      { key: "char", code: null },
+      { key: "char", code: null },
+      { key: "char", code: null },
+      { key: "char", code: null },
+      { key: "ArrowDown", code: "ArrowDown" },
+      { key: "Enter", code: "Enter" },
+      { key: "Escape", code: "Escape" },
+    ]);
+    const box = page.boxText();
+    for (const leaked of ["KeyA", "Quote", "KeyQ", "Process", "Dead", "Unidentified"]) {
+      assert.ok(!box.includes(leaked), `the box shows ${leaked}`);
+    }
+  },
+
   async "probe-pages-keep-full-keys"() {
     const b = makeBrowser();
     const page = await openLoaded(b, 1, `http://127.0.0.1:8765/probe.html#cptk=${TOKEN}`);
     page.press("a", "KeyA");
+    page.press("Process", "KeyS", { isComposing: true });
+    page.press("Dead", "Quote");
     await idle();
-    assert.deepEqual(keys(b), [{ key: "a", code: "KeyA" }]);
+    assert.deepEqual(keys(b), [
+      { key: "a", code: "KeyA" },
+      { key: "Process", code: "KeyS" },
+      { key: "Dead", code: "Quote" },
+    ]);
     assert.match(page.boxText(), /"KeyA"/);
+  },
+
+  async "background-redacts-ime-and-dead-keys"() {
+    const b = makeBrowser();
+    await openLoaded(b, 1, `https://site.example/#cptk=${TOKEN}`);
+    const raw = (key, code) => ({
+      type: "report",
+      event: "key",
+      data: { key, code, trusted: true, activation: true, origin: "http://127.0.0.1:8765", version: "0.0.1" },
+    });
+    const sent = [["Process", "KeyA"], ["Dead", "Quote"], ["Unidentified", "KeyQ"], ["ArrowDown", "ArrowDown"]];
+    for (const [key, code] of sent) {
+      assert.deepEqual(await b.sendFromTab(1, "https://site.example/", raw(key, code)), { ok: true, hostError: null });
+    }
+    assert.deepEqual(await b.sendFromTab(1, "http://127.0.0.1:8765/probe.html", raw("Process", "KeyS")), {
+      ok: true,
+      hostError: null,
+    });
+    assert.deepEqual(keys(b), [
+      { key: "char", code: null },
+      { key: "char", code: null },
+      { key: "char", code: null },
+      { key: "ArrowDown", code: "ArrowDown" },
+      { key: "Process", code: "KeyS" },
+    ]);
   },
 
   async "background-redacts-again"() {

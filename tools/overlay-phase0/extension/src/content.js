@@ -34,10 +34,14 @@
   }
 
   // Named keys (ArrowUp, Enter, MediaPlayPause, F5) are reported by value; a typed character never is, except on
-  // the kit's own probe pages. background.js applies the same rule again before posting.
-  function redactKey(data) {
+  // the kit's own probe pages. An IME's composing keydown ("Process", or isComposing set) and a dead or unidentified
+  // key keep the physical key's code, so they are redacted too. background.js applies the same rule again.
+  const HIDDEN_KEYS = new Set(["Process", "Unidentified", "Dead"]);
+
+  function redactKey(data, composing) {
     if (location.origin === PROBE_ORIGIN) return data;
-    if (typeof data.key === "string" && /^[A-Za-z][A-Za-z0-9]+$/.test(data.key)) return data;
+    const named = typeof data.key === "string" && /^[A-Za-z][A-Za-z0-9]+$/.test(data.key) && !HIDDEN_KEYS.has(data.key);
+    if (named && !composing) return data;
     return { ...data, key: "char", code: null };
   }
 
@@ -45,8 +49,8 @@
     return Promise.resolve(api.runtime.sendMessage(message));
   }
 
-  function report(event, data) {
-    const safe = event === "key" ? redactKey(data) : data;
+  function report(event, data, composing = false) {
+    const safe = event === "key" ? redactKey(data, composing) : data;
     show(`${event} ${JSON.stringify(safe)}`);
     send({ type: "report", event, data: { ...safe, origin: location.origin, version: VERSION } })
       .then((reply) => {
@@ -57,12 +61,16 @@
   }
 
   async function onKey(e) {
-    report("key", {
-      key: e.key,
-      code: e.code,
-      trusted: e.isTrusted,
-      activation: navigator.userActivation ? navigator.userActivation.isActive : null,
-    });
+    report(
+      "key",
+      {
+        key: e.key,
+        code: e.code,
+        trusted: e.isTrusted,
+        activation: navigator.userActivation ? navigator.userActivation.isActive : null,
+      },
+      e.isComposing === true,
+    );
     if (e.code === "KeyF") {
       try {
         await document.documentElement.requestFullscreen();

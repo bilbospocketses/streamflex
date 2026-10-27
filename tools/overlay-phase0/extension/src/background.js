@@ -6,10 +6,15 @@ const TOKEN = /^[0-9a-f]{32}$/;
 let port = null;
 
 // Named keys (ArrowUp, Enter, MediaPlayPause, F5) are reported by value; a typed character never is, except on the
-// kit's own probe pages. content.js applies the same rule first; this is the second line of defense.
+// kit's own probe pages. content.js applies the same rule first; this is the second line of defense. An IME's
+// "Process" key and a dead or unidentified key keep the physical key's code, so they are redacted too (only
+// content.js sees isComposing).
+const HIDDEN_KEYS = new Set(["Process", "Unidentified", "Dead"]);
+
 function redactKey(data, origin) {
   if (origin === PROBE_ORIGIN) return data;
-  if (typeof data.key === "string" && /^[A-Za-z][A-Za-z0-9]+$/.test(data.key)) return data;
+  const named = typeof data.key === "string" && /^[A-Za-z][A-Za-z0-9]+$/.test(data.key) && !HIDDEN_KEYS.has(data.key);
+  if (named) return data;
   return { ...data, key: "char", code: null };
 }
 
