@@ -62,11 +62,11 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
    "$PWD\probe_host.exe" -ManifestDir "$env:LOCALAPPDATA\cptk-probe\hosts"`.
 2. Start Edge with the Chromium launch line on `http://127.0.0.1:8765/probe.html#cptk=<token>`; wait 60 s.
 3. Repeat for Chrome.
-4. Run step 1 again with `-Remove`, then repeat 1-3 with `-Scope HKLM` from a **Run as administrator** PowerShell in
-   the same user's session (an administrator account in Admin Approval Mode). `windows.ps1` always writes the host
-   keys under the running account's HKCU, so that account must be the one that starts the browsers. If the test
-   user is a standard user, run `-Scope HKCU -Remove` as that user, then do the HKLM run and steps 2-3 signed in as
-   the administrator.
+4. First, as the test user, run step 1 again with `-Remove`. Then, from a **Run as administrator** PowerShell in the
+   kit folder: `powershell -ExecutionPolicy Bypass -File setup\windows.ps1 -Scope HKLM -IdsFile ids.json -HostPath
+   "$PWD\probe_host.exe" -ManifestDir "$env:ProgramData\cptk-probe\hosts"`, which writes the policy and the host
+   keys under `HKLM:\Software`. Repeat steps 2-3 as the test user, then undo the HKLM setup with the same elevated
+   command plus `-Remove`.
 
 **Read:** `probe.log` has a host start line from each browser (its `argv` names the extension's origin) and an
 extension start report; `edge://policy` / `chrome://policy` list the forcelist with status OK (screenshot). Where
@@ -180,7 +180,9 @@ A fresh prepared profile on the Shaka demo's Widevine stream; time from launch t
 
 Each browser, prepared as above, on the Shaka demo's Widevine stream for 60 minutes with the probe active: start it
 on `https://shaka-player-demo.appspot.com/#cptk=<token>` and choose the asset in that same tab, so the probe box
-shows. Space is sent through `probe_spawn keys` every 5 minutes. **Pass:** no playback error, no reload.
+shows. Space is sent through `probe_spawn keys` every 5 minutes. **Read:** the probe box at the start and at the
+end of the hour (screenshots). **Pass:** the probe box is present in both screenshots, no playback error, no
+reload.
 
 ### G16. Chrome and Edge `Extensions.loadUnpacked` (the development loop)
 

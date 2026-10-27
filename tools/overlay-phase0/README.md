@@ -34,6 +34,18 @@ Linux:
 PROBE_HOST=build-phase0/probe_host PROBE_SPAWN=build-phase0/probe_spawn python3 -m unittest discover -s tools/overlay-phase0/tests -v
 ```
 
+## Assemble the kit (Windows)
+
+The run sheet and the Windows guests use one folder holding the whole kit. After the build, from the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\overlay-phase0\make-kit.ps1 -Build build-phase0\Release -Xpi <signed xpi>
+```
+
+It copies `probe_host.exe`, `probe_spawn.exe` and every DLL beside them (SDL3.dll), `setup\`, `pages\`, `extension\`
+(`src\` and `build.py`), `ids.json` when it exists and the XPI when `-Xpi` names one into `$env:USERPROFILE\cptk-kit`
+(`-Kit` picks another folder), then lists what it copied. Re-running refreshes every file and deletes nothing.
+
 ## What is here
 
 | Piece | Job |
@@ -44,3 +56,4 @@ PROBE_HOST=build-phase0/probe_host PROBE_SPAWN=build-phase0/probe_spawn python3 
 | `pages/` | `probe.html` (fullscreen and media-start targets), `keylog.html` (what a page sees), `serve.ps1` (a page server for Windows guests). |
 | `setup/` | `windows.ps1`, `linux_setup.py`: policy and host registration. `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |
 | `ids.json` | The three store ids, recorded when the probe is published. |
+| `make-kit.ps1` | Assembles the built kit into one folder for the run sheet and the Windows guests. |
