@@ -58,8 +58,7 @@ the dashboard. Changing it means changing `build.py` and uploading a new package
 > passes named keys, such as the arrow keys, Enter and the media keys. Except on CPTK's own local test pages, it never
 > passes the characters you type: a letter, a digit, an accent key, or a key pressed while an input method is
 > composing text is reported only as "char", with no key code. The F key enters full screen and the P key starts the
-> page's video,
-> and the probe reports whether each one worked. If the CPTK program cannot be reached, the box says why.
+> page's video, and the probe reports whether each one worked. If the CPTK program cannot be reached, the box says why.
 >
 > The probe talks only to the CPTK program, through the browser's native messaging. The CPTK program writes each
 > reading to a log file on the same computer. Nothing is sent over the network, to CPTK's developers or to anyone

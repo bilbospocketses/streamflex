@@ -2712,7 +2712,8 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 ### Task 7: The store accounts and CPTK Overlay Probe 0.0.1 (the user's steps, then the record)
 
 This task is mostly the user's: three accounts, three uploads. Start it as soon as Task 5 is done, because store
-review can take days and G1, G10 and G13 cannot run before the listings are live.
+review can take days and G1, G5, G10 and G15 cannot run before the listings are live (G13 needs only the signed
+XPIs and `ids.json`).
 
 **Files:**
 - Create: `tools/overlay-phase0/ids.json`
@@ -2821,7 +2822,8 @@ Expected: `True`.
 
 - [ ] **Step 8: Wait for both reviews**
 
-Each store emails when the item is published. G1, G10 and G13 need both live; the other G items do not.
+Each store emails when the item is published. G1, G5, G10 and G15 need both live, and so do the run sheet's Part B,
+H3 and H4; G13 needs only the signed XPIs and `ids.json`; the other G items need no listing.
 
 - [ ] **Step 9: Commit**
 
@@ -3008,7 +3010,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "docs: 
 
 Write `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/README.md` naming: the protocol's path on
 `master` (after this branch merges), the built kit's location, `ids.json`, the signed XPI, and which items wait
-for the store reviews (G1, G10, G13). Then send qa-harness-sf one message starting
+for the store reviews (G1, G5, G10, G15; G13 waits only for the signed XPIs). Then send qa-harness-sf one message starting
 `From the streamflex tab: Phase 0 of the streaming overlay is ready for your guests`, with that folder's path. Its
 plan, bookings and guests are its own.
 

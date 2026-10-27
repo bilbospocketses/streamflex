@@ -9,8 +9,11 @@ This is the checklist for publishing CPTK Overlay Probe 0.0.1, the Phase 0 measu
 The probe has its own listing, separate from the planned product. **Do not create a CPTK Overlay listing (or claim
 `overlay@cptk.app` on AMO) yet.** That listing waits for R1.
 
-Keep `tools/overlay-phase0/listing.md` open beside this file. Every box you fill in a store comes from there. Type every
-command in a Windows PowerShell window. Store review can take days, so start as soon as the extension has landed.
+Keep `tools/overlay-phase0/listing.md` open beside this file. Every box you fill in a store comes from there. Open it
+rendered, on GitHub or in a Markdown preview, and copy each paste block from that view, never from the raw file: the
+raw file wraps the blocks as quoted lines, so a copy from it carries `> ` marks and line breaks into the store's
+fields. Type every command in a Windows PowerShell window. Store review can take days, so start as soon as the
+extension has landed.
 
 ## Before you start
 
@@ -211,15 +214,49 @@ $m.version -ceq '0.0.1' -and $g.id -ceq 'overlay-probe@cptk.app' -and $req.Count
    Rename-Item (Join-Path $handoff '<the name it showed>.xpi') 'cptk-overlay-probe-0.0.1.xpi'
    ```
 
-6. Clear the keys from the window:
+6. **Sign a 0.0.2 copy for guest row G13, while the keys are still in this window.** G13 checks that Firefox picks
+   up a replaced XPI, so it needs the same probe signed a second time, as version 0.0.2. Like 0.0.1 it is signed
+   with `--channel unlisted`, so it never appears on any listing. The version changes on this PC only and is put
+   back afterwards; never commit it.
+
+   ```powershell
+   $build = "$repo\tools\overlay-phase0\extension\build.py"
+   $text = [IO.File]::ReadAllText($build)
+   [IO.File]::WriteAllText($build, $text.Replace('VERSION = "0.0.1"', 'VERSION = "0.0.2"'))
+   python $build
+   npx.cmd --yes web-ext@8 sign --source-dir "$repo\tools\overlay-phase0\extension\dist\firefox" --channel unlisted --artifacts-dir "$handoff\0.0.2"
+   ```
+
+   The build prints two `0.0.2` lines. Wait for `web-ext` as in 3 above; if it stops before the file arrives,
+   download version 0.0.2 by hand as in 4 above, into `$handoff\0.0.2`. Then move the file next to 0.0.1 under its
+   new name:
+
+   ```powershell
+   Get-ChildItem "$handoff\0.0.2" -Filter *.xpi
+   Move-Item (Join-Path "$handoff\0.0.2" '<the name it showed>.xpi') (Join-Path $handoff 'cptk-overlay-probe-0.0.2.xpi')
+   ```
+
+   Put the version back, rebuild 0.0.1 and delete the 0.0.2 zips:
+
+   ```powershell
+   [IO.File]::WriteAllText($build, $text)
+   python $build
+   Remove-Item "$repo\tools\overlay-phase0\extension\dist\*-0.0.2.zip"
+   ```
+
+   Run the check from the top of this section (the one before 1) again. It must print `True`: the build is back at
+   0.0.1. `False` means the version did not go back. Stop and ask the streamflex tab.
+
+7. Clear the keys from the window:
 
    ```powershell
    Remove-Item Env:WEB_EXT_API_KEY, Env:WEB_EXT_API_SECRET
    Remove-Variable secret
    ```
 
-The signed XPI is now at
-`C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi`.
+The signed XPIs are now at
+`C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi` and, for G13,
+`C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.2.xpi`.
 
 ## 9. Record the ids
 
@@ -253,6 +290,7 @@ CPTK Overlay Probe 0.0.1 is submitted.
 Chrome Web Store id: <id>  (submitted <date>)
 Edge Add-ons id: <id>  (submitted <date>)
 Signed XPI: C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi
+Signed 0.0.2 XPI (G13): C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.2.xpi / not made
 ids.json: written and checked (True) / not written
 Privacy policy URL used: <address>
 ```
@@ -266,8 +304,9 @@ powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\make-kit.ps
 
 ## 11. Wait for both reviews
 
-Each store emails you when the item is published. Tell the streamflex tab when each one goes live. Guest rows G1, G10
-and G13 need both live. The other rows do not.
+Each store emails you when the item is published. Tell the streamflex tab when each one goes live. Guest rows G1, G5,
+G10 and G15 need both live, and so do Part B, H3 and H4 of your run sheet. Guest row G13 needs neither: only the two
+signed XPIs and `ids.json`. The other rows need no listing.
 
 If you submitted with the PR #73 permalink for the privacy policy, then once PR #73 has merged, replace the privacy
 policy URL in both stores with
