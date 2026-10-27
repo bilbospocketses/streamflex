@@ -58,4 +58,7 @@ kit runs on a clean Windows 11, `setup\`, `pages\`, `extension\`
 | `pages/` | `probe.html` (fullscreen and media-start targets), `keylog.html` (what a page sees), `serve.ps1` (a page server for Windows guests). |
 | `setup/` | `windows.ps1`, `linux_setup.py`: policy and host registration. `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |
 | `ids.json` | The three store ids, recorded when the probe is published. |
+| `listing.md` | The store listing text, the same for all three stores; `design/research/overlay/phase0/store-steps.md` says where each part goes. |
+| `privacy-policy.md` | The probe's privacy policy, which the store listings link to. |
+| `ci/` | The Linux check: `Dockerfile.linux` makes the image, and `linux-check.sh` builds the kit in it and runs the whole tests folder. |
 | `make-kit.ps1` | Assembles the built kit into one folder for the run sheet and the Windows guests. |
