@@ -52,7 +52,9 @@ class ExtensionBuildTest(unittest.TestCase):
         gecko = ff["browser_specific_settings"]["gecko"]
         self.assertEqual(gecko["id"], "overlay-probe@cptk.app")
         self.assertEqual(gecko["strict_min_version"], "140.0")
-        self.assertEqual(gecko["data_collection_permissions"], {"required": ["none"]})
+        self.assertEqual(
+            gecko["data_collection_permissions"], {"required": ["browsingActivity", "websiteActivity"]}
+        )
 
     def test_zips_hold_the_built_files_at_the_root(self):
         for flavor in FLAVORS:

@@ -33,7 +33,9 @@ FLAVORS = {
             "gecko": {
                 "id": "overlay-probe@cptk.app",
                 "strict_min_version": "140.0",
-                "data_collection_permissions": {"required": ["none"]},
+                # Mozilla's taxonomy (extensionworkshop.com, firefox-builtin-data-consent) counts data sent to a
+                # native app. The probe sends page origins (browsingActivity) and key presses (websiteActivity).
+                "data_collection_permissions": {"required": ["browsingActivity", "websiteActivity"]},
             }
         },
     },
