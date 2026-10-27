@@ -6,14 +6,17 @@ guests; this file says what to set up, what to do, what to read, and what passes
 `results.md` beside this file, one row per item, with the evidence path.
 
 Every Windows command below is typed in a Windows PowerShell window, from the kit folder, unless the step says
-otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase0/`.
+otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase0/` in the guest's checkout of the
+repo (`<repo>` below), except the build, which runs from `<repo>` itself.
 
 ## Common setup
 
 - **The probe** is **CPTK Overlay Probe** 0.0.1, published under its own store listings (Gecko id
   `overlay-probe@cptk.app`); the product's CPTK Overlay listing is not created until R1. Its native host is still
   `app.cptk.overlay`. Its signed Firefox package is `cptk-overlay-probe-0.0.1.xpi` (the `web-ext` artifact, renamed
-  to that).
+  to that). G13 also uses `cptk-overlay-probe-0.0.2.xpi`, the same probe signed unlisted as version 0.0.2, which the
+  user makes in the store steps (step 8.6) and leaves in the same handoff folder; copy it into the guest beside the
+  kit.
 - **The kit (Windows):** on the host, after building `tools/overlay-phase0/` (README there), run
   `powershell -ExecutionPolicy Bypass -File tools\overlay-phase0\make-kit.ps1 -Build build-phase0\Release -Xpi
   C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi` from the repo root. It
@@ -22,13 +25,16 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
   and prints what it copied. Copy that folder into the guest. The kit carries the Visual C++ runtime DLLs
   (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`) beside the executables, so a clean guest needs no
   runtime install.
-- **The kit (Linux):** build `tools/overlay-phase0/` in the guest (README there) and copy the signed XPI in.
-  `probe_host` and `probe_spawn` are the absolute paths of `build-phase0/probe_host` and `build-phase0/probe_spawn`.
-- **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and the absolute path of
-  `build-phase0/probe_spawn` on Linux.
+- **The kit (Linux):** build `tools/overlay-phase0/` in the guest, running the README's Linux build commands from
+  `<repo>`, which puts the build in `<repo>/build-phase0`, and copy the signed XPI in. `probe_host` and `probe_spawn`
+  are the absolute paths `<repo>/build-phase0/probe_host` and `<repo>/build-phase0/probe_spawn`.
+- **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and `<repo>/build-phase0/probe_spawn`
+  (its absolute path) on Linux.
+- **The interactive session (Windows):** G5, G6 and G7 run in the guest's interactive desktop session, never over
+  SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no desktop the browser is on.
 - **Store listings:** G1, G5, G10 and G15's Chrome and Edge runs force-install the probe's published Chrome Web
-  Store and Edge Add-ons items, so they wait until both listings are live. G13 needs only the AMO-signed XPI and no Chrome or
-  Edge listing; no other item needs a listing.
+  Store and Edge Add-ons items, so they wait until both listings are live. G13 needs only the two AMO-signed XPIs
+  and `ids.json` (its host registration reads it), and no Chrome or Edge listing; no other item needs a listing.
 - **The page server:** Windows `powershell -ExecutionPolicy Bypass -File pages\serve.ps1`; Linux
   `python3 -m http.server 8765 --bind 127.0.0.1 --directory pages`. The probe page is
   `http://127.0.0.1:8765/probe.html`.
@@ -85,7 +91,9 @@ box at all means the extension did not install or did not run).
 **Pass:** both browsers, HKCU: the policy installs the extension on the first launch, and the probe starts after
 at most one reload, with no prompt; and `probe.log` holds, from each browser, a host start line and an extension
 start report. The probe box alone never passes this row: a box showing `host: <reason>` is a failure. `first_load` is not a pass condition. It is data for the launcher's design: it
-tells R1 whether the launcher must open the token URL only after the extension is installed.
+tells R1 whether the launcher must open the token URL only after the extension is installed. Step 4's HKLM run is
+not a pass condition either, but record it per browser as `HKLM: pass/fail` by the same rule, beside
+`HKCU: pass/fail`: the spec's fallback for this item turns on which of the two worked.
 
 ### G2. A standard user writes HKCU\Software\Policies
 
@@ -102,13 +110,18 @@ first and which keys reach Yes. **Pass:** the prompt can be answered Yes without
 
 `probe_spawn run <browser launch line>`; after 20 s close the window with Alt+F4 through the guest's keyboard,
 and note the time sent. Then repeat and send `close` on `probe_spawn`'s stdin instead. **Read:** the `exited` line's
-`t` minus the Alt+F4 time, and `ms_since_close`. Edge runs with G1's hygiene policies in place. **Pass:** each exit
-seen within 2000 ms. Record Edge without the hygiene policies too, as information.
+`t` minus the Alt+F4 time, and `ms_since_close`. On Linux read the `group_empty` line in its place: the leader
+reaped and no process left in its group, the signal the spec's launcher waits for. Linux `exited` comes only once
+every descendant is gone, one that left the group included; record it, and `leader_exited`, as information. Edge
+runs with G1's hygiene policies in place. **Pass:** each exit seen within 2000 ms (on Linux, `group_empty`). Record
+Edge without the hygiene policies too, as information.
 
 ### G5. Trusted injection
 
 With `http://127.0.0.1:8765/probe.html#cptk=<token>` open in each browser (setup as G1 on Windows, `linux_setup.py`
-as in G10 on Linux), run `probe_spawn keys 3000 F` and, after reloading, `probe_spawn keys 3000 P`. It must be the
+as in G10 on Linux), run `probe_spawn keys 3000 F` and, after reloading, `probe_spawn keys 3000 P`. `keys` sends to
+whatever window has focus once its delay ends, and the window the command was typed in has it, so within the 3 s
+bring the browser to the front (click it, or Alt+Tab). It must be the
 kit's probe page: anywhere else the `key` reports name F and P only as `char`. On Linux run it on GNOME Wayland and
 KDE Wayland, with `sudo` (uinput needs root: Ubuntu 24.04 has no udev rule that opens it to the `input` group).
 **Read:** the extension's `key` reports (`trusted`, `activation`) and its `fullscreen` and `play` reports in
@@ -120,9 +133,20 @@ result is recorded as information.
 
 ### G6. Focus after the browser closes
 
-`probe_spawn focus <browser launch line on probe.html>`; after 15 s send Alt+F4, then 2 s later press Enter through
-the guest's keyboard. Twenty times per OS and desktop (Windows 11, GNOME Wayland, KDE, an X11 session). **Read:**
-`focus_after_exit.gained` and `key_after_exit.ms`. **Pass:** 20 of 20 with `gained: true` and a key seen.
+`probe_spawn focus <browser launch line on probe.html>`, with Edge run with G1's hygiene policies in place, as in
+G4 (without them Edge's process can outlive its window, and `focus` never prints `exited`). After 15 s send Alt+F4
+through the guest's keyboard, then read `probe_spawn`'s stdout and press Enter through the guest's keyboard only
+once it has printed `exited`: `focus` drops every key that reaches it before then. Twenty times per OS and desktop
+(Windows 11, GNOME Wayland, KDE, an X11 session).
+
+**Read:** per run, `focus_after_exit`'s `raised`, `lost`, `back_before_raise`, `gained` and `ms`, and
+`key_after_exit.ms`; record all six for every run, because which path brought the launcher's focus back is what R1
+needs. `back_before_raise: true` means the desktop gave the launcher focus back as the browser closed, before the
+probe raised its window; no later focus gain comes then, so `gained` is false.
+
+**Pass:** a run passes on `key_after_exit.ms` 0 or more and either `gained: true` or `back_before_raise: true`. A run
+with `lost: false` (the browser never took focus from the launcher) is invalid, not a pass: record it, then run once
+more in its place. The item passes on 20 of 20 valid runs.
 
 ### G7. Key codes through the launcher's paths
 
@@ -186,10 +210,11 @@ in G9: on Windows `windows.ps1` as in G1 step 1, on Linux `sudo python3 setup/li
 <abs probe_host>`. Without it nothing reaches `probe.log`.
 1. Prepare a fresh profile; start Firefox `-kiosk` on `http://127.0.0.1:8765/probe.html#cptk=<token>`. **Read:**
    an extension start report with `allUrls: true` in `probe.log`.
-2. Close it, rebuild the XPI as version 0.0.2 (change `VERSION` in the kit's `extension/build.py` locally, sign it
-   the same way), copy it in with the profile script, and start again on the token URL (the restart needs it).
-   **Read:** the extension start report's `version` is 0.0.2.
-3. Repeat 2 with `--no-scan-scopes` (`-NoScanScopes`), on a profile that already ran 0.0.1.
+2. Close it, copy in `cptk-overlay-probe-0.0.2.xpi` (the signed 0.0.2 from the handoff folder, *Common setup*) with
+   the profile script, and start again on the token URL (the restart needs it). **Read:** the extension start
+   report's `version` is 0.0.2.
+3. Repeat 2 with `--no-scan-scopes` (`-NoScanScopes`), on a profile that already ran 0.0.1. In that mode the profile
+   script writes `extensions.startupScanScopes` as 0, which overrides the 1 that 0.0.1's run left in `prefs.js`.
 4. Open the everyday Firefox: `about:addons` and `about:policies` (screenshots).
 
 **Pass:** 1 runs with no prompt; 2 shows 0.0.2; the everyday Firefox has no CPTK Overlay Probe add-on and no CPTK policy. Step 3's
@@ -204,9 +229,13 @@ A fresh prepared profile on the Shaka demo's Widevine stream; time from launch t
 
 Each browser, prepared as above, on the Shaka demo's Widevine stream for 60 minutes with the probe active: start it
 on `https://shaka-player-demo.appspot.com/#cptk=<token>` and choose the asset in that same tab, so the probe box
-shows. Space is sent through `probe_spawn keys` every 5 minutes. **Read:** the probe box at the start and at the
-end of the hour (screenshots). **Pass:** the probe box is present in both screenshots, no playback error, no
-reload.
+shows. Every 5 minutes send Space twice, 2 s apart, with `probe_spawn keys 3000 Space; probe_spawn keys 2000 Space`
+on one line, bringing the browser to the front (click the video, or Alt+Tab) within the first 3 s, as in G5. The
+pair keeps the probe's key path busy for the hour (each press is a `key` report in `probe.log`) and leaves playback
+as it was: the first Space pauses, the second resumes. After each pair, record whether the video is playing on the
+same asset; a page that reloaded or left the asset counts as a reload. **Read:** the probe box
+at the start and at the end of the hour (screenshots), and the twelve after-pair records. **Pass:** the probe box is
+present in both screenshots, no playback error, no reload.
 
 ### G16. Chrome and Edge `Extensions.loadUnpacked` (the development loop)
 
@@ -223,4 +252,5 @@ it loads in both browsers and the probe box appears. (Development only.)
 ## Results format
 
 `results.md`, one row per item: `| G<n> | pass / fail / partial | browsers and versions | evidence path | note |`.
-G1 and G10 put each browser's `first_load` and `after one reload` values in the note.
+G1 and G10 put each browser's `first_load` and `after one reload` values in the note. G1's note also gives each
+browser's `HKCU: pass/fail` and `HKLM: pass/fail`.
