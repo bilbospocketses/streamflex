@@ -180,5 +180,44 @@ class RunTest(unittest.TestCase):
         self.assertGreaterEqual(evs[2]["ms_since_close"], 0)
 
 
+@unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
+class KeysTest(unittest.TestCase):
+    def test_dry_run_names_every_key_of_a_chord(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "0", "Up", "Alt+F4"], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 0)
+        evs = events(proc.stdout)
+        self.assertEqual([e["name"] for e in evs], ["Up", "Alt", "F4"])
+        self.assertEqual(evs[0]["vk"], 0x26)
+        self.assertEqual(evs[0]["evdev"], 103)
+        self.assertTrue(all(e["dry"] for e in evs))
+
+    def test_unknown_chord_part_injects_nothing(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "0", "Up", "Alt+Foo"], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual([e["event"] for e in events(proc.stdout)], ["unknown_key"])
+
+    def test_unknown_key_name_is_json_escaped(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "0", 'Up+Fo"o\\'], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual([e.get("name") for e in events(proc.stdout)], ['Fo"o\\'])
+
+    def test_negative_delay_is_refused(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "-1", "Up"], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(events(proc.stdout), [])
+
+    def test_keylog_ends_on_time(self):
+        proc = subprocess.run([SPAWN, "keylog", "1"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(events(proc.stdout)[-1]["event"], "keylog_end")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -50,7 +50,5 @@ int main(int argc, char **argv)
     return usage();
 }
 
-int probe_keys(int argc, char **argv) { (void)argc; (void)argv; return 2; }
-int probe_keylog(int argc, char **argv) { (void)argc; (void)argv; return 2; }
 int probe_pad(int argc, char **argv) { (void)argc; (void)argv; return 2; }
 int probe_focus(int argc, char **argv) { (void)argc; (void)argv; return 2; }
