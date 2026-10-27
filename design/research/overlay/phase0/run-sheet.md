@@ -10,11 +10,12 @@ Type every command in a Windows PowerShell window (Start, type `powershell`, Ent
 1. Have the Netflix, Disney+ and Prime Video logins ready.
 2. Part B, H3 and H4 need CPTK Overlay live on the Chrome Web Store and Edge Add-ons; the streamflex tab tells you
    when both listings are. Part A and H2 do not.
-3. Assemble the kit once, on the PC with the StreamFlex checkout and its `build-phase0` build (`<checkout>` below is
-   that checkout's folder):
+3. Assemble the kit once, on the PC with the StreamFlex checkout and its `build-phase0` build (built as the Build
+   section of `tools/overlay-phase0/README.md` says; `<checkout>` below is that checkout's folder):
    `powershell -ExecutionPolicy Bypass -File "<checkout>\tools\overlay-phase0\make-kit.ps1" -Build "<checkout>\build-phase0\Release" -Xpi "C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi"`
    It copies everything this sheet uses into `$env:USERPROFILE\cptk-kit` (the kit folder) and lists the files. If
-   that PC is not the HTPC, copy the folder to the same place on the HTPC.
+   that PC is not the HTPC, copy the folder to the same place on the HTPC. The kit carries its own Visual C++
+   runtime DLLs, so the HTPC needs no runtime install.
 
 The setup comes partway through H1, not here: it installs the probe into every Chrome and Edge profile, so the rows
 before it must run without it.
@@ -41,17 +42,21 @@ Vision**, and the **audio** codec and channels.
 1. Close every browser window.
 2. Run the setup, as yourself:
    `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\cptk-kit\setup\windows.ps1" -IdsFile "$env:USERPROFILE\cptk-kit\ids.json" -HostPath "$env:USERPROFILE\cptk-kit\probe_host.exe" -ManifestDir "$env:LOCALAPPDATA\cptk-probe\hosts"`
-   It prints `setup: wrote (policy under HKCU:\Software, host keys under HKCU:\Software)`.
+   It prints `setup: wrote (policy and host keys under HKCU:\Software, manifests in C:\Users\<you>\AppData\Local\cptk-probe\hosts)`.
 
-**Part B: with the probe.** Check that the probe box shows in the bottom-left corner on each row; if it shows a
-`host:` line, write that line in the row's Notes. The probe wakes only in the tab its `#cptk=` address opened, and
+**Part B: with the probe.** Check that the probe box shows in the bottom-left corner on each row. Its
+`host: connected (pid N)` line means the probe is working; any other `host:` line is a problem, so write it in the
+row's Notes. Give each row 60 seconds after it starts: H1.4 and H1.6b are the first launches after setup, and the
+browser can finish installing the probe after the page has loaded. If the box is still missing, press Ctrl+R once
+and write "reloaded" in the row's Notes; if it is still missing after that, write "no probe", because the row then
+measured nothing. The probe wakes only in the tab its `#cptk=` address opened, and
 only until the browser closes, so start every row with its own command, never from a new tab or a restored window.
 
 | Row | Browser | How to start it | Fill in |
 |---|---|---|---|
 | H1.4 | Edge | as H1.3 | |
 | H1.6b | Chrome | as H1.6a | |
-| H1.8 | Firefox | prepared profile: `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\cptk-kit\setup\firefox-profile.ps1" -ProfileDir "$env:LOCALAPPDATA\cptk-probe\f1" -Xpi "$env:USERPROFILE\cptk-kit\cptk-overlay-0.0.1.xpi"`, then `& "$env:ProgramFiles\Mozilla Firefox\firefox.exe" -kiosk "https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef" -profile "$env:LOCALAPPDATA\cptk-probe\f1" -no-remote -wait-for-browser` | |
+| H1.8 | Firefox | prepared profile: `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\cptk-kit\setup\firefox-profile.ps1" -ProfileDir "$env:LOCALAPPDATA\cptk-probe\f1" -Xpi "$env:USERPROFILE\cptk-kit\cptk-overlay-0.0.1.xpi"`, then `& "$env:ProgramFiles\Mozilla Firefox\firefox.exe" -kiosk "https://www.netflix.com#cptk=0123456789abcdef0123456789abcdef" -profile "$env:LOCALAPPDATA\cptk-probe\f1" -no-remote -wait-for-browser` (sign in once) | |
 | H1.9 | Edge | as H1.4, but with `"--app=https://www.disneyplus.com#cptk=0123456789abcdef0123456789abcdef"`, then again with `"--app=https://www.primevideo.com#cptk=0123456789abcdef0123456789abcdef"`, in place of the Netflix `--app=` argument. The `--app` window has no address bar, so start it on each site's address directly (sign in on first use; 1080p expected) | |
 
 ## H2. What does your remote send? (about 10 minutes)
@@ -66,8 +71,8 @@ only until the browser closes, so start every row with its own command, never fr
 ## H3. Atmos at the receiver (about 5 minutes)
 
 In H1.4's setup (if Edge was closed since, start it again with H1.4's command), play the Atmos title and read the
-receiver's display. Note what it shows (Dolby Atmos, Dolby
-Digital Plus 5.1, PCM 2.0).
+receiver's display. Note what it shows (Dolby Atmos, Dolby Digital Plus 5.1,
+PCM 2.0).
 
 ## H4. The display chain and sleep (about 10 minutes)
 
@@ -83,7 +88,7 @@ Startup Boost and background mode turned off. This puts them back.
 1. Close every browser window.
 2. Run the setup again with `-Remove`:
    `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\cptk-kit\setup\windows.ps1" -IdsFile "$env:USERPROFILE\cptk-kit\ids.json" -HostPath "$env:USERPROFILE\cptk-kit\probe_host.exe" -ManifestDir "$env:LOCALAPPDATA\cptk-probe\hosts" -Remove`
-   It prints `setup: removed (policy under HKCU:\Software, host keys under HKCU:\Software)`.
+   It prints `setup: removed (policy and host keys under HKCU:\Software, manifests in C:\Users\<you>\AppData\Local\cptk-probe\hosts)`.
 3. Open Edge and Chrome normally. `edge://policy` and `chrome://policy` list nothing from CPTK, "Managed by your
    organization" is gone from the menu, and CPTK Overlay is gone from the extensions page. If any of it is still
    there, close the browser and open it once more, then note it in the table's Cleanup row.

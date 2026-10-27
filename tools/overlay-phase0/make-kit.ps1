@@ -1,13 +1,15 @@
 <#
 Assembles the Phase 0 kit into one folder for the run sheet and the guests: probe_host.exe, probe_spawn.exe and
-every DLL beside them (SDL3.dll), setup\, pages\, extension\ (src\ and build.py, never dist\), ids.json when it
+every DLL beside them (SDL3.dll), the Visual C++ runtime DLLs from -RuntimeDir (app-local, because a clean
+Windows 11 has no VCRUNTIME140.dll), setup\, pages\, extension\ (src\ and build.py, never dist\), ids.json when it
 exists, and the signed XPI when -Xpi names one. Re-running refreshes every file; it deletes nothing.
-Windows PowerShell 5.1 compatible.
+Windows PowerShell 5.1 compatible. Run it from 64-bit PowerShell: a 32-bit one reads SysWOW64's 32-bit runtime.
 #>
 param(
     [string]$Kit = (Join-Path $env:USERPROFILE 'cptk-kit'),
     [Parameter(Mandatory = $true)][string]$Build,
-    [string]$Xpi
+    [string]$Xpi,
+    [string]$RuntimeDir = (Join-Path $env:SystemRoot 'System32')
 )
 $ErrorActionPreference = 'Stop'
 $source = $PSScriptRoot
@@ -41,6 +43,11 @@ $Kit = (Resolve-Path -LiteralPath $Kit).ProviderPath
 
 foreach ($exe in 'probe_host.exe', 'probe_spawn.exe') { Copy-KitFile (Join-Path $Build $exe) $exe }
 foreach ($dll in Get-ChildItem -LiteralPath $Build -Filter '*.dll' -File) { Copy-KitFile $dll.FullName $dll.Name }
+# A runtime DLL the build already placed beside the executables wins over the system's copy.
+foreach ($name in 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll') {
+    $path = Join-Path $RuntimeDir $name
+    if ((Test-Path -LiteralPath $path -PathType Leaf) -and -not ($copied -contains $name)) { Copy-KitFile $path $name }
+}
 Copy-KitTree 'setup'
 Copy-KitTree 'pages'
 Copy-KitTree 'extension\src'

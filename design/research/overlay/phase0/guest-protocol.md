@@ -15,7 +15,9 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
   C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi` from the repo root. It
   copies `probe_host.exe`, `probe_spawn.exe` with every DLL beside it (SDL3.dll), `setup\`, `pages\`, `extension\`
   (`src\` and `build.py`), `ids.json` and the signed XPI into one folder, `$env:USERPROFILE\cptk-kit` by default,
-  and prints what it copied. Copy that folder into the guest.
+  and prints what it copied. Copy that folder into the guest. The kit carries the Visual C++ runtime DLLs
+  (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`) beside the executables, so a clean guest needs no
+  runtime install.
 - **The kit (Linux):** build `tools/overlay-phase0/` in the guest (README there) and copy the signed XPI in.
   `probe_host` and `probe_spawn` are the absolute paths of `build-phase0/probe_host` and `build-phase0/probe_spawn`.
 - **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and the absolute path of
@@ -30,8 +32,9 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
   as `#cptk=<token>`. It activates the probe only in the tab it arrives in, and only until that browser closes: a
   step that opens a second tab or restarts the browser opens a token URL again.
 - **The probe box** sits in the page's bottom-left corner while the probe is active. It shows `webdriver: <value>`
-  when the extension starts, and `host: <reason>` when the native host is missing, forbidden or has exited; a step
-  that reads either takes a screenshot of it. Key reports name single-character keys only as `char`, except on the
+  when the extension starts, then `host: connected (pid N)` once the native host answers (the success line, never a
+  failure reason), or `host: <reason>` when the native host is missing, forbidden or has exited; a step that reads
+  any of them takes a screenshot of it. Key reports name single-character keys only as `char`, except on the
   kit's own pages at `http://127.0.0.1:8765`, so any step that checks a letter key does it on the kit's probe page.
 - **Evidence:** the probe host's `probe.log` (`$env:LOCALAPPDATA\cptk-probe\probe.log`, `~/.cptk-probe/probe.log`),
   `probe_spawn`'s JSON lines, and a screenshot where a line says so.
@@ -76,7 +79,8 @@ extension start report; `edge://policy` / `chrome://policy` list the forcelist w
 either `probe.log` line is missing, screenshot the probe box: its `host: <reason>` line is the failure's reason (no
 box at all means the extension did not install or did not run).
 **Pass:** both browsers, HKCU: the policy installs the extension on the first launch, and the probe starts after
-at most one reload, with no prompt. `first_load` is not a pass condition. It is data for the launcher's design: it
+at most one reload, with no prompt; and `probe.log` holds, from each browser, a host start line and an extension
+start report. The probe box alone never passes this row: a box showing `host: <reason>` is a failure. `first_load` is not a pass condition. It is data for the launcher's design: it
 tells R1 whether the launcher must open the token URL only after the extension is installed.
 
 ### G2. A standard user writes HKCU\Software\Policies
@@ -102,11 +106,13 @@ seen within 2000 ms. Record Edge without the hygiene policies too, as informatio
 With `http://127.0.0.1:8765/probe.html#cptk=<token>` open in each browser (setup as G1 on Windows, `linux_setup.py`
 as in G10 on Linux), run `probe_spawn keys 3000 F` and, after reloading, `probe_spawn keys 3000 P`. It must be the
 kit's probe page: anywhere else the `key` reports name F and P only as `char`. On Linux run it on GNOME Wayland and
-KDE Wayland, with `sudo` or as a user in the `input` group (uinput needs it). **Read:** the extension's `key`
-reports (`trusted`, `activation`) and its `fullscreen` and `play` reports in `probe.log`. **Pass:** `trusted: true`,
-`fullscreen ok`, `play ok`, on every browser and desktop. In Firefox the prepared profile sets
-`media.autoplay.default` to 0 (allow), so `play ok` there proves no user activation: Firefox passes on
-`trusted: true`, `activation: true` and `fullscreen ok`, and its `play` result is recorded as information.
+KDE Wayland, with `sudo` (uinput needs root: Ubuntu 24.04 has no udev rule that opens it to the `input` group).
+**Read:** the extension's `key` reports (`trusted`, `activation`) and its `fullscreen` and `play` reports in
+`probe.log`. "`fullscreen ok`" means a `msg` line whose `body.event` is `fullscreen` with `body.data.ok: true`;
+"`play ok`" the same with `body.event` `play`. **Pass:** `trusted: true`, `fullscreen ok`, `play ok`, on every
+browser and desktop. In Firefox the prepared profile sets `media.autoplay.default` to 0 (allow), so `play ok` there
+proves no user activation: Firefox passes on `trusted: true`, `activation: true` and `fullscreen ok`, and its `play`
+result is recorded as information.
 
 ### G6. Focus after the browser closes
 
@@ -147,11 +153,12 @@ Then add a second managed file,
 `linux_setup.py` command again, and start Chrome again on the token URL. **Read:** `chrome://policy`,
 `edge://policy` (screenshots), the host start lines and extension start reports in `probe.log`, and the re-run's
 conflict line. Where a browser installed the extension but `probe.log` has no line from it, screenshot the probe
-box: its `host: <reason>` line is the failure's reason. **Pass:** both browsers install the extension on the first
-launch, and the probe starts and reports after at most one reload, with no prompt; with `zz-other.json` the
-extension is gone from Chrome and the re-run names the file. `first_load` is not a pass condition. It is data for
-the launcher's design: it tells R1 whether the launcher must open the token URL only after the extension is
-installed.
+box: its `host: <reason>` line is the failure's reason. With `zz-other.json` in place, record as data which
+`ExtensionInstallForcelist` entry `chrome://policy` shows Chrome applied, and whether the probe extension is still
+installed: this item does not assume which managed file wins. **Pass:** both browsers install the extension on the
+first launch, and the probe starts and reports after at most one reload, with no prompt; and the re-run prints the
+conflict line naming `zz-other.json`. `first_load` is not a pass condition. It is data for the launcher's design:
+it tells R1 whether the launcher must open the token URL only after the extension is installed.
 
 ### G11. Linux browser discovery
 
@@ -170,7 +177,9 @@ with the flag too, as information.
 
 ### G13. The Firefox profile sideload
 
-Windows and Linux, current release Firefox, with an everyday Firefox installed:
+Windows and Linux, current release Firefox, with an everyday Firefox installed. Register the native host first, as
+in G9: on Windows `windows.ps1` as in G1 step 1, on Linux `sudo python3 setup/linux_setup.py --ids ids.json --host
+<abs probe_host>`. Without it nothing reaches `probe.log`.
 1. Prepare a fresh profile; start Firefox `-kiosk` on `http://127.0.0.1:8765/probe.html#cptk=<token>`. **Read:**
    an extension start report with `allUrls: true` in `probe.log`.
 2. Close it, rebuild the XPI as version 0.0.2 (change `VERSION` in the kit's `extension/build.py` locally, sign it

@@ -42,7 +42,9 @@ The run sheet and the Windows guests use one folder holding the whole kit. After
 powershell -ExecutionPolicy Bypass -File tools\overlay-phase0\make-kit.ps1 -Build build-phase0\Release -Xpi <signed xpi>
 ```
 
-It copies `probe_host.exe`, `probe_spawn.exe` and every DLL beside them (SDL3.dll), `setup\`, `pages\`, `extension\`
+It copies `probe_host.exe`, `probe_spawn.exe` and every DLL beside them (SDL3.dll), the Visual C++ runtime DLLs
+(`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`, from `-RuntimeDir`, default System32, when there) so the
+kit runs on a clean Windows 11, `setup\`, `pages\`, `extension\`
 (`src\` and `build.py`), `ids.json` when it exists and the XPI when `-Xpi` names one into `$env:USERPROFILE\cptk-kit`
 (`-Kit` picks another folder), then lists what it copied. Re-running refreshes every file and deletes nothing.
 
