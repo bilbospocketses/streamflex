@@ -399,8 +399,9 @@ that it stays on the allowed side; the precedent is a remotely refreshed JSON ru
 - **Selectors** are CSS selector lists tried in order, first match wins. **Paths** are globs over the URL's path and
   fragment (`*` is any run of characters).
 - **Versioning.** `format` is the schema's major version; the engine refuses one it does not know. `minEngine` is the
-  lowest engine (extension) version the adapter needs. `version` is the provider's counter and only goes up: a bad
-  adapter is rolled back by publishing the good content again under a higher number.
+  lowest engine (extension) version the adapter needs. `version` identifies one published adapter. The app serves
+  the version the newest accepted manifest names, even if it is lower than one it served before, so the source rolls
+  a bad adapter back by pointing its manifest at an earlier version (**The adapter source and cache**).
 - **Per-browser overrides.** `browsers.<chrome|edge|firefox>` replaces single leaf fields for that browser.
 - **Validation.** `extension/adapters/schema.json` (JSON Schema). CI validates every adapter in the repo against it;
   the engine validates again at load and rejects the **whole** adapter on any miss, falling back to the generic engine
@@ -438,9 +439,10 @@ off (1 min, doubling, capped at 1 h) and is logged once per backoff step.
 
 **The cache** is `<data>/adapters/`: `manifest.envelope` as received, and `<provider>/<version>.json` (or `.envelope`).
 Files are written atomically (write a temporary file, then rename), readable by the user only. It is seeded at first
-start from the built-in adapters. It keeps the **last good copy** of each provider: nothing replaces it until a newer
-one passes every check. A manifest whose `issued_at` is older than the last accepted one is refused (no replay of an
-old manifest). An adapter whose expiry has passed is not served; the provider then shows *Can't reach the adapter
+start from the built-in adapters. **The newest accepted manifest is the authority:** for each provider the cache
+serves exactly the version that manifest names, higher or lower than before, once that version's file passes every
+check; until it does, the **last good copy** keeps serving. A manifest whose `issued_at` is older than the last
+accepted one is refused, so an old manifest cannot be replayed to force an old version. An adapter whose expiry has passed is not served; the provider then shows *Can't reach the adapter
 source to renew <provider>* while offline, or the manifest's reason.
 
 When the cache gains or changes an adapter for a provider whose browser is live, the launcher pushes
