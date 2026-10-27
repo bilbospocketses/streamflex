@@ -224,6 +224,21 @@ class KeysTest(unittest.TestCase):
                 self.assertEqual(events(proc.stdout), [])
                 self.assertIn("usage:", proc.stderr)
 
+    def test_delay_is_decimal_and_bounded(self):
+        proc = subprocess.run(
+            [SPAWN, "keys", "--dry-run", "010", "Up"], capture_output=True, text=True, timeout=120
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual([e["delay_ms"] for e in events(proc.stdout)], [10])  # not octal 8
+        for delay in ["2147483648", "99999999999999999999"]:
+            with self.subTest(delay=delay):
+                proc = subprocess.run(
+                    [SPAWN, "keys", "--dry-run", delay, "Up"], capture_output=True, text=True, timeout=120
+                )
+                self.assertEqual(proc.returncode, 2)
+                self.assertEqual(events(proc.stdout), [])
+                self.assertIn("usage:", proc.stderr)
+
     def test_keylog_refuses_a_bad_seconds_value(self):
         for seconds in ["x", "1x", "", "-1"]:
             with self.subTest(seconds=seconds):

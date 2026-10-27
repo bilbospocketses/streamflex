@@ -1,7 +1,6 @@
 #include "keys.h"
 
 #include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +66,7 @@ int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
         i = 1;
     }
     long delay; /* never negative: that is Sleep(INFINITE) on Windows */
-    if (argc - i < 2 || probe_parse_count(argv[i++], LONG_MAX, &delay) < 0) {
+    if (argc - i < 2 || probe_parse_count(argv[i++], PROBE_KEYS_MAX_DELAY_MS, &delay) < 0) {
         fputs("usage: probe_spawn keys [--dry-run] <delay_ms> <chord>...\n", stderr);
         return 2;
     }
@@ -91,8 +90,9 @@ int probe_keys_main(int argc, char **argv, const probe_key_sender *sender)
         for (int k = 0; k < n; k++) {
             if (!dry)
                 sender->send(chord[k], 0);
-            snprintf(fields, sizeof fields, "\"event\":\"key\",\"name\":\"%s\",\"vk\":%u,\"evdev\":%u,\"dry\":%s",
-                     chord[k]->name, chord[k]->vk, chord[k]->evdev, dry ? "true" : "false");
+            snprintf(fields, sizeof fields,
+                     "\"event\":\"key\",\"name\":\"%s\",\"vk\":%u,\"evdev\":%u,\"dry\":%s,\"delay_ms\":%ld",
+                     chord[k]->name, chord[k]->vk, chord[k]->evdev, dry ? "true" : "false", delay);
             probe_emit(fields);
         }
         for (int k = n - 1; k >= 0; k--) {

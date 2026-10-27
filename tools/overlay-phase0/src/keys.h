@@ -5,7 +5,8 @@
 #include <stddef.h>
 
 #define PROBE_MAX_CHORD 4
-#define PROBE_KEYLOG_MAX_S 2147483L /* SetTimer's longest wait (USER_TIMER_MAXIMUM), in whole seconds */
+#define PROBE_KEYS_MAX_DELAY_MS 2147483647L /* below Sleep's INFINITE, and the same on every platform */
+#define PROBE_KEYLOG_MAX_S 2147483L         /* SetTimer's longest wait (USER_TIMER_MAXIMUM), in whole seconds */
 
 typedef struct {
     const char *name;
