@@ -10,6 +10,8 @@ import time
 import unittest
 
 SPAWN = os.environ.get("PROBE_SPAWN", "")
+# How run reports the end: Linux also reports the leader's exit and the empty process group, both before exited.
+EXIT_EVENTS = ["leader_exited", "group_empty", "exited"] if os.name == "posix" else ["exited"]
 
 
 def events(text):
@@ -44,9 +46,13 @@ class RunTest(unittest.TestCase):
             input="", capture_output=True, text=True, timeout=120,
         )
         evs = events(proc.stdout)
-        self.assertEqual([e["event"] for e in evs], ["started", "exited"])
-        self.assertEqual(evs[1]["code"], 3)
-        self.assertEqual(evs[1]["ms_since_close"], -1)
+        self.assertEqual([e["event"] for e in evs], ["started"] + EXIT_EVENTS)
+        self.assertEqual(evs[-1]["code"], 3)
+        self.assertEqual(evs[-1]["ms_since_close"], -1)
+        if os.name == "posix":
+            self.assertEqual(evs[1]["code"], 3)
+            self.assertEqual(evs[1]["ms_since_close"], -1)
+            self.assertEqual(evs[2]["ms_since_close"], -1)
 
     def test_kill_ends_the_child(self):
         proc = subprocess.Popen(
@@ -71,7 +77,8 @@ class RunTest(unittest.TestCase):
             except subprocess.TimeoutExpired:
                 self.fail("HUNG: probe_spawn run did not report the killed child's exit")
             evs = events(out)
-            self.assertEqual([e["event"] for e in evs], ["kill_sent", "exited"])
+            self.assertEqual([e["event"] for e in evs], ["kill_sent"] + EXIT_EVENTS)
+            self.assertEqual(evs[-1]["code"], 137)
             self.assertEqual(evs[1]["code"], 137)
         finally:
             if proc.poll() is None:
@@ -114,8 +121,8 @@ class RunTest(unittest.TestCase):
         lines += rest.splitlines(True)
         self.assertEqual([line for line in lines if not line.startswith("{")], [])
         evs = events("".join(lines))
-        self.assertEqual([e["event"] for e in evs], ["started", "exited"])
-        self.assertEqual(evs[1]["code"], 0)
+        self.assertEqual([e["event"] for e in evs], ["started"] + EXIT_EVENTS)
+        self.assertEqual(evs[-1]["code"], 0)
         self.assertIn("child-was-here", err)
 
     def test_exited_waits_for_a_grandchild(self):
@@ -131,9 +138,52 @@ class RunTest(unittest.TestCase):
             except subprocess.TimeoutExpired:
                 self.fail("HUNG: probe_spawn run did not report the leader's exit")
             evs = events(proc.stdout)
-            self.assertEqual([e["event"] for e in evs], ["started", "exited"])
+            # The grandchild stays in the leader's group, so on Linux the group is empty only once it is gone too.
+            self.assertEqual([e["event"] for e in evs], ["started"] + EXIT_EVENTS)
             self.assertEqual(evs[1]["code"], 5)
+            self.assertEqual(evs[-1]["code"], 5)
             self.assertTrue(os.path.exists(marker), "exited came while the grandchild was still running")
+
+    @unittest.skipUnless(os.name == "posix", "leader_exited and group_empty are Linux run's lines")
+    def test_group_empty_comes_before_a_descendant_that_left_the_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            release, marker = os.path.join(tmp, "release"), os.path.join(tmp, "done")
+            stray = ("import os, time\nwhile not os.path.exists(%r):\n    time.sleep(0.05)\nopen(%r, 'w').write('done')"
+                     % (release, marker))
+            leader = ("import subprocess, sys; subprocess.Popen([sys.executable, '-c', %r], start_new_session=True); "
+                      "sys.exit(4)" % stray)
+            proc = subprocess.Popen(
+                [SPAWN, "run", sys.executable, "-c", leader], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            )
+            try:
+                lines = []
+                reader = read_until_exited(proc, lines)
+                end = time.monotonic() + 120
+                while not any('"group_empty"' in line for line in list(lines)):
+                    if not reader.is_alive():
+                        self.fail("run ended with no group_empty line: " + "".join(lines))
+                    if time.monotonic() > end:
+                        self.fail("HUNG: no group_empty line while the stray descendant waited")
+                    time.sleep(0.05)
+                early = [e["event"] for e in events("".join(list(lines)))]
+                stray_done_early = os.path.exists(marker)
+                open(release, "w").close()
+                reader.join(120)
+                if reader.is_alive():
+                    self.fail("HUNG: no exited line after the stray descendant was released")
+                stray_done = os.path.exists(marker)
+            finally:
+                open(release, "w").close()  # never leave the stray waiting
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=120)
+        self.assertEqual(early, ["started", "leader_exited", "group_empty"])
+        self.assertFalse(stray_done_early, "the stray finished before group_empty was read")
+        evs = events("".join(lines))
+        self.assertEqual([e["event"] for e in evs], ["started", "leader_exited", "group_empty", "exited"])
+        self.assertEqual(evs[1]["code"], 4)
+        self.assertEqual(evs[3]["code"], 4)
+        self.assertTrue(stray_done, "exited came while the stray descendant was still running")
 
     def close_child(self, program, code, marker):
         """Runs program -c code, waits for it to write marker, then sends close; returns run's events."""
@@ -174,9 +224,11 @@ class RunTest(unittest.TestCase):
             code = ("import signal, sys, time; signal.signal(signal.SIGTERM, lambda *a: sys.exit(0)); "
                     "open(%r, 'w').write('up'); time.sleep(600)" % marker)
             evs = self.close_child(sys.executable, code, marker)
-        self.assertEqual([e["event"] for e in evs], ["started", "close_sent", "exited"])
+        self.assertEqual([e["event"] for e in evs], ["started", "close_sent"] + EXIT_EVENTS)
         self.assertEqual(evs[2]["code"], 0)
-        self.assertGreaterEqual(evs[2]["ms_since_close"], 0)
+        for e in evs[2:]:
+            self.assertGreaterEqual(e["ms_since_close"], 0, e["event"])
+        self.assertEqual(evs[-1]["code"], 0)
 
 
 @unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")

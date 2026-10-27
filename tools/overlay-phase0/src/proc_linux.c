@@ -1,4 +1,5 @@
-/* probe_spawn run, Linux: a process group under a child subreaper; done once every descendant is reaped. */
+/* probe_spawn run, Linux: a process group under a child subreaper; done once every descendant is reaped. On the way
+   it reports leader_exited (the leader reaped) and group_empty (no process left in its group), both before exited. */
 #define _POSIX_C_SOURCE 200809L
 #include <dirent.h>
 #include <errno.h>
@@ -29,6 +30,21 @@ static int64_t mono_ms(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* Milliseconds since the last close, or -1 when none came. */
+static long long since_close(const struct run_state *s)
+{
+    return s->closed ? (long long)(mono_ms() - s->t_close) : -1;
+}
+
+/* The leader's exit code as run reports it: 128 + the signal when a signal ended it, -1 when it was never reaped. */
+static int exit_code(int reaped, int status)
+{
+    return !reaped                ? -1
+           : WIFEXITED(status)   ? WEXITSTATUS(status)
+           : WIFSIGNALED(status) ? 128 + WTERMSIG(status)
+                                 : -1;
 }
 
 static int spawn_failed(const char *step, int error)
@@ -139,6 +155,7 @@ int probe_run(int argc, char **argv)
     memset(&lines, 0, sizeof lines);
     int status = 0;
     int leader_reaped = 0;
+    int group_empty = 0;
     int stdin_open = 1;
     for (;;) {
         int st;
@@ -147,9 +164,20 @@ int probe_run(int argc, char **argv)
             if (r == pid) {
                 status = st;
                 leader_reaped = 1;
+                snprintf(fields, sizeof fields, "\"event\":\"leader_exited\",\"code\":%d,\"ms_since_close\":%lld",
+                         exit_code(1, status), since_close(&s));
+                probe_emit(fields);
             }
         }
-        if (r == -1 && errno == ECHILD) /* no child left: the leader and every descendant are gone */
+        int no_child = r == -1 && errno == ECHILD; /* the leader and every descendant are gone */
+        /* The spec's launcher signal: the leader reaped and no process left in its group. A descendant that left the
+           group (setsid, setpgid) can outlive it, and exited still waits for that one. */
+        if (leader_reaped && !group_empty && kill(-pid, 0) == -1 && errno == ESRCH) {
+            group_empty = 1;
+            snprintf(fields, sizeof fields, "\"event\":\"group_empty\",\"ms_since_close\":%lld", since_close(&s));
+            probe_emit(fields);
+        }
+        if (no_child)
             break;
         if (s.killing)
             kill_children();
@@ -170,12 +198,8 @@ int probe_run(int argc, char **argv)
         }
         probe_lines_feed(&lines, buf, (size_t)n, on_command, &s);
     }
-    int code = !leader_reaped        ? -1
-               : WIFEXITED(status)   ? WEXITSTATUS(status)
-               : WIFSIGNALED(status) ? 128 + WTERMSIG(status)
-                                     : -1;
-    long long since = s.closed ? (long long)(mono_ms() - s.t_close) : -1;
-    snprintf(fields, sizeof fields, "\"event\":\"exited\",\"code\":%d,\"ms_since_close\":%lld", code, since);
+    snprintf(fields, sizeof fields, "\"event\":\"exited\",\"code\":%d,\"ms_since_close\":%lld",
+             exit_code(leader_reaped, status), since_close(&s));
     probe_emit(fields);
     return 0;
 }
