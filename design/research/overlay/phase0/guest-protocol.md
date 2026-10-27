@@ -60,7 +60,10 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
 
 1. As the test user: `powershell -ExecutionPolicy Bypass -File setup\windows.ps1 -IdsFile ids.json -HostPath
    "$PWD\probe_host.exe" -ManifestDir "$env:LOCALAPPDATA\cptk-probe\hosts"`.
-2. Start Edge with the Chromium launch line on `http://127.0.0.1:8765/probe.html#cptk=<token>`; wait 60 s.
+2. Start Edge with the Chromium launch line on `http://127.0.0.1:8765/probe.html#cptk=<token>`; wait 60 s. Record
+   `first_load: probe box present yes/no` (screenshot). If no, reload that tab once (Ctrl+R; its address still holds
+   the token, because no probe ran to remove it), wait 30 s, and record `after one reload: yes/no` (screenshot);
+   if `first_load` is yes, record `after one reload: not needed`.
 3. Repeat for Chrome.
 4. First, as the test user, run step 1 again with `-Remove`. Then, from a **Run as administrator** PowerShell in the
    kit folder: `powershell -ExecutionPolicy Bypass -File setup\windows.ps1 -Scope HKLM -IdsFile ids.json -HostPath
@@ -72,7 +75,9 @@ otherwise. Every Linux command is typed in a terminal, from `tools/overlay-phase
 extension start report; `edge://policy` / `chrome://policy` list the forcelist with status OK (screenshot). Where
 either `probe.log` line is missing, screenshot the probe box: its `host: <reason>` line is the failure's reason (no
 box at all means the extension did not install or did not run).
-**Pass:** both browsers, HKCU, first launch, no prompt.
+**Pass:** both browsers, HKCU: the policy installs the extension on the first launch, and the probe starts after
+at most one reload, with no prompt. `first_load` is not a pass condition. It is data for the launcher's design: it
+tells R1 whether the launcher must open the token URL only after the extension is installed.
 
 ### G2. A standard user writes HKCU\Software\Policies
 
@@ -134,13 +139,19 @@ line is the failure's reason. **Pass:** both.
 ### G10. Linux Chrome and Edge policy
 
 `sudo python3 setup/linux_setup.py --ids ids.json --host <abs probe_host>`, then start each browser on
-`http://127.0.0.1:8765/probe.html#cptk=<token>`. Then add a second managed file,
+`http://127.0.0.1:8765/probe.html#cptk=<token>` and wait 60 s. For each, record `first_load: probe box present
+yes/no` (screenshot). If no, reload that tab once (Ctrl+R; the token is still in its address), wait 30 s, and
+record `after one reload: yes/no` (screenshot); if `first_load` is yes, record `after one reload: not needed`.
+Then add a second managed file,
 `/etc/opt/chrome/policies/managed/zz-other.json`, that sets `ExtensionInstallForcelist` to another id, run the same
 `linux_setup.py` command again, and start Chrome again on the token URL. **Read:** `chrome://policy`,
 `edge://policy` (screenshots), the host start lines and extension start reports in `probe.log`, and the re-run's
 conflict line. Where a browser installed the extension but `probe.log` has no line from it, screenshot the probe
-box: its `host: <reason>` line is the failure's reason. **Pass:** both browsers install and report on the first launch; with
-`zz-other.json` the extension is gone from Chrome and the re-run names the file.
+box: its `host: <reason>` line is the failure's reason. **Pass:** both browsers install the extension on the first
+launch, and the probe starts and reports after at most one reload, with no prompt; with `zz-other.json` the
+extension is gone from Chrome and the re-run names the file. `first_load` is not a pass condition. It is data for
+the launcher's design: it tells R1 whether the launcher must open the token URL only after the extension is
+installed.
 
 ### G11. Linux browser discovery
 
@@ -199,3 +210,4 @@ it loads in both browsers and the probe box appears. (Development only.)
 ## Results format
 
 `results.md`, one row per item: `| G<n> | pass / fail / partial | browsers and versions | evidence path | note |`.
+G1 and G10 put each browser's `first_load` and `after one reload` values in the note.
