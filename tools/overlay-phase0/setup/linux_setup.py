@@ -5,12 +5,25 @@ import json
 import os
 import pathlib
 import posixpath
+import re
 import sys
 
 CWS_UPDATE = "https://clients2.google.com/service/update2/crx"
 EDGE_UPDATE = "https://edge.microsoft.com/extensionwebstorebase/v1/crx"
 HOST = "app.cptk.overlay"
+GECKO = "overlay-probe@cptk.app"
 OURS = "cptk-overlay.json"
+
+
+def bad_ids(ids):
+    """What is wrong with the ids file, or None. The same rules as windows.ps1."""
+    for field in ("chrome_web_store", "edge_addons"):
+        if not re.fullmatch(r"[a-p]{32}", str(ids.get(field, ""))):
+            return f"{field} must be 32 letters a-p, got {ids.get(field)!r}"
+    # The profile scripts name the sideloaded XPI after this id, and Firefox loads it only under that name.
+    if ids.get("gecko") != GECKO:
+        return f"gecko must be {GECKO}, got {ids.get('gecko')!r}"
+    return None
 
 
 def plan(ids, host_path, root, home):
@@ -72,6 +85,10 @@ def main(argv=None):
     if not posixpath.isabs(args.host):  # a Linux path, even when the tests run on Windows
         ap.error("--host must be an absolute path")
     ids = json.loads(pathlib.Path(args.ids).read_text())
+    problem = bad_ids(ids)
+    if problem:
+        print(f"setup: ids file {args.ids}: {problem}", file=sys.stderr)
+        return 1
     owner = None
     home = args.home
     if home is None:

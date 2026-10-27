@@ -1,4 +1,5 @@
 """Tests for the Phase 0 setup scripts."""
+import io
 import json
 import os
 import pathlib
@@ -95,6 +96,18 @@ class LinuxSetupTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             linux_setup.main(["--ids", str(self.ids), "--host", "probe_host", "--root", str(self.root),
                               "--home", str(self.home)])
+
+    def test_refuses_bad_ids(self):
+        for bad in ({**IDS, "chrome_web_store": "A" * 32}, {**IDS, "edge_addons": "b" * 31},
+                    {k: v for k, v in IDS.items() if k != "gecko"}, {**IDS, "gecko": "overlay@cptk.app"}):
+            ids = write_ids(tempfile.mkdtemp(), bad)
+            argv = ["--ids", str(ids), "--host", "/usr/libexec/cptk/probe_host", "--root", str(self.root),
+                    "--home", str(self.home)]
+            with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                self.assertEqual(linux_setup.main(argv), 1, bad)
+            self.assertIn("ids file", err.getvalue())
+        self.assertEqual(os.listdir(self.root), [])
+        self.assertEqual(os.listdir(self.home), [])
 
     def test_under_sudo_gives_the_user_back_what_it_made_in_their_home(self):
         def getpwnam(name):
