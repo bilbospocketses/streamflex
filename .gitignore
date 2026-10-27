@@ -19,3 +19,8 @@ branding/library/build/
 tests/qa/__pycache__/
 # Python caches from the headless harness's merge.py
 tests/headless/__pycache__/
+# The Phase 0 probe kit's build tree, extension packages and Python caches
+/build-phase0/
+tools/overlay-phase0/extension/dist/
+tools/overlay-phase0/tests/__pycache__/
+tools/overlay-phase0/setup/__pycache__/
