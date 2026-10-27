@@ -1,10 +1,13 @@
-# CPTK Overlay 0.0.1: the store steps
+# CPTK Overlay Probe 0.0.1: the store steps
 
-This is the checklist for publishing CPTK Overlay 0.0.1, the Phase 0 probe extension. It goes to three stores:
+This is the checklist for publishing CPTK Overlay Probe 0.0.1, the Phase 0 measurement probe. It goes to three stores:
 
 - the Chrome Web Store, as an unlisted item;
 - Edge Add-ons, as a hidden item;
 - AMO (addons.mozilla.org), which signs the Firefox build for self-distribution.
+
+The probe has its own listing, separate from the planned product. **Do not create a CPTK Overlay listing (or claim
+`overlay@cptk.app` on AMO) yet.** That listing waits for R1.
 
 Keep `tools/overlay-phase0/listing.md` open beside this file. Every box you fill in a store comes from there. Type every
 command in a Windows PowerShell window. Store review can take days, so start as soon as the extension has landed.
@@ -26,17 +29,16 @@ command in a Windows PowerShell window. Store review can take days, so start as 
 
    If it prints `False`, the extension has not landed in this checkout yet. Stop and ask the streamflex tab.
 
-2. **Check one open question is settled.** `listing.md` ends with a *Pending a ruling* note about the Firefox data
-   setting. If that note is still there, ask the streamflex tab before step 8. You can do steps 1 to 7 first.
-
-3. **Have these ready:**
+2. **Have these ready:**
    - the Google account that will own CPTK's Chrome Web Store items, and a payment card for its one-time fee;
    - the Microsoft account that will own CPTK's Edge items (no fee);
    - a Mozilla account for AMO (no fee);
-   - a password manager entry for the AMO keys you will create in step 7;
-   - a web address for the privacy policy. Both stores require one. The text is under *Privacy policy text* in
-     `listing.md`. It has to be live on the web before you submit, for example as a file on the StreamFlex
-     repository's `master` branch, opened by its github.com address.
+   - a password manager entry for the AMO keys you will create in step 7.
+
+3. **The privacy policy address.** Both stores require one. Use
+   `https://github.com/bilbospocketses/streamflex/blob/master/tools/overlay-phase0/privacy-policy.md`.
+   That URL works once PR #73 has merged; a submission before then uses the file's permalink on PR #73 instead (the
+   streamflex tab gives it to you).
 
 ## 1. Build the packages
 
@@ -47,15 +49,15 @@ python "$repo\tools\overlay-phase0\extension\build.py"
 It prints two lines:
 
 ```
-built ...\dist\cptk-overlay-chromium-0.0.1.zip
-built ...\dist\cptk-overlay-firefox-0.0.1.zip
+built ...\dist\cptk-overlay-probe-chromium-0.0.1.zip
+built ...\dist\cptk-overlay-probe-firefox-0.0.1.zip
 ```
 
 Here is what each store gets:
 
 | Store | What to upload | Where it is |
 |---|---|---|
-| Chrome Web Store | the Chromium zip | `$repo\tools\overlay-phase0\extension\dist\cptk-overlay-chromium-0.0.1.zip` |
+| Chrome Web Store | the Chromium zip | `$repo\tools\overlay-phase0\extension\dist\cptk-overlay-probe-chromium-0.0.1.zip` |
 | Edge Add-ons | the same Chromium zip | the same file |
 | AMO | nothing by hand: step 8 signs the folder | `$repo\tools\overlay-phase0\extension\dist\firefox\` |
 
@@ -75,14 +77,14 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
    powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\pages\serve.ps1"
    ```
 
-3. In Chrome, open `http://127.0.0.1:8765/#cptk=0123456789abcdef0123456789abcdef` and press a few arrow keys. The status
-   box appears in the bottom-left corner.
+3. In Chrome, open `http://127.0.0.1:8765/#cptk=0123456789abcdef0123456789abcdef` and press a few arrow keys. The
+   probe's box, headed "CPTK Overlay Probe 0.0.1", appears in the bottom-left corner.
 4. Take a screenshot with Win+Shift+S and save it.
 5. Fit it to 1280 x 800. In your first PowerShell window, set `$shot` to the file you saved, then paste the rest:
 
    ```powershell
    $shot = "$env:USERPROFILE\Pictures\Screenshots\<the file you saved>.png"
-   $saveAs = "$env:USERPROFILE\Pictures\cptk-overlay-1280x800.png"
+   $saveAs = "$env:USERPROFILE\Pictures\cptk-overlay-probe-1280x800.png"
    Add-Type -AssemblyName System.Drawing
    $src = [System.Drawing.Image]::FromFile($shot)
    $out = New-Object System.Drawing.Bitmap 1280, 800
@@ -95,7 +97,7 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
    $g.Dispose(); $out.Dispose(); $src.Dispose()
    ```
 
-   The result is `cptk-overlay-1280x800.png` in your Pictures folder.
+   The result is `cptk-overlay-probe-1280x800.png` in your Pictures folder.
 6. Stop the server with Ctrl+C in the second window, and remove the unpacked copy from `chrome://extensions`.
 
 ## 3. Chrome Web Store: the account
@@ -109,7 +111,7 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
 
 ## 4. Chrome Web Store: the upload
 
-1. Click *New item* and upload `cptk-overlay-chromium-0.0.1.zip`.
+1. Click *New item* and upload `cptk-overlay-probe-chromium-0.0.1.zip`.
 2. **The item id appears at once**, on the item's page and in the browser's address bar. It is 32 letters, all
    between `a` and `p`. Copy it into a note now; step 9 needs it.
 3. **Store listing tab**, from `listing.md`, section *Store listing*:
@@ -117,8 +119,8 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
    - Category: Accessibility (under *Make Chrome Yours*).
    - Language: English (United States).
    - Store icon: `$repo\tools\overlay-phase0\extension\dist\chromium\icon128.png`.
-   - Screenshot: `cptk-overlay-1280x800.png` from step 2.
-   - The summary comes from the package and cannot be edited here. That is expected.
+   - Screenshot: `cptk-overlay-probe-1280x800.png` from step 2.
+   - The name and summary come from the package and cannot be edited here. That is expected.
 4. **Privacy practices tab**, from `listing.md`, section *Privacy fields*:
    - Single purpose: paste it.
    - Permission justifications: one box each for `nativeMessaging`, `storage` and the host permission. Paste each.
@@ -140,16 +142,16 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
 
 ## 6. Edge Add-ons: the upload
 
-1. Click *Create new extension* and upload the same `cptk-overlay-chromium-0.0.1.zip`.
+1. Click *Create new extension* and upload the same `cptk-overlay-probe-chromium-0.0.1.zip`.
 2. **Availability:** set *Visibility* to **Hidden**. Leave *Markets* at all markets.
 3. **Properties:** Category: Accessibility. Leave *Mature content* unchecked.
 4. **Privacy**, from `listing.md`, section *Privacy fields*: single purpose, the three permission justifications,
    *No, I am not using remote code*, the same two data types (web history, user activity) and the certifications,
    and the privacy policy URL.
 5. **Store listings:** click *Edit details* on the English row.
-   - Description: paste it. Edge wants at least 250 characters; this one has about 1,300.
+   - Description: paste it. Edge wants at least 250 characters; this one has about 1,600.
    - Extension logo: `icon128.png`, the same file as the Chrome store icon.
-   - Screenshot: `cptk-overlay-1280x800.png` (optional here, but use it).
+   - Screenshot: `cptk-overlay-probe-1280x800.png` (optional here, but use it).
    - The name and the short description come from the package. That is expected.
 6. Click *Publish*. In *Notes for certification*, paste the *Notes for the reviewer* text. Click *Publish* again.
 7. **Find the id.** Open the extension's *Extension overview* page. It shows a listing URL that ends in a 32-letter
@@ -167,8 +169,16 @@ The Chrome Web Store needs at least one screenshot, exactly 1280 x 800 pixels. E
 
 ## 8. Sign the Firefox build
 
-Do this only after the *Pending a ruling* note in `listing.md` is settled. A signed file cannot be changed, and
-AMO will not sign version 0.0.1 a second time.
+A signed file cannot be changed, and AMO will not sign version 0.0.1 a second time. So check first that the build
+carries the probe's id and its data declaration. This must print `True`:
+
+```powershell
+$m = Get-Content -Raw "$repo\tools\overlay-phase0\extension\dist\firefox\manifest.json" | ConvertFrom-Json
+$g = $m.browser_specific_settings.gecko
+$g.id -eq 'overlay-probe@cptk.app' -and (($g.data_collection_permissions.required -join ',') -eq 'browsingActivity,websiteActivity')
+```
+
+`False` means the build is not the reviewed one. Stop and ask the streamflex tab.
 
 1. Put the two keys into this PowerShell window only. `Read-Host` asks for each one. The secret is hidden as you
    type, and neither one is saved in a file or in the command history:
@@ -192,12 +202,12 @@ AMO will not sign version 0.0.1 a second time.
 3. Wait. AMO checks and signs unlisted add-ons on its own, usually within minutes, and `web-ext` waits up to 15
    minutes. When it finishes, a new `.xpi` file is in the handoff folder. AMO picks its name.
 4. If `web-ext` stops before the file arrives, do not run it again. Open `https://addons.mozilla.org/developers/`, pick
-   CPTK Overlay, then version 0.0.1, and download the signed file into the handoff folder by hand.
-5. Rename the file to `cptk-overlay-0.0.1.xpi`:
+   CPTK Overlay Probe, then version 0.0.1, and download the signed file into the handoff folder by hand.
+5. Rename the file to `cptk-overlay-probe-0.0.1.xpi`:
 
    ```powershell
    Get-ChildItem $handoff -Filter *.xpi
-   Rename-Item (Join-Path $handoff '<the name it showed>.xpi') 'cptk-overlay-0.0.1.xpi'
+   Rename-Item (Join-Path $handoff '<the name it showed>.xpi') 'cptk-overlay-probe-0.0.1.xpi'
    ```
 
 6. Clear the keys from the window:
@@ -207,7 +217,8 @@ AMO will not sign version 0.0.1 a second time.
    Remove-Variable secret
    ```
 
-The signed XPI is now at `C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi`.
+The signed XPI is now at
+`C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi`.
 
 ## 9. Record the ids
 
@@ -217,7 +228,7 @@ The signed XPI is now at `C:\Users\jscha\ClaudeScratch\streamflex-handoff\overla
    {
      "chrome_web_store": "<the 32-letter id from step 4>",
      "edge_addons": "<the 32-letter id from step 6>",
-     "gecko": "overlay@cptk.app"
+     "gecko": "overlay-probe@cptk.app"
    }
    ```
 
@@ -236,19 +247,19 @@ The signed XPI is now at `C:\Users\jscha\ClaudeScratch\streamflex-handoff\overla
 Paste this into the streamflex tab, filled in:
 
 ```
-CPTK Overlay 0.0.1 is submitted.
+CPTK Overlay Probe 0.0.1 is submitted.
 Chrome Web Store id: <id>  (submitted <date>)
 Edge Add-ons id: <id>  (submitted <date>)
-Signed XPI: C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi
+Signed XPI: C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi
 ids.json: written and checked (True) / not written
-Privacy policy URL: <address>
+Privacy policy URL used: <address>
 ```
 
 The tab then commits `ids.json` and builds the kit. The run sheet covers that, with a line like this, run from
 the checkout:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\make-kit.ps1" -Build "$repo\build-phase0\Release" -Xpi "C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-0.0.1.xpi"
+powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\make-kit.ps1" -Build "$repo\build-phase0\Release" -Xpi "C:\Users\jscha\ClaudeScratch\streamflex-handoff\overlay-phase0\cptk-overlay-probe-0.0.1.xpi"
 ```
 
 ## 11. Wait for both reviews
