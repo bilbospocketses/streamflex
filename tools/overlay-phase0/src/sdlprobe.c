@@ -147,7 +147,7 @@ int probe_pad(int argc, char **argv)
 }
 
 /* Reads every queued event. The first focus loss sets *lost_ms, and the first focus gain after it sets *back_ms,
-   each in ms since t0. */
+   each in ms since t0. Every other event, a key included, is dropped. */
 static void drain_focus(Uint64 t0, long long *lost_ms, long long *back_ms)
 {
     SDL_Event e;
@@ -202,12 +202,12 @@ int probe_focus(int argc, char **argv)
         SDL_Delay(20);
     }
     Uint64 t_exit = SDL_GetTicks();
+    /* What is queued now came before the raise, so it is not the raise's doing. The drain runs before exited is
+       printed: a key sent once exited has been read then arrives after it and is always counted below. */
+    drain_focus(t_start, &lost_ms, &back_ms);
     snprintf(fields, sizeof fields, "\"event\":\"exited\",\"code\":%d", code);
     probe_emit(fields);
     SDL_DestroyProcess(p);
-
-    /* What is queued now came before the raise, so it is not the raise's doing. */
-    drain_focus(t_start, &lost_ms, &back_ms);
     bool raised = SDL_RaiseWindow(w);
     long long gained_ms = -1, key_ms = -1;
     while (SDL_GetTicks() - t_exit < 10000 && key_ms < 0) {
