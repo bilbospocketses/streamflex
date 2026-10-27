@@ -18,3 +18,12 @@ target_link_libraries(probe_host PRIVATE probe_common)
 if (WIN32)
   target_link_libraries(probe_host PRIVATE shell32) # CommandLineToArgvW
 endif ()
+
+add_executable(probe_spawn src/spawn_main.c)
+if (WIN32)
+  target_sources(probe_spawn PRIVATE src/proc_win32.c)
+  target_link_libraries(probe_spawn PRIVATE user32)
+else ()
+  target_sources(probe_spawn PRIVATE src/proc_linux.c)
+endif ()
+target_link_libraries(probe_spawn PRIVATE probe_common)
