@@ -102,7 +102,6 @@ class RunTest(unittest.TestCase):
                 if reader.is_alive():
                     self.fail("HUNG: the child did not exit while probe_spawn's stdin was open")
                 ran = os.path.exists(marker)
-                proc.stdin.close()
                 try:
                     rest, err = proc.communicate(timeout=120)
                 except subprocess.TimeoutExpired:
@@ -257,14 +256,34 @@ class KeysTest(unittest.TestCase):
 
 @unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
 class SdlProbeTest(unittest.TestCase):
+    """Every run uses SDL's dummy video driver, so no window reaches the desktop."""
+
+    def probe(self, args, **env):
+        try:
+            return subprocess.run(
+                [SPAWN] + args, capture_output=True, text=True, timeout=120,
+                env=dict(os.environ, SDL_VIDEO_DRIVER="dummy", **env),
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("HUNG: probe_spawn %s did not end" % " ".join(args))
+
     def test_pad_runs_without_a_display(self):
-        env = dict(os.environ, SDL_VIDEO_DRIVER="dummy")
-        proc = subprocess.run([SPAWN, "pad", "1", "default"], capture_output=True, text=True, env=env, timeout=120)
+        proc = self.probe(["pad", "1", "default"])
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(events(proc.stdout)[-1]["event"], "pad_end")
+        evs = events(proc.stdout)
+        # One focus line, the start state: the window's own opening churn is not reported. A plugged-in pad may add
+        # pad_added lines, so only the focus lines are pinned.
+        self.assertEqual(evs[0]["event"], "focus")
+        self.assertEqual([e["event"] for e in evs].count("focus"), 1)
+        self.assertEqual(evs[-1]["event"], "pad_end")
+
+    def test_pad_reports_a_renderer_failure(self):
+        proc = self.probe(["pad", "1", "default"], SDL_RENDER_DRIVER="nosuchrenderer")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual([e["event"] for e in events(proc.stdout)], ["sdl_failed"])
 
     def test_pad_refuses_an_unknown_backend(self):
-        proc = subprocess.run([SPAWN, "pad", "1", "dinput"], capture_output=True, text=True, timeout=120)
+        proc = self.probe(["pad", "1", "dinput"])
         self.assertEqual(proc.returncode, 2)
         self.assertEqual(events(proc.stdout), [])
         self.assertIn("usage:", proc.stderr)
@@ -272,15 +291,39 @@ class SdlProbeTest(unittest.TestCase):
     def test_pad_refuses_a_bad_seconds_value(self):
         for seconds in ["x", "1x", "", "-1", "86401"]:
             with self.subTest(seconds=seconds):
-                try:
-                    proc = subprocess.run(
-                        [SPAWN, "pad", seconds, "default"], capture_output=True, text=True, timeout=120
-                    )
-                except subprocess.TimeoutExpired:
-                    self.fail("HUNG: pad %r did not refuse its seconds value" % seconds)
+                proc = self.probe(["pad", seconds, "default"])
                 self.assertEqual(proc.returncode, 2)
                 self.assertEqual(events(proc.stdout), [])
                 self.assertIn("usage:", proc.stderr)
+
+    def test_focus_reports_a_renderer_failure(self):
+        proc = self.probe(["focus", sys.executable, "-c", "pass"], SDL_RENDER_DRIVER="nosuchrenderer")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual([e["event"] for e in events(proc.stdout)], ["sdl_failed"])
+
+    def test_focus_reports_a_missing_program(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self.probe(["focus", os.path.join(tmp, "no-such-program")])
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual([e["event"] for e in events(proc.stdout)], ["spawn_failed"])
+
+    def test_focus_reports_only_what_it_measured(self):
+        code = "import sys; print('child-was-here'); sys.stderr.write('child-err'); sys.exit(7)"
+        proc = self.probe(["focus", sys.executable, "-c", code])
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual([line for line in proc.stdout.splitlines() if not line.startswith("{")], [])
+        self.assertIn("child-err", proc.stderr)
+        evs = events(proc.stdout)
+        self.assertEqual([e["event"] for e in evs], ["started", "exited", "focus_after_exit", "key_after_exit"])
+        self.assertEqual(evs[1]["code"], 7)
+        # The dummy driver never moves focus, so the probe must not claim it was lost or won back.
+        self.assertFalse(evs[2]["lost"])
+        self.assertEqual(evs[2]["lost_ms"], -1)
+        self.assertFalse(evs[2]["back_before_raise"])
+        self.assertFalse(evs[2]["gained"])
+        self.assertEqual(evs[2]["ms"], -1)
+        self.assertIsInstance(evs[2]["raised"], bool)
+        self.assertEqual(evs[3]["ms"], -1)
 
 
 if __name__ == "__main__":

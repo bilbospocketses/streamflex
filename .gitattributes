@@ -16,3 +16,4 @@ vcpkg-overlays/** text eol=lf
 tests/unit.sh text eol=lf
 tests/check-no-text-input.sh text eol=lf
 tests/mutants/** text eol=lf
+tools/overlay-phase0/ci/* text eol=lf
