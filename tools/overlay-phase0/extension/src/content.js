@@ -1,8 +1,9 @@
-// CPTK Overlay 0.0.1, the Phase 0 probe. It does nothing unless a CPTK token in the URL fragment activated this tab.
+// CPTK Overlay Probe 0.0.1, the Phase 0 measurement probe. It does nothing unless a CPTK token in the URL fragment
+// activated this tab.
 (() => {
   "use strict";
   const api = globalThis.browser ?? globalThis.chrome;
-  const VERSION = api.runtime.getManifest().version;
+  const { name: NAME, version: VERSION } = api.runtime.getManifest();
   const PROBE_ORIGIN = "http://127.0.0.1:8765";
   const TOKEN_IN_HASH = /(?:^#|&)cptk=([0-9a-f]{32})(?=&|$)/;
   const lines = [];
@@ -19,7 +20,7 @@
         "font:16px monospace;padding:8px;white-space:pre;pointer-events:none";
       document.body.appendChild(box);
     }
-    if (box) box.textContent = `CPTK probe ${VERSION}\n` + lines.join("\n");
+    if (box) box.textContent = `${NAME} ${VERSION}\n` + lines.join("\n");
   }
 
   function showHost(status) {

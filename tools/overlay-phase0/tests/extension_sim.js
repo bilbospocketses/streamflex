@@ -55,7 +55,7 @@ function makeBrowser({ allUrls = true, host = "ack" } = {}) {
     runtime: {
       onMessage,
       connectNative,
-      getManifest: () => ({ version: "0.0.1" }),
+      getManifest: () => ({ name: "CPTK Overlay Probe", version: "0.0.1" }),
       get lastError() {
         return lastError;
       },
@@ -150,7 +150,7 @@ function makeBrowser({ allUrls = true, host = "ack" } = {}) {
     };
     const contentApi = {
       runtime: {
-        getManifest: () => ({ version: "0.0.1" }),
+        getManifest: () => ({ name: "CPTK Overlay Probe", version: "0.0.1" }),
         sendMessage: (msg) => sendFromTab(tabId, page.url.href, msg),
         onMessage: page.onMessage,
       },
@@ -228,6 +228,7 @@ const SCENARIOS = {
     assert.equal(start.tab, 1);
     assert.equal(start.frame, 0);
     assert.equal(typeof start.t, "number");
+    assert.match(page.boxText(), /^CPTK Overlay Probe 0\.0\.1\n/);
     assert.match(page.boxText(), /webdriver: false/);
     assert.match(page.boxText(), /page ready/);
 

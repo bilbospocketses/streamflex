@@ -1,4 +1,4 @@
-// CPTK Overlay 0.0.1, the Phase 0 probe: relays the content script's reports to the native host.
+// CPTK Overlay Probe 0.0.1, the Phase 0 measurement probe: relays the content script's reports to the native host.
 // Only tabs a CPTK token activated are relayed. Activation lives in storage.session, so it ends with the browser.
 const api = globalThis.browser ?? globalThis.chrome;
 const PROBE_ORIGIN = "http://127.0.0.1:8765";
@@ -36,7 +36,7 @@ async function tellHost(status, failed) {
     if (!key.startsWith("active:")) continue;
     const tabId = Number(key.slice("active:".length));
     api.tabs.sendMessage(tabId, { type: "host", status }).catch((err) => {
-      console.warn("CPTK probe: could not tell a tab the host state:", tabId, err);
+      console.warn("CPTK Overlay Probe: could not tell a tab the host state:", tabId, err);
     });
   }
 }
@@ -48,12 +48,12 @@ function hostPort() {
   opened.onDisconnect.addListener(() => {
     const err = opened.error || api.runtime.lastError;
     if (port === opened) port = null;
-    tellHost((err && err.message) || "host exited", true).catch((e) => console.error("CPTK probe:", e));
+    tellHost((err && err.message) || "host exited", true).catch((e) => console.error("CPTK Overlay Probe:", e));
   });
   opened.onMessage.addListener((msg) => {
     if (acked || !msg || msg.type !== "ack") return;
     acked = true;
-    tellHost(`connected (pid ${msg.pid})`, false).catch((e) => console.error("CPTK probe:", e));
+    tellHost(`connected (pid ${msg.pid})`, false).catch((e) => console.error("CPTK Overlay Probe:", e));
   });
   port = opened;
   return opened;
@@ -109,5 +109,5 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 api.tabs.onRemoved.addListener((tabId) => {
-  api.storage.session.remove(activeKey(tabId)).catch((err) => console.error("CPTK probe:", err));
+  api.storage.session.remove(activeKey(tabId)).catch((err) => console.error("CPTK Overlay Probe:", err));
 });

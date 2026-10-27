@@ -36,7 +36,9 @@ class ExtensionBuildTest(unittest.TestCase):
         for flavor in FLAVORS:
             m = self.manifest(flavor)
             self.assertEqual(m["manifest_version"], 3)
-            self.assertEqual(m["name"], "CPTK Overlay")
+            self.assertEqual(m["name"], "CPTK Overlay Probe")
+            self.assertLessEqual(len(m["description"]), 132, "Chrome's description limit")
+            self.assertIn("measurement probe", m["description"])
             self.assertEqual(m["version"], "0.0.1")
             self.assertEqual(m["permissions"], ["nativeMessaging", "storage"])
             self.assertEqual(m["host_permissions"], ["<all_urls>"])
@@ -48,13 +50,13 @@ class ExtensionBuildTest(unittest.TestCase):
         ff = self.manifest("firefox")
         self.assertEqual(ff["background"], {"scripts": ["background.js"]})
         gecko = ff["browser_specific_settings"]["gecko"]
-        self.assertEqual(gecko["id"], "overlay@cptk.app")
+        self.assertEqual(gecko["id"], "overlay-probe@cptk.app")
         self.assertEqual(gecko["strict_min_version"], "140.0")
         self.assertEqual(gecko["data_collection_permissions"], {"required": ["none"]})
 
     def test_zips_hold_the_built_files_at_the_root(self):
         for flavor in FLAVORS:
-            with zipfile.ZipFile(DIST / f"cptk-overlay-{flavor}-0.0.1.zip") as z:
+            with zipfile.ZipFile(DIST / f"cptk-overlay-probe-{flavor}-0.0.1.zip") as z:
                 self.assertEqual(sorted(z.namelist()), list(FILES))
                 self.assertEqual(json.loads(z.read("manifest.json")), self.manifest(flavor))
 

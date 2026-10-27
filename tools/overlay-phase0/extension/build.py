@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds CPTK Overlay 0.0.1 (the Phase 0 probe) for Chromium (Chrome, Edge) and Firefox."""
+"""Builds CPTK Overlay Probe 0.0.1 (the Phase 0 measurement probe) for Chromium (Chrome, Edge) and Firefox."""
 import json
 import pathlib
 import shutil
@@ -8,15 +8,16 @@ import zipfile
 import zlib
 
 HERE = pathlib.Path(__file__).resolve().parent
+NAME = "CPTK Overlay Probe"
 VERSION = "0.0.1"
 
 BASE = {
     "manifest_version": 3,
-    "name": "CPTK Overlay",
+    "name": NAME,
     "version": VERSION,
     "description": (
-        "Drives streaming sites with a TV remote inside CPTK's own browser profiles. "
-        "It does nothing anywhere else."
+        "A measurement probe for CPTK's TV-remote overlay. "
+        "It runs only in CPTK's own browser profiles and does nothing anywhere else."
     ),
     "permissions": ["nativeMessaging", "storage"],
     "host_permissions": ["<all_urls>"],
@@ -30,7 +31,7 @@ FLAVORS = {
         "background": {"scripts": ["background.js"]},
         "browser_specific_settings": {
             "gecko": {
-                "id": "overlay@cptk.app",
+                "id": "overlay-probe@cptk.app",
                 "strict_min_version": "140.0",
                 "data_collection_permissions": {"required": ["none"]},
             }
@@ -64,7 +65,7 @@ def build():
         (out / "icon128.png").write_bytes(icon_png())
         manifest = {**BASE, **extra}
         (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        archive = dist / f"cptk-overlay-{flavor}-{VERSION}.zip"
+        archive = dist / f"cptk-overlay-probe-{flavor}-{VERSION}.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
             for path in sorted(out.iterdir()):
                 z.write(path, path.name)
