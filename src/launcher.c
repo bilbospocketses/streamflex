@@ -4333,7 +4333,14 @@ int main(int argc, char *argv[])
         log_debug("Restarted, so the StartupCmd does not run again");
     else if (config.startup_cmd != NULL)
         execute_command(config.startup_cmd);
-    
+
+    // The desktop's media keys, at every start: KDE Plasma and GNOME can take next and previous track before
+    // StreamFlex sees them, so settings open on a prompt to turn the desktop's shortcuts off (Windows: none).
+    // As for :settings, never over an application the StartupCmd is launching
+#ifndef _WIN32
+    settings_start_media_keys(!state.application_launching && !state.application_running);
+#endif
+
     // Main program loop
     log_debug("Begin program loop");
     log_debug("Timing: startup: first menu shown %u ms after the window opened", (unsigned) (ticks_ms() - ticks.program_start));
