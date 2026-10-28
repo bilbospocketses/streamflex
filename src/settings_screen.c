@@ -2163,6 +2163,10 @@ static void handle_event(const SettingsEvent *event)
             if (pickers_active() || browser != NULL)
                 return;   // The grid or the browser is open over the page: they show their own icons
             break;
+        case SETTINGS_EVENT_MEDIA_KEYS_OFF:
+        case SETTINGS_EVENT_MEDIA_KEYS_NEVER:
+        case SETTINGS_EVENT_MEDIA_KEYS_RESTORE:
+            break;   // The desktop's shortcuts are not wired yet
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
             break;
