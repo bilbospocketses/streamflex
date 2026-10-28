@@ -3,6 +3,7 @@
 // over a whole state (GNOME's static keys too), and the values config.ini cannot read back.
 #include <limits.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include "check.h"
 #include "mediakeys.h"
@@ -59,7 +60,7 @@ static void test_names(void)
 }
 
 // A function to tell whether formatting key sequences and parsing the text gives them back
-static bool round_trip(const int (*seqs)[4], int nseq, const char *expected)
+static bool round_trip(int (*seqs)[4], int nseq, const char *expected)
 {
     char text[MEDIAKEYS_VALUE_MAX];
     if (!mediakeys_plasma_format(seqs, nseq, text, sizeof(text)) || strcmp(text, expected) != 0)
@@ -73,10 +74,10 @@ static bool round_trip(const int (*seqs)[4], int nseq, const char *expected)
 // A function to test Plasma's value text: no sequence, one and two, both ways
 static void test_plasma_round_trip(void)
 {
-    static const int none[1][4] = { { 0, 0, 0, 0 } };
-    static const int next[1][4] = { { 16777347, 0, 0, 0 } };
-    static const int two[2][4] = { { 16777347, 0, 0, 0 }, { 67108864 + 16777347, 0, 0, 0 } };
-    static const int signs[1][4] = { { INT_MAX, INT_MIN, -1, 0 } };
+    int none[1][4] = { { 0, 0, 0, 0 } };
+    int next[1][4] = { { 16777347, 0, 0, 0 } };
+    int two[2][4] = { { 16777347, 0, 0, 0 }, { 67108864 + 16777347, 0, 0, 0 } };
+    int signs[1][4] = { { INT_MAX, INT_MIN, -1, 0 } };
     CHECK(round_trip(none, 0, ""));
     CHECK(round_trip(next, 1, "16777347,0,0,0"));
     CHECK(round_trip(two, 2, "16777347,0,0,0|83886211,0,0,0"));
@@ -123,7 +124,7 @@ static void test_plasma_malformed(void)
 // A function to test formatting into too little room: false, and nothing half written
 static void test_plasma_format_room(void)
 {
-    static const int two[2][4] = { { 16777347, 0, 0, 0 }, { 16777346, 0, 0, 0 } };
+    int two[2][4] = { { 16777347, 0, 0, 0 }, { 16777346, 0, 0, 0 } };
     char text[32];
     CHECK(mediakeys_plasma_format(two, 2, text, 31));           // "16777347,0,0,0|16777346,0,0,0" is 29
     CHECK_STR(text, "16777347,0,0,0|16777346,0,0,0");
@@ -192,7 +193,7 @@ static MediaKeysState state_of(MediaKeysDesktop desktop, const char *v0, const c
     state.desktop = desktop;
     const char *values[MEDIAKEYS_KEYS_MAX] = { v0, v1, v2, v3 };
     for (int i = 0; i < MEDIAKEYS_KEYS_MAX; i++)
-        strcpy(state.values[i], values[i]);
+        snprintf(state.values[i], sizeof(state.values[i]), "%s", values[i]);
     return state;
 }
 
@@ -254,6 +255,19 @@ static void test_value_safe(void)
     CHECK(!mediakeys_value_safe(";['a']"));                // Or at the start
     CHECK(!mediakeys_value_safe("#['a']"));
     CHECK(!mediakeys_value_safe(NULL));
+
+    // inidoc's 199-byte line cap under the longest key, "GnomePreviousStatic=" (20 bytes): 179 bytes of
+    // value fill the line exactly
+    char text[MEDIAKEYS_VALUE_MAX];
+    memset(text, 'x', sizeof(text));
+    text[178] = '\0';
+    CHECK(mediakeys_value_safe(text));                     // One byte under
+    text[178] = 'x';
+    text[179] = '\0';
+    CHECK(mediakeys_value_safe(text));                     // At the cap
+    text[179] = 'x';
+    text[180] = '\0';
+    CHECK(!mediakeys_value_safe(text));                    // One byte over
 }
 
 int main(void)

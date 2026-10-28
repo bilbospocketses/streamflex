@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mediakeys.h"
+#include "inidoc.h"      // INIDOC_MAX_LINE only; nothing of inidoc.c is linked
 
 // Each desktop's keys, next track first and previous track second: kglobalaccel's actions in Plasma's
 // "mediacontrol" component, and the keys of GNOME's org.gnome.settings-daemon.plugins.media-keys, whose
@@ -146,8 +147,9 @@ int mediakeys_plasma_parse(const char *text, int (*seqs)[4], int max)
     }
 }
 
-// A function to write key sequences as Plasma's value text; false, with "" written, when it does not fit
-bool mediakeys_plasma_format(const int (*seqs)[4], int nseq, char *out, size_t cap)
+// A function to write key sequences as Plasma's value text; false, with "" written, when it does not fit.
+// seqs is only read
+bool mediakeys_plasma_format(int (*seqs)[4], int nseq, char *out, size_t cap)
 {
     if (out == NULL || cap == 0)
         return false;
@@ -252,14 +254,29 @@ bool mediakeys_holds_previous(const MediaKeysState *state)
     return holds_either(state, 1);
 }
 
-// A function to tell whether config.ini reads a value back exactly as written: not when it has a line
-// break, starts or ends with whitespace (dropped), or has a ';' or '#' at its start or after whitespace
-// (read as a comment)
+// A function to give the longest [Desktop Keys] key a value is saved under
+static size_t longest_config_key(void)
+{
+    size_t longest = 0;
+    for (int i = 0; i < GNOME_KEY_COUNT; i++)
+        longest = strlen(GNOME_CONFIG_KEYS[i]) > longest ? strlen(GNOME_CONFIG_KEYS[i]) : longest;
+    for (int i = 0; i < PLASMA_KEY_COUNT; i++)
+        longest = strlen(PLASMA_CONFIG_KEYS[i]) > longest ? strlen(PLASMA_CONFIG_KEYS[i]) : longest;
+    return longest;
+}
+
+// A function to tell whether [Desktop Keys] can hold a value: not when it has a line break (it would
+// split the line), starts or ends with whitespace (config.ini drops it), starts with a ';' or has one
+// after whitespace (config.ini reads a comment), or has a '#' in those places (config.ini reads a '#'
+// as a comment only at a line's start, but the plan refuses it there too), nor when "<key>=<value>"
+// under the longest key would pass inidoc's line cap
 bool mediakeys_value_safe(const char *value)
 {
     if (value == NULL)
         return false;
     size_t length = strlen(value);
+    if (longest_config_key() + 1 + length > INIDOC_MAX_LINE)
+        return false;
     if (strchr(value, '\n') != NULL || strchr(value, '\r') != NULL)
         return false;
     if (length > 0 && (is_space(value[0]) || is_space(value[length - 1])))
