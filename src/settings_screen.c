@@ -1317,13 +1317,23 @@ static void refresh_media_keys(bool held)
     settings_set_media_keys(model, media_desktop, held, config.media_keys_saved.desktop == media_desktop);
 }
 
+// A function to write [Desktop Keys] edits into config.ini (write_config()), saying in the log what a save
+// that succeeded could not keep, as the settings' save does
+static bool write_media_keys(const ConfigEdit *edits, int count, ConfigSaveResult *result)
+{
+    bool ok = write_config(edits, count, NULL, 0, NULL, NULL, result);
+    if (ok && result->warning[0] != '\0')
+        log_error("Media keys: saved [%s] to %s, but %s", MEDIAKEYS_SECTION, result->path, result->warning);
+    return ok;
+}
+
 // A function to remove the saved shortcuts from [Desktop Keys] (Ask stays): false when the save failed,
 // config.media_keys_saved then still what the file holds
 static bool forget_media_keys(ConfigSaveResult *result)
 {
     ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
     int count = mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX);   // Room for every edit a builder makes
-    if (!write_config(edits, count, NULL, 0, NULL, NULL, result))
+    if (!write_media_keys(edits, count, result))
         return false;
     memset(&config.media_keys_saved, 0, sizeof(config.media_keys_saved));   // MEDIAKEYS_NONE: nothing saved
     return true;
@@ -1351,7 +1361,7 @@ static void media_keys_off(void)
         return;
     }
     ConfigSaveResult result;
-    if (!write_config(edits, count, NULL, 0, NULL, NULL, &result)) {
+    if (!write_media_keys(edits, count, &result)) {
         media_retry = SETTINGS_EVENT_MEDIA_KEYS_OFF;
         save_failed(&result);
         return;
@@ -1408,7 +1418,7 @@ static void media_keys_never(void)
     ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
     int count = mediakeys_never_edits(edits, MEDIAKEYS_EDITS_MAX);   // Room for every edit a builder makes
     ConfigSaveResult result;
-    if (!write_config(edits, count, NULL, 0, NULL, NULL, &result)) {
+    if (!write_media_keys(edits, count, &result)) {
         media_retry = SETTINGS_EVENT_MEDIA_KEYS_NEVER;
         save_failed(&result);
         return;
@@ -3695,35 +3705,32 @@ void settings_open(void)
 }
 
 #ifndef _WIN32
-// A function to check the desktop's media keys as StreamFlex starts: the log says which of them KDE Plasma or
-// GNOME holds (nothing for another desktop), and while it holds either and [Desktop Keys] Ask is not no,
-// settings open on the Media keys prompt, given the same read, unless they may not open now (`may_open`)
-void settings_start_media_keys(bool may_open)
+// A function to check the desktop's media keys as StreamFlex starts, before the StartupCmd: the log says which
+// of them KDE Plasma or GNOME holds (nothing for another desktop), and while it holds either and [Desktop Keys]
+// Ask is not no, settings open on the Media keys prompt, given the same read. True when the prompt opened
+bool settings_start_media_keys(void)
 {
     MediaKeysState keys;
     char why[MEDIA_WHY_MAX];
     if (!mediakeys_read(&keys, why, sizeof(why))) {
         log_error("Media keys: could not read %s's shortcuts (%s)", media_short_name(keys.desktop), why);
-        return;
+        return false;
     }
     if (keys.desktop == MEDIAKEYS_NONE)
-        return;
+        return false;
     bool next = mediakeys_holds_next(&keys);
     bool previous = mediakeys_holds_previous(&keys);
     log_debug("Media keys: %s holds %s", mediakeys_desktop_name(keys.desktop),
               next && previous ? "next track and previous track" : next ? "next track"
               : previous ? "previous track" : "neither next track nor previous track");
     if (!media_keys_held(&keys) || !config.media_keys_ask)
-        return;
-    if (!may_open) {
-        log_debug("Settings: not opened while an application is launching or running");
-        return;
-    }
-    open_settings(&keys);   // Nothing when settings are open already (a StartupCmd's :settings)
-    if (model == NULL || media_desktop != keys.desktop)
-        return;   // open_settings() said why, or settings were open with another read
+        return false;
+    open_settings(&keys);
+    if (model == NULL)
+        return false;   // open_settings() said why
     settings_show_media_keys(model);
     log_path();
+    return true;
 }
 #endif
 

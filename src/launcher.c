@@ -4328,24 +4328,38 @@ int main(int argc, char *argv[])
     if (error)
         log_fatal("Could not load default menu %s", config.default_menu);
 
+    // The desktop's media keys, at every start and before the StartupCmd: KDE Plasma and GNOME can take next
+    // and previous track before StreamFlex sees them, so settings open on a prompt to turn the desktop's
+    // shortcuts off (Windows: none). While it is open the StartupCmd waits, and it runs once it closes
+    bool startup_owed = false;
+#ifndef _WIN32
+    bool prompted = settings_start_media_keys();
+#else
+    bool prompted = false;
+#endif
+
     // Execute startup command; a restart's fresh copy runs none, as the start before it ran it
     if (config.startup_cmd != NULL && config.restarted)
         log_debug("Restarted, so the StartupCmd does not run again");
+    else if (config.startup_cmd != NULL && prompted) {
+        startup_owed = true;
+        log_debug("StartupCmd: waits for the Media keys prompt to close");
+    }
     else if (config.startup_cmd != NULL)
         execute_command(config.startup_cmd);
-
-    // The desktop's media keys, at every start: KDE Plasma and GNOME can take next and previous track before
-    // StreamFlex sees them, so settings open on a prompt to turn the desktop's shortcuts off (Windows: none).
-    // As for :settings, never over an application the StartupCmd is launching
-#ifndef _WIN32
-    settings_start_media_keys(!state.application_launching && !state.application_running);
-#endif
 
     // Main program loop
     log_debug("Begin program loop");
     log_debug("Timing: startup: first menu shown %u ms after the window opened", (unsigned) (ticks_ms() - ticks.program_start));
     while (1) {
         ticks.main = ticks_ms();
+        // The StartupCmd the Media keys prompt held back runs once, as soon as settings have closed, however
+        // the prompt was left
+        if (startup_owed && !settings_is_open() && config.startup_cmd != NULL) {
+            startup_owed = false;
+            log_debug("StartupCmd: the Media keys prompt closed, so it runs now");
+            execute_command(config.startup_cmd);
+        }
 #ifdef STREAMFLEX_TEST_HOOKS
         test_pad_update();
         test_app_update();
