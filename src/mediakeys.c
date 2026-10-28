@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mediakeys.h"
-#include "inidoc.h"      // INIDOC_MAX_LINE only; nothing of inidoc.c is linked
+#include "inidoc.h"      // INIDOC_MAX_LINE and the placements only; nothing of inidoc.c is linked
 
 // Each desktop's keys, next track first and previous track second: kglobalaccel's actions in Plasma's
 // "mediacontrol" component, and the keys of GNOME's org.gnome.settings-daemon.plugins.media-keys, whose
@@ -286,4 +286,63 @@ bool mediakeys_value_safe(const char *value)
             return false;
     }
     return true;
+}
+
+// A function to make one [Desktop Keys] edit: the key set to value, or removed when value is NULL
+static ConfigEdit edit_of(const char *key, const char *value)
+{
+    ConfigEdit edit;
+    edit.section = MEDIAKEYS_SECTION;
+    edit.key = key;
+    edit.alias = NULL;
+    edit.value = value;
+    edit.placement = INIDOC_AFTER_LAST_KEY;
+    return edit;
+}
+
+// A function to make the edits that save a desktop's shortcuts: Desktop, then its value keys, then the
+// other desktop's removed, so [Desktop Keys] never holds two desktops' values. The edits point into state
+int mediakeys_save_edits(const MediaKeysState *state, ConfigEdit *out, int cap)
+{
+    if (state == NULL || out == NULL)
+        return -1;
+    MediaKeysDesktop other = state->desktop == MEDIAKEYS_PLASMA ? MEDIAKEYS_GNOME : MEDIAKEYS_PLASMA;
+    int own = mediakeys_key_count(state->desktop);
+    if (own == 0 || cap < 1 + own + mediakeys_key_count(other))
+        return -1;
+    for (int i = 0; i < own; i++) {
+        if (!mediakeys_value_safe(state->values[i]))
+            return -1;
+    }
+    int count = 0;
+    out[count++] = edit_of(MEDIAKEYS_KEY_DESKTOP, mediakeys_desktop_config_name(state->desktop));
+    for (int i = 0; i < own; i++)
+        out[count++] = edit_of(mediakeys_config_key(state->desktop, i), state->values[i]);
+    for (int i = 0; i < mediakeys_key_count(other); i++)
+        out[count++] = edit_of(mediakeys_config_key(other, i), NULL);
+    return count;
+}
+
+// A function to make the edits that forget the saved shortcuts: Desktop and both desktops' value keys
+// removed. Ask is the user's own answer, so it stays
+int mediakeys_forget_edits(ConfigEdit *out, int cap)
+{
+    if (out == NULL || cap < 1 + PLASMA_KEY_COUNT + GNOME_KEY_COUNT)
+        return -1;
+    int count = 0;
+    out[count++] = edit_of(MEDIAKEYS_KEY_DESKTOP, NULL);
+    for (int i = 0; i < PLASMA_KEY_COUNT; i++)
+        out[count++] = edit_of(PLASMA_CONFIG_KEYS[i], NULL);
+    for (int i = 0; i < GNOME_KEY_COUNT; i++)
+        out[count++] = edit_of(GNOME_CONFIG_KEYS[i], NULL);
+    return count;
+}
+
+// A function to make the edit that stops the prompt for good: Ask=no
+int mediakeys_never_edits(ConfigEdit *out, int cap)
+{
+    if (out == NULL || cap < 1)
+        return -1;
+    out[0] = edit_of(MEDIAKEYS_KEY_ASK, "no");
+    return 1;
 }

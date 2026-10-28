@@ -1,15 +1,22 @@
 // The desktop's media-key shortcuts as StreamFlex reads, saves and judges them: KDE Plasma's two
 // kglobalaccel actions and GNOME's four gsettings keys, their names in config.ini's [Desktop Keys], the
-// text each value is saved as, and whether a value holds a key. Pure: no SDL, no I/O, no globals, so
-// tests/test_mediakeys.c builds it on its own; the backends that talk to the desktop live elsewhere.
+// text each value is saved as, whether a value holds a key, and the edits that write [Desktop Keys].
+// Pure: no SDL, no I/O, no globals, so tests/test_mediakeys.c builds it on its own; the backends that
+// talk to the desktop live elsewhere.
 #ifndef MEDIAKEYS_H
 #define MEDIAKEYS_H
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "config_save.h"   // ConfigEdit only; nothing of config_save.c is linked
 
 #define MEDIAKEYS_KEYS_MAX 4      // GNOME's four keys; Plasma has two
 #define MEDIAKEYS_VALUE_MAX 256   // The longest value text kept, with its terminator
+#define MEDIAKEYS_EDITS_MAX 7     // The most edits a builder below makes: Desktop and all six value keys
+
+#define MEDIAKEYS_SECTION "Desktop Keys"   // config.ini's section, which is never a menu
+#define MEDIAKEYS_KEY_ASK "Ask"            // "no" when the prompt is never to be shown; anything else asks
+#define MEDIAKEYS_KEY_DESKTOP "Desktop"    // Whose shortcuts the value keys hold: "plasma" or "gnome"
 
 typedef enum {
     MEDIAKEYS_NONE,
@@ -47,5 +54,14 @@ int mediakeys_plasma_parse(const char *text, int (*seqs)[4], int max);
 // Whether [Desktop Keys] can hold a value: no line break, no whitespace at either end, no ';' or '#' at its
 // start or after whitespace, and short enough for one config.ini line under the longest key
 bool mediakeys_value_safe(const char *value);
+
+// The [Desktop Keys] edits for config_save_with(), each new key placed after the section's last (a missing
+// section is added at the end of the file), and how many; -1, with nothing made, when out has room for
+// fewer than they need. The save's edits point into `state`, which must outlive them: Desktop and that
+// desktop's values, the other desktop's value keys removed; -1 too for a state with no desktop or a value
+// mediakeys_value_safe() refuses
+int mediakeys_save_edits(const MediaKeysState *state, ConfigEdit *out, int cap);
+int mediakeys_forget_edits(ConfigEdit *out, int cap);   // Desktop and every value key removed; Ask stays
+int mediakeys_never_edits(ConfigEdit *out, int cap);    // Ask=no
 
 #endif

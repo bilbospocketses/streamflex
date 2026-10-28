@@ -262,9 +262,13 @@ target_include_directories(test_keycodes PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME keycodes COMMAND test_keycodes)
 
 # Unit tests for the media-keys codec: the desktops' key names, Plasma's key sequences as text, whether a
-# value holds a key, and the values config.ini cannot hold (pure, linked alone)
-add_executable(test_mediakeys test_mediakeys.c "${PROJECT_SOURCE_DIR}/src/mediakeys.c")
+# value holds a key, the values config.ini cannot hold, and the [Desktop Keys] edits (pure; the edits are
+# saved through config_save.c, as the settings screen saves them)
+add_executable(test_mediakeys test_mediakeys.c "${PROJECT_SOURCE_DIR}/src/mediakeys.c"
+  "${PROJECT_SOURCE_DIR}/src/config_save.c" "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c"
+  "${PROJECT_SOURCE_DIR}/src/alloc.c")
 target_include_directories(test_mediakeys PRIVATE "${PROJECT_SOURCE_DIR}/src")
+link_fileio(test_mediakeys)
 add_test(NAME mediakeys COMMAND test_mediakeys)
 
 # The Linux media-key backend (src/platform/mediakeys_unix.c): gsettings through a fake the test puts on the

@@ -1,12 +1,19 @@
 // The media-keys codec: the desktops' key and config names, Plasma's key sequences as value text and
 // back, whether a value holds a key (Plasma's ints, GNOME's GVariant string arrays), next and previous
-// over a whole state (GNOME's static keys too), and the values config.ini cannot read back.
+// over a whole state (GNOME's static keys too), the values config.ini cannot read back, and the
+// [Desktop Keys] edits, alone and as config_save_with() writes them.
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "check.h"
+#include "config_save.h"
+#include "fileio.h"
 #include "mediakeys.h"
+
+#define DIR "mediakeys-fixture"
+#define CONFIG DIR "/config.ini"
 
 // A function to test the name tables: each desktop's keys in order, their [Desktop Keys] names, and the
 // desktops' own names
@@ -270,6 +277,231 @@ static void test_value_safe(void)
     CHECK(!mediakeys_value_safe(text));                    // One byte over
 }
 
+// A function to tell whether an edit is one [Desktop Keys] edit: its key, its value (NULL removes it),
+// no alias, and a new key placed after the section's last
+static bool is_edit(const ConfigEdit *edit, const char *key, const char *value)
+{
+    return strcmp(edit->section, "Desktop Keys") == 0 && strcmp(edit->key, key) == 0 && edit->alias == NULL &&
+           (value == NULL ? edit->value == NULL : edit->value != NULL && strcmp(edit->value, value) == 0) &&
+           edit->placement == INIDOC_AFTER_LAST_KEY;
+}
+
+// A function to test the edits that save a desktop's shortcuts: Desktop, its values pointing into the
+// state, the other desktop's keys removed; refused for no desktop, a value config.ini cannot hold, or
+// too little room
+static void test_save_edits(void)
+{
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX + 1];
+    MediaKeysState s = state_of(MEDIAKEYS_PLASMA, "16777347,0,0,0", "", "", "");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), 7);
+    CHECK(is_edit(&edits[0], "Desktop", "plasma"));
+    CHECK(is_edit(&edits[1], "PlasmaNext", "16777347,0,0,0"));
+    CHECK(is_edit(&edits[2], "PlasmaPrevious", ""));
+    CHECK(edits[1].value == s.values[0]);
+    CHECK(edits[2].value == s.values[1]);
+    CHECK(is_edit(&edits[3], "GnomeNext", NULL));
+    CHECK(is_edit(&edits[4], "GnomePrevious", NULL));
+    CHECK(is_edit(&edits[5], "GnomeNextStatic", NULL));
+    CHECK(is_edit(&edits[6], "GnomePreviousStatic", NULL));
+
+    s = state_of(MEDIAKEYS_GNOME, "['XF86AudioNext', '<Ctrl>XF86AudioNext']", "@as []", "['']", "['XF86AudioPrev']");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), 7);
+    CHECK(is_edit(&edits[0], "Desktop", "gnome"));
+    CHECK(is_edit(&edits[1], "GnomeNext", "['XF86AudioNext', '<Ctrl>XF86AudioNext']"));
+    CHECK(is_edit(&edits[2], "GnomePrevious", "@as []"));
+    CHECK(is_edit(&edits[3], "GnomeNextStatic", "['']"));
+    CHECK(is_edit(&edits[4], "GnomePreviousStatic", "['XF86AudioPrev']"));
+    CHECK(edits[4].value == s.values[3]);
+    CHECK(is_edit(&edits[5], "PlasmaNext", NULL));
+    CHECK(is_edit(&edits[6], "PlasmaPrevious", NULL));
+
+    // Too little room, or nothing to save: -1, and out untouched
+    ConfigEdit marker = { "x", "x", NULL, "x", INIDOC_UNDER_HEADER };
+    edits[0] = marker;
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX - 1), -1);
+    CHECK(edits[0].section == marker.section);
+    s = state_of(MEDIAKEYS_PLASMA, "16777347,0,0,0", "16777346,0,0,0", "", "");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX - 1), -1);
+    s = state_of(MEDIAKEYS_NONE, "16777347,0,0,0", "", "", "");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), -1);
+    CHECK_INT(mediakeys_save_edits(NULL, edits, MEDIAKEYS_EDITS_MAX), -1);
+    CHECK_INT(mediakeys_save_edits(&s, NULL, MEDIAKEYS_EDITS_MAX), -1);
+    CHECK(edits[0].section == marker.section);
+
+    // A value config.ini cannot hold refuses the whole save; past the desktop's keys nothing is read
+    s = state_of(MEDIAKEYS_GNOME, "['XF86AudioNext']", "@as []", "@as []", "['a ;b']");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), -1);
+    s = state_of(MEDIAKEYS_PLASMA, "16777347,0,0,0", " 16777346,0,0,0", "", "");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), -1);
+    CHECK(edits[0].section == marker.section);
+    s = state_of(MEDIAKEYS_PLASMA, "16777347,0,0,0", "16777346,0,0,0", "x\ny", " ");
+    CHECK_INT(mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX), 7);
+}
+
+// A function to test the edits that forget the saved shortcuts, and the one that stops the prompt
+static void test_forget_and_never_edits(void)
+{
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
+    CHECK_INT(mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX), 7);
+    CHECK(is_edit(&edits[0], "Desktop", NULL));
+    CHECK(is_edit(&edits[1], "PlasmaNext", NULL));
+    CHECK(is_edit(&edits[2], "PlasmaPrevious", NULL));
+    CHECK(is_edit(&edits[3], "GnomeNext", NULL));
+    CHECK(is_edit(&edits[4], "GnomePrevious", NULL));
+    CHECK(is_edit(&edits[5], "GnomeNextStatic", NULL));
+    CHECK(is_edit(&edits[6], "GnomePreviousStatic", NULL));
+    CHECK_INT(mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX - 1), -1);
+    CHECK_INT(mediakeys_forget_edits(NULL, MEDIAKEYS_EDITS_MAX), -1);
+
+    CHECK_INT(mediakeys_never_edits(edits, 1), 1);
+    CHECK(is_edit(&edits[0], "Ask", "no"));
+    CHECK_INT(mediakeys_never_edits(edits, 0), -1);
+    CHECK_INT(mediakeys_never_edits(NULL, 1), -1);
+}
+
+// A function to start a check from a known file, with no backup lying about
+static void reset(const char *text)
+{
+    fileio_remove(CONFIG);
+    fileio_remove(CONFIG ".bak");
+    CHECK(fileio_make_dirs(DIR));
+    CHECK(fileio_write_all(CONFIG, text, strlen(text)));
+}
+
+// A function to tell whether the config holds exactly a text, printing it when it does not
+static bool holds(const char *path, const char *text)
+{
+    char *content = fileio_read_all(path, NULL);
+    bool same = content != NULL && strcmp(content, text) == 0;
+    if (!same)
+        fprintf(stderr, "%s holds:\n%s\n", path, content != NULL ? content : "(nothing)");
+    free(content);
+    return same;
+}
+
+// A function to save edits as the settings screen does, through config_save_with()
+static bool save(const ConfigEdit *edits, int count)
+{
+    ConfigSaveResult result;
+    bool ok = count > 0 && config_save_with(CONFIG, NULL, NULL, edits, count, NULL, 0, NULL, NULL, &result);
+    if (ok && result.notes[0] != '\0')
+        fprintf(stderr, "notes: %s\n", result.notes);
+    return ok && result.notes[0] == '\0';
+}
+
+// A function to test the edits as config_save_with() writes them: the section made at the end of the file
+// when absent, kept where it is when present, Ask kept by a save and a forget, and the other desktop's
+// keys gone when a desktop is saved
+static void test_edits_written(void)
+{
+    static const char *const ORIGINAL =
+        "[General]\n"
+        "DefaultMenu=Main\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n";
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
+
+    // No section yet: it is made at the end, after a blank line, and the old file is kept
+    reset(ORIGINAL);
+    MediaKeysState s = state_of(MEDIAKEYS_PLASMA, "16777347,0,0,0", "", "", "");
+    CHECK(save(edits, mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[General]\n"
+        "DefaultMenu=Main\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"
+        "\n"
+        "[Desktop Keys]\n"
+        "Desktop=plasma\n"
+        "PlasmaNext=16777347,0,0,0\n"
+        "PlasmaPrevious=\n"));
+    CHECK(holds(CONFIG ".bak", ORIGINAL));
+
+    // Don't ask again joins the section; GNOME's save then puts its keys after Ask and drops Plasma's
+    CHECK(save(edits, mediakeys_never_edits(edits, MEDIAKEYS_EDITS_MAX)));
+    s = state_of(MEDIAKEYS_GNOME, "['XF86AudioNext', '<Ctrl>XF86AudioNext']", "@as []", "['']", "['XF86AudioPrev']");
+    CHECK(save(edits, mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[General]\n"
+        "DefaultMenu=Main\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"
+        "\n"
+        "[Desktop Keys]\n"
+        "Desktop=gnome\n"
+        "Ask=no\n"
+        "GnomeNext=['XF86AudioNext', '<Ctrl>XF86AudioNext']\n"
+        "GnomePrevious=@as []\n"
+        "GnomeNextStatic=['']\n"
+        "GnomePreviousStatic=['XF86AudioPrev']\n"));
+
+    // Forgetting leaves Ask alone
+    CHECK(save(edits, mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[General]\n"
+        "DefaultMenu=Main\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"
+        "\n"
+        "[Desktop Keys]\n"
+        "Ask=no\n"));
+
+    // A section before a menu keeps its place: new keys go after its last key, not at the file's end, and
+    // its comment stays
+    static const char *const MIDDLE =
+        "[Desktop Keys]\n"
+        "; saved by StreamFlex\n"
+        "Ask=yes\n"
+        "PlasmaNext=1,0,0,0\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n";
+    reset(MIDDLE);
+    s = state_of(MEDIAKEYS_GNOME, "['XF86AudioNext']", "['XF86AudioPrev']", "@as []", "@as []");
+    CHECK(save(edits, mediakeys_save_edits(&s, edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[Desktop Keys]\n"
+        "; saved by StreamFlex\n"
+        "Ask=yes\n"
+        "Desktop=gnome\n"
+        "GnomeNext=['XF86AudioNext']\n"
+        "GnomePrevious=['XF86AudioPrev']\n"
+        "GnomeNextStatic=@as []\n"
+        "GnomePreviousStatic=@as []\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"));
+    CHECK(save(edits, mediakeys_never_edits(edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(save(edits, mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[Desktop Keys]\n"
+        "; saved by StreamFlex\n"
+        "Ask=no\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"));
+
+    // Don't ask again on a file with no section makes it with Ask alone
+    reset(ORIGINAL);
+    CHECK(save(edits, mediakeys_never_edits(edits, MEDIAKEYS_EDITS_MAX)));
+    CHECK(holds(CONFIG,
+        "[General]\n"
+        "DefaultMenu=Main\n"
+        "\n"
+        "[Main]\n"
+        "Entry1=A;apps;:quit\n"
+        "\n"
+        "[Desktop Keys]\n"
+        "Ask=no\n"));
+
+    fileio_remove(CONFIG);
+    fileio_remove(CONFIG ".bak");
+}
+
 int main(void)
 {
     test_names();
@@ -279,5 +511,8 @@ int main(void)
     test_value_holds();
     test_holds_next_previous();
     test_value_safe();
+    test_save_edits();
+    test_forget_and_never_edits();
+    test_edits_written();
     return check_report();
 }
