@@ -3333,6 +3333,8 @@ static void test_media_keys_prompt(void)
     settings_show_media_keys(state);                               // No desktop: no prompt
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
     CHECK(!settings_media_keys_prompt_open(state));
+    settings_show_media_keys_failed(state, "kglobalaccel did not answer");   // No desktop to name: no failure page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
     open_page(state, "General");
     settings_set_media_keys(state, MEDIAKEYS_PLASMA, true, false);
     settings_show_media_keys(state);

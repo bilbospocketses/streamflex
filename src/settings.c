@@ -3104,7 +3104,7 @@ void settings_show_restart(SettingsState *state, const char *names)
 }
 
 // A function to give the model the desktop's media-key shortcuts, which the Controls row and the Media keys
-// pages show; the screen gives them again after it changes them
+// pages show; the screen gives them again after it changes them, the desktop always the one settings opened with
 void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved)
 {
     state->media.desktop = desktop;
@@ -3130,7 +3130,8 @@ bool settings_media_keys_prompt_open(const SettingsState *state)
     return state->depth >= 1 && state->stack[1].page == SETTINGS_PAGE_MEDIA_KEYS;
 }
 
-// A function to show why the desktop's shortcuts could not be changed, over the page that tried, with OK
+// A function to show why the desktop's shortcuts could not be changed, over the page that tried, with OK;
+// nothing with no desktop set, which has no name to put in the note
 void settings_show_media_keys_failed(SettingsState *state, const char *why)
 {
     const char *name = mediakeys_desktop_short_name(state->media.desktop);

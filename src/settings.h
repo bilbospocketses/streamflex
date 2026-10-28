@@ -451,7 +451,10 @@ void settings_show_tile(SettingsState *state, int menu, int tile);
 
 // The desktop's media-key shortcuts (Linux; Windows never sets them): the desktop (MEDIAKEYS_NONE, as the
 // model starts: no Controls row and no pages), whether it holds next or previous track, and whether
-// [Desktop Keys] holds its shortcuts as saved before they were turned off
+// [Desktop Keys] holds its shortcuts as saved before they were turned off. The desktop stays the one settings
+// opened with: while they are open, the screen gives that desktop again and changes only `holds` and `saved`,
+// even when a fresh read finds no desktop (kglobalaccel gone from the bus), since NONE would leave a Media
+// keys page on show with no rows, and settings_show_media_keys_failed() no page to say why
 void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved);
 // The Media keys prompt, in place of the pages open, as settings open at start: Back and Not now close
 // settings. Nothing with no desktop set.
@@ -459,7 +462,8 @@ void settings_show_media_keys(SettingsState *state);
 // Whether the prompt settings_show_media_keys() opened is open: on show, or under its failure page
 bool settings_media_keys_prompt_open(const SettingsState *state);
 // Why the desktop's shortcuts could not be changed, on a page of its own over the one on show (OK and
-// Back go back to it); a second failure there takes the new reason
+// Back go back to it); a second failure there takes the new reason. Nothing with no desktop set, which
+// names no desktop to blame: keep the desktop settings opened with (settings_set_media_keys())
 void settings_show_media_keys_failed(SettingsState *state, const char *why);
 
 #endif
