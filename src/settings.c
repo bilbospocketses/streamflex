@@ -958,6 +958,14 @@ struct SettingsState {
     char confirm_note[96];       // The confirm page's "Captured: ..."
     char restart_note[320];      // The restart page's question
     SettingsIconChoices icon;    // What the Icon page offers for its tile, once the screen has looked
+    struct {                     // The desktop's media-key shortcuts (settings_set_media_keys())
+        MediaKeysDesktop desktop;   // MEDIAKEYS_NONE: no Controls row and no pages
+        bool holds;              // It holds next or previous track
+        bool saved;              // [Desktop Keys] holds its shortcuts, saved before they were turned off
+    } media;
+    char media_note[400];        // The Media keys prompt's note
+    char media_why[96];          // Why the Desktop media keys page's Give them back is grayed
+    char media_failure[640];     // The page's note when the desktop's shortcuts could not be changed
 };
 
 // A function to start the model over the launcher's menus; the caller then sets every entry value
@@ -1124,6 +1132,7 @@ static const char *const KEYBOARD_NOTE = "The arrows, OK (Enter) and Back (Backs
 static const char *const BUILT_IN_NOTE = "Up, Down and Settings have built-in buttons while nothing else is bound to them.";
 static const char *const WHY_NO_NAME =
     "This line has no name in config.ini, so removing it would change how the lines after it read";
+static const char *const WHY_KEYS_OFF = "They are already off";
 
 // A function to start a row of a kind
 static SettingsRow new_row(SettingsRowKind kind, const char *label)
@@ -1671,6 +1680,13 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
                 n = add_row(rows, n, max, link_row("Keyboard", text, SETTINGS_PAGE_KEYBOARD, -1));
             }
             n = add_row(rows, n, max, link_row("Gamepad", on_off(state, SET_ID_GAMEPAD_ENABLED), SETTINGS_PAGE_GAMEPAD, -1));
+#ifndef _WIN32
+            // KDE Plasma and GNOME can hold the media keys; on Windows nothing takes them, so there is no row
+            if (state->media.desktop != MEDIAKEYS_NONE)
+                n = add_row(rows, n, max, link_row("Desktop media keys", state->media.holds ? "On"
+                                                   : state->media.saved ? "Off for StreamFlex" : "Off",
+                                                   SETTINGS_PAGE_DESKTOP_KEYS, -1));
+#endif
             break;
         case SETTINGS_PAGE_GAMEPAD: {
             bool off = !is_on(state, SET_ID_GAMEPAD_ENABLED);
@@ -1796,6 +1812,38 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             break;
         case SETTINGS_PAGE_MOVE_TO:
             n = move_to_rows(state, top, rows, n, max);
+            break;
+        case SETTINGS_PAGE_MEDIA_KEYS: {
+            const char *name = mediakeys_desktop_name(state->media.desktop);
+            if (name == NULL)
+                break;
+            snprintf(state->media_note, sizeof(state->media_note), "%s uses the next-track and previous-track keys "
+                     "for its own media controls, so StreamFlex never receives them. Turn %s's shortcuts for them "
+                     "off? Other music players will stop responding to these keys until you turn them back on in "
+                     "Settings" ARROW "Controls" ARROW "Desktop media keys.",
+                     name, mediakeys_desktop_short_name(state->media.desktop));
+            n = add_row(rows, n, max, note_row(state->media_note));
+            n = add_row(rows, n, max, action_row("Turn them off", SETTINGS_ACTION_MEDIA_KEYS_OFF, true));
+            n = add_row(rows, n, max, action_row("Not now", SETTINGS_ACTION_MEDIA_KEYS_NOT_NOW, true));
+            n = add_row(rows, n, max, action_row("Don't ask again", SETTINGS_ACTION_MEDIA_KEYS_NEVER, true));
+            break;
+        }
+        case SETTINGS_PAGE_DESKTOP_KEYS: {
+            // Give them back is grayed while the desktop holds a key, Turn them off while it holds none
+            const char *name = mediakeys_desktop_name(state->media.desktop);
+            if (name == NULL)
+                break;
+            snprintf(state->media_why, sizeof(state->media_why), "%s already has them", name);
+            snprintf(text, sizeof(text), "Give them back to %s", name);
+            n = add_row(rows, n, max, grayed(action_row(text, SETTINGS_ACTION_MEDIA_KEYS_RESTORE, true),
+                                             state->media.holds, state->media_why));
+            n = add_row(rows, n, max, grayed(action_row("Turn them off", SETTINGS_ACTION_MEDIA_KEYS_OFF, true),
+                                             !state->media.holds, WHY_KEYS_OFF));
+            break;
+        }
+        case SETTINGS_PAGE_MEDIA_KEYS_FAILED:
+            n = add_row(rows, n, max, note_row(state->media_failure));
+            n = add_row(rows, n, max, action_row("OK", SETTINGS_ACTION_MEDIA_KEYS_OK, true));
             break;
     }
     return n < max ? n : max;
@@ -2728,6 +2776,7 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
     SettingsRow *row = top->cursor >= 0 && top->cursor < count ? &rows[top->cursor] : NULL;
     bool failure_page = top->page == SETTINGS_PAGE_SAVE_FAILED;
     bool restart_page = top->page == SETTINGS_PAGE_RESTART;   // Saved already: Back is No
+    bool prompt_page = top->page == SETTINGS_PAGE_MEDIA_KEYS; // Opened at start: Back is Not now
 
     switch (command) {
         case SETTINGS_UP:
@@ -2906,13 +2955,29 @@ SettingsEvent settings_command(SettingsState *state, SettingsCommand command)
                 event.kind = SETTINGS_EVENT_RESTART;
             else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_NO_RESTART)
                 event.kind = SETTINGS_EVENT_CLOSE_SAVED;
+            else if (row->kind == SETTINGS_ROW_ACTION &&
+                     (row->action == SETTINGS_ACTION_MEDIA_KEYS_OFF || row->action == SETTINGS_ACTION_MEDIA_KEYS_RESTORE)) {
+                if (!row->enabled)
+                    break;   // Grayed: its reason is on show
+                // The screen saves and changes the shortcuts itself: no setting changes here
+                event.kind = row->action == SETTINGS_ACTION_MEDIA_KEYS_OFF ? SETTINGS_EVENT_MEDIA_KEYS_OFF
+                                                                           : SETTINGS_EVENT_MEDIA_KEYS_RESTORE;
+            }
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_MEDIA_KEYS_NEVER)
+                event.kind = SETTINGS_EVENT_MEDIA_KEYS_NEVER;
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_MEDIA_KEYS_NOT_NOW)
+                event.kind = SETTINGS_EVENT_CLOSE;
+            else if (row->kind == SETTINGS_ROW_ACTION && row->action == SETTINGS_ACTION_MEDIA_KEYS_OK) {
+                state->depth--;
+                event.kind = SETTINGS_EVENT_MOVED;
+            }
             break;
         case SETTINGS_BACK:
             if (restart_page) {
                 event.kind = SETTINGS_EVENT_CLOSE_SAVED;
                 break;
             }
-            if (state->depth == 0) {
+            if (state->depth == 0 || prompt_page) {
                 event.kind = SETTINGS_EVENT_CLOSE;
                 break;
             }
@@ -3038,6 +3103,47 @@ void settings_show_restart(SettingsState *state, const char *names)
     push_page(state, SETTINGS_PAGE_RESTART, -1);
 }
 
+// A function to give the model the desktop's media-key shortcuts, which the Controls row and the Media keys
+// pages show; the screen gives them again after it changes them
+void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved)
+{
+    state->media.desktop = desktop;
+    state->media.holds = holds;
+    state->media.saved = saved;
+    fix_cursor(state);
+}
+
+// A function to open settings onto the Media keys prompt, as start does while the desktop holds the keys: the
+// page replaces the ones open, with the cursor on Turn them off, and Back is Not now, which closes settings
+void settings_show_media_keys(SettingsState *state)
+{
+    if (state->media.desktop == MEDIAKEYS_NONE)
+        return;
+    state->depth = 0;
+    push_page(state, SETTINGS_PAGE_MEDIA_KEYS, -1);
+}
+
+// A function to tell whether the prompt settings_show_media_keys() opened is open: it is the only way to
+// that page, which sits right over the top page, on show or under its failure page
+bool settings_media_keys_prompt_open(const SettingsState *state)
+{
+    return state->depth >= 1 && state->stack[1].page == SETTINGS_PAGE_MEDIA_KEYS;
+}
+
+// A function to show why the desktop's shortcuts could not be changed, over the page that tried, with OK
+void settings_show_media_keys_failed(SettingsState *state, const char *why)
+{
+    const char *name = mediakeys_desktop_short_name(state->media.desktop);
+    if (name == NULL)
+        return;
+    snprintf(state->media_failure, sizeof(state->media_failure), "Couldn't change %s's shortcuts: %s. Nothing was changed.",
+             name, why);
+    if (state->stack[state->depth].page != SETTINGS_PAGE_MEDIA_KEYS_FAILED)
+        push_page(state, SETTINGS_PAGE_MEDIA_KEYS_FAILED, -1);
+    else
+        fix_cursor(state);
+}
+
 // A function to get the cursor on the page on show
 int settings_cursor(const SettingsState *state)
 {
@@ -3086,6 +3192,9 @@ void settings_path(const SettingsState *state, char *out, size_t size)
             case SETTINGS_PAGE_SPECIAL: name = "Special"; break;
             case SETTINGS_PAGE_REMOVE_MENU: name = "Remove?"; break;
             case SETTINGS_PAGE_MOVE_TO: name = "Move to"; break;
+            case SETTINGS_PAGE_MEDIA_KEYS: name = "Media keys"; break;
+            case SETTINGS_PAGE_DESKTOP_KEYS: name = "Desktop media keys"; break;
+            case SETTINGS_PAGE_MEDIA_KEYS_FAILED: name = "Couldn't change shortcuts"; break;
             case SETTINGS_PAGE_TOP: break;
         }
         size_t used = strlen(out);
