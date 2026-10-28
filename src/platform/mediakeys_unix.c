@@ -195,10 +195,16 @@ static bool session_bus_known(void)
     return written > 0 && (size_t) written < sizeof(socket_path) && access(socket_path, F_OK) == 0;
 }
 
+// tests/test_mediakeys_unix.c, which includes this file, defines this to count the connections tried
+#ifndef PLASMA_CONNECT_TRIED
+#define PLASMA_CONNECT_TRIED()
+#endif
+
 // A function to open a private connection to the session bus, shared with nothing else in the process, which
 // never ends the process when the bus goes away; NULL, with why, when there is none
 static DBusConnection *plasma_connect(char *why, size_t whycap)
 {
+    PLASMA_CONNECT_TRIED();
     if (!session_bus_known()) {
         say(why, whycap, "there is no session bus");
         return NULL;

@@ -3,9 +3,12 @@
 // a non-zero exit, a missing program, output too long, a signal, the kill at the timeout), kglobalaccel's
 // a(ai) marshaling without a bus, and no session bus at all. GNOME runs against a fake gsettings the test
 // writes and puts first on the PATH: detection by XDG_CURRENT_DESKTOP, read, clear, write, reset, a clear
-// that fails partway (the failed key put back too, even when it took effect), and a hung gsettings. KDE
-// Plasma is never detected without its XDG_CURRENT_DESKTOP name, and with it but no bus there is none. Then
-// every STREAMFLEX_TEST_MEDIAKEYS mode of the seam. Linux only.
+// that fails partway (the failed key put back too, even when it took effect), and a hung gsettings. The
+// session bus is tried for KDE Plasma only when XDG_CURRENT_DESKTOP names KDE (counted through the backend's
+// PLASMA_CONNECT_TRIED hook), and with no bus there is no desktop. Then every STREAMFLEX_TEST_MEDIAKEYS mode
+// of the seam. Linux only.
+static int connects_tried = 0;   // Each plasma_connect(), counted through the backend's hook
+#define PLASMA_CONNECT_TRIED() (connects_tried++)
 #include "platform/mediakeys_unix.c"
 #include <sys/stat.h>
 #include "check.h"
@@ -247,6 +250,70 @@ static void test_marshaling(void)
     dbus_message_unref(reply);
 }
 
+// A function to tell whether XDG_CURRENT_DESKTOP, set to value (NULL: unset), names a desktop
+static bool names(const char *value, const char *desktop)
+{
+    if (value == NULL)
+        unsetenv("XDG_CURRENT_DESKTOP");
+    else
+        setenv("XDG_CURRENT_DESKTOP", value, 1);
+    return xdg_names(desktop);
+}
+
+// A function to test xdg_names(): one ':'-separated name equal to the desktop's, in any case
+static void test_xdg_names(void)
+{
+    CHECK(names("KDE", "KDE"));
+    CHECK(names("kde", "KDE"));
+    CHECK(names("ubuntu:KDE", "KDE"));
+    CHECK(names("KDE:GNOME", "KDE"));
+    CHECK(!names("KDEX", "KDE"));
+    CHECK(!names("XKDE", "KDE"));
+    CHECK(!names("", "KDE"));
+    CHECK(!names(NULL, "KDE"));
+    CHECK(!names("GNOME", "KDE"));
+    CHECK(!names("ubuntu:KDEX:", "KDE"));
+
+    CHECK(names("GNOME", "GNOME"));
+    CHECK(names("gnome", "GNOME"));
+    CHECK(names("ubuntu:GNOME", "GNOME"));
+    CHECK(names("KDE:GNOME", "GNOME"));
+    CHECK(!names("GNOMEX", "GNOME"));
+    CHECK(!names("GNOME-Classic", "GNOME"));
+    CHECK(!names("XGNOME", "GNOME"));
+    CHECK(!names("", "GNOME"));
+    CHECK(!names(NULL, "GNOME"));
+    CHECK(!names("KDE", "GNOME"));
+    unsetenv("XDG_CURRENT_DESKTOP");
+}
+
+// A function to test that XDG_CURRENT_DESKTOP decides whether the session bus is tried for Plasma at all:
+// with a bus address set, under XFCE, GNOME or none it is not, and under KDE it is
+static void test_plasma_gate(void)
+{
+    char why[300];
+    MediaKeysState state;
+    reset_store();
+    setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/streamflex-bus", 1);
+    const char *const untried[] = { "XFCE", "GNOME", "KDEX", NULL };
+    for (int i = 0; i < 4; i++) {
+        names(untried[i], "KDE");
+        connects_tried = 0;
+        CHECK(mediakeys_read(&state, why, sizeof(why)));
+        CHECK_INT(connects_tried, 0);
+    }
+    const char *const tried[] = { "KDE", "kde", "ubuntu:KDE" };
+    for (int i = 0; i < 3; i++) {
+        names(tried[i], "KDE");
+        connects_tried = 0;
+        CHECK(mediakeys_read(&state, why, sizeof(why)));
+        CHECK_INT(connects_tried, 1);
+        CHECK_INT(state.desktop, MEDIAKEYS_NONE);   // The bus is not there
+    }
+    unsetenv("DBUS_SESSION_BUS_ADDRESS");
+    unsetenv("XDG_CURRENT_DESKTOP");
+}
+
 // A function to test which desktop is found: Plasma only under its XDG_CURRENT_DESKTOP name and with a
 // bus, GNOME only under its own name and with its schema
 static void test_detection(void)
@@ -484,6 +551,8 @@ int main(void)
     }
     test_run_capture();
     test_marshaling();
+    test_xdg_names();
+    test_plasma_gate();
     test_detection();
     test_gnome();
     test_partial_clear();
