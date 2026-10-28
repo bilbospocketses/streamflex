@@ -14,7 +14,7 @@ FROM mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c
 RUN dnf install -y --setopt=install_weak_deps=False \
       gcc make cmake pkgconf-pkg-config file git tar gawk findutils diffutils \
       libasan libubsan \
-      SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel \
+      SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel dbus-devel \
       xorg-x11-server-Xvfb xdotool setxkbmap xwd xrandr mesa-dri-drivers mesa-vulkan-drivers vulkan-loader \
       google-noto-sans-cjk-vf-fonts google-noto-color-emoji-fonts weston xkeyboard-config python3 util-linux shadow-utils \
  && dnf clean all \

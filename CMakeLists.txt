@@ -44,10 +44,12 @@ endif ()
 # Import settings
 include(${PROJECT_SOURCE_DIR}/config/config_settings.cmake)
 
-# Find dependencies - Linux: inih through pkg-config, and fontconfig, which finds the fallback fonts
+# Find dependencies - Linux: inih and libdbus-1 (KDE Plasma's media-key shortcuts) through pkg-config, and
+# fontconfig, which finds the fallback fonts
 if (UNIX)
   find_package(PkgConfig MODULE REQUIRED)
   pkg_check_modules(INIH REQUIRED IMPORTED_TARGET inih)
+  pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
   find_package(Fontconfig REQUIRED)
 endif ()
 

@@ -208,7 +208,7 @@ jobs:
           if [[ "${{matrix.config.name}}" == "Debian" ]]; then
             bash .github/scripts/stall-watch.sh --name "apt update" -- apt update
             bash .github/scripts/stall-watch.sh --name "apt install" -- \
-              apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
+              apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev libdbus-1-dev
           fi
 
       - name: Build
@@ -272,7 +272,7 @@ jobs:
         run: |
           bash .github/scripts/stall-watch.sh --name "apt update" -- apt update
           bash .github/scripts/stall-watch.sh --name "apt install" -- \
-            apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
+            apt install -y build-essential file git cmake pkg-config libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev libdbus-1-dev
 
       - name: Build
         run: |
@@ -336,7 +336,7 @@ jobs:
       - name: Install dependencies
         run: |
           bash .ci-scripts/.github/scripts/stall-watch.sh --name "pacman -Syu" -- \
-            pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih
+            pacman -Syu --noconfirm --needed base-devel git cmake sdl3 sdl3_image sdl3_ttf fontconfig libinih dbus
 
       - name: Checkout Git repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -388,7 +388,7 @@ jobs:
         run: |
           bash .github/scripts/stall-watch.sh --name "dnf install" -- \
             dnf install -y --repo=fedora --setopt=install_weak_deps=False \
-            gcc make cmake pkgconf-pkg-config binutils SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel
+            gcc make cmake pkgconf-pkg-config binutils SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel dbus-devel
 
       - name: Build
         run: |
