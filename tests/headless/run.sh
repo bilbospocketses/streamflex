@@ -119,7 +119,7 @@ tar -C /src --exclude=./build --exclude=./.git --exclude=./headless-out --exclud
 # is the mean of the four rest passes at bc8bd30, on 2026-10-14 (38 to 40 s each). The menu-editing
 # checks' (80-menus-live.sh to 87-menus-log.sh) are the mean of the four passes in CI's build.yml run
 # 39162761021 at 2acc058, on 2026-10-18 (each file's SHARD BEGIN to SHARD END, by the job log's times).
-# 68-media-keys.sh's is an estimate from its runs (twenty-two runs, about 4 s each to start and stop,
+# 68-media-keys.sh's is an estimate from its runs (twenty-three runs, about 4 s each to start and stop,
 # and about 160 keys, each waited on for its frame and a second more under ASan), until a set measures it.
 declare -A shard_seconds=(
     [10-grid.sh]=10 [15-home.sh]=2 [20-refresh.sh]=1 [25-menus.sh]=2 [30-backgrounds.sh]=20
@@ -132,7 +132,7 @@ declare -A shard_seconds=(
     [60-settings-background.sh]=145 [60-settings-background-timing.sh]=66 [60-timing.sh]=38
     [62-settings-bindings.sh]=658 [62-settings-bindings-timing.sh]=202 [62-settings-bindings-pad-timing.sh]=209
     [63-settings-mappings.sh]=70 [64-settings-restart.sh]=216 [65-settings-reasons.sh]=49
-    [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6 [68-media-keys.sh]=325
+    [66-pad-power.sh]=45 [67-wayland.sh]=20 [67-wayland-timing.sh]=6 [68-media-keys.sh]=335
     [70-chroma.sh]=3 [72-fallback-fonts.sh]=40 [80-menus-live.sh]=47 [84-keyboard.sh]=543
     [82-tiles.sh]=463 [81-apps.sh]=103 [83-move.sh]=158 [85-icons.sh]=109 [86-hold-ok.sh]=14 [86-hold-ok-timing.sh]=87 [87-menus-log.sh]=25
 )

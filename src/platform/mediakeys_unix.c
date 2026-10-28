@@ -540,7 +540,7 @@ static bool open_desktop(MediaKeysDesktop desktop, DBusConnection **connection, 
 // desktop: its first line plasma, gnome or none; then each key's value text, a line each, in
 // mediakeys_key_name()'s order; then any of fail=read, fail=clear, fail=clear-second (the second key fails
 // once the first is cleared), fail=write, fail=write-second (the second key fails once the first is set),
-// fail=put-back (with write-second, the first key is not put back) and fail=defaults. Every change rewrites
+// fail=put-back (with clear-second or write-second, the first key is not put back) and fail=defaults. Every change rewrites
 // the whole file, its fail= lines kept
 #define FAKE_LINE_MAX 1024
 #define FAKE_FAILS_MAX 8
@@ -658,8 +658,10 @@ static bool fake_read(MediaKeysState *out, char *why, size_t whycap)
 
 // A function to clear the keys in the file: empty (Plasma) or @as [] (GNOME), as each desktop reads back. With
 // fail=clear-second, the first key is cleared, then it and the second are put back from before, as
-// mediakeys_clear() does, and the clear fails
-static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, char *why, size_t whycap)
+// mediakeys_clear() does, and the clear fails; with fail=put-back too, the first key stays cleared and
+// *left_changed says so
+static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, bool *left_changed, char *why,
+                       size_t whycap)
 {
     FakeDesktop fake;
     if (!fake_begin(&fake, desktop, "clear", why, whycap))
@@ -667,10 +669,18 @@ static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, c
     const char *cleared = desktop == MEDIAKEYS_PLASMA ? "" : "@as []";
     for (int i = 0; i < mediakeys_key_count(desktop); i++) {
         if (i == 1 && fake_fails(&fake, "clear-second")) {
-            for (int k = 0; k <= i; k++)
+            bool kept = !fake_fails(&fake, "put-back");
+            for (int k = 0; kept && k <= i; k++)
                 copy_string(fake.state.values[k], before->values[k], MEDIAKEYS_VALUE_MAX);
-            if (fake_save(&fake, why, whycap))
+            if (!fake_save(&fake, why, whycap))
+                return false;
+            if (kept)
                 say(why, whycap, "the test file fails clear-second");
+            else
+                say(why, whycap, "the test file fails clear-second; %s could not be put back",
+                    mediakeys_key_name(desktop, 0));
+            if (left_changed != NULL)
+                *left_changed = !kept;
             return false;
         }
         copy_string(fake.state.values[i], cleared, MEDIAKEYS_VALUE_MAX);
@@ -766,16 +776,19 @@ bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap)
 }
 
 // A function to clear every one of the desktop's media keys. When one fails, it and every key before it are
-// put back from before first; why then also says when one of them could not be
-bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, char *why, size_t whycap)
+// put back from before first; why then also says when one of them could not be, and *left_changed is true
+bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, bool *left_changed, char *why,
+                     size_t whycap)
 {
+    if (left_changed != NULL)
+        *left_changed = false;
     if (before == NULL || before->desktop != desktop) {
         say(why, whycap, "the shortcuts read before are another desktop's");
         return false;
     }
 #ifdef STREAMFLEX_TEST_HOOKS
     if (fake_path() != NULL)
-        return fake_clear(desktop, before, why, whycap);
+        return fake_clear(desktop, before, left_changed, why, whycap);
 #endif
     DBusConnection *connection;
     if (!open_desktop(desktop, &connection, why, whycap))
@@ -786,8 +799,8 @@ bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, cha
         if (!set_key(connection, desktop, i, cleared, why, whycap))
             failed = i;
     }
-    if (failed >= 0)
-        put_back(connection, desktop, before, failed, why, whycap);
+    if (failed >= 0 && !put_back(connection, desktop, before, failed, why, whycap) && left_changed != NULL)
+        *left_changed = true;
     if (connection != NULL)
         plasma_disconnect(connection);
     return failed < 0;

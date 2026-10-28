@@ -342,7 +342,7 @@ static void test_detection(void)
     CHECK_INT(state.desktop, MEDIAKEYS_NONE);
     why[0] = '\0';
     MediaKeysState plasma = { .desktop = MEDIAKEYS_PLASMA };
-    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &plasma, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &plasma, NULL, why, sizeof(why)));
     CHECK(strstr(why, "the session bus did not answer: ") == why);
     unsetenv("DBUS_SESSION_BUS_ADDRESS");
 
@@ -380,7 +380,7 @@ static void test_gnome(void)
     reset_store();
     CHECK(mediakeys_read(&before, why, sizeof(why)));
 
-    CHECK(mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, why, sizeof(why)));
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     for (int i = 0; i < 4; i++)
         CHECK_STR(state.values[i], "@as []");
@@ -415,16 +415,20 @@ static void test_gnome(void)
 
     // A clear refused for another desktop's values
     MediaKeysState plasma = { .desktop = MEDIAKEYS_PLASMA };
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &plasma, why, sizeof(why)));
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, NULL, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &plasma, NULL, why, sizeof(why)));
+    bool left_changed = true;                             // A refused clear changed nothing
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, NULL, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
     unsetenv("XDG_CURRENT_DESKTOP");
 }
 
 // A function to test a clear that fails partway: every key up to the failed one is put back, the failed
-// one included when its set took effect before it failed, and a put-back that fails is named
+// one included when its set took effect before it failed, and a put-back that fails is named and sets
+// left_changed
 static void test_partial_clear(void)
 {
     char why[300];
+    bool left_changed;
     MediaKeysState before, state;
     setenv("XDG_CURRENT_DESKTOP", "GNOME", 1);
 
@@ -433,7 +437,9 @@ static void test_partial_clear(void)
     CHECK(mediakeys_read(&before, why, sizeof(why)));
     write_text(in_store("fail-set-previous-first"), "");
     why[0] = '\0';
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    left_changed = true;
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
     CHECK_STR(why, "could not set previous: gsettings exited with status 1");
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK(memcmp(state.values, before.values, sizeof(state.values)) == 0);
@@ -442,7 +448,7 @@ static void test_partial_clear(void)
     reset_store();
     write_text(in_store("late-set-previous"), "");
     why[0] = '\0';
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, why, sizeof(why)));
     CHECK_STR(why, "could not set previous: gsettings exited with status 1");
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK_STR(state.values[0], VALUE_NEXT);
@@ -452,7 +458,7 @@ static void test_partial_clear(void)
     // The first key fails after it was written: it is put back
     reset_store();
     write_text(in_store("late-set-next"), "");
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, why, sizeof(why)));
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK_STR(state.values[0], VALUE_NEXT);
     CHECK_STR(state.values[1], VALUE_PREVIOUS);
@@ -462,18 +468,23 @@ static void test_partial_clear(void)
     write_text(in_store("fail-set-previous"), "");
     write_text(in_store("fail-set-next-second"), "");
     why[0] = '\0';
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, &left_changed, why, sizeof(why)));
+    CHECK(left_changed);
     CHECK_STR(why, "could not set previous: gsettings exited with status 1; next could not be put back; "
                    "previous could not be put back");
+    CHECK(mediakeys_read(&state, why, sizeof(why)));
+    CHECK_STR(state.values[0], "@as []");                 // next stays cleared
+    CHECK_STR(state.values[1], VALUE_PREVIOUS);
 
     // With no room for why, a failed put-back still writes nothing
     reset_store();
     write_text(in_store("fail-set-previous"), "");
     write_text(in_store("fail-set-next-second"), "");
     char untouched[4] = "abc";
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, untouched, 0));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, &left_changed, untouched, 0));
+    CHECK(left_changed);
     CHECK_STR(untouched, "abc");
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, 0));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, NULL, 0));
     reset_store();
     unsetenv("XDG_CURRENT_DESKTOP");
 }
@@ -576,7 +587,7 @@ static void test_seam(void)
     CHECK(mediakeys_read(&before, why, sizeof(why)));
     CHECK_INT(before.desktop, MEDIAKEYS_PLASMA);
     CHECK_STR(before.values[1], "16777346,0,0,0|33554432,0,0,0");
-    CHECK(mediakeys_clear(MEDIAKEYS_PLASMA, &before, why, sizeof(why)));
+    CHECK(mediakeys_clear(MEDIAKEYS_PLASMA, &before, NULL, why, sizeof(why)));
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "plasma\n\n\n");
     CHECK(mediakeys_read(&state, why, sizeof(why)));
@@ -591,14 +602,25 @@ static void test_seam(void)
     // clear-second: the first key cleared, both put back, the file as it was
     write_text(file, "plasma\n16777347,0,0,0\n16777346,0,0,0\nfail=clear-second\n");
     CHECK(mediakeys_read(&before, why, sizeof(why)));
-    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &before, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &before, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file fails clear-second");
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "plasma\n16777347,0,0,0\n16777346,0,0,0\nfail=clear-second\n");
+    bool left_changed = true;
+    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &before, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+
+    // clear-second with put-back: the first key stays cleared, and left_changed says so
+    write_text(file, "plasma\n16777347,0,0,0\n16777346,0,0,0\nfail=clear-second\nfail=put-back\n");
+    CHECK(!mediakeys_clear(MEDIAKEYS_PLASMA, &before, &left_changed, why, sizeof(why)));
+    CHECK(left_changed);
+    CHECK_STR(why, "the test file fails clear-second; nextmedia could not be put back");
+    read_text(file, text, sizeof(text));
+    CHECK_STR(text, "plasma\n\n16777346,0,0,0\nfail=clear-second\nfail=put-back\n");
 
     // write-second: the first key set, both put back, the file as it was; with put-back too, the first stays
     // set and left_changed says so
-    bool left_changed = true;
+    left_changed = true;
     write_text(file, "plasma\n\n\nfail=write-second\n");
     CHECK(!mediakeys_write(&before, &left_changed, why, sizeof(why)));
     CHECK(!left_changed);
@@ -616,7 +638,7 @@ static void test_seam(void)
     CHECK(mediakeys_read(&before, why, sizeof(why)));
     CHECK_INT(before.desktop, MEDIAKEYS_GNOME);
     CHECK_STR(before.values[3], "@as []");
-    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file fails clear");
     CHECK(!mediakeys_write(&before, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file fails write");
@@ -626,7 +648,7 @@ static void test_seam(void)
 
     write_text(file, "gnome\n['XF86AudioNext']\n['XF86AudioPrev']\n['']\n@as []\n");
     CHECK(mediakeys_read(&before, why, sizeof(why)));
-    CHECK(mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
+    CHECK(mediakeys_clear(MEDIAKEYS_GNOME, &before, NULL, why, sizeof(why)));
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "gnome\n@as []\n@as []\n@as []\n@as []\n");
 

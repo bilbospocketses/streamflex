@@ -1341,12 +1341,15 @@ static bool forget_media_keys(ConfigSaveResult *result)
 
 // A function to turn the desktop's media keys off, saving them first: they are read, saved to [Desktop Keys]
 // (a save that fails changes nothing, and its Couldn't save page's Try again comes back here), then cleared.
-// A clear that fails has put back what it cleared, and the saved values are removed again. From the prompt
-// at start, settings close once the keys are off; from Controls they stay, showing what the desktop holds.
+// A clear that fails has put back what it cleared, and the saved values are removed again; when a key could
+// not be put back, the log and the failure page say some may have changed, and the saved values stay, the
+// only way back for a key still cleared. From the prompt at start, settings close once the keys are off; from
+// Controls they stay, showing what the desktop holds.
 static void media_keys_off(void)
 {
     const char *name = media_short_name(media_desktop);
     MediaKeysState before;
+    bool changed = false;
     char why[MEDIA_WHY_MAX];
     if (!read_media_keys(&before, why, sizeof(why))) {
         settings_show_media_keys_failed(model, why, false);
@@ -1368,13 +1371,20 @@ static void media_keys_off(void)
     }
     config.media_keys_saved = before;
     log_debug("Media keys: saved %s's shortcuts to [%s]", name, MEDIAKEYS_SECTION);
-    if (!mediakeys_clear(media_desktop, &before, why, sizeof(why))) {
-        log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
-        if (!forget_media_keys(&result))
-            log_error("Media keys: the saved shortcuts stay in [%s]: couldn't save to %s: %s", MEDIAKEYS_SECTION,
-                      result.path, result.why);
+    if (!mediakeys_clear(media_desktop, &before, &changed, why, sizeof(why))) {
+        if (changed) {
+            log_error("Media keys: could not change %s's shortcuts (%s), so some of them may have changed",
+                      name, why);
+            log_debug("Media keys: the saved shortcuts stay in [%s], for Give them back", MEDIAKEYS_SECTION);
+        }
+        else {
+            log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
+            if (!forget_media_keys(&result))
+                log_error("Media keys: the saved shortcuts stay in [%s]: couldn't save to %s: %s",
+                          MEDIAKEYS_SECTION, result.path, result.why);
+        }
         refresh_media_keys(true);
-        settings_show_media_keys_failed(model, why, false);
+        settings_show_media_keys_failed(model, why, changed);
         return;
     }
     log_debug("Media keys: turned off %s's next- and previous-track shortcuts", name);

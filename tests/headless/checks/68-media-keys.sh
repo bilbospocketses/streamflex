@@ -172,6 +172,28 @@ f68_nothing_saved "$cfg" && f68_desktop_is "${F68_PLASMA[@]}" fail=clear-second 
 result "media keys: a clear that fails halfway leaves the desktop as it started (exit $(cat "$out/f68-failsecond.code"))" $ok
 f68_show f68-failsecond
 
+# The same, but the first key cannot be put back: the log and the failure page say some of the shortcuts may
+# have changed, never that nothing was, and the saved shortcuts stay in [Desktop Keys], the only way back for
+# the key left cleared; OK goes back to the prompt, whose Not now closes settings
+f68_desktop "${F68_PLASMA[@]}" fail=clear-second fail=put-back
+cfg=$(f68_config f68-clearputback)
+STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg WAIT_FOR=$F68_PROMPT UNTIL='Settings closed' \
+    run_keys f68-clearputback Return Return Down Return
+log=$out/f68-clearputback.log
+section=$(f68_section "$cfg")
+ok=1
+f68_desktop_is plasma '' 16777346,0,0,0 fail=clear-second fail=put-back \
+    && grep -qx 'Desktop=plasma' <<< "$section" && grep -qx 'PlasmaNext=16777347,0,0,0' <<< "$section" \
+    && grep -qx 'PlasmaPrevious=16777346,0,0,0' <<< "$section" \
+    && grep -qxF "Media keys: could not change Plasma's shortcuts (the test file fails clear-second; nextmedia could not be put back), so some of them may have changed" "$log" \
+    && grep -qxF 'Media keys: the saved shortcuts stay in [Desktop Keys], for Give them back' "$log" \
+    && grep -qxF "Settings: the note says Couldn't change Plasma's shortcuts: the test file fails clear-second; nextmedia could not be put back. Some of them may have changed." "$log" \
+    && grep -qxF "$F68_FAILED" "$log" && ! grep -qiF 'nothing was changed' "$log" \
+    && ! grep -q '^Media keys: turned off' "$log" && ran_clean f68-clearputback && ok=0
+result "media keys: a clear whose put-back fails says so, and keeps the saved shortcuts (exit $(cat "$out/f68-clearputback.code"))" $ok
+f68_show f68-clearputback
+sed 's/^/      /' <<< "$section"
+
 # A save that fails (a config the launcher cannot write) clears nothing and shows the Couldn't save page.
 # Its Try again, once the config can be written, turns the keys off: it makes the media-key choice again,
 # not the settings' own save (which would find nothing changed and only close)
