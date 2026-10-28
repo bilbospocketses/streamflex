@@ -962,9 +962,11 @@ struct SettingsState {
         MediaKeysDesktop desktop;   // MEDIAKEYS_NONE: no Controls row and no pages
         bool holds;              // It holds next or previous track
         bool saved;              // [Desktop Keys] holds its shortcuts, saved before they were turned off
+        bool unreadable;         // They could not be read: the Controls row is grayed, and no page opens
     } media;
     char media_note[400];        // The Media keys prompt's note
     char media_why[96];          // Why the Desktop media keys page's Give them back is grayed
+    char media_unread[320];      // Why the Controls row is grayed while the shortcuts could not be read
     char media_failure[640];     // The page's note when the desktop's shortcuts could not be changed
 };
 
@@ -1681,11 +1683,14 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             }
             n = add_row(rows, n, max, link_row("Gamepad", on_off(state, SET_ID_GAMEPAD_ENABLED), SETTINGS_PAGE_GAMEPAD, -1));
 #ifndef _WIN32
-            // KDE Plasma and GNOME can hold the media keys; on Windows nothing takes them, so there is no row
+            // KDE Plasma and GNOME can hold the media keys; on Windows nothing takes them, so there is no row.
+            // Shortcuts that could not be read leave the row grayed, saying why
             if (state->media.desktop != MEDIAKEYS_NONE)
-                n = add_row(rows, n, max, link_row("Desktop media keys", state->media.holds ? "On"
-                                                   : state->media.saved ? "Off for StreamFlex" : "Off",
-                                                   SETTINGS_PAGE_DESKTOP_KEYS, -1));
+                n = add_row(rows, n, max, grayed(link_row("Desktop media keys", state->media.unreadable ? "Unknown"
+                                                          : state->media.holds ? "On"
+                                                          : state->media.saved ? "Off for StreamFlex" : "Off",
+                                                          SETTINGS_PAGE_DESKTOP_KEYS, -1),
+                                                 state->media.unreadable, state->media_unread));
 #endif
             break;
         case SETTINGS_PAGE_GAMEPAD: {
@@ -3110,6 +3115,21 @@ void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, boo
     state->media.desktop = desktop;
     state->media.holds = holds;
     state->media.saved = saved;
+    state->media.unreadable = false;
+    fix_cursor(state);
+}
+
+// A function to give the model a desktop whose shortcuts could not be read as settings opened: the Controls
+// row shows grayed, with why, and opens nothing
+void settings_set_media_keys_unreadable(SettingsState *state, MediaKeysDesktop desktop, const char *why)
+{
+    const char *name = mediakeys_desktop_short_name(desktop);
+    snprintf(state->media_unread, sizeof(state->media_unread), "Couldn't read %s's shortcuts: %s",
+             name != NULL ? name : "the desktop", why);
+    state->media.desktop = desktop;
+    state->media.holds = false;
+    state->media.saved = false;
+    state->media.unreadable = true;
     fix_cursor(state);
 }
 
@@ -3117,7 +3137,7 @@ void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, boo
 // page replaces the ones open, with the cursor on Turn them off, and Back is Not now, which closes settings
 void settings_show_media_keys(SettingsState *state)
 {
-    if (state->media.desktop == MEDIAKEYS_NONE)
+    if (state->media.desktop == MEDIAKEYS_NONE || state->media.unreadable)
         return;
     state->depth = 0;
     push_page(state, SETTINGS_PAGE_MEDIA_KEYS, -1);
@@ -3131,14 +3151,18 @@ bool settings_media_keys_prompt_open(const SettingsState *state)
 }
 
 // A function to show why the desktop's shortcuts could not be changed, over the page that tried, with OK;
-// nothing with no desktop set, which has no name to put in the note
-void settings_show_media_keys_failed(SettingsState *state, const char *why)
+// nothing with no desktop set, which has no name to put in the note. `changed`: a key could not be put back
+void settings_show_media_keys_failed(SettingsState *state, const char *why, bool changed)
 {
     const char *name = mediakeys_desktop_short_name(state->media.desktop);
     if (name == NULL)
         return;
-    snprintf(state->media_failure, sizeof(state->media_failure), "Couldn't change %s's shortcuts: %s. Nothing was changed.",
-             name, why);
+    if (changed)
+        snprintf(state->media_failure, sizeof(state->media_failure),
+                 "Couldn't change %s's shortcuts: %s. Some of them may have changed.", name, why);
+    else
+        snprintf(state->media_failure, sizeof(state->media_failure),
+                 "Couldn't change %s's shortcuts: %s. Nothing was changed.", name, why);
     if (state->stack[state->depth].page != SETTINGS_PAGE_MEDIA_KEYS_FAILED)
         push_page(state, SETTINGS_PAGE_MEDIA_KEYS_FAILED, -1);
     else

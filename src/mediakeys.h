@@ -13,6 +13,7 @@
 #define MEDIAKEYS_KEYS_MAX 4      // GNOME's four keys; Plasma has two
 #define MEDIAKEYS_VALUE_MAX 256   // The longest value text kept, with its terminator
 #define MEDIAKEYS_EDITS_MAX 7     // The most edits a builder below makes: Desktop and all six value keys
+#define MEDIAKEYS_PLASMA_SEQUENCES_MAX 16   // The most key sequences one Plasma key keeps, read or set
 
 #define MEDIAKEYS_SECTION "Desktop Keys"   // config.ini's section, which is never a menu
 #define MEDIAKEYS_KEY_ASK "Ask"            // "no" when the prompt is never to be shown; anything else asks
@@ -54,6 +55,10 @@ int mediakeys_plasma_parse(const char *text, int (*seqs)[4], int max);
 // Whether [Desktop Keys] can hold a value: no line break, no whitespace at either end, no ';' or '#' at its
 // start or after whitespace, and short enough for one config.ini line under the longest key
 bool mediakeys_value_safe(const char *value);
+// Whether a saved value is one the desktop can be given back: for Plasma, key sequences
+// mediakeys_plasma_parse() reads, at most MEDIAKEYS_PLASMA_SEQUENCES_MAX ("" is none); for GNOME, any text,
+// which gsettings judges as it sets it
+bool mediakeys_value_valid(MediaKeysDesktop desktop, const char *value);
 
 // The [Desktop Keys] edits for config_save_with(), each new key placed after the section's last (a missing
 // section is added at the end of the file), and how many; -1, with nothing made, when out has room for

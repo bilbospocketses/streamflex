@@ -989,7 +989,7 @@ KDE Plasma and GNOME use the next-track and previous-track keys for their own me
 - *Not now* changes nothing, and the prompt comes back at the next start.
 - *Don't ask again* saves `Ask=no` there, and changes nothing else.
 
-The settings screen's Controls page has a *Desktop media keys* row: *On* while the desktop holds either key, *Off for StreamFlex* while it holds neither and `[Desktop Keys]` keeps its shortcuts, and *Off* while it holds neither and nothing is saved. Its page has *Give them back to KDE Plasma* (or *to GNOME*), which gives the desktop the saved shortcuts, or its own defaults when none are saved, and then removes the saved ones; and *Turn them off*, as on the prompt. When a change fails, a *Couldn't change shortcuts* page says why, and nothing is changed.
+The settings screen's Controls page has a *Desktop media keys* row: *On* while the desktop holds either key, *Off for StreamFlex* while it holds neither and `[Desktop Keys]` keeps its shortcuts, and *Off* while it holds neither and nothing is saved. Its page has *Give them back to KDE Plasma* (or *to GNOME*), which gives the desktop the saved shortcuts, or its own defaults when none are saved, and then removes the saved ones; and *Turn them off*, as on the prompt. When a change fails, a *Couldn't change shortcuts* page says why, and nothing is changed: any shortcut already changed is put back first. In the rare case that *Give them back* cannot put one back, its page says that some of them may have changed. When the desktop does not answer as settings open, the row is grayed, and the reason shows under the preview.
 
 StreamFlex writes this section itself, to the file the settings screen saves to (on Linux, your own `~/.config/streamflex/config.ini` when the packaged config cannot be written), keeping the old file as `config.ini.bak`. On Windows nothing takes these keys: there is no prompt and no row, and the section is never read. After *Turn them off* on KDE Plasma it holds, for example:
 ```ini
@@ -1011,7 +1011,7 @@ KDE Plasma's saved shortcuts for next track and previous track: each key sequenc
 #### GnomeNext, GnomePrevious, GnomeNextStatic and GnomePreviousStatic
 GNOME's saved values of `next`, `previous`, `next-static` and `previous-static` in `org.gnome.settings-daemon.plugins.media-keys`, as `gsettings get` prints them, such as `['XF86AudioNext', '<Ctrl>XF86AudioNext']` or `@as []`.
 
-These value keys are StreamFlex's own record of the desktop's shortcuts, not settings to change. When one of the saved desktop's value keys is missing, or a hand edit leaves it a value StreamFlex would never write there (such as one with a `#` after a space), or `Desktop` names no desktop, the saved shortcuts count as nothing saved: the log says why, the row reads *Off* rather than *Off for StreamFlex*, and *Give them back* gives the desktop its defaults.
+These value keys are StreamFlex's own record of the desktop's shortcuts, not settings to change. When one of the saved desktop's value keys is missing, or a hand edit leaves it a value StreamFlex would never write there (such as one with a `#` after a space, or a KDE Plasma value that is not key sequences), or `Desktop` names no desktop, the saved shortcuts count as nothing saved: the log says why, the row reads *Off* rather than *Off for StreamFlex*, and *Give them back* gives the desktop its defaults.
 
 ## Transparent Backgrounds
 Transparent mode lets the desktop, or a program running behind StreamFlex, show through the background. Windows and Linux do it in different ways.

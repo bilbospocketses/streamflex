@@ -384,12 +384,14 @@ static void desktop_keys_line(const char *name, const char *value)
 
 // A function to make config.media_keys_saved from the [Desktop Keys] lines read: the named desktop's
 // values, or none when Desktop is absent or names no desktop, or when one of that desktop's keys has no
-// line or a value StreamFlex never saves, so a hand-edited save gives back the defaults rather than a part
-// of it. An empty value has a line: it is Plasma's "no key sequences"
+// line or a value StreamFlex never saves (one config.ini cannot hold, or a Plasma value that is not key
+// sequences, which the desktop would refuse), so a hand-edited save gives back the defaults rather than a
+// part of it. An empty value has a line: it is Plasma's "no key sequences"
 static void desktop_keys_finish(void)
 {
     MediaKeysDesktop desktop = desktop_keys_desktop;
     for (int i = 0; desktop != MEDIAKEYS_NONE && i < mediakeys_key_count(desktop); i++) {
+        const char *value = desktop_keys_read[desktop].values[i];
         if (!desktop_keys_seen[desktop][i]) {
             log_error("No %s value in [%s], so no saved %s shortcuts are read",
                 mediakeys_config_key(desktop, i), MEDIAKEYS_SECTION, mediakeys_desktop_name(desktop));
@@ -397,6 +399,11 @@ static void desktop_keys_finish(void)
         }
         else if (desktop_keys_unsafe[desktop][i])
             desktop = MEDIAKEYS_NONE;   // Its line said so in the log
+        else if (!mediakeys_value_valid(desktop, value)) {
+            log_error("Invalid %s value '%s' in [%s], so no saved %s shortcuts are read",
+                mediakeys_config_key(desktop, i), value, MEDIAKEYS_SECTION, mediakeys_desktop_name(desktop));
+            desktop = MEDIAKEYS_NONE;
+        }
     }
     memset(&config.media_keys_saved, 0, sizeof(config.media_keys_saved));
     if (desktop != MEDIAKEYS_NONE) {

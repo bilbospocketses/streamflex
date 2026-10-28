@@ -34,7 +34,6 @@ extern char **environ;
 #define KGLOBALACCEL_INTERFACE "org.kde.KGlobalAccel"
 #define KGLOBALACCEL_COMPONENT "mediacontrol"
 #define DBUS_TIMEOUT_MS 1000             // Every D-Bus call's reply timeout
-#define PLASMA_SEQUENCES_MAX 16          // More than a value's text can hold
 #define PLASMA_MEDIA_NEXT 16777347       // Qt::Key_MediaNext, the default when kglobalaccel gives none
 #define PLASMA_MEDIA_PREVIOUS 16777346   // Qt::Key_MediaPrevious
 
@@ -374,11 +373,11 @@ static int plasma_sequences(DBusMessage *reply, const char *action, int (*seqs)[
 static bool plasma_read_key(DBusConnection *connection, const char *action, char *value, size_t cap, char *why,
                             size_t whycap)
 {
-    int seqs[PLASMA_SEQUENCES_MAX][4];
+    int seqs[MEDIAKEYS_PLASMA_SEQUENCES_MAX][4];
     DBusMessage *reply = plasma_call(connection, "shortcutKeys", action, NULL, -1, why, whycap);
     if (reply == NULL)
         return false;
-    int count = plasma_sequences(reply, action, seqs, PLASMA_SEQUENCES_MAX, why, whycap);
+    int count = plasma_sequences(reply, action, seqs, MEDIAKEYS_PLASMA_SEQUENCES_MAX, why, whycap);
     dbus_message_unref(reply);
     if (count < 0)
         return false;
@@ -393,8 +392,8 @@ static bool plasma_read_key(DBusConnection *connection, const char *action, char
 static bool plasma_set_key(DBusConnection *connection, const char *action, const char *value, char *why,
                            size_t whycap)
 {
-    int seqs[PLASMA_SEQUENCES_MAX][4];
-    int count = mediakeys_plasma_parse(value, seqs, PLASMA_SEQUENCES_MAX);
+    int seqs[MEDIAKEYS_PLASMA_SEQUENCES_MAX][4];
+    int count = mediakeys_plasma_parse(value, seqs, MEDIAKEYS_PLASMA_SEQUENCES_MAX);
     if (count < 0) {
         say(why, whycap, "the saved value for %s is not key sequences", action);
         return false;
@@ -411,11 +410,11 @@ static bool plasma_set_key(DBusConnection *connection, const char *action, const
 static bool plasma_default_key(DBusConnection *connection, int i, char *why, size_t whycap)
 {
     const char *action = mediakeys_key_name(MEDIAKEYS_PLASMA, i);
-    int seqs[PLASMA_SEQUENCES_MAX][4];
+    int seqs[MEDIAKEYS_PLASMA_SEQUENCES_MAX][4];
     int count = -1;
     DBusMessage *reply = plasma_call(connection, "defaultShortcutKeys", action, NULL, -1, NULL, 0);
     if (reply != NULL) {
-        count = plasma_sequences(reply, action, seqs, PLASMA_SEQUENCES_MAX, NULL, 0);
+        count = plasma_sequences(reply, action, seqs, MEDIAKEYS_PLASMA_SEQUENCES_MAX, NULL, 0);
         dbus_message_unref(reply);
     }
     bool binds = false;
@@ -474,6 +473,53 @@ static bool set_key(DBusConnection *connection, MediaKeysDesktop desktop, int i,
     return gsettings("set", key, value, NULL, 0, why, whycap);
 }
 
+// A function to set one key of a desktop to its default: kglobalaccel's default shortcut, or gsettings reset,
+// the schema's own
+static bool default_key(DBusConnection *connection, MediaKeysDesktop desktop, int i, char *why, size_t whycap)
+{
+    if (desktop == MEDIAKEYS_PLASMA)
+        return plasma_default_key(connection, i, why, whycap);
+    return gsettings("reset", mediakeys_key_name(desktop, i), NULL, NULL, 0, why, whycap);
+}
+
+// A function to read each of a desktop's keys as value text, as mediakeys_read() does, through what
+// open_desktop() opened
+static bool read_keys(DBusConnection *connection, MediaKeysDesktop desktop, MediaKeysState *out, char *why,
+                      size_t whycap)
+{
+    memset(out, 0, sizeof(*out));
+    out->desktop = desktop;
+    bool read = true;
+    for (int i = 0; read && i < mediakeys_key_count(desktop); i++) {
+        const char *key = mediakeys_key_name(desktop, i);
+        if (desktop == MEDIAKEYS_PLASMA)
+            read = plasma_read_key(connection, key, out->values[i], MEDIAKEYS_VALUE_MAX, why, whycap);
+        else
+            read = gsettings("get", key, NULL, out->values[i], MEDIAKEYS_VALUE_MAX, why, whycap);
+    }
+    return read;
+}
+
+// A function to put a desktop's keys back from before after the change of key `failed` failed: the keys
+// before it were changed, and it may have been too (a D-Bus call that timed out was still sent, and gsettings
+// killed at its timeout may already have written). So every key up to it is put back, in order; putting back
+// a key that never changed is harmless. False when one could not be, which why then names after the failure
+static bool put_back(DBusConnection *connection, MediaKeysDesktop desktop, const MediaKeysState *before, int failed,
+                     char *why, size_t whycap)
+{
+    bool all = true;
+    for (int k = 0; k <= failed; k++) {
+        if (set_key(connection, desktop, k, before->values[k], NULL, 0))
+            continue;
+        all = false;
+        if (why != NULL && whycap > 0) {
+            size_t used = strlen(why);
+            say(why + used, whycap - used, "; %s could not be put back", mediakeys_key_name(desktop, k));
+        }
+    }
+    return all;
+}
+
 // A function to open what a desktop's calls need: Plasma's private bus connection (NULL for GNOME); false,
 // with why, when it cannot, or for no desktop
 static bool open_desktop(MediaKeysDesktop desktop, DBusConnection **connection, char *why, size_t whycap)
@@ -493,8 +539,9 @@ static bool open_desktop(MediaKeysDesktop desktop, DBusConnection **connection, 
 // Only the headless harness builds this. STREAMFLEX_TEST_MEDIAKEYS names a file that stands in for the
 // desktop: its first line plasma, gnome or none; then each key's value text, a line each, in
 // mediakeys_key_name()'s order; then any of fail=read, fail=clear, fail=clear-second (the second key fails
-// once the first is cleared), fail=write and fail=defaults. Every change rewrites the whole file, its fail=
-// lines kept
+// once the first is cleared), fail=write, fail=write-second (the second key fails once the first is set),
+// fail=put-back (with write-second, the first key is not put back) and fail=defaults. Every change rewrites
+// the whole file, its fail= lines kept
 #define FAKE_LINE_MAX 1024
 #define FAKE_FAILS_MAX 8
 #define FAKE_FAIL_MAX 32
@@ -631,14 +678,33 @@ static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, c
     return fake_save(&fake, why, whycap);
 }
 
-// A function to write saved values to the file
-static bool fake_write(const MediaKeysState *saved, char *why, size_t whycap)
+// A function to write saved values to the file. With fail=write-second, the first key is set, then it and
+// the second are put back from before, as mediakeys_write() does, and the write fails; with fail=put-back
+// too, the first key stays set and *left_changed says so
+static bool fake_write(const MediaKeysState *saved, bool *left_changed, char *why, size_t whycap)
 {
     FakeDesktop fake;
     if (!fake_begin(&fake, saved->desktop, "write", why, whycap))
         return false;
-    for (int i = 0; i < mediakeys_key_count(saved->desktop); i++)
+    MediaKeysState before = fake.state;
+    for (int i = 0; i < mediakeys_key_count(saved->desktop); i++) {
+        if (i == 1 && fake_fails(&fake, "write-second")) {
+            bool kept = !fake_fails(&fake, "put-back");
+            for (int k = 0; kept && k <= i; k++)
+                copy_string(fake.state.values[k], before.values[k], MEDIAKEYS_VALUE_MAX);
+            if (!fake_save(&fake, why, whycap))
+                return false;
+            if (kept)
+                say(why, whycap, "the test file fails write-second");
+            else
+                say(why, whycap, "the test file fails write-second; %s could not be put back",
+                    mediakeys_key_name(saved->desktop, 0));
+            if (left_changed != NULL)
+                *left_changed = !kept;
+            return false;
+        }
         copy_string(fake.state.values[i], saved->values[i], MEDIAKEYS_VALUE_MAX);
+    }
     return fake_save(&fake, why, whycap);
 }
 
@@ -720,58 +786,59 @@ bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, cha
         if (!set_key(connection, desktop, i, cleared, why, whycap))
             failed = i;
     }
-
-    // The keys before the one that failed were cleared, and that one may have been too: a D-Bus call that
-    // timed out was still sent, and gsettings killed at its timeout may already have written. So every key
-    // up to it is put back, in order; putting back a key that never changed is harmless
-    for (int k = 0; k <= failed; k++) {
-        if (!set_key(connection, desktop, k, before->values[k], NULL, 0) && why != NULL && whycap > 0) {
-            size_t used = strlen(why);
-            say(why + used, whycap - used, "; %s could not be put back", mediakeys_key_name(desktop, k));
-        }
-    }
+    if (failed >= 0)
+        put_back(connection, desktop, before, failed, why, whycap);
     if (connection != NULL)
         plasma_disconnect(connection);
     return failed < 0;
 }
 
-// A function to set each of the desktop's media keys back to a saved value
-bool mediakeys_write(const MediaKeysState *saved, char *why, size_t whycap)
+// A function to set each of the desktop's media keys, to `saved`'s values when given, else to its defaults.
+// They are read first, so that when one fails, it and every key before it are put back as they were: a read
+// that fails changes nothing, and *left_changed is true only when a put-back failed
+static bool change_keys(MediaKeysDesktop desktop, const MediaKeysState *saved, bool *left_changed, char *why,
+                        size_t whycap)
 {
-#ifdef STREAMFLEX_TEST_HOOKS
-    if (fake_path() != NULL)
-        return fake_write(saved, why, whycap);
-#endif
     DBusConnection *connection;
-    if (!open_desktop(saved->desktop, &connection, why, whycap))
+    if (!open_desktop(desktop, &connection, why, whycap))
         return false;
-    bool written = true;
-    for (int i = 0; written && i < mediakeys_key_count(saved->desktop); i++)
-        written = set_key(connection, saved->desktop, i, saved->values[i], why, whycap);
+    MediaKeysState before;
+    bool read = read_keys(connection, desktop, &before, why, whycap);
+    int failed = -1;
+    for (int i = 0; read && failed < 0 && i < mediakeys_key_count(desktop); i++) {
+        bool changed = saved != NULL ? set_key(connection, desktop, i, saved->values[i], why, whycap)
+                                     : default_key(connection, desktop, i, why, whycap);
+        if (!changed)
+            failed = i;
+    }
+    if (failed >= 0 && !put_back(connection, desktop, &before, failed, why, whycap) && left_changed != NULL)
+        *left_changed = true;
     if (connection != NULL)
         plasma_disconnect(connection);
-    return written;
+    return read && failed < 0;
+}
+
+// A function to set each of the desktop's media keys back to a saved value
+bool mediakeys_write(const MediaKeysState *saved, bool *left_changed, char *why, size_t whycap)
+{
+    if (left_changed != NULL)
+        *left_changed = false;
+#ifdef STREAMFLEX_TEST_HOOKS
+    if (fake_path() != NULL)
+        return fake_write(saved, left_changed, why, whycap);
+#endif
+    return change_keys(saved->desktop, saved, left_changed, why, whycap);
 }
 
 // A function to set each of the desktop's media keys to its default: kglobalaccel's default shortcut, or
 // gsettings reset, the schema's own
-bool mediakeys_reset_defaults(MediaKeysDesktop desktop, char *why, size_t whycap)
+bool mediakeys_reset_defaults(MediaKeysDesktop desktop, bool *left_changed, char *why, size_t whycap)
 {
+    if (left_changed != NULL)
+        *left_changed = false;
 #ifdef STREAMFLEX_TEST_HOOKS
     if (fake_path() != NULL)
         return fake_reset_defaults(desktop, why, whycap);
 #endif
-    DBusConnection *connection;
-    if (!open_desktop(desktop, &connection, why, whycap))
-        return false;
-    bool reset = true;
-    for (int i = 0; reset && i < mediakeys_key_count(desktop); i++) {
-        if (desktop == MEDIAKEYS_PLASMA)
-            reset = plasma_default_key(connection, i, why, whycap);
-        else
-            reset = gsettings("reset", mediakeys_key_name(desktop, i), NULL, NULL, 0, why, whycap);
-    }
-    if (connection != NULL)
-        plasma_disconnect(connection);
-    return reset;
+    return change_keys(desktop, NULL, left_changed, why, whycap);
 }

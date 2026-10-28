@@ -268,8 +268,8 @@ static size_t longest_config_key(void)
 // A function to tell whether [Desktop Keys] can hold a value: not when it has a line break (it would
 // split the line), starts or ends with whitespace (config.ini drops it), starts with a ';' or has one
 // after whitespace (config.ini reads a comment), or has a '#' in those places (config.ini reads a '#'
-// as a comment only at a line's start, but the plan refuses it there too), nor when "<key>=<value>"
-// under the longest key would pass inidoc's line cap
+// as a comment only at a line's start; one after whitespace is refused too, as a ';' is, so both comment
+// marks follow one rule), nor when "<key>=<value>" under the longest key would pass inidoc's line cap
 bool mediakeys_value_safe(const char *value)
 {
     if (value == NULL)
@@ -286,6 +286,19 @@ bool mediakeys_value_safe(const char *value)
             return false;
     }
     return true;
+}
+
+// A function to tell whether a saved value is one the desktop can be given back: Plasma's backend sets only
+// key sequences it can read, and no more of them than it keeps; GNOME's text is gsettings' to judge
+bool mediakeys_value_valid(MediaKeysDesktop desktop, const char *value)
+{
+    if (value == NULL)
+        return false;
+    if (desktop == MEDIAKEYS_PLASMA) {
+        int seqs[MEDIAKEYS_PLASMA_SEQUENCES_MAX][4];
+        return mediakeys_plasma_parse(value, seqs, MEDIAKEYS_PLASMA_SEQUENCES_MAX) >= 0;
+    }
+    return desktop == MEDIAKEYS_GNOME;
 }
 
 // A function to make one [Desktop Keys] edit: the key set to value, or removed when value is NULL

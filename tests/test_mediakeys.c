@@ -1,7 +1,8 @@
 // The media-keys codec: the desktops' key and config names, Plasma's key sequences as value text and
 // back, whether a value holds a key (Plasma's ints, GNOME's GVariant string arrays), next and previous
-// over a whole state (GNOME's static keys too), the values config.ini cannot read back, and the
-// [Desktop Keys] edits, alone and as config_save_with() writes them.
+// over a whole state (GNOME's static keys too), the values config.ini cannot read back, the saved values
+// the desktop could not be given back, and the [Desktop Keys] edits, alone and as config_save_with()
+// writes them.
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -277,6 +278,35 @@ static void test_value_safe(void)
     CHECK(!mediakeys_value_safe(text));                    // One byte over
 }
 
+// A function to test which saved values the desktop can be given back: Plasma's only as key sequences, no
+// more than the backend keeps; GNOME's any text
+static void test_value_valid(void)
+{
+    CHECK(mediakeys_value_valid(MEDIAKEYS_PLASMA, ""));                      // No key sequences
+    CHECK(mediakeys_value_valid(MEDIAKEYS_PLASMA, "16777347,0,0,0"));
+    CHECK(mediakeys_value_valid(MEDIAKEYS_PLASMA, "16777347,0,0,0|117440594,0,0,0"));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, "abc"));                  // Safe for config.ini, not sequences
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, "16777347"));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, "16777347,0,0,0|"));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, "['XF86AudioNext']"));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, NULL));
+    CHECK(mediakeys_value_valid(MEDIAKEYS_GNOME, "['XF86AudioNext', '<Ctrl>XF86AudioNext']"));
+    CHECK(mediakeys_value_valid(MEDIAKEYS_GNOME, "abc"));                    // gsettings judges GNOME's
+    CHECK(mediakeys_value_valid(MEDIAKEYS_GNOME, ""));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_GNOME, NULL));
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_NONE, ""));
+
+    // As many sequences as the backend keeps, and one more
+    char text[MEDIAKEYS_VALUE_MAX];
+    size_t used = 0;
+    for (int i = 0; i < MEDIAKEYS_PLASMA_SEQUENCES_MAX; i++)
+        used += (size_t) snprintf(text + used, sizeof(text) - used, "%s1,0,0,0", i > 0 ? "|" : "");
+    CHECK(mediakeys_value_valid(MEDIAKEYS_PLASMA, text));
+    snprintf(text + used, sizeof(text) - used, "|1,0,0,0");
+    CHECK(mediakeys_value_safe(text));                                      // config.ini can hold it
+    CHECK(!mediakeys_value_valid(MEDIAKEYS_PLASMA, text));
+}
+
 // A function to tell whether an edit is one [Desktop Keys] edit: its key, its value (NULL removes it),
 // no alias, and a new key placed after the section's last
 static bool is_edit(const ConfigEdit *edit, const char *key, const char *value)
@@ -511,6 +541,7 @@ int main(void)
     test_value_holds();
     test_holds_next_previous();
     test_value_safe();
+    test_value_valid();
     test_save_edits();
     test_forget_and_never_edits();
     test_edits_written();

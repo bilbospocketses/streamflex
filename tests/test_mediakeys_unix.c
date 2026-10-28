@@ -2,11 +2,12 @@
 // included rather than linked so its helpers can be tested too: run_capture() on real programs (output,
 // a non-zero exit, a missing program, output too long, a signal, the kill at the timeout), kglobalaccel's
 // a(ai) marshaling without a bus, and no session bus at all. GNOME runs against a fake gsettings the test
-// writes and puts first on the PATH: detection by XDG_CURRENT_DESKTOP, read, clear, write, reset, a clear
-// that fails partway (the failed key put back too, even when it took effect), and a hung gsettings. The
-// session bus is tried for KDE Plasma only when XDG_CURRENT_DESKTOP names KDE (counted through the backend's
-// PLASMA_CONNECT_TRIED hook), and with no bus there is no desktop. Then every STREAMFLEX_TEST_MEDIAKEYS mode
-// of the seam. Linux only.
+// writes and puts first on the PATH: detection by XDG_CURRENT_DESKTOP, read, clear, write, reset, a clear,
+// write or reset that fails partway (the failed key put back too, even when it took effect, and a write
+// or reset read first, so it has the keys to put back), and a hung gsettings. The session bus is tried
+// for KDE Plasma only when XDG_CURRENT_DESKTOP names KDE (counted through the backend's
+// PLASMA_CONNECT_TRIED hook), and with no bus there is no desktop. Then every STREAMFLEX_TEST_MEDIAKEYS
+// mode of the seam. Linux only.
 static int connects_tried = 0;   // Each plasma_connect(), counted through the backend's hook
 #define PLASMA_CONNECT_TRIED() (connects_tried++)
 #include "platform/mediakeys_unix.c"
@@ -88,9 +89,10 @@ static const char *in_store(const char *name)
 // A function to start every GNOME key at a known value, with no failure asked for
 static void reset_store(void)
 {
-    const char *const names[] = { "hang", "fail-get-next", "fail-get-next-static", "fail-set-previous",
-                                  "fail-set-previous-first", "late-set-next", "late-set-previous", "fail-set-next-second", "count-next",
-                                  "count-previous", "count-next-static", "count-previous-static" };
+    const char *const names[] = { "hang", "fail-get-next", "fail-get-next-static", "fail-get-previous", "fail-set-previous",
+                                  "fail-set-previous-first", "late-set-next", "late-set-previous", "fail-set-next-second",
+                                  "fail-reset-previous", "count-next", "count-previous", "count-next-static",
+                                  "count-previous-static" };
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
         unlink(in_store(names[i]));
     write_text(in_store("next"), VALUE_NEXT);
@@ -384,11 +386,11 @@ static void test_gnome(void)
         CHECK_STR(state.values[i], "@as []");
     CHECK(!mediakeys_holds_next(&state) && !mediakeys_holds_previous(&state));
 
-    CHECK(mediakeys_write(&before, why, sizeof(why)));
+    CHECK(mediakeys_write(&before, NULL, why, sizeof(why)));
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK(memcmp(state.values, before.values, sizeof(state.values)) == 0);
 
-    CHECK(mediakeys_reset_defaults(MEDIAKEYS_GNOME, why, sizeof(why)));
+    CHECK(mediakeys_reset_defaults(MEDIAKEYS_GNOME, NULL, why, sizeof(why)));
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK_STR(state.values[0], "['']");
     CHECK_STR(state.values[1], "['']");
@@ -403,12 +405,12 @@ static void test_gnome(void)
     CHECK_INT(state.desktop, MEDIAKEYS_GNOME);
     CHECK_STR(why, "could not get next-static: gsettings exited with status 1");
 
-    // A gsettings that never finishes is killed at 2000 ms
+    // A gsettings that never finishes is killed at 2000 ms: here the write's first call, the read before it
     reset_store();
     write_text(in_store("hang"), "");
     why[0] = '\0';
-    CHECK(!mediakeys_write(&before, why, sizeof(why)));
-    CHECK_STR(why, "could not set next: gsettings did not finish within 2000 ms");
+    CHECK(!mediakeys_write(&before, NULL, why, sizeof(why)));
+    CHECK_STR(why, "could not get next: gsettings did not finish within 2000 ms");
     unlink(in_store("hang"));
 
     // A clear refused for another desktop's values
@@ -476,6 +478,92 @@ static void test_partial_clear(void)
     unsetenv("XDG_CURRENT_DESKTOP");
 }
 
+// A function to test a write or a reset that fails partway: the keys are read first, and every key up to
+// the failed one is put back as read, so the failure changes nothing; *left_changed says when a put-back
+// failed, and a read that fails sets nothing
+static void test_partial_write(void)
+{
+    char why[300], text[64];
+    bool left_changed;
+    MediaKeysState before, saved, state;
+    setenv("XDG_CURRENT_DESKTOP", "GNOME", 1);
+    reset_store();
+    CHECK(mediakeys_read(&before, why, sizeof(why)));
+    saved = before;
+    for (int i = 0; i < 4; i++)
+        copy_string(saved.values[i], "['XF86AudioPlay']", MEDIAKEYS_VALUE_MAX);
+
+    // A write that succeeds leaves nothing changed by a put-back
+    left_changed = true;
+    CHECK(mediakeys_write(&saved, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+
+    // previous fails, writing nothing: next, already written, is put back
+    reset_store();
+    write_text(in_store("fail-set-previous-first"), "");
+    why[0] = '\0';
+    left_changed = true;
+    CHECK(!mediakeys_write(&saved, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+    CHECK_STR(why, "could not set previous: gsettings exited with status 1");
+    CHECK(mediakeys_read(&state, why, sizeof(why)));
+    CHECK(memcmp(state.values, before.values, sizeof(state.values)) == 0);
+
+    // previous fails after it was written (a gsettings killed late): it is put back too
+    reset_store();
+    write_text(in_store("late-set-previous"), "");
+    CHECK(!mediakeys_write(&saved, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+    CHECK(mediakeys_read(&state, why, sizeof(why)));
+    CHECK(memcmp(state.values, before.values, sizeof(state.values)) == 0);
+
+    // A reset that fails on previous: next, already reset to the schema's [''], is put back
+    reset_store();
+    write_text(in_store("fail-reset-previous"), "");
+    why[0] = '\0';
+    left_changed = true;
+    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_GNOME, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+    CHECK_STR(why, "could not reset previous: gsettings exited with status 1");
+    CHECK(mediakeys_read(&state, why, sizeof(why)));
+    CHECK(memcmp(state.values, before.values, sizeof(state.values)) == 0);
+
+    // A put-back that fails too: named after the failure, and next is left written
+    reset_store();
+    write_text(in_store("fail-set-previous"), "");
+    write_text(in_store("fail-set-next-second"), "");
+    why[0] = '\0';
+    CHECK(!mediakeys_write(&saved, &left_changed, why, sizeof(why)));
+    CHECK(left_changed);
+    CHECK_STR(why, "could not set previous: gsettings exited with status 1; next could not be put back; "
+                   "previous could not be put back");
+    CHECK(mediakeys_read(&state, why, sizeof(why)));
+    CHECK_STR(state.values[0], "['XF86AudioPlay']");
+    CHECK_STR(state.values[1], VALUE_PREVIOUS);
+    reset_store();
+    write_text(in_store("fail-reset-previous"), "");
+    write_text(in_store("fail-set-previous"), "");
+    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_GNOME, &left_changed, NULL, 0));
+    CHECK(left_changed);
+
+    // The read before fails: nothing is set, and nothing needs putting back
+    reset_store();
+    write_text(in_store("fail-get-previous"), "");
+    why[0] = '\0';
+    left_changed = true;
+    CHECK(!mediakeys_write(&saved, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+    CHECK_STR(why, "could not get previous: gsettings exited with status 1");
+    CHECK(access(in_store("count-next"), F_OK) != 0);
+    read_text(in_store("next"), text, sizeof(text));
+    CHECK_STR(text, VALUE_NEXT);
+    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_GNOME, NULL, why, sizeof(why)));
+    read_text(in_store("next"), text, sizeof(text));
+    CHECK_STR(text, VALUE_NEXT);
+    reset_store();
+    unsetenv("XDG_CURRENT_DESKTOP");
+}
+
 // A function to test the seam: the file in place of the desktop, and each fail= mode
 static void test_seam(void)
 {
@@ -493,10 +581,10 @@ static void test_seam(void)
     CHECK_STR(text, "plasma\n\n\n");
     CHECK(mediakeys_read(&state, why, sizeof(why)));
     CHECK(!mediakeys_holds_next(&state) && !mediakeys_holds_previous(&state));
-    CHECK(mediakeys_write(&before, why, sizeof(why)));
+    CHECK(mediakeys_write(&before, NULL, why, sizeof(why)));
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "plasma\n16777347,0,0,0\n16777346,0,0,0|33554432,0,0,0\n");
-    CHECK(mediakeys_reset_defaults(MEDIAKEYS_PLASMA, why, sizeof(why)));
+    CHECK(mediakeys_reset_defaults(MEDIAKEYS_PLASMA, NULL, why, sizeof(why)));
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "plasma\n16777347,0,0,0\n16777346,0,0,0\n");
 
@@ -508,15 +596,31 @@ static void test_seam(void)
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "plasma\n16777347,0,0,0\n16777346,0,0,0\nfail=clear-second\n");
 
+    // write-second: the first key set, both put back, the file as it was; with put-back too, the first stays
+    // set and left_changed says so
+    bool left_changed = true;
+    write_text(file, "plasma\n\n\nfail=write-second\n");
+    CHECK(!mediakeys_write(&before, &left_changed, why, sizeof(why)));
+    CHECK(!left_changed);
+    CHECK_STR(why, "the test file fails write-second");
+    read_text(file, text, sizeof(text));
+    CHECK_STR(text, "plasma\n\n\nfail=write-second\n");
+    write_text(file, "plasma\n\n\nfail=write-second\nfail=put-back\n");
+    CHECK(!mediakeys_write(&before, &left_changed, why, sizeof(why)));
+    CHECK(left_changed);
+    CHECK_STR(why, "the test file fails write-second; nextmedia could not be put back");
+    read_text(file, text, sizeof(text));
+    CHECK_STR(text, "plasma\n16777347,0,0,0\n\nfail=write-second\nfail=put-back\n");
+
     write_text(file, "gnome\n['XF86AudioNext']\n['XF86AudioPrev']\n['']\n@as []\nfail=clear\nfail=write\n");
     CHECK(mediakeys_read(&before, why, sizeof(why)));
     CHECK_INT(before.desktop, MEDIAKEYS_GNOME);
     CHECK_STR(before.values[3], "@as []");
     CHECK(!mediakeys_clear(MEDIAKEYS_GNOME, &before, why, sizeof(why)));
     CHECK_STR(why, "the test file fails clear");
-    CHECK(!mediakeys_write(&before, why, sizeof(why)));
+    CHECK(!mediakeys_write(&before, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file fails write");
-    CHECK(mediakeys_reset_defaults(MEDIAKEYS_GNOME, why, sizeof(why)));
+    CHECK(mediakeys_reset_defaults(MEDIAKEYS_GNOME, NULL, why, sizeof(why)));
     read_text(file, text, sizeof(text));
     CHECK_STR(text, "gnome\n['']\n['']\n" VALUE_NEXT_STATIC "\n" VALUE_PREVIOUS_STATIC "\nfail=clear\nfail=write\n");
 
@@ -530,9 +634,9 @@ static void test_seam(void)
     CHECK(!mediakeys_read(&state, why, sizeof(why)));
     CHECK_INT(state.desktop, MEDIAKEYS_GNOME);
     CHECK_STR(why, "the test file fails read");
-    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_GNOME, why, sizeof(why)));
+    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_GNOME, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file fails defaults");
-    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_PLASMA, why, sizeof(why)));
+    CHECK(!mediakeys_reset_defaults(MEDIAKEYS_PLASMA, NULL, why, sizeof(why)));
     CHECK_STR(why, "the test file stands in for another desktop");
 
     write_text(file, "none\n");
@@ -558,6 +662,7 @@ int main(void)
     test_detection();
     test_gnome();
     test_partial_clear();
+    test_partial_write();
     test_seam();
     char out[64];
     const char *cleanup[] = { "rm", "-rf", work, NULL };

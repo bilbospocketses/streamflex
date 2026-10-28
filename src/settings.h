@@ -456,14 +456,19 @@ void settings_show_tile(SettingsState *state, int menu, int tile);
 // even when a fresh read finds no desktop (kglobalaccel gone from the bus), since NONE would leave a Media
 // keys page on show with no rows, and settings_show_media_keys_failed() no page to say why
 void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved);
+// A desktop whose shortcuts could not be read as settings opened: the Controls row shows grayed, reading
+// Unknown, with why as its reason ("Couldn't read Plasma's shortcuts: <why>"), and opens no page; the prompt
+// never opens. MEDIAKEYS_NONE leaves no row, as above. settings_set_media_keys() replaces it
+void settings_set_media_keys_unreadable(SettingsState *state, MediaKeysDesktop desktop, const char *why);
 // The Media keys prompt, in place of the pages open, as settings open at start: Back and Not now close
 // settings. Nothing with no desktop set.
 void settings_show_media_keys(SettingsState *state);
 // Whether the prompt settings_show_media_keys() opened is open: on show, or under its failure page
 bool settings_media_keys_prompt_open(const SettingsState *state);
 // Why the desktop's shortcuts could not be changed, on a page of its own over the one on show (OK and
-// Back go back to it); a second failure there takes the new reason. Nothing with no desktop set, which
-// names no desktop to blame: keep the desktop settings opened with (settings_set_media_keys())
-void settings_show_media_keys_failed(SettingsState *state, const char *why);
+// Back go back to it); a second failure there takes the new reason. The note ends "Nothing was changed.",
+// or with `changed` (a key could not be put back) "Some of them may have changed." Nothing with no desktop
+// set, which names no desktop to blame: keep the desktop settings opened with (settings_set_media_keys())
+void settings_show_media_keys_failed(SettingsState *state, const char *why, bool changed);
 
 #endif

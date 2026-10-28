@@ -1349,7 +1349,7 @@ static void media_keys_off(void)
     MediaKeysState before;
     char why[MEDIA_WHY_MAX];
     if (!read_media_keys(&before, why, sizeof(why))) {
-        settings_show_media_keys_failed(model, why);
+        settings_show_media_keys_failed(model, why, false);
         return;
     }
     ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
@@ -1357,7 +1357,7 @@ static void media_keys_off(void)
     if (count < 0) {
         copy_string(why, "a shortcut is not one config.ini can keep", sizeof(why));
         log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
-        settings_show_media_keys_failed(model, why);
+        settings_show_media_keys_failed(model, why, false);
         return;
     }
     ConfigSaveResult result;
@@ -1374,7 +1374,7 @@ static void media_keys_off(void)
             log_error("Media keys: the saved shortcuts stay in [%s]: couldn't save to %s: %s", MEDIAKEYS_SECTION,
                       result.path, result.why);
         refresh_media_keys(true);
-        settings_show_media_keys_failed(model, why);
+        settings_show_media_keys_failed(model, why, false);
         return;
     }
     log_debug("Media keys: turned off %s's next- and previous-track shortcuts", name);
@@ -1385,19 +1385,26 @@ static void media_keys_off(void)
 }
 
 // A function to give the desktop its media keys back: the shortcuts [Desktop Keys] saved for it, else its
-// defaults, and then the saved ones are removed. A desktop that could not take them leaves config.ini as it
-// was; a save that fails says so on the Couldn't save page, whose Try again comes back here
+// defaults, and then the saved ones are removed. A desktop that could not take them has had every key it
+// took put back, and config.ini stays as it was; when a key could not be put back, the log and the failure
+// page say some may have changed. A save that fails says so on the Couldn't save page, whose Try again comes
+// back here
 static void media_keys_restore(void)
 {
+    const char *name = media_short_name(media_desktop);
     bool saved = config.media_keys_saved.desktop == media_desktop;
+    bool changed = false;
     char why[MEDIA_WHY_MAX];
-    bool given = saved ? mediakeys_write(&config.media_keys_saved, why, sizeof(why))
-                       : mediakeys_reset_defaults(media_desktop, why, sizeof(why));
+    bool given = saved ? mediakeys_write(&config.media_keys_saved, &changed, why, sizeof(why))
+                       : mediakeys_reset_defaults(media_desktop, &changed, why, sizeof(why));
     if (!given) {
-        log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed",
-                  media_short_name(media_desktop), why);
-        refresh_media_keys(false);
-        settings_show_media_keys_failed(model, why);
+        if (changed)
+            log_error("Media keys: could not change %s's shortcuts (%s), so some of them may have changed",
+                      name, why);
+        else
+            log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
+        refresh_media_keys(changed);   // A key that could not be put back may hold its shortcut again
+        settings_show_media_keys_failed(model, why, changed);
         return;
     }
     ConfigSaveResult result;
@@ -3595,8 +3602,8 @@ static void make_preview(void)
 
 #ifndef _WIN32
 // A function to give the model the desktop's media keys as settings open: the read start made (`given`), or
-// a fresh one. The desktop it names is the one the model keeps while they are open; a read that fails leaves
-// the Controls row out, and says why
+// a fresh one. The desktop it names is the one the model keeps while they are open; a read that fails says
+// why in the log, and the desktop it names (none: no row) gets the Controls row grayed with that reason
 static void open_media_keys(const MediaKeysState *given)
 {
     MediaKeysState keys;
@@ -3607,6 +3614,9 @@ static void open_media_keys(const MediaKeysState *given)
         keys = *given;
     else if (!mediakeys_read(&keys, why, sizeof(why))) {
         log_error("Media keys: could not read %s's shortcuts (%s)", media_short_name(keys.desktop), why);
+        media_desktop = keys.desktop;
+        if (media_desktop != MEDIAKEYS_NONE)
+            settings_set_media_keys_unreadable(model, media_desktop, why);
         return;
     }
     media_desktop = keys.desktop;
