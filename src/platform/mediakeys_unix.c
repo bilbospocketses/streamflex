@@ -443,14 +443,15 @@ static bool gsettings(const char *verb, const char *key, const char *value, char
     return true;
 }
 
-// A function to tell whether XDG_CURRENT_DESKTOP names GNOME: one of its ':'-separated names, in any case
-static bool xdg_names_gnome(void)
+// A function to tell whether XDG_CURRENT_DESKTOP names a desktop ("KDE", "GNOME"): one of its ':'-separated
+// names, in any case
+static bool xdg_names(const char *desktop)
 {
     const char *desktops = getenv("XDG_CURRENT_DESKTOP");
     while (desktops != NULL) {
         const char *end = strchr(desktops, ':');
         size_t length = end != NULL ? (size_t) (end - desktops) : strlen(desktops);
-        if (length == 5 && strncasecmp(desktops, "GNOME", 5) == 0)
+        if (length == strlen(desktop) && strncasecmp(desktops, desktop, length) == 0)
             return true;
         desktops = end != NULL ? end + 1 : NULL;
     }
@@ -603,7 +604,8 @@ static bool fake_read(MediaKeysState *out, char *why, size_t whycap)
 }
 
 // A function to clear the keys in the file: empty (Plasma) or @as [] (GNOME), as each desktop reads back. With
-// fail=clear-second, the first key is cleared, then put back from before, and the clear fails
+// fail=clear-second, the first key is cleared, then it and the second are put back from before, as
+// mediakeys_clear() does, and the clear fails
 static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, char *why, size_t whycap)
 {
     FakeDesktop fake;
@@ -612,7 +614,8 @@ static bool fake_clear(MediaKeysDesktop desktop, const MediaKeysState *before, c
     const char *cleared = desktop == MEDIAKEYS_PLASMA ? "" : "@as []";
     for (int i = 0; i < mediakeys_key_count(desktop); i++) {
         if (i == 1 && fake_fails(&fake, "clear-second")) {
-            copy_string(fake.state.values[0], before->values[0], MEDIAKEYS_VALUE_MAX);
+            for (int k = 0; k <= i; k++)
+                copy_string(fake.state.values[k], before->values[k], MEDIAKEYS_VALUE_MAX);
             if (fake_save(&fake, why, whycap))
                 say(why, whycap, "the test file fails clear-second");
             return false;
@@ -649,9 +652,10 @@ static bool fake_reset_defaults(MediaKeysDesktop desktop, char *why, size_t whyc
 }
 #endif
 
-// A function to read the desktop's media-key shortcuts: KDE Plasma when kglobalaccel is on the session bus,
-// else GNOME when XDG_CURRENT_DESKTOP names it and gsettings reads its keys, else no desktop (true). False,
-// with why, when a call to the desktop found failed; out->desktop then still names it
+// A function to read the desktop's media-key shortcuts: KDE Plasma when XDG_CURRENT_DESKTOP names KDE and
+// kglobalaccel is on the session bus (a KDE app can start kglobalaccel under another desktop), else GNOME
+// when XDG_CURRENT_DESKTOP names it and gsettings reads its keys, else no desktop (true). False, with why,
+// when a call to the desktop found failed; out->desktop then still names it
 bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap)
 {
     memset(out, 0, sizeof(*out));
@@ -660,7 +664,7 @@ bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap)
     if (fake_path() != NULL)
         return fake_read(out, why, whycap);
 #endif
-    DBusConnection *connection = plasma_connect(NULL, 0);
+    DBusConnection *connection = xdg_names("KDE") ? plasma_connect(NULL, 0) : NULL;
     if (connection != NULL) {
         bool found = true;
         if (plasma_running(connection)) {
@@ -675,7 +679,7 @@ bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap)
     }
 
     // GNOME: its first key read is also the check that the schema is there
-    if (!xdg_names_gnome() || !gsettings("get", mediakeys_key_name(MEDIAKEYS_GNOME, 0), NULL, out->values[0],
+    if (!xdg_names("GNOME") || !gsettings("get", mediakeys_key_name(MEDIAKEYS_GNOME, 0), NULL, out->values[0],
                                          MEDIAKEYS_VALUE_MAX, NULL, 0)) {
         out->values[0][0] = '\0';
         return true;
@@ -689,8 +693,8 @@ bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap)
     return true;
 }
 
-// A function to clear every one of the desktop's media keys. When one fails after others were cleared,
-// those are put back from before first; why then also says when one of them could not be
+// A function to clear every one of the desktop's media keys. When one fails, it and every key before it are
+// put back from before first; why then also says when one of them could not be
 bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, char *why, size_t whycap)
 {
     if (before == NULL || before->desktop != desktop) {
@@ -705,22 +709,24 @@ bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, cha
     if (!open_desktop(desktop, &connection, why, whycap))
         return false;
     const char *cleared = desktop == MEDIAKEYS_PLASMA ? "" : "[]";
-    bool clear = true;
-    int i = 0;
-    for (; clear && i < mediakeys_key_count(desktop); i++)
-        clear = set_key(connection, desktop, i, cleared, why, whycap);
-    if (!clear) {
-        // Keys 0 to i - 2 were cleared; key i - 1 failed
-        for (int k = 0; k < i - 1; k++) {
-            if (!set_key(connection, desktop, k, before->values[k], NULL, 0) && why != NULL) {
-                size_t used = strlen(why);
-                say(why + used, whycap - used, "; %s could not be put back", mediakeys_key_name(desktop, k));
-            }
+    int failed = -1;
+    for (int i = 0; failed < 0 && i < mediakeys_key_count(desktop); i++) {
+        if (!set_key(connection, desktop, i, cleared, why, whycap))
+            failed = i;
+    }
+
+    // The keys before the one that failed were cleared, and that one may have been too: a D-Bus call that
+    // timed out was still sent, and gsettings killed at its timeout may already have written. So every key
+    // up to it is put back, in order; putting back a key that never changed is harmless
+    for (int k = 0; k <= failed; k++) {
+        if (!set_key(connection, desktop, k, before->values[k], NULL, 0) && why != NULL && whycap > 0) {
+            size_t used = strlen(why);
+            say(why + used, whycap - used, "; %s could not be put back", mediakeys_key_name(desktop, k));
         }
     }
     if (connection != NULL)
         plasma_disconnect(connection);
-    return clear;
+    return failed < 0;
 }
 
 // A function to set each of the desktop's media keys back to a saved value
