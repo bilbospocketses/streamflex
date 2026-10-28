@@ -27,12 +27,15 @@ f68_desktop() { printf '%s\n' "$@" > "$F68_DESKTOP"; chmod 666 "$F68_DESKTOP"; }
 f68_desktop_is() { printf '%s\n' "$@" > "$out/f68-want"; cmp -s "$out/f68-want" "$F68_DESKTOP"; }
 
 # A function to write the config NAME.ini, which the test user can write: one menu, then the lines given
-# (a [Desktop Keys] section, written before the launch); prints its path, and keeps a copy as NAME.before
+# (a [Desktop Keys] section, written before the launch), with the StartupCmd F68_STARTUP when that is set;
+# prints its path, and keeps a copy as NAME.before
 f68_config() {
     local name=$1 cfg=$TESTER_HOME/cfg/$1.ini; shift
     mkdir -p "$TESTER_HOME/cfg"
     rm -f "$cfg" "$cfg.bak" "$cfg.tmp" "$cfg.bak.tmp"
-    printf '%s\n' '[General]' 'DefaultMenu=Main' '' '[Main]' 'Entry1=One;apps;:quit' "$@" > "$cfg"
+    { printf '%s\n' '[General]' 'DefaultMenu=Main'
+      [ -z "${F68_STARTUP:-}" ] || printf 'StartupCmd=%s\n' "$F68_STARTUP"
+      printf '%s\n' '' '[Main]' 'Entry1=One;apps;:quit' "$@"; } > "$cfg"
     cp "$cfg" "$out/$name.before"
     chown -R tester:tester "$TESTER_HOME/cfg"
     chmod 644 "$cfg"
@@ -276,4 +279,79 @@ grep -qx 'Media keys: GNOME holds next track and previous track' "$log" \
 result "media keys: GNOME's prompt opens at start, and Turn them off saves its keys, then clears them (exit $(cat "$out/f68-gnome.code"))" $ok
 f68_show f68-gnome
 sed 's/^/      /' <<< "$section"
+
+# The StartupCmd waits for the prompt (user, 2026-10-28: the keys are turned off before the app starts): it
+# runs once, only after the prompt has closed, whether Not now or Turn them off closed it; with no prompt it
+# runs at start as before. Here it adds a line to a marker file, as check 64's does
+F68_MARKS=$TESTER_HOME/r68-marks
+F68_STARTUP_CMD=":fork echo started >> $F68_MARKS/startup.txt"
+F68_RUNS_NOW='StartupCmd: the Media keys prompt closed, so it runs now'
+
+# A function to empty the marker's folder before a run
+f68_clear_marks() { rm -rf "$F68_MARKS"; mkdir -p "$F68_MARKS"; chown tester:tester "$F68_MARKS"; }
+
+# A function to count the marker's lines, waiting up to 5 s for the file when WAIT is set: :fork's command can
+# write after the launcher has gone on
+f68_marks() {
+    local file=$F68_MARKS/startup.txt i
+    if [ -n "${1:-}" ]; then
+        for i in $(seq 25); do [ -s "$file" ] && break; sleep 0.2; done
+        sleep 0.5
+    fi
+    [ -f "$file" ] && wc -l < "$file" || echo 0
+}
+
+# A function for a +key, called with the run's NAME: keep how many times the StartupCmd has run while the
+# prompt is still on show (NAME.early), after a second for a :fork that was started to write
+f68_early() { sleep 1; f68_marks > "$out/$1.early"; }
+
+# A function to tell whether a run held its StartupCmd back until settings closed, and ran it once then
+f68_held_back() {
+    local log=$out/$1.log
+    [ "$(cat "$out/$1.early")" = 0 ] && [ "$2" = 1 ] \
+        && precedes "$log" "$F68_PROMPT" 'StartupCmd: waits for the Media keys prompt to close' \
+        && precedes "$log" 'Settings closed' "$F68_RUNS_NOW" && [ "$(grep -cxF "$F68_RUNS_NOW" "$log")" = 1 ]
+}
+
+# Not now: the StartupCmd runs once settings close
+f68_desktop "${F68_PLASMA[@]}"
+f68_clear_marks
+cfg=$(F68_STARTUP=$F68_STARTUP_CMD f68_config f68-startup)
+STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg WAIT_FOR=$F68_PROMPT UNTIL="$F68_RUNS_NOW" \
+    run_keys f68-startup +f68_early Down Return
+marks=$(f68_marks wait)
+ok=1
+f68_held_back f68-startup "$marks" && in_range "$out/f68-startup.log" 'Settings opened' 'Settings closed' 'Settings: nothing changed' \
+    && f68_desktop_is "${F68_PLASMA[@]}" && ran_clean f68-startup && ok=0
+result "media keys: the StartupCmd waits for the prompt, and runs once after Not now (exit $(cat "$out/f68-startup.code"))" $ok
+echo "      the StartupCmd ran $(cat "$out/f68-startup.early" 2> /dev/null) times with the prompt open, $marks in all"
+grep -E '^(StartupCmd|Settings: page|Settings (opened|closed))' "$out/f68-startup.log" | sed 's/^/      /'
+
+# Turn them off: the keys are off before the StartupCmd runs
+f68_desktop "${F68_PLASMA[@]}"
+f68_clear_marks
+cfg=$(F68_STARTUP=$F68_STARTUP_CMD f68_config f68-startup-off)
+STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg WAIT_FOR=$F68_PROMPT UNTIL="$F68_RUNS_NOW" \
+    run_keys f68-startup-off +f68_early Return
+marks=$(f68_marks wait)
+ok=1
+f68_held_back f68-startup-off "$marks" \
+    && precedes "$out/f68-startup-off.log" "Media keys: turned off Plasma's" 'Settings closed' \
+    && f68_desktop_is plasma '' '' && ran_clean f68-startup-off && ok=0
+result "media keys: the StartupCmd runs once after Turn them off, with the keys off (exit $(cat "$out/f68-startup-off.code"))" $ok
+echo "      the StartupCmd ran $(cat "$out/f68-startup-off.early" 2> /dev/null) times with the prompt open, $marks in all"
+grep -E '^(StartupCmd|Media keys|Settings (opened|closed))' "$out/f68-startup-off.log" | sed 's/^/      /'
+
+# No prompt (Ask=no): the StartupCmd runs at start, as it always has
+f68_desktop "${F68_PLASMA[@]}"
+f68_clear_marks
+cfg=$(F68_STARTUP=$F68_STARTUP_CMD f68_config f68-startup-askno '' '[Desktop Keys]' 'Ask=no')
+STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Begin program loop' run_keys f68-startup-askno
+marks=$(f68_marks wait)
+ok=1
+[ "$marks" = 1 ] && ! grep -q '^StartupCmd' "$out/f68-startup-askno.log" && ! grep -q 'Settings opened' "$out/f68-startup-askno.log" \
+    && ran_clean f68-startup-askno && ok=0
+result "media keys: with no prompt the StartupCmd runs at start, as before (exit $(cat "$out/f68-startup-askno.code"))" $ok
+echo "      the StartupCmd ran $marks times"
+rm -rf "$F68_MARKS"
 rm -f "$F68_DESKTOP" "$out/f68-want"
