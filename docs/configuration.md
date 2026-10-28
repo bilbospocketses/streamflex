@@ -21,7 +21,8 @@ title: Configuration
 6. [Screensaver](#screensaver)
 7. [Hotkeys](#hotkeys)
 8. [Gamepad Controls](#gamepad-controls)
-9. [Transparent Backgrounds](#transparent-backgrounds)
+9. [Desktop Keys (Linux only)](#desktop-keys-linux-only)
+10. [Transparent Backgrounds](#transparent-backgrounds)
 
 ## Overview
 StreamFlex uses an [INI file](https://en.wikipedia.org/wiki/INI_file) to configure settings and menus. The INI file consists of sections enclosed in square brackets, and in each section there are entries which consist of a key and a value. Example:
@@ -163,6 +164,7 @@ Every row but *On* is grayed while the screensaver is off.
   - the gamepad's [controls](#key-and-button-bindings).
 
   *Device* and *Mappings file* are grayed while the gamepad is off.
+- *Desktop media keys*, on Linux under KDE Plasma or GNOME: whether the desktop holds the next-track and previous-track keys. Its page gives them back to the desktop or turns them off; see [Desktop Keys](#desktop-keys-linux-only).
 
 #### The folder browser
 Choosing an image or a slideshow folder opens a folder browser. It starts in the folder of the image or slideshow you have now, or else in your Pictures folder (on Linux, the one your desktop names in its `user-dirs.dirs` file, whatever its language, such as `~/Bilder`), and its list of places reaches your home folder and your drives (on Linux, `/` and the drives and shares mounted in `/media` and `/mnt`).
@@ -980,6 +982,36 @@ The following axis and buttons are available for control in StreamFlex:
 - ButtonDPadDown
 - ButtonDPadLeft
 - ButtonDPadRight
+
+## Desktop Keys (Linux only)
+KDE Plasma and GNOME use the next-track and previous-track keys for their own media controls, so while the desktop holds them, StreamFlex never receives them and a hotkey on them never runs. At every start on either desktop, while it holds either key, settings open on the *Media keys* prompt. A [StartupCmd](#startupcmd) waits for the prompt: it runs once settings close.
+- *Turn them off* saves the desktop's shortcuts in a `[Desktop Keys]` section of your config file, then turns them off. Other music players then stop responding to these keys too.
+- *Not now* changes nothing, and the prompt comes back at the next start.
+- *Don't ask again* saves `Ask=no` there, and changes nothing else.
+
+The settings screen's Controls page has a *Desktop media keys* row: *On* while the desktop holds either key, *Off for StreamFlex* while it holds neither and `[Desktop Keys]` keeps its shortcuts, and *Off* while it holds neither and nothing is saved. Its page has *Give them back to KDE Plasma* (or *to GNOME*), which gives the desktop the saved shortcuts, or its own defaults when none are saved, and then removes the saved ones; and *Turn them off*, as on the prompt. When a change fails, a *Couldn't change shortcuts* page says why, and nothing is changed.
+
+StreamFlex writes this section itself, to the file the settings screen saves to (on Linux, your own `~/.config/streamflex/config.ini` when the packaged config cannot be written), keeping the old file as `config.ini.bak`. On Windows nothing takes these keys: there is no prompt and no row, and the section is never read. After *Turn them off* on KDE Plasma it holds, for example:
+```ini
+[Desktop Keys]
+Desktop=plasma
+PlasmaNext=16777347,0,0,0
+PlasmaPrevious=16777346,0,0,0
+```
+
+#### Ask
+Whether the *Media keys* prompt opens at start. `no` stops it for good; any other value, or no `Ask` line, means ask. *Don't ask again* writes `Ask=no`. The *Desktop media keys* row works either way.
+
+#### Desktop
+The desktop whose shortcuts are saved: `plasma` or `gnome`. Any other value is ignored, and the log says so.
+
+#### PlasmaNext and PlasmaPrevious
+KDE Plasma's saved shortcuts for next track and previous track: each key sequence as four numbers joined by `,`, and the sequences joined by `|`. `16777347` is Media Next and `16777346` Media Previous. An empty value is a key with no shortcut.
+
+#### GnomeNext, GnomePrevious, GnomeNextStatic and GnomePreviousStatic
+GNOME's saved values of `next`, `previous`, `next-static` and `previous-static` in `org.gnome.settings-daemon.plugins.media-keys`, as `gsettings get` prints them, such as `['XF86AudioNext', '<Ctrl>XF86AudioNext']` or `@as []`.
+
+These value keys are StreamFlex's own record of the desktop's shortcuts, not settings to change. When one of the saved desktop's value keys is missing, or a hand edit leaves it a value StreamFlex would never write there (such as one with a `#` after a space), or `Desktop` names no desktop, the saved shortcuts count as nothing saved: the log says why, the row reads *Off* rather than *Off for StreamFlex*, and *Give them back* gives the desktop its defaults.
 
 ## Transparent Backgrounds
 Transparent mode lets the desktop, or a program running behind StreamFlex, show through the background. Windows and Linux do it in different ways.
