@@ -273,6 +273,7 @@ static void test_xdg_names(void)
     CHECK(!names(NULL, "KDE"));
     CHECK(!names("GNOME", "KDE"));
     CHECK(!names("ubuntu:KDEX:", "KDE"));
+    CHECK(!names("KD", "KDE"));
 
     CHECK(names("GNOME", "GNOME"));
     CHECK(names("gnome", "GNOME"));
@@ -284,6 +285,7 @@ static void test_xdg_names(void)
     CHECK(!names("", "GNOME"));
     CHECK(!names(NULL, "GNOME"));
     CHECK(!names("KDE", "GNOME"));
+    CHECK(!names("GNOM", "GNOME"));
     unsetenv("XDG_CURRENT_DESKTOP");
 }
 
