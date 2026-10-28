@@ -261,6 +261,12 @@ add_executable(test_keycodes test_keycodes.c "${PROJECT_SOURCE_DIR}/src/keycodes
 target_include_directories(test_keycodes PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME keycodes COMMAND test_keycodes)
 
+# Unit tests for the media-keys codec: the desktops' key names, Plasma's key sequences as text, whether a
+# value holds a key, and the values config.ini cannot hold (pure, linked alone)
+add_executable(test_mediakeys test_mediakeys.c "${PROJECT_SOURCE_DIR}/src/mediakeys.c")
+target_include_directories(test_mediakeys PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME mediakeys COMMAND test_mediakeys)
+
 # 3b's bindings fixtures load to the bindings they held, and their codes read as the same keys on SDL3
 add_executable(test_bindings_fixtures test_bindings_fixtures.c "${PROJECT_SOURCE_DIR}/src/bindings.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c"

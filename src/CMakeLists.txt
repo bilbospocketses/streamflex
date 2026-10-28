@@ -65,6 +65,8 @@ set(SOURCES
   bindings.h
   keycodes.c
   keycodes.h
+  mediakeys.c
+  mediakeys.h
   browser.c
   browser.h
   applist.c
