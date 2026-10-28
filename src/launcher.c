@@ -210,7 +210,8 @@ Config config = {
     .clock_date_format                = DEFAULT_CLOCK_DATE_FORMAT,
     .clock_include_weekday            = DEFAULT_CLOCK_INCLUDE_WEEKDAY,
     .slideshow_image_duration         = DEFAULT_SLIDESHOW_IMAGE_DURATION,
-    .slideshow_transition_time        = DEFAULT_SLIDESHOW_TRANSITION_TIME
+    .slideshow_transition_time        = DEFAULT_SLIDESHOW_TRANSITION_TIME,
+    .media_keys_ask                   = true
 };
 
 // Initialize default states

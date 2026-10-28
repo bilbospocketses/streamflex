@@ -231,11 +231,11 @@ static bool settings_section(const char *section)
     return false;
 }
 
-// A function to tell whether a section holds settings or the hotkeys, never a menu; names match as the
-// parser matches them, exactly, so [general] is a menu
+// A function to tell whether a section holds settings, the hotkeys or the desktop's saved media keys, never
+// a menu; names match as the parser matches them, exactly, so [general] is a menu
 static bool reserved_section(const char *section)
 {
-    return settings_section(section) || MATCH(section, "Hotkeys");
+    return settings_section(section) || MATCH(section, "Hotkeys") || MATCH(section, MEDIAKEYS_SECTION);
 }
 
 // A function to give every section that is not settings a menu (plan ruling 2): the parser makes one only
@@ -337,11 +337,63 @@ void read_menu_layout(Menu *target, const IniDoc *doc, const char *section)
     free(items);
 }
 
+// [Desktop Keys] as read so far: Desktop, and each desktop's values apart, with the ones config.ini cannot
+// hold (mediakeys_value_safe()), so the keys may come in any order around Desktop and the last line counts
+static MediaKeysDesktop desktop_keys_desktop = MEDIAKEYS_NONE;
+static MediaKeysState desktop_keys_read[MEDIAKEYS_GNOME + 1];           // By desktop; NONE's is unused
+static bool desktop_keys_unsafe[MEDIAKEYS_GNOME + 1][MEDIAKEYS_KEYS_MAX];
+
+// A function to read one [Desktop Keys] line, then make config.media_keys_saved again from all read so
+// far: the named desktop's values, or none when Desktop is absent or names no desktop, or when one of
+// that desktop's values is one StreamFlex never saves, so a hand-edited save gives back the defaults
+// rather than a part of it. Any other key is ignored, as in the settings sections.
+static void desktop_keys_line(const char *name, const char *value)
+{
+    if (MATCH(name, MEDIAKEYS_KEY_ASK))
+        config.media_keys_ask = !MATCH(value, "no");
+    else if (MATCH(name, MEDIAKEYS_KEY_DESKTOP)) {
+        desktop_keys_desktop = mediakeys_desktop_from_config(value);
+        if (desktop_keys_desktop == MEDIAKEYS_NONE)
+            log_error("Invalid %s value '%s' in [%s], so no saved shortcuts are read",
+                name, value, MEDIAKEYS_SECTION);
+    }
+    else {
+        for (int d = MEDIAKEYS_PLASMA; d <= MEDIAKEYS_GNOME; d++) {
+            for (int i = 0; i < mediakeys_key_count((MediaKeysDesktop) d); i++) {
+                if (!MATCH(name, mediakeys_config_key((MediaKeysDesktop) d, i)))
+                    continue;
+                desktop_keys_unsafe[d][i] = !mediakeys_value_safe(value);
+                if (desktop_keys_unsafe[d][i])
+                    log_error("Invalid %s value '%s' in [%s], so no saved %s shortcuts are read",
+                        name, value, MEDIAKEYS_SECTION, mediakeys_desktop_name((MediaKeysDesktop) d));
+                else
+                    copy_string(desktop_keys_read[d].values[i], value, MEDIAKEYS_VALUE_MAX);
+            }
+        }
+    }
+
+    MediaKeysDesktop desktop = desktop_keys_desktop;
+    for (int i = 0; desktop != MEDIAKEYS_NONE && i < mediakeys_key_count(desktop); i++) {
+        if (desktop_keys_unsafe[desktop][i])
+            desktop = MEDIAKEYS_NONE;
+    }
+    memset(&config.media_keys_saved, 0, sizeof(config.media_keys_saved));
+    if (desktop != MEDIAKEYS_NONE) {
+        config.media_keys_saved = desktop_keys_read[desktop];
+        config.media_keys_saved.desktop = desktop;
+    }
+}
+
 // A function to handle config file parsing: every setting through the settings table, the hotkeys
-// and gamepad controls into their lists, and every other section as a menu
+// and gamepad controls into their lists, the desktop's saved media keys, and every other section as a menu
 int config_handler(void *user, const char *section, const char *name, const char *value)
 {
     UNUSED(user);
+
+    if (MATCH(section, MEDIAKEYS_SECTION)) {
+        desktop_keys_line(name, value);
+        return 0;
+    }
 
     if (MATCH(section, "Hotkeys")) {
         char *rest = NULL;
