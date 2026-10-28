@@ -25,6 +25,9 @@ static Menu *create_menu(const char *menu_name, size_t *num_menus);
 static bool gamepad_command_mapped(const char *cmd);
 static bool gamepad_control_mapped(const char *label);
 static void add_default_controls(const char *cmd, const char *const *labels, size_t count);
+#ifndef _WIN32
+static void desktop_keys_finish(void);
+#endif
 
 extern Config          config;
 extern GamepadControl  *gamepad_controls;
@@ -193,7 +196,8 @@ static void drop_nameless_menu(void)
 
 // A function to parse the config file and store the settings into the config struct, then give each
 // section with no lines a menu of its own (add_empty_menus()), as inih calls nothing for one; keys in no
-// section make no menu (drop_nameless_menu())
+// section make no menu (drop_nameless_menu()). On Linux the saved media keys are made of their lines once
+// all are read (desktop_keys_finish())
 void parse_config_file(const char *config_file_path)
 {
     FILE *file = fileio_open(config_file_path, "r");
@@ -205,6 +209,9 @@ void parse_config_file(const char *config_file_path)
     if (error < 0)
         log_fatal("Could not parse config file");
     drop_nameless_menu();
+#ifndef _WIN32
+    desktop_keys_finish();
+#endif
 
     size_t length = 0;
     char *text = fileio_read_all(config_file_path, &length);
@@ -337,16 +344,17 @@ void read_menu_layout(Menu *target, const IniDoc *doc, const char *section)
     free(items);
 }
 
-// [Desktop Keys] as read so far: Desktop, and each desktop's values apart, with the ones config.ini cannot
-// hold (mediakeys_value_safe()), so the keys may come in any order around Desktop and the last line counts
+#ifndef _WIN32
+// [Desktop Keys] as read: Desktop, and each desktop's values apart, with the keys a line was read for and
+// the values config.ini cannot hold (mediakeys_value_safe()), so the keys may come in any order around
+// Desktop and the last line counts. Windows reads none of it: the desktop's media keys are Linux's alone.
 static MediaKeysDesktop desktop_keys_desktop = MEDIAKEYS_NONE;
 static MediaKeysState desktop_keys_read[MEDIAKEYS_GNOME + 1];           // By desktop; NONE's is unused
+static bool desktop_keys_seen[MEDIAKEYS_GNOME + 1][MEDIAKEYS_KEYS_MAX];
 static bool desktop_keys_unsafe[MEDIAKEYS_GNOME + 1][MEDIAKEYS_KEYS_MAX];
 
-// A function to read one [Desktop Keys] line, then make config.media_keys_saved again from all read so
-// far: the named desktop's values, or none when Desktop is absent or names no desktop, or when one of
-// that desktop's values is one StreamFlex never saves, so a hand-edited save gives back the defaults
-// rather than a part of it. Any other key is ignored, as in the settings sections.
+// A function to read one [Desktop Keys] line; desktop_keys_finish() makes the saved state of them all.
+// Any other key is ignored, as in the settings sections.
 static void desktop_keys_line(const char *name, const char *value)
 {
     if (MATCH(name, MEDIAKEYS_KEY_ASK))
@@ -362,6 +370,7 @@ static void desktop_keys_line(const char *name, const char *value)
             for (int i = 0; i < mediakeys_key_count((MediaKeysDesktop) d); i++) {
                 if (!MATCH(name, mediakeys_config_key((MediaKeysDesktop) d, i)))
                     continue;
+                desktop_keys_seen[d][i] = true;
                 desktop_keys_unsafe[d][i] = !mediakeys_value_safe(value);
                 if (desktop_keys_unsafe[d][i])
                     log_error("Invalid %s value '%s' in [%s], so no saved %s shortcuts are read",
@@ -371,11 +380,23 @@ static void desktop_keys_line(const char *name, const char *value)
             }
         }
     }
+}
 
+// A function to make config.media_keys_saved from the [Desktop Keys] lines read: the named desktop's
+// values, or none when Desktop is absent or names no desktop, or when one of that desktop's keys has no
+// line or a value StreamFlex never saves, so a hand-edited save gives back the defaults rather than a part
+// of it. An empty value has a line: it is Plasma's "no key sequences"
+static void desktop_keys_finish(void)
+{
     MediaKeysDesktop desktop = desktop_keys_desktop;
     for (int i = 0; desktop != MEDIAKEYS_NONE && i < mediakeys_key_count(desktop); i++) {
-        if (desktop_keys_unsafe[desktop][i])
+        if (!desktop_keys_seen[desktop][i]) {
+            log_error("No %s value in [%s], so no saved %s shortcuts are read",
+                mediakeys_config_key(desktop, i), MEDIAKEYS_SECTION, mediakeys_desktop_name(desktop));
             desktop = MEDIAKEYS_NONE;
+        }
+        else if (desktop_keys_unsafe[desktop][i])
+            desktop = MEDIAKEYS_NONE;   // Its line said so in the log
     }
     memset(&config.media_keys_saved, 0, sizeof(config.media_keys_saved));
     if (desktop != MEDIAKEYS_NONE) {
@@ -383,6 +404,7 @@ static void desktop_keys_line(const char *name, const char *value)
         config.media_keys_saved.desktop = desktop;
     }
 }
+#endif
 
 // A function to handle config file parsing: every setting through the settings table, the hotkeys
 // and gamepad controls into their lists, the desktop's saved media keys, and every other section as a menu
@@ -390,8 +412,11 @@ int config_handler(void *user, const char *section, const char *name, const char
 {
     UNUSED(user);
 
+    // Never a menu on any platform; read on Linux only
     if (MATCH(section, MEDIAKEYS_SECTION)) {
+#ifndef _WIN32
         desktop_keys_line(name, value);
+#endif
         return 0;
     }
 
