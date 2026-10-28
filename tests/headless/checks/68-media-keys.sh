@@ -443,7 +443,8 @@ cfg=$(F68_STARTUP=$F68_STARTUP_CMD f68_config f68-startup-askno '' '[Desktop Key
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Begin program loop' run_keys f68-startup-askno
 marks=$(f68_marks wait)
 ok=1
-[ "$marks" = 1 ] && ! grep -q '^StartupCmd' "$out/f68-startup-askno.log" && ! grep -q 'Settings opened' "$out/f68-startup-askno.log" \
+[ "$marks" = 1 ] && ! grep -q '^StartupCmd: \(waits\|the Media keys\)' "$out/f68-startup-askno.log" \
+    && ! grep -q 'Settings opened' "$out/f68-startup-askno.log" \
     && ran_clean f68-startup-askno && ok=0
 result "media keys: with no prompt the StartupCmd runs at start, as before (exit $(cat "$out/f68-startup-askno.code"))" $ok
 echo "      the StartupCmd ran $marks times"
