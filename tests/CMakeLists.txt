@@ -267,6 +267,17 @@ add_executable(test_mediakeys test_mediakeys.c "${PROJECT_SOURCE_DIR}/src/mediak
 target_include_directories(test_mediakeys PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME mediakeys COMMAND test_mediakeys)
 
+# The Linux media-key backend (src/platform/mediakeys_unix.c): gsettings through a fake the test puts on the
+# PATH, kglobalaccel's messages without a bus, no session bus, and the test seam's file. The test includes the
+# backend, so its helpers are reached too, and stands in for util.c's copy_string(). Linux only
+if (UNIX)
+  add_executable(test_mediakeys_unix test_mediakeys_unix.c "${PROJECT_SOURCE_DIR}/src/mediakeys.c")
+  target_include_directories(test_mediakeys_unix PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_definitions(test_mediakeys_unix PRIVATE STREAMFLEX_TEST_HOOKS)
+  target_link_libraries(test_mediakeys_unix SDL3::SDL3 PkgConfig::DBUS)
+  add_test(NAME mediakeys_unix COMMAND test_mediakeys_unix)
+endif ()
+
 # 3b's bindings fixtures load to the bindings they held, and their codes read as the same keys on SDL3
 add_executable(test_bindings_fixtures test_bindings_fixtures.c "${PROJECT_SOURCE_DIR}/src/bindings.c"
   "${PROJECT_SOURCE_DIR}/src/inidoc.c" "${PROJECT_SOURCE_DIR}/src/fileio.c" "${PROJECT_SOURCE_DIR}/src/alloc.c"
