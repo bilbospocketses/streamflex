@@ -19,7 +19,7 @@
 # fix's in trixie-security-debug), the libraries are installed first, and each -dbgsym is asked for at
 # the version installed. Should the debug archive not have that version yet, the build stops and says
 # so (CONTRIBUTING.md, the headless checks, says what to do).
-FROM mirror.gcr.io/library/debian:trixie@sha256:913f6706df59a68922d1dd08f78c2476560a8d367897200a6005b00e5f67c2d5
+FROM mirror.gcr.io/library/debian:trixie@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
 RUN printf '%s\n' \
       'deb http://deb.debian.org/debian-debug trixie-debug main' \
       'deb http://deb.debian.org/debian-debug trixie-proposed-updates-debug main' \
