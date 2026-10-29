@@ -325,6 +325,7 @@ f68_heal() {
     f68_desktop plasma '' ''
 }
 f68_desktop plasma '' '' fail=write-second
+rm -f "$out/f68-failwrite.as-failed"
 cfg=$(f68_config f68-failwrite '' "${F68_SAVED[@]}")
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
     run_keys f68-failwrite $F68_TO_ROW Return Return Return +f68_heal Return BackSpace BackSpace BackSpace
