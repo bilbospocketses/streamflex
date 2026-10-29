@@ -3193,17 +3193,18 @@ static bool has_row(SettingsState *state, const char *label)
 }
 
 // A function to test Controls' Desktop media keys row: Linux only, and only once a desktop is set; it reads On
-// while the desktop holds a key, Off for StreamFlex while it holds none and its shortcuts are saved, else Off
+// while the desktop holds a key, else Off. Whether shortcuts are saved is the screen's to know, never the row's:
+// the headless checks (68-media-keys.sh) read Off with a save and without one
 static void test_media_keys_row(void)
 {
     SettingsState *state = open_model();
     open_page(state, "Controls");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
     CHECK(!has_row(state, "Desktop media keys"));                   // No desktop: no row
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
 #ifdef _WIN32
     CHECK(!has_row(state, "Desktop media keys"));                   // Windows: never a row
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, false, true);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
     CHECK(!has_row(state, "Desktop media keys"));
 #else
     SettingsRow rows[SETTINGS_MAX_ROWS];
@@ -3213,20 +3214,23 @@ static void test_media_keys_row(void)
     CHECK_INT(rows[1].kind, SETTINGS_ROW_LINK);
     CHECK_INT(rows[1].target, SETTINGS_PAGE_DESKTOP_KEYS);
     CHECK_STR(rows[1].value, "On");
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true, true);   // Holding a key again outranks a save
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);        // Off still opens its page, to give them back
+    const SettingsRow *off = row_labeled(state, rows, "Desktop media keys");
+    CHECK_STR(off->value, "Off");
+    CHECK(off->enabled);
+    CHECK(off->why == NULL);
+    CHECK_INT(off->kind, SETTINGS_ROW_LINK);
+    CHECK_INT(off->target, SETTINGS_PAGE_DESKTOP_KEYS);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
     CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "On");
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false, true);
-    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "Off for StreamFlex");
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
     CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "Off");
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, false, true);
-    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "Off for StreamFlex");
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
     CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "On");
 
     // A desktop that is neither again takes the row away, the cursor off it
     cursor_to(state, "Desktop media keys");
-    settings_set_media_keys(state, MEDIAKEYS_NONE, false, false);
+    settings_set_media_keys(state, MEDIAKEYS_NONE, false);
     CHECK(!has_row(state, "Desktop media keys"));
     CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 1);
     CHECK_INT(settings_cursor(state), 0);
@@ -3249,7 +3253,7 @@ static void test_media_keys_row(void)
     settings_set_media_keys_unreadable(state, MEDIAKEYS_GNOME, "could not get previous: gsettings exited with status 1");
     CHECK_STR(row_labeled(state, rows, "Desktop media keys")->why,
               "Couldn't read GNOME's shortcuts: could not get previous: gsettings exited with status 1");
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
     row = row_labeled(state, rows, "Desktop media keys");
     CHECK(row->enabled);
     CHECK(row->why == NULL);
@@ -3271,7 +3275,7 @@ static void test_desktop_keys_page(void)
     SettingsState *state = open_model();
     SettingsRow rows[SETTINGS_MAX_ROWS];
     char path[256];
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
     open_page(state, "Controls");
     open_page(state, "Desktop media keys");
     CHECK_INT(settings_page(state), SETTINGS_PAGE_DESKTOP_KEYS);
@@ -3293,7 +3297,7 @@ static void test_desktop_keys_page(void)
     CHECK(!settings_any_changed(state));
 
     // Turned off, as the screen gives it again: Give them back now, Turn them off grayed
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false, true);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK(rows[0].enabled);
     CHECK(rows[0].why == NULL);
@@ -3303,7 +3307,7 @@ static void test_desktop_keys_page(void)
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
     settings_command(state, SETTINGS_UP);
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_RESTORE);
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false, false);   // Nothing saved: Give them back sets defaults
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);   // Given again: still Give them back
     CHECK(row_labeled(state, rows, "Give them back to KDE Plasma")->enabled);
     CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_RESTORE);
     CHECK(!settings_any_changed(state));
@@ -3334,10 +3338,10 @@ static void test_desktop_keys_page(void)
     CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
 
     // GNOME's page names GNOME
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
     open_page(state, "Desktop media keys");
     CHECK_STR(row_labeled(state, rows, "Give them back to GNOME")->why, "GNOME already has them");
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, false, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
     CHECK_STR(row_labeled(state, rows, "Turn them off")->why, "They are already off");
     settings_show_media_keys_failed(state, "gsettings did not answer", false);
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
@@ -3368,7 +3372,7 @@ static void test_media_keys_prompt(void)
     settings_show_media_keys_failed(state, "kglobalaccel did not answer", false);   // No desktop to name: no failure page
     CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
     open_page(state, "General");
-    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
     settings_show_media_keys(state);
     CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS);
     CHECK(settings_media_keys_prompt_open(state));
@@ -3411,7 +3415,7 @@ static void test_media_keys_prompt(void)
 
     // GNOME's note names GNOME
     state = open_model();
-    settings_set_media_keys(state, MEDIAKEYS_GNOME, true, false);
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
     settings_show_media_keys(state);
     settings_rows(state, rows, SETTINGS_MAX_ROWS);
     CHECK_STR(rows[0].note, GNOME_NOTE);

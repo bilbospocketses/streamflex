@@ -1314,7 +1314,7 @@ static void refresh_media_keys(bool held)
     char why[MEDIA_WHY_MAX];
     if (read_media_keys(&now, why, sizeof(why)))
         held = media_keys_held(&now);
-    settings_set_media_keys(model, media_desktop, held, config.media_keys_saved.desktop == media_desktop);
+    settings_set_media_keys(model, media_desktop, held);
 }
 
 // A function to write [Desktop Keys] edits into config.ini (write_config()), saying in the log what a save
@@ -3631,8 +3631,7 @@ static void open_media_keys(const MediaKeysState *given)
     }
     media_desktop = keys.desktop;
     if (media_desktop != MEDIAKEYS_NONE)
-        settings_set_media_keys(model, media_desktop, media_keys_held(&keys),
-                                config.media_keys_saved.desktop == media_desktop);
+        settings_set_media_keys(model, media_desktop, media_keys_held(&keys));
 }
 #endif
 

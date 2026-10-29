@@ -18,6 +18,7 @@ F68_TO_ROW="Menu Down Down Down Down Down Down Down Down Return Down Down"   # C
 F68_NOTE="uses the next-track and previous-track keys for its own media controls, so StreamFlex never receives them."
 F68_NOTE_END="shortcuts for them off? Other music players will stop responding to these keys until you turn them back on in Settings${F68_ARROW}Controls${F68_ARROW}Desktop media keys."
 F68_PLASMA=(plasma 16777347,0,0,0 16777346,0,0,0)   # Plasma 6's own shortcuts: Media Next and Media Previous
+F68_OWN_NEXT='16777347,0,0,0|117440594,0,0,0'      # Next track with a second shortcut of the user's own: no default
 F68_GNOME=(gnome "['']" "['']" "['XF86AudioNext', '<Ctrl>XF86AudioNext']" "['XF86AudioPrev', '<Ctrl>XF86AudioPrev']")
 
 # A function to stand the desktop in: the file's lines, one an argument, which the test user can write
@@ -215,40 +216,49 @@ result "media keys: a failed save clears nothing, and its Try again turns them o
 f68_show f68-failsave
 
 # Controls > Desktop media keys, Ask=no written by hand: the row reads On while Plasma holds them; Turn them off
-# there saves and clears them and stays, the row then reads Off for StreamFlex; Give them back gives the saved
-# ones back and forgets them, and the row reads On again. Ask=no stays
-f68_desktop "${F68_PLASMA[@]}"
+# there saves and clears them and stays, the row then reads Off; Give them back gives the saved ones back and
+# forgets them, and the row reads On again. Ask=no stays. The row never says whether a copy is saved, so three
+# things prove one was: next track has a shortcut of the user's own, which the defaults would not give back;
+# the log says the saved ones came back; and the .bak that Give them back's save kept is the config Turn them
+# off wrote, holding them
+f68_desktop plasma "$F68_OWN_NEXT" 16777346,0,0,0
 cfg=$(f68_config f68-controls '' '[Desktop Keys]' 'Ask=no')
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
     run_keys f68-controls $F68_TO_ROW Return Down Return BackSpace Return Return BackSpace BackSpace BackSpace
 log=$out/f68-controls.log
+section=$(f68_section "$cfg.bak")
 ok=1
-[ "$(f68_row_values f68-controls)" = 'On|Off for StreamFlex|On' ] \
+[ "$(f68_row_values f68-controls)" = 'On|Off|On' ] \
     && grep -qxF "Settings: page Settings${F68_ARROW}Controls${F68_ARROW}Desktop media keys" "$log" \
     && ! grep -qxF "$F68_PROMPT" "$log" \
     && precedes "$log" "Media keys: saved Plasma's shortcuts" "Media keys: turned off Plasma's" \
     && precedes "$log" "Media keys: turned off Plasma's" 'Media keys: gave KDE Plasma back its saved shortcuts' \
     && grep -qx 'Media keys: gave KDE Plasma back its saved shortcuts' "$log" \
-    && f68_desktop_is "${F68_PLASMA[@]}" && f68_section "$cfg" | grep -qx 'Ask=no' && f68_nothing_saved "$cfg" \
-    && ran_clean f68-controls && ok=0
-result "media keys: Controls turns them off and gives the saved ones back, the row On, then Off for StreamFlex, then On (exit $(cat "$out/f68-controls.code"))" $ok
+    && grep -qx 'Ask=no' <<< "$section" && grep -qx 'Desktop=plasma' <<< "$section" \
+    && grep -qxF "PlasmaNext=$F68_OWN_NEXT" <<< "$section" && grep -qx 'PlasmaPrevious=16777346,0,0,0' <<< "$section" \
+    && f68_desktop_is plasma "$F68_OWN_NEXT" 16777346,0,0,0 && f68_section "$cfg" | grep -qx 'Ask=no' \
+    && f68_nothing_saved "$cfg" && ran_clean f68-controls && ok=0
+result "media keys: Controls turns them off and gives the saved ones back, the row On, then Off, then On (exit $(cat "$out/f68-controls.code"))" $ok
 echo "      the row read: $(f68_row_values f68-controls)"
 f68_show f68-controls
+sed 's/^/      /' <<< "$section"
 
-# Shortcuts saved before the launch, by hand: the row reads Off for StreamFlex while the desktop holds none,
-# and Give them back gives exactly them back, then forgets them (Ask=no stays); [Desktop Keys] is no menu
+# Shortcuts saved before the launch, by hand: the row reads Off while the desktop holds none, and Give them
+# back gives exactly them back, then forgets them (Ask=no stays); [Desktop Keys] is no menu. What proves the
+# save was read: the log says the saved ones came back, next track ends with its shortcut of the user's own,
+# which the defaults would not give, and the .bak that Give them back's save kept is the config as written
 f68_desktop plasma '' ''
-cfg=$(f68_config f68-givesaved '' '[Desktop Keys]' 'Ask=no' 'Desktop=plasma' 'PlasmaNext=16777347,0,0,0|117440594,0,0,0' \
+cfg=$(f68_config f68-givesaved '' '[Desktop Keys]' 'Ask=no' 'Desktop=plasma' "PlasmaNext=$F68_OWN_NEXT" \
       'PlasmaPrevious=16777346,0,0,0')
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
     run_keys f68-givesaved $F68_TO_ROW Return Return BackSpace BackSpace BackSpace
 ok=1
-[ "$(f68_row_values f68-givesaved)" = 'Off for StreamFlex|On' ] \
+[ "$(f68_row_values f68-givesaved)" = 'Off|On' ] \
     && grep -qx 'Media keys: gave KDE Plasma back its saved shortcuts' "$out/f68-givesaved.log" \
-    && f68_desktop_is plasma '16777347,0,0,0|117440594,0,0,0' '16777346,0,0,0' \
+    && f68_desktop_is plasma "$F68_OWN_NEXT" 16777346,0,0,0 && cmp -s "$out/f68-givesaved.before" "$cfg.bak" \
     && f68_section "$cfg" | grep -qx 'Ask=no' && f68_nothing_saved "$cfg" && f68_one_menu f68-givesaved \
     && ran_clean f68-givesaved && ok=0
-result "media keys: shortcuts saved before the launch read Off for StreamFlex, and come back as saved (exit $(cat "$out/f68-givesaved.code"))" $ok
+result "media keys: shortcuts saved before the launch read Off, and come back as saved (exit $(cat "$out/f68-givesaved.code"))" $ok
 echo "      the row read: $(f68_row_values f68-givesaved)"
 f68_show f68-givesaved
 
@@ -265,9 +275,9 @@ result "media keys: with nothing saved the row reads Off, and Give them back giv
 echo "      the row read: $(f68_row_values f68-givedefault)"
 f68_show f68-givedefault
 
-# A save written by hand that lacks PlasmaNext is read as nothing saved: the row reads Off, never Off for
-# StreamFlex, and Give them back gives the defaults, never an empty next-track key; the partial save is
-# removed with it
+# A save written by hand that lacks PlasmaNext is read as nothing saved: the row reads Off, and Give them back
+# gives the defaults, never an empty next-track key; the partial save is removed with it. The .bak that Give
+# them back's save kept is the config as written: the partial save was still there, and was not used
 f68_desktop plasma '' ''
 cfg=$(f68_config f68-missing '' '[Desktop Keys]' 'Ask=no' 'Desktop=plasma' 'PlasmaPrevious=16777346,0,0,0')
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
@@ -276,62 +286,79 @@ ok=1
 [ "$(f68_row_values f68-missing)" = 'Off|On' ] \
     && grep -qx 'No PlasmaNext value in \[Desktop Keys\], so no saved KDE Plasma shortcuts are read' "$out/f68-missing.log" \
     && grep -qx 'Media keys: gave KDE Plasma back its default shortcuts' "$out/f68-missing.log" \
-    && f68_desktop_is "${F68_PLASMA[@]}" && f68_nothing_saved "$cfg" && f68_section "$cfg" | grep -qx 'Ask=no' \
-    && ran_clean f68-missing && ok=0
+    && f68_desktop_is "${F68_PLASMA[@]}" && cmp -s "$out/f68-missing.before" "$cfg.bak" \
+    && f68_nothing_saved "$cfg" && f68_section "$cfg" | grep -qx 'Ask=no' && ran_clean f68-missing && ok=0
 result "media keys: a save missing PlasmaNext reads as nothing saved, and gives the defaults back (exit $(cat "$out/f68-missing.code"))" $ok
 echo "      the row read: $(f68_row_values f68-missing)"
 f68_show f68-missing
 
 # A save written by hand whose PlasmaPrevious is not key sequences is read as nothing saved, as the desktop
-# would refuse it: the row reads Off, never Off for StreamFlex, and Give them back gives the defaults
+# would refuse it: the row reads Off, and Give them back gives the defaults. Its PlasmaNext, a valid shortcut of
+# the user's own, would end on the desktop had the save been used, so both keys ending as the defaults proves it
+# was not; and the .bak that Give them back's save kept is the config as written, the save still there
 f68_desktop plasma '' ''
-cfg=$(f68_config f68-unparsable '' '[Desktop Keys]' 'Ask=no' 'Desktop=plasma' 'PlasmaNext=16777347,0,0,0' 'PlasmaPrevious=abc')
+cfg=$(f68_config f68-unparsable '' '[Desktop Keys]' 'Ask=no' 'Desktop=plasma' "PlasmaNext=$F68_OWN_NEXT" 'PlasmaPrevious=abc')
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
     run_keys f68-unparsable $F68_TO_ROW Return Return BackSpace BackSpace BackSpace
 ok=1
 [ "$(f68_row_values f68-unparsable)" = 'Off|On' ] \
     && grep -qxF "Invalid PlasmaPrevious value 'abc' in [Desktop Keys], so no saved KDE Plasma shortcuts are read" "$out/f68-unparsable.log" \
     && grep -qx 'Media keys: gave KDE Plasma back its default shortcuts' "$out/f68-unparsable.log" \
-    && f68_desktop_is "${F68_PLASMA[@]}" && f68_nothing_saved "$cfg" && f68_section "$cfg" | grep -qx 'Ask=no' \
-    && ran_clean f68-unparsable && ok=0
+    && f68_desktop_is "${F68_PLASMA[@]}" && cmp -s "$out/f68-unparsable.before" "$cfg.bak" \
+    && f68_nothing_saved "$cfg" && f68_section "$cfg" | grep -qx 'Ask=no' && ran_clean f68-unparsable && ok=0
 result "media keys: a saved PlasmaPrevious that is not key sequences reads as nothing saved (exit $(cat "$out/f68-unparsable.code"))" $ok
 echo "      the row read: $(f68_row_values f68-unparsable)"
 f68_show f68-unparsable
 
 # Give them back that fails on the second key, once the first is set: the first is put back, so the desktop
-# ends exactly as it started, the saved shortcuts stay, and the failure page says nothing was changed
-F68_SAVED=('[Desktop Keys]' 'Ask=no' 'Desktop=plasma' 'PlasmaNext=16777347,0,0,0' 'PlasmaPrevious=16777346,0,0,0')
+# ends exactly as it started, the saved shortcuts stay, and the failure page says nothing was changed. Then,
+# the desktop able to take them, Give them back again gives the saved ones: the log says so, and next track
+# ends with its shortcut of the user's own, which the defaults would not give; so the failure kept the save,
+# in the config (the .bak that save kept is the config as written) and in what settings hold
+F68_SAVED=('[Desktop Keys]' 'Ask=no' 'Desktop=plasma' "PlasmaNext=$F68_OWN_NEXT" 'PlasmaPrevious=16777346,0,0,0')
 F68_GIVE_FAILED="Settings: page Settings${F68_ARROW}Controls${F68_ARROW}Desktop media keys${F68_ARROW}Couldn't change shortcuts"
+# A function, run once the failure page's OK is back on the page, to note the desktop as it started and the
+# config untouched, then to let the desktop take the shortcuts
+f68_heal() {
+    f68_desktop_is plasma '' '' fail=write-second && cmp -s "$out/$1.before" "$cfg" && [ ! -e "$cfg.bak" ] \
+        && touch "$out/$1.as-failed"
+    f68_desktop plasma '' ''
+}
 f68_desktop plasma '' '' fail=write-second
 cfg=$(f68_config f68-failwrite '' "${F68_SAVED[@]}")
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
-    run_keys f68-failwrite $F68_TO_ROW Return Return Return BackSpace BackSpace BackSpace
+    run_keys f68-failwrite $F68_TO_ROW Return Return Return +f68_heal Return BackSpace BackSpace BackSpace
 log=$out/f68-failwrite.log
 ok=1
-f68_desktop_is plasma '' '' fail=write-second && cmp -s "$out/f68-failwrite.before" "$cfg" && [ ! -e "$cfg.bak" ] \
+[ -e "$out/f68-failwrite.as-failed" ] \
     && grep -qxF "Media keys: could not change Plasma's shortcuts (the test file fails write-second), so nothing was changed" "$log" \
     && grep -qxF "$F68_GIVE_FAILED" "$log" \
     && grep -qxF "Settings: the note says Couldn't change Plasma's shortcuts: the test file fails write-second. Nothing was changed." "$log" \
-    && [ "$(f68_row_values f68-failwrite)" = 'Off for StreamFlex|Off for StreamFlex' ] \
-    && ! grep -q '^Media keys: gave' "$log" && ran_clean f68-failwrite && ok=0
-result "media keys: Give them back that fails on the second key leaves the desktop and the save as they were (exit $(cat "$out/f68-failwrite.code"))" $ok
+    && precedes "$log" "Media keys: could not change Plasma's shortcuts" 'Media keys: gave KDE Plasma back its saved shortcuts' \
+    && [ "$(grep -c '^Media keys: gave' "$log")" = 1 ] \
+    && grep -qx 'Media keys: gave KDE Plasma back its saved shortcuts' "$log" \
+    && f68_desktop_is plasma "$F68_OWN_NEXT" 16777346,0,0,0 && cmp -s "$out/f68-failwrite.before" "$cfg.bak" \
+    && f68_nothing_saved "$cfg" && f68_section "$cfg" | grep -qx 'Ask=no' \
+    && [ "$(f68_row_values f68-failwrite)" = 'Off|On' ] && ran_clean f68-failwrite && ok=0
+result "media keys: Give them back that fails on the second key leaves the desktop and the save as they were, and the save still comes back (exit $(cat "$out/f68-failwrite.code"))" $ok
 echo "      the row read: $(f68_row_values f68-failwrite)"
 f68_show f68-failwrite
 
 # The same, but the first key cannot be put back: the log and the failure page say some of the shortcuts may
-# have changed, never that nothing was; the row reads On, as the desktop now holds next track
+# have changed, never that nothing was; the row reads On, as the desktop now holds next track. The key left
+# set holds the saved shortcut of the user's own, which the defaults would not give: the save was used
 f68_desktop plasma '' '' fail=write-second fail=put-back
 cfg=$(f68_config f68-putback '' "${F68_SAVED[@]}")
 STREAMFLEX_TEST_MEDIAKEYS=$F68_DESKTOP CFG=$cfg UNTIL='Settings closed' \
     run_keys f68-putback $F68_TO_ROW Return Return Return BackSpace BackSpace BackSpace
 log=$out/f68-putback.log
 ok=1
-f68_desktop_is plasma 16777347,0,0,0 '' fail=write-second fail=put-back && cmp -s "$out/f68-putback.before" "$cfg" \
+f68_desktop_is plasma "$F68_OWN_NEXT" '' fail=write-second fail=put-back && cmp -s "$out/f68-putback.before" "$cfg" \
     && grep -qxF "Media keys: could not change Plasma's shortcuts (the test file fails write-second; nextmedia could not be put back), so some of them may have changed" "$log" \
     && grep -qxF "$F68_GIVE_FAILED" "$log" \
     && grep -qxF "Settings: the note says Couldn't change Plasma's shortcuts: the test file fails write-second; nextmedia could not be put back. Some of them may have changed." "$log" \
     && ! grep -qiF 'nothing was changed' "$log" \
-    && [ "$(f68_row_values f68-putback)" = 'Off for StreamFlex|On' ] && ran_clean f68-putback && ok=0
+    && [ "$(f68_row_values f68-putback)" = 'Off|On' ] && ran_clean f68-putback && ok=0
 result "media keys: a Give them back whose put-back fails says some shortcuts may have changed (exit $(cat "$out/f68-putback.code"))" $ok
 echo "      the row read: $(f68_row_values f68-putback)"
 f68_show f68-putback

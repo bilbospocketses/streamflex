@@ -961,7 +961,6 @@ struct SettingsState {
     struct {                     // The desktop's media-key shortcuts (settings_set_media_keys())
         MediaKeysDesktop desktop;   // MEDIAKEYS_NONE: no Controls row and no pages
         bool holds;              // It holds next or previous track
-        bool saved;              // [Desktop Keys] holds its shortcuts, saved before they were turned off
         bool unreadable;         // They could not be read: the Controls row is grayed, and no page opens
     } media;
     char media_note[400];        // The Media keys prompt's note
@@ -1684,11 +1683,11 @@ int settings_rows(SettingsState *state, SettingsRow *rows, int max)
             n = add_row(rows, n, max, link_row("Gamepad", on_off(state, SET_ID_GAMEPAD_ENABLED), SETTINGS_PAGE_GAMEPAD, -1));
 #ifndef _WIN32
             // KDE Plasma and GNOME can hold the media keys; on Windows nothing takes them, so there is no row.
-            // Shortcuts that could not be read leave the row grayed, saying why
+            // It reads On while the desktop holds either key, else Off, saved shortcuts or not. Shortcuts that
+            // could not be read leave the row grayed, reading Unknown and saying why
             if (state->media.desktop != MEDIAKEYS_NONE)
                 n = add_row(rows, n, max, grayed(link_row("Desktop media keys", state->media.unreadable ? "Unknown"
-                                                          : state->media.holds ? "On"
-                                                          : state->media.saved ? "Off for StreamFlex" : "Off",
+                                                          : state->media.holds ? "On" : "Off",
                                                           SETTINGS_PAGE_DESKTOP_KEYS, -1),
                                                  state->media.unreadable, state->media_unread));
 #endif
@@ -3108,13 +3107,13 @@ void settings_show_restart(SettingsState *state, const char *names)
     push_page(state, SETTINGS_PAGE_RESTART, -1);
 }
 
-// A function to give the model the desktop's media-key shortcuts, which the Controls row and the Media keys
-// pages show; the screen gives them again after it changes them, the desktop always the one settings opened with
-void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved)
+// A function to give the model the desktop and whether it holds the media keys, which the Controls row and the
+// Media keys pages show; the screen gives them again after it changes them, the desktop always the one settings
+// opened with
+void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds)
 {
     state->media.desktop = desktop;
     state->media.holds = holds;
-    state->media.saved = saved;
     state->media.unreadable = false;
     fix_cursor(state);
 }
@@ -3128,7 +3127,6 @@ void settings_set_media_keys_unreadable(SettingsState *state, MediaKeysDesktop d
              name != NULL ? name : "the desktop", why);
     state->media.desktop = desktop;
     state->media.holds = false;
-    state->media.saved = false;
     state->media.unreadable = true;
     fix_cursor(state);
 }

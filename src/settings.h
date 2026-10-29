@@ -450,12 +450,13 @@ void settings_icon_done(SettingsState *state, const char *why);   // NULL: chose
 void settings_show_tile(SettingsState *state, int menu, int tile);
 
 // The desktop's media-key shortcuts (Linux; Windows never sets them): the desktop (MEDIAKEYS_NONE, as the
-// model starts: no Controls row and no pages), whether it holds next or previous track, and whether
-// [Desktop Keys] holds its shortcuts as saved before they were turned off. The desktop stays the one settings
-// opened with: while they are open, the screen gives that desktop again and changes only `holds` and `saved`,
-// even when a fresh read finds no desktop (kglobalaccel gone from the bus), since NONE would leave a Media
-// keys page on show with no rows, and settings_show_media_keys_failed() no page to say why
-void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds, bool saved);
+// model starts: no Controls row and no pages) and whether it holds next or previous track, which the Controls
+// row reads as On or Off. Whether [Desktop Keys] holds saved shortcuts is the screen's to know, for Give them
+// back; the row never shows it. The desktop stays the one settings opened with: while they are open, the
+// screen gives that desktop again and changes only `holds`, even when a fresh read finds no desktop
+// (kglobalaccel gone from the bus), since NONE would leave a Media keys page on show with no rows, and
+// settings_show_media_keys_failed() no page to say why
+void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds);
 // A desktop whose shortcuts could not be read as settings opened: the Controls row shows grayed, reading
 // Unknown, with why as its reason ("Couldn't read Plasma's shortcuts: <why>"), and opens no page; the prompt
 // never opens. MEDIAKEYS_NONE leaves no row, as above. settings_set_media_keys() replaces it
