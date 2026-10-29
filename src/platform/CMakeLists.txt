@@ -1,8 +1,11 @@
 # Build platform-specific library
 if (UNIX)
-  add_library(platform unix.c unix.h platform.h)
+  add_library(platform unix.c unix.h mediakeys_unix.c platform.h)
 endif ()
 if (WIN32)
   add_library(platform win32.c appsfolder_win32.c appsfolder.h platform.h)
 endif ()
 target_link_libraries(platform SDL3::SDL3)
+if (UNIX)
+  target_link_libraries(platform PkgConfig::DBUS)
+endif ()

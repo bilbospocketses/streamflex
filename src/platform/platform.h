@@ -18,12 +18,22 @@ bool start_self(char **argv);        // A restart: after the teardown; false, lo
 
 // Linux-specific function prototypes
 #ifdef __unix__
+#include "../mediakeys.h"   // MediaKeysState
 void make_directory(const char *directory);
 bool home_directory(char *buffer, size_t size);
 #ifdef __linux__
 void keep_name(const char *argv0);   // A restart's fresh copy: named after argv[0] again, not /proc/self/exe's "exe"
 #endif
 void print_usage(void);
+
+// The desktop's media-key shortcuts (mediakeys_unix.c): KDE Plasma's through kglobalaccel, GNOME's through
+// gsettings. Each is false, with why, when a call to the desktop failed. A change that fails puts the failed
+// key and every one before it back first, so it changes nothing; why then also names each key that could not
+// be put back, and each change sets *left_changed (when given) to whether one could not
+bool mediakeys_read(MediaKeysState *out, char *why, size_t whycap);   // The desktop (MEDIAKEYS_NONE, true, for neither) and each key's value; out->desktop is set on failure too
+bool mediakeys_clear(MediaKeysDesktop desktop, const MediaKeysState *before, bool *left_changed, char *why, size_t whycap);   // Every key cleared; put back from before
+bool mediakeys_write(const MediaKeysState *saved, bool *left_changed, char *why, size_t whycap);   // Each key set back to its saved value; read first, to put back from
+bool mediakeys_reset_defaults(MediaKeysDesktop desktop, bool *left_changed, char *why, size_t whycap);   // Each key set to the desktop's default; read first, to put back from
 #endif
 
 // Windows-specific function prototypes

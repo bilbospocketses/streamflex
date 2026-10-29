@@ -119,6 +119,15 @@ static void test_load(void)
     CHECK_INT(menuedit_menu(edit, 0)->count, 1);
     CHECK_INT(menuedit_find(edit, ""), -1);
     menuedit_free(edit);
+
+    // The desktop's saved media keys are no menu, before the menus or after them; in another case it is one
+    edit = load("[Desktop Keys]\nAsk=no\n[Main]\nEntry1=A;apps;:quit\n[Desktop Keys]\nDesktop=plasma\n"
+                "PlasmaNext=16777347,0,0,0\n[desktop keys]\nEntry1=B;apps;:quit\n", NULL);
+    CHECK_INT(menuedit_count(edit), 2);
+    CHECK_STR(menuedit_menu(edit, 0)->name, "Main");
+    CHECK_STR(menuedit_menu(edit, 1)->name, "desktop keys");
+    CHECK_INT(menuedit_find(edit, "Desktop Keys"), -1);
+    menuedit_free(edit);
 }
 
 // A function to test what opens a submenu: a command of exactly ":submenu " and a name, the name being
@@ -163,6 +172,8 @@ static void test_check_name(void)
     CHECK_STR(menuedit_check_name(edit, "Hotkeys", -1), "That name is kept for settings");
     CHECK_STR(menuedit_check_name(edit, "Scroll Indicators", -1), "That name is kept for settings");
     CHECK_STR(menuedit_check_name(edit, "general", -1), "That name is kept for settings");   // In any case
+    CHECK_STR(menuedit_check_name(edit, "Desktop Keys", -1), "That name is kept for settings");
+    CHECK_STR(menuedit_check_name(edit, "desktop keys", -1), "That name is kept for settings");
     CHECK_STR(menuedit_check_name(edit, "System", -1), "There's already a menu with that name");
     CHECK_STR(menuedit_check_name(edit, "games", -1), "There's already a menu with that name");   // In any case
     CHECK(menuedit_check_name(edit, "games", 1) == NULL);       // Games itself, in another case

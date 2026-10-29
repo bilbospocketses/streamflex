@@ -112,6 +112,10 @@ static struct {
 } typing;
 static bool go_home = false;          // Go to the default menu after closing (:home)
 static char restart_names[256];       // What the restart prompt offers to apply: "the mappings file"
+#ifndef _WIN32
+static MediaKeysDesktop media_desktop = MEDIAKEYS_NONE;          // The desktop settings opened with, kept while they are open
+static SettingsEventKind media_retry = SETTINGS_EVENT_NONE;      // The media-key choice whose save failed: Try again makes it again
+#endif
 static SDL_Texture *preview = NULL;   // The scene at full size; NULL when the renderer has no targets
 static TTF_Font *font_header = NULL;
 static TTF_Font *font_row = NULL;
@@ -1154,6 +1158,43 @@ static bool apply_menus(IniDoc *doc, void *context, ConfigSaveResult *result)
     return ok;
 }
 
+// A function to write edits into config.ini as it is on disk now, as every save from settings does: on
+// Linux a packaged config that cannot be written becomes the user's own, where the launcher looks first,
+// and the config's path then follows the file written
+static bool write_config(const ConfigEdit *edits, int count, const ConfigListEdit *lists, int list_count,
+                         ConfigDocEdit doc_edit, void *context, ConfigSaveResult *result)
+{
+    bool ok;
+    test_fail("keep", true);
+#ifdef __unix__
+    // The packaged config cannot be written; the user's own goes where the launcher looks first
+    char user_config[MAX_PATH_CHARS + 1];
+    char home[MAX_PATH_CHARS + 1];
+    bool has_home = home_directory(home, sizeof(home));
+    if (has_home)
+        join_paths(user_config, sizeof(user_config), 4, home, ".config", EXECUTABLE_TITLE, FILENAME_DEFAULT_CONFIG);
+    ok = config_save_with(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, count, lists,
+                          list_count, doc_edit, context, result);
+#else
+    ok = config_save_with(config.config_path, NULL, NULL, edits, count, lists, list_count, doc_edit, context, result);
+#endif
+    test_fail("keep", false);
+    if (ok && strcmp(result->path, config.config_path) != 0) {
+        free(config.config_path);
+        config.config_path = strdup(result->path);
+    }
+    return ok;
+}
+
+// A function to say why a save failed, in the log and on the Couldn't save page
+static void save_failed(const ConfigSaveResult *result)
+{
+    char message[CONFIG_SAVE_PATH_MAX + 600];
+    snprintf(message, sizeof(message), "Couldn't save to %s: %s", result->path, result->why);
+    log_error("%s", message);
+    settings_show_save_failed(model, message);
+}
+
 // A function to save every changed setting and binding into config.ini; on failure, show why. The
 // bindings' list edits are sized to their lists, which holds every edit they can make.
 static bool save_changes(void)
@@ -1195,22 +1236,7 @@ static bool save_changes(void)
         n++;
     }
     ConfigSaveResult result;
-    bool ok;
-    test_fail("keep", true);
-#ifdef __unix__
-    // The packaged config cannot be written; the user's own goes where the launcher looks first
-    char user_config[MAX_PATH_CHARS + 1];
-    char home[MAX_PATH_CHARS + 1];
-    bool has_home = home_directory(home, sizeof(home));
-    if (has_home)
-        join_paths(user_config, sizeof(user_config), 4, home, ".config", EXECUTABLE_TITLE, FILENAME_DEFAULT_CONFIG);
-    ok = config_save_with(config.config_path, PATH_CONFIG_SYSTEM, has_home ? user_config : NULL, edits, n, lists, list_count,
-                          menus_edited ? apply_menus : NULL, menu_edit, &result);
-#else
-    ok = config_save_with(config.config_path, NULL, NULL, edits, n, lists, list_count,
-                          menus_edited ? apply_menus : NULL, menu_edit, &result);
-#endif
-    test_fail("keep", false);
+    bool ok = write_config(edits, n, lists, list_count, menus_edited ? apply_menus : NULL, menu_edit, &result);
     free(edits);
     free(values);
     free(lists);
@@ -1223,16 +1249,9 @@ static bool save_changes(void)
         log_save_notes(&result);
         if (menus_edited)
             log_debug("Settings: the menus were written to %s", result.path);
-        if (strcmp(result.path, config.config_path) != 0) {
-            free(config.config_path);
-            config.config_path = strdup(result.path);
-        }
         return true;
     }
-    char message[CONFIG_SAVE_PATH_MAX + 600];
-    snprintf(message, sizeof(message), "Couldn't save to %s: %s", result.path, result.why);
-    log_error("%s", message);
-    settings_show_save_failed(model, message);
+    save_failed(&result);
     return false;
 }
 
@@ -1240,6 +1259,9 @@ static bool save_changes(void)
 // that applies at next start asks first whether to restart StreamFlex now.
 static void save_and_close(void)
 {
+#ifndef _WIN32
+    media_retry = SETTINGS_EVENT_NONE;   // Try again after this save's failure tries this save
+#endif
     if (!settings_any_changed(model) && !settings_menus_edited(model)) {
         log_debug("Settings: nothing changed");
         close_settings();
@@ -1253,6 +1275,188 @@ static void save_and_close(void)
         }
     }
 }
+
+#ifndef _WIN32
+#define MEDIA_WHY_MAX 256   // Why the desktop's shortcuts could not be read or changed
+
+// A function to name a desktop as the log's possessives do ("Plasma's"); a backend that failed always names one
+static const char *media_short_name(MediaKeysDesktop desktop)
+{
+    const char *name = mediakeys_desktop_short_name(desktop);
+    return name != NULL ? name : "the desktop";
+}
+
+// A function to tell whether the desktop holds next or previous track
+static bool media_keys_held(const MediaKeysState *state)
+{
+    return mediakeys_holds_next(state) || mediakeys_holds_previous(state);
+}
+
+// A function to read the desktop's media-key shortcuts while settings are open: false, logged, with why, when
+// the read failed or found another desktop than the one settings opened with (none, as when kglobalaccel has
+// left the bus), which the model never takes (settings_set_media_keys())
+static bool read_media_keys(MediaKeysState *out, char *why, size_t whycap)
+{
+    bool answered = mediakeys_read(out, why, whycap);
+    if (answered && out->desktop == media_desktop)
+        return true;
+    if (answered)
+        copy_string(why, "the desktop no longer answers", whycap);
+    log_error("Media keys: could not read %s's shortcuts (%s)", media_short_name(media_desktop), why);
+    return false;
+}
+
+// A function to give the model what the desktop holds now, after a change: a fresh read, or when that
+// fails, `held`, what the change left it holding. The desktop stays the one settings opened with
+static void refresh_media_keys(bool held)
+{
+    MediaKeysState now;
+    char why[MEDIA_WHY_MAX];
+    if (read_media_keys(&now, why, sizeof(why)))
+        held = media_keys_held(&now);
+    settings_set_media_keys(model, media_desktop, held);
+}
+
+// A function to write [Desktop Keys] edits into config.ini (write_config()), saying in the log what a save
+// that succeeded could not keep, as the settings' save does
+static bool write_media_keys(const ConfigEdit *edits, int count, ConfigSaveResult *result)
+{
+    bool ok = write_config(edits, count, NULL, 0, NULL, NULL, result);
+    if (ok && result->warning[0] != '\0')
+        log_error("Media keys: saved [%s] to %s, but %s", MEDIAKEYS_SECTION, result->path, result->warning);
+    return ok;
+}
+
+// A function to remove the saved shortcuts from [Desktop Keys] (Ask stays): false when the save failed,
+// config.media_keys_saved then still what the file holds
+static bool forget_media_keys(ConfigSaveResult *result)
+{
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
+    int count = mediakeys_forget_edits(edits, MEDIAKEYS_EDITS_MAX);   // Room for every edit a builder makes
+    if (!write_media_keys(edits, count, result))
+        return false;
+    memset(&config.media_keys_saved, 0, sizeof(config.media_keys_saved));   // MEDIAKEYS_NONE: nothing saved
+    return true;
+}
+
+// A function to turn the desktop's media keys off, saving them first: they are read, saved to [Desktop Keys]
+// (a save that fails changes nothing, and its Couldn't save page's Try again comes back here), then cleared.
+// A clear that fails has put back what it cleared, and the saved values are removed again; when a key could
+// not be put back, the log and the failure page say some may have changed, and the saved values stay, the
+// only way back for a key still cleared. From the prompt at start, settings close once the keys are off; from
+// Controls they stay, showing what the desktop holds.
+static void media_keys_off(void)
+{
+    const char *name = media_short_name(media_desktop);
+    MediaKeysState before;
+    bool changed = false;
+    char why[MEDIA_WHY_MAX];
+    if (!read_media_keys(&before, why, sizeof(why))) {
+        settings_show_media_keys_failed(model, why, false);
+        return;
+    }
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
+    int count = mediakeys_save_edits(&before, edits, MEDIAKEYS_EDITS_MAX);
+    if (count < 0) {
+        copy_string(why, "a shortcut is not one config.ini can keep", sizeof(why));
+        log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
+        settings_show_media_keys_failed(model, why, false);
+        return;
+    }
+    ConfigSaveResult result;
+    if (!write_media_keys(edits, count, &result)) {
+        media_retry = SETTINGS_EVENT_MEDIA_KEYS_OFF;
+        save_failed(&result);
+        return;
+    }
+    config.media_keys_saved = before;
+    log_debug("Media keys: saved %s's shortcuts to [%s]", name, MEDIAKEYS_SECTION);
+    if (!mediakeys_clear(media_desktop, &before, &changed, why, sizeof(why))) {
+        if (changed) {
+            log_error("Media keys: could not change %s's shortcuts (%s), so some of them may have changed",
+                      name, why);
+            log_debug("Media keys: the saved shortcuts stay in [%s], for Give them back", MEDIAKEYS_SECTION);
+        }
+        else {
+            log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
+            if (!forget_media_keys(&result))
+                log_error("Media keys: the saved shortcuts stay in [%s]: couldn't save to %s: %s",
+                          MEDIAKEYS_SECTION, result.path, result.why);
+        }
+        refresh_media_keys(true);
+        settings_show_media_keys_failed(model, why, changed);
+        return;
+    }
+    log_debug("Media keys: turned off %s's next- and previous-track shortcuts", name);
+    if (settings_media_keys_prompt_open(model))
+        close_settings();
+    else
+        refresh_media_keys(false);
+}
+
+// A function to give the desktop its media keys back: the shortcuts [Desktop Keys] saved for it, else its
+// defaults, and then the saved ones are removed. A desktop that could not take them has had every key it
+// took put back, and config.ini stays as it was; when a key could not be put back, the log and the failure
+// page say some may have changed. A save that fails says so on the Couldn't save page, whose Try again comes
+// back here
+static void media_keys_restore(void)
+{
+    const char *name = media_short_name(media_desktop);
+    bool saved = config.media_keys_saved.desktop == media_desktop;
+    bool changed = false;
+    char why[MEDIA_WHY_MAX];
+    bool given = saved ? mediakeys_write(&config.media_keys_saved, &changed, why, sizeof(why))
+                       : mediakeys_reset_defaults(media_desktop, &changed, why, sizeof(why));
+    if (!given) {
+        if (changed)
+            log_error("Media keys: could not change %s's shortcuts (%s), so some of them may have changed",
+                      name, why);
+        else
+            log_error("Media keys: could not change %s's shortcuts (%s), so nothing was changed", name, why);
+        refresh_media_keys(changed);   // A key that could not be put back may hold its shortcut again
+        settings_show_media_keys_failed(model, why, changed);
+        return;
+    }
+    ConfigSaveResult result;
+    bool forgotten = forget_media_keys(&result);
+    log_debug("Media keys: gave %s back its %s shortcuts", mediakeys_desktop_name(media_desktop),
+              saved ? "saved" : "default");
+    refresh_media_keys(true);
+    if (!forgotten) {
+        media_retry = SETTINGS_EVENT_MEDIA_KEYS_RESTORE;
+        save_failed(&result);
+    }
+}
+
+// A function to stop the prompt for good: Ask=no saved, then settings close. A save that fails says so on
+// the Couldn't save page, whose Try again comes back here
+static void media_keys_never(void)
+{
+    ConfigEdit edits[MEDIAKEYS_EDITS_MAX];
+    int count = mediakeys_never_edits(edits, MEDIAKEYS_EDITS_MAX);   // Room for every edit a builder makes
+    ConfigSaveResult result;
+    if (!write_media_keys(edits, count, &result)) {
+        media_retry = SETTINGS_EVENT_MEDIA_KEYS_NEVER;
+        save_failed(&result);
+        return;
+    }
+    config.media_keys_ask = false;
+    log_debug("Media keys: will not ask again (saved Ask=no to %s)", result.path);
+    close_settings();
+}
+
+// A function to act on a choice on the Media keys pages: Turn them off, Give them back or Don't ask again
+static void media_keys_chosen(SettingsEventKind kind)
+{
+    media_retry = SETTINGS_EVENT_NONE;
+    if (kind == SETTINGS_EVENT_MEDIA_KEYS_OFF)
+        media_keys_off();
+    else if (kind == SETTINGS_EVENT_MEDIA_KEYS_RESTORE)
+        media_keys_restore();
+    else if (kind == SETTINGS_EVENT_MEDIA_KEYS_NEVER)
+        media_keys_never();
+}
+#endif
 
 static void handle_event(const SettingsEvent *event);
 static void keep_taken(void);
@@ -2117,6 +2321,16 @@ static void handle_event(const SettingsEvent *event)
             save_and_close();
             return;
         case SETTINGS_EVENT_RETRY:
+#ifndef _WIN32
+            if (media_retry != SETTINGS_EVENT_NONE) {
+                // A media-key choice's save failed: Try again leaves the Couldn't save page as Back does, back
+                // to the page the choice was made on, and makes the choice again, not the settings' save
+                SettingsEventKind retry = media_retry;
+                settings_command(model, SETTINGS_BACK);
+                media_keys_chosen(retry);
+                return;
+            }
+#endif
             save_and_close();
             return;
         case SETTINGS_EVENT_LEAVE:
@@ -2163,6 +2377,13 @@ static void handle_event(const SettingsEvent *event)
             if (pickers_active() || browser != NULL)
                 return;   // The grid or the browser is open over the page: they show their own icons
             break;
+        case SETTINGS_EVENT_MEDIA_KEYS_OFF:
+        case SETTINGS_EVENT_MEDIA_KEYS_NEVER:
+        case SETTINGS_EVENT_MEDIA_KEYS_RESTORE:
+#ifndef _WIN32
+            media_keys_chosen(event->kind);   // Windows has no desktop to set, so no page sends these
+#endif
+            return;
         case SETTINGS_EVENT_MOVED:
         case SETTINGS_EVENT_NONE:
             break;
@@ -2395,8 +2616,25 @@ static void handle_browser_command(const char *command)
     preview_highlighted();
 }
 
+// A function to log the note row of the Media keys prompt and of its failure page, whose text is the page's
+// question or its reason and which no other line logs (the caption's line is the preview's note)
+static void log_page_note(void)
+{
+    SettingsPage page = settings_page(model);
+    if (pickers_active() || (page != SETTINGS_PAGE_MEDIA_KEYS && page != SETTINGS_PAGE_MEDIA_KEYS_FAILED))
+        return;
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = min_int(settings_rows(model, rows, SETTINGS_MAX_ROWS), SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        if (rows[i].kind == SETTINGS_ROW_NOTE && rows[i].note != NULL) {
+            log_debug("Settings: the note says %s", rows[i].note);
+            return;
+        }
+    }
+}
+
 // A function to log the column's path when it changes: the page's, or with a picker open, the
-// setting it chooses for after it
+// setting it chooses for after it; and the note of a page whose note is its question
 static void log_path(void)
 {
     char path[512];
@@ -2407,6 +2645,7 @@ static void log_path(void)
     if (strcmp(path, logged_path) != 0) {
         copy_string(logged_path, path, sizeof(logged_path));
         log_debug("Settings: page %s", path);
+        log_page_note();
     }
 }
 
@@ -2778,12 +3017,15 @@ static void draw_column(SettingsRow *rows, int count)
         draw_model_rows(rows, count, x, top, hint_y - margin);
     // The hint is one line: the top page's and the browser's fit the column at 1280 x 800 (a share of
     // the width, with text a share of the height), the top page's Back's "saves and closes" said as
-    // "saves" and the browser's "OK opens or chooses" as the list picker's "OK chooses"
+    // "saves" and the browser's "OK opens or chooses" as the list picker's "OK chooses". The Media keys
+    // prompt opens settings at start with nothing under it, so its Back (Not now) closes them
     const char *hint = pickers_active() ? pickers_hint()
                      : browser != NULL ? "Left and right page \xC2\xB7 OK chooses \xC2\xB7 Back goes up"
                      : settings_moving_tile(model) >= 0 ? "Arrows move it \xC2\xB7 OK drops it \xC2\xB7 Back puts it back"
                      : settings_page(model) == SETTINGS_PAGE_TOP
                        ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back saves"
+                     : settings_page(model) == SETTINGS_PAGE_MEDIA_KEYS
+                       ? "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back closes"
                        : "Left and right change \xC2\xB7 OK opens \xC2\xB7 Back goes back";
     draw_text(font_small, hint, x, hint_y, column_width, ALPHA_DIM, false);
     if (strcmp(hint, logged_hint) != 0) {
@@ -3368,8 +3610,34 @@ static void make_preview(void)
     }
 }
 
-// A function to open settings over the menu on show
-void settings_open(void)
+#ifndef _WIN32
+// A function to give the model the desktop's media keys as settings open: the read start made (`given`), or
+// a fresh one. The desktop it names is the one the model keeps while they are open; a read that fails says
+// why in the log, and the desktop it names (none: no row) gets the Controls row grayed with that reason
+static void open_media_keys(const MediaKeysState *given)
+{
+    MediaKeysState keys;
+    char why[MEDIA_WHY_MAX];
+    media_desktop = MEDIAKEYS_NONE;
+    media_retry = SETTINGS_EVENT_NONE;
+    if (given != NULL)
+        keys = *given;
+    else if (!mediakeys_read(&keys, why, sizeof(why))) {
+        log_error("Media keys: could not read %s's shortcuts (%s)", media_short_name(keys.desktop), why);
+        media_desktop = keys.desktop;
+        if (media_desktop != MEDIAKEYS_NONE)
+            settings_set_media_keys_unreadable(model, media_desktop, why);
+        return;
+    }
+    media_desktop = keys.desktop;
+    if (media_desktop != MEDIAKEYS_NONE)
+        settings_set_media_keys(model, media_desktop, media_keys_held(&keys));
+}
+#endif
+
+// A function to open settings over the menu on show. On Linux the desktop's media keys come from `media`,
+// the read start made, or with NULL from a fresh read
+static void open_settings(const MediaKeysState *media)
 {
     if (model != NULL || current_menu == NULL)
         return;
@@ -3395,6 +3663,11 @@ void settings_open(void)
         settings_set_entry(model, (SettingId) id, -1, &value);
     }
     list_pads();
+#ifndef _WIN32
+    open_media_keys(media);
+#else
+    UNUSED(media);   // Windows has no desktop that holds the media keys
+#endif
     // config.ini as it is now, for the bindings and the menus: their saves find each line again by its text
     size_t length = 0;
     char *text = fileio_read_all(config.config_path, &length);
@@ -3443,6 +3716,42 @@ void settings_open(void)
 #endif
     keep_taken();   // The menus as the launcher shows them now, which a change it cannot take goes back to
 }
+
+// A function to open settings over the menu on show
+void settings_open(void)
+{
+    open_settings(NULL);
+}
+
+#ifndef _WIN32
+// A function to check the desktop's media keys as StreamFlex starts, before the StartupCmd: the log says which
+// of them KDE Plasma or GNOME holds (nothing for another desktop), and while it holds either and [Desktop Keys]
+// Ask is not no, settings open on the Media keys prompt, given the same read. True when the prompt opened
+bool settings_start_media_keys(void)
+{
+    MediaKeysState keys;
+    char why[MEDIA_WHY_MAX];
+    if (!mediakeys_read(&keys, why, sizeof(why))) {
+        log_error("Media keys: could not read %s's shortcuts (%s)", media_short_name(keys.desktop), why);
+        return false;
+    }
+    if (keys.desktop == MEDIAKEYS_NONE)
+        return false;
+    bool next = mediakeys_holds_next(&keys);
+    bool previous = mediakeys_holds_previous(&keys);
+    log_debug("Media keys: %s holds %s", mediakeys_desktop_name(keys.desktop),
+              next && previous ? "next track and previous track" : next ? "next track"
+              : previous ? "previous track" : "neither next track nor previous track");
+    if (!media_keys_held(&keys) || !config.media_keys_ask)
+        return false;
+    open_settings(&keys);
+    if (model == NULL)
+        return false;   // open_settings() said why
+    settings_show_media_keys(model);
+    log_path();
+    return true;
+}
+#endif
 
 // A function to let go of settings at quit, saving nothing
 void settings_close_now(void)

@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include "bindings.h"
 #include "menuedit.h"
+#include "mediakeys.h"
 
 #define SETTING_TEXT_MAX 1024  // Longest path a setting holds
 #define SETTINGS_MAX_ROWS 64   // Most rows one page shows; Menus counts the rest in a note
@@ -219,7 +220,10 @@ typedef enum {
     SETTINGS_PAGE_SPECIAL,       // The special commands a tile can run
     SETTINGS_PAGE_REMOVE_MENU,   // A submenu tile's Remove: the menu with its tiles, or the tile alone
     SETTINGS_PAGE_MOVE_TO,       // The other menus a tile can be moved to
-    SETTINGS_PAGE_ICON           // A tile's icon: the library match, its own icon, the library, an image
+    SETTINGS_PAGE_ICON,          // A tile's icon: the library match, its own icon, the library, an image
+    SETTINGS_PAGE_MEDIA_KEYS,    // The desktop holds the media keys: turn its shortcuts off? (opened at start)
+    SETTINGS_PAGE_DESKTOP_KEYS,  // Controls' Desktop media keys: give them back, or turn them off
+    SETTINGS_PAGE_MEDIA_KEYS_FAILED  // The desktop's shortcuts could not be changed, and why
 } SettingsPage;
 
 typedef enum {
@@ -262,7 +266,12 @@ typedef enum {
     SETTINGS_ACTION_ICON_SUGGESTED,     // The Icon page: the library icon offered first (the match, or the generic one)
     SETTINGS_ACTION_ICON_OWN,           // ...the app's own icon, on a plate
     SETTINGS_ACTION_ICON_GRID,          // ...the library grid
-    SETTINGS_ACTION_ICON_BROWSE         // ...the folder browser, for an image
+    SETTINGS_ACTION_ICON_BROWSE,        // ...the folder browser, for an image
+    SETTINGS_ACTION_MEDIA_KEYS_OFF,     // Turn the desktop's media-key shortcuts off
+    SETTINGS_ACTION_MEDIA_KEYS_NOT_NOW, // The prompt's Not now: close settings
+    SETTINGS_ACTION_MEDIA_KEYS_NEVER,   // The prompt's Don't ask again
+    SETTINGS_ACTION_MEDIA_KEYS_RESTORE, // Give the shortcuts back to the desktop
+    SETTINGS_ACTION_MEDIA_KEYS_OK       // The failure page's OK: back to the page under it
 } SettingsAction;
 
 typedef struct {
@@ -317,7 +326,10 @@ typedef enum {
     SETTINGS_EVENT_PICK_APP,     // Open the app list, for a new tile in the Add page's menu
     SETTINGS_EVENT_BROWSE_PROGRAM,   // Open the program browser, for a new tile there
     SETTINGS_EVENT_PICK_TILE_COMMAND, // Open the command list for tile `tile` of menu `menu`
-    SETTINGS_EVENT_ICON          // The Icon page's row `action` was chosen: the screen acts, then calls settings_icon_done()
+    SETTINGS_EVENT_ICON,         // The Icon page's row `action` was chosen: the screen acts, then calls settings_icon_done()
+    SETTINGS_EVENT_MEDIA_KEYS_OFF,     // Save the desktop's media-key shortcuts, then turn them off
+    SETTINGS_EVENT_MEDIA_KEYS_NEVER,   // Save Ask=no: the prompt never opens again
+    SETTINGS_EVENT_MEDIA_KEYS_RESTORE  // Give the desktop its saved shortcuts back, else its defaults
 } SettingsEventKind;
 
 typedef struct {
@@ -436,5 +448,28 @@ void settings_icon_done(SettingsState *state, const char *why);   // NULL: chose
 // The pages opened at a tile, as the remote opens them: Menus, the menu, its Tiles page and the tile's
 // page (tile -1: the Tiles page); they stop at the last that opened when a menu or tile is not there
 void settings_show_tile(SettingsState *state, int menu, int tile);
+
+// The desktop's media-key shortcuts (Linux; Windows never sets them): the desktop (MEDIAKEYS_NONE, as the
+// model starts: no Controls row and no pages) and whether it holds next or previous track, which the Controls
+// row reads as On or Off. Whether [Desktop Keys] holds saved shortcuts is the screen's to know, for Give them
+// back; the row never shows it. The desktop stays the one settings opened with: while they are open, the
+// screen gives that desktop again and changes only `holds`, even when a fresh read finds no desktop
+// (kglobalaccel gone from the bus), since NONE would leave a Media keys page on show with no rows, and
+// settings_show_media_keys_failed() no page to say why
+void settings_set_media_keys(SettingsState *state, MediaKeysDesktop desktop, bool holds);
+// A desktop whose shortcuts could not be read as settings opened: the Controls row shows grayed, reading
+// Unknown, with why as its reason ("Couldn't read Plasma's shortcuts: <why>"), and opens no page; the prompt
+// never opens. MEDIAKEYS_NONE leaves no row, as above. settings_set_media_keys() replaces it
+void settings_set_media_keys_unreadable(SettingsState *state, MediaKeysDesktop desktop, const char *why);
+// The Media keys prompt, in place of the pages open, as settings open at start: Back and Not now close
+// settings. Nothing with no desktop set.
+void settings_show_media_keys(SettingsState *state);
+// Whether the prompt settings_show_media_keys() opened is open: on show, or under its failure page
+bool settings_media_keys_prompt_open(const SettingsState *state);
+// Why the desktop's shortcuts could not be changed, on a page of its own over the one on show (OK and
+// Back go back to it); a second failure there takes the new reason. The note ends "Nothing was changed.",
+// or with `changed` (a key could not be put back) "Some of them may have changed." Nothing with no desktop
+// set, which names no desktop to blame: keep the desktop settings opened with (settings_set_media_keys())
+void settings_show_media_keys_failed(SettingsState *state, const char *why, bool changed);
 
 #endif
