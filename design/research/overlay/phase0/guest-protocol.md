@@ -30,8 +30,9 @@ repo (`<repo>` below), except the build, which runs from `<repo>` itself.
   are the absolute paths `<repo>/build-phase0/probe_host` and `<repo>/build-phase0/probe_spawn`.
 - **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and `<repo>/build-phase0/probe_spawn`
   (its absolute path) on Linux.
-- **The interactive session (Windows):** G5, G6, G7, G17 step 4 and G18 run in the guest's interactive desktop
-  session, never over SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no desktop the browser is on.
+- **The interactive session (Windows):** G5, G6, G7, G17 steps 4 and 5, and G18 run in the guest's interactive
+  desktop session, never over SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no
+  desktop the browser is on.
 - **Linux runs Firefox only** (decided together, 2026-11-03): every Linux step below uses the full Firefox, and G10 and
   G12 are retired.
 - **Store listings:** G1, G5 and G15's Chrome and Edge runs (Windows) force-install the probe's published Chrome Web
@@ -268,16 +269,19 @@ profiles:
 3. **Automatic picture-in-picture (Chrome and Edge).** In each profile from step 1, with the asset playing, press
    Ctrl+T and record whether a picture-in-picture window opens, and whether the `Preferences` key still reads block
    after the browser closes. Repeat in a fresh profile with the key left unset, as the baseline.
-4. **The launcher's watch.** `probe_spawn pip <browser launch line>` on the Shaka demo, play a clear asset, then
+4. **The launcher's watch.** In a fresh profile without step 1's settings (Firefox: the profile script alone, with
+   none of the four `user_pref` lines, which stop the site's request; Chrome and Edge: a fresh profile, since their
+   settings do not stop it), `probe_spawn pip <browser launch line>` on the Shaka demo, play a clear asset, then
    open picture-in-picture as in step 2. **Read:** the `pip_session` line (what the watch can see on this desktop);
-   each `window` line (`pid`, `title`, `class`, and on Linux `instance` and `role`), the picture-in-picture window's
-   among them; its `pip_seen` line; the `pip_closed` line (`call_ok`, `method`, `ms`) and the `pip_gone` line (`ms`:
-   when the window was actually gone); the `raised` line (`call_ok`, and `method`: which way the raise got through);
-   the `foreground` line, whose `ms` is the time from the window's first appearance until the main window had the
-   focus; and `pip_summary`. Every `ms` counts from the window's first appearance. Then record whether the video
-   kept playing in the page after the window closed, or paused, or left the asset (screenshot). A
-   picture-in-picture window the watch did not call one (`pip: false` in its `window` line) is recorded with its
-   title and class: the rule needs that browser's.
+   each `window` and `window_changed` line (`pid`, `title`, `class`, and on Linux `instance` and `role`), the
+   picture-in-picture window's among them (a window retitled into one is classified on its `window_changed` line);
+   its `pip_seen` line; the `pip_closed` line (`call_ok`, `method`, `ms`) and the `pip_gone` line (`ms`: when the
+   window was actually gone); the `raised` line (`call_ok`, and `method`: which way the raise got through), or in
+   its place a `raise_skipped` line, whose `why` says why there was no raise; the `foreground` line, whose `ms` is
+   the time from the window's first appearance until the main window had the focus; and `pip_summary`. Every `ms`
+   counts from the window's first appearance. Then record whether the video kept playing in the page after the
+   window closed, or paused, or left the asset (screenshot). A picture-in-picture window the watch did not call one
+   (no `pip_seen` line for its `id`) is recorded with its title and class: the rule needs that browser's.
 5. **A minimized main window (Chrome and Edge, Windows).** As step 4, in step 3's baseline profile (the key left
    unset), but with the asset playing press Win+M, which minimizes the browser's main window, instead of opening
    picture-in-picture by hand. Whether automatic picture-in-picture opens a window then is not known: record whether
@@ -305,7 +309,7 @@ passed with `--file`, never on the command line: Windows PowerShell 5.1 drops a 
 quotes, and on Windows `text` refuses a command line that the C runtime and `CommandLineToArgvW` split differently
 (`text_refused`, reason `argv_mismatch`, exit 2). The page `http://127.0.0.1:8765/text.html` holds a
 React-controlled text field and reports the field's value, the React state, each event's `isTrusted`, and which of
-the string's characters are missing from the field. `pages/text-g18.txt` holds the string.
+the string's characters are missing from the React state. `pages/text-g18.txt` holds the string.
 
 Chrome, Edge and Firefox on Windows, and Firefox on Linux (GNOME Wayland, KDE Wayland, an X11 session), with the
 session's keyboard layout set to US, then to a layout with AltGr (German):
@@ -318,10 +322,11 @@ session's keyboard layout set to US, then to a layout with AltGr (German):
    `127.0.0.1` unelevated is not known yet. On Linux run it as the desktop user, never with `sudo` (which hides the
    session's settings from it), after opening uinput to that user once per boot:
    `sudo setfacl -m "u:$USER:rw" /dev/uinput` (undo with `sudo setfacl -x "u:$USER" /dev/uinput`).
-2. On Linux, record the `layout_source` lines (each source tried, and what it answered: `ok`, or why not, a source
-   whose output overflows the probe's buffer reading as `failed`), the `layout` line (the source used, the layout
-   and the variant), the `compose` line (the locale, and whether its table loaded), and each character's `path`; and
-   on Wayland whether any of the session's own sources answered.
+2. On Linux, record the `layout_source` lines (each source tried, and what it answered: `ok`, or why not; a source
+   that keeps writing past the probe's buffer reads `failed`, and one that writes more and stops reads `ok`, its
+   output cut short), the `layout` line (the source used, the layout and the variant), the `compose` line (the
+   locale, and whether its table loaded), and each character's `path`; and on Wayland whether any of the session's
+   own sources answered.
 
 **Read:** the page (screenshot): `value`, `state`, `state equals value`, the `events` line with its `untrusted`
 count, `G18 characters missing` and `characters not in G18`; and `probe_spawn`'s `untyped` lines and exit status.
