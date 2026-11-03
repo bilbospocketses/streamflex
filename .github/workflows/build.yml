@@ -577,9 +577,11 @@ jobs:
       # a copy of the read-only /src and prints CONFIGURE FAILED, BUILD FAILED or WARNINGS OUTSIDE
       # src/external when a step before ctest fails
       - name: Build and run the unit tests
+        # The label names this step's container, the only one stall-watch.sh stops on a stall
         run: |
-          bash .github/scripts/stall-watch.sh --name "Build and run the unit tests" -- \
-            docker run --rm --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
+          tag="streamflex.stall-watch=$(cat /proc/sys/kernel/random/uuid)"
+          bash .github/scripts/stall-watch.sh --name "Build and run the unit tests" --containers "$tag" -- \
+            docker run --rm --label "$tag" --security-opt seccomp=unconfined -v "$GITHUB_WORKSPACE:/src:ro" \
             streamflex-test-debian bash /src/tests/unit.sh
 
   # What only a running launcher shows: the settings screen, key handling and startup paths,
@@ -642,9 +644,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/headless" "$RUNNER_TEMP/console"
           mode=()
           if [ "$PASS" = leaks ]; then mode=(leaks); fi
+          tag="streamflex.stall-watch=$(cat /proc/sys/kernel/random/uuid)"
           bash .github/scripts/stall-watch.sh --name "Run the shard" \
-            --log "$RUNNER_TEMP/console/$LABEL.console.log" -- \
-            docker run --rm --security-opt seccomp=unconfined \
+            --log "$RUNNER_TEMP/console/$LABEL.console.log" --containers "$tag" -- \
+            docker run --rm --label "$tag" --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
             "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2"
 
@@ -654,8 +657,9 @@ jobs:
         if: (success() || failure()) && steps.build_image.outcome == 'success' && matrix.pass == 'plain' && matrix.shard == 1
         run: |
           mkdir -p "$RUNNER_TEMP/headless"
-          bash .github/scripts/stall-watch.sh --name "Run scrollfail" -- \
-            docker run --rm --security-opt seccomp=unconfined \
+          tag="streamflex.stall-watch=$(cat /proc/sys/kernel/random/uuid)"
+          bash .github/scripts/stall-watch.sh --name "Run scrollfail" --containers "$tag" -- \
+            docker run --rm --label "$tag" --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
             "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail
 
