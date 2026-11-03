@@ -7,7 +7,8 @@
 
 #define PROBE_PIP_MAX_WINDOWS 256
 
-/* One visible top-level window of the browser, as a platform lists it. Strings are UTF-8. */
+/* One top-level window of the browser, as a platform lists it (Windows: a visible one, minimized included; X11: one
+   in the window manager's client list, minimized or on another workspace included). Strings are UTF-8. */
 typedef struct {
     uint64_t id;        /* the HWND, or the X11 window id */
     long pid;           /* the process that owns it */
@@ -29,7 +30,7 @@ const char *probe_session_kind(const char *wayland_display, const char *session_
 typedef struct {
     /* Prints the pip_session line; returns 1 when it can list windows, else 0 (the watch then only supervises). */
     int (*session)(void);
-    /* Fills out with the browser's visible top-level windows; returns how many. */
+    /* Fills out with the browser's top-level windows, as probe_win describes them; returns how many. */
     int (*snapshot)(probe_win *out, int cap);
     /* Asks the browser to close window id, as its own close button would; writes the method into method; returns 1
        when the request was sent. The window going away shows in a later snapshot. */

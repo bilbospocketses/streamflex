@@ -1,8 +1,8 @@
 /* probe_spawn pip, Linux. The session kind comes from the environment. On X11, and on Wayland through XWayland when
    DISPLAY is set, the window manager's _NET_CLIENT_LIST is the window list, each window's _NET_WM_PID ties it to the
    browser, _NET_CLOSE_WINDOW closes a picture-in-picture window, and _NET_ACTIVE_WINDOW both raises the main window
-   and says which window has the focus. A Wayland session has no portable window list: a browser drawing on Wayland itself is out of reach, and the pip_session line
-   says so instead of failing quietly. */
+   and says which window has the focus. A Wayland session has no portable window list: a browser drawing on Wayland
+   itself is out of reach, and the pip_session line says so instead of failing quietly. */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,22 +28,31 @@ static int ignore_x_error(Display *d, XErrorEvent *e)
     return 0;
 }
 
-/* A property's items (n of them), or NULL when the window has no such property of that type. XFree the result. */
-static unsigned char *get_prop(Window w, Atom prop, Atom type, unsigned long *n)
+/* A property's items (n of them), with its actual type and format, or NULL when the window has no such property of
+   that type (type may be AnyPropertyType). XFree the result. */
+static unsigned char *get_prop_typed(Window w, Atom prop, Atom type, unsigned long *n, Atom *actual, int *format)
 {
-    Atom actual = None;
-    int format = 0;
     unsigned long after = 0;
     unsigned char *data = NULL;
+    *actual = None;
+    *format = 0;
     *n = 0;
-    if (XGetWindowProperty(g_dpy, w, prop, 0, 4096, False, type, &actual, &format, n, &after, &data) != Success
-        || actual == None || !data) {
+    /* A type mismatch still reports the actual type, with no items: read as no such property. */
+    if (XGetWindowProperty(g_dpy, w, prop, 0, 4096, False, type, actual, format, n, &after, &data) != Success
+        || *actual == None || (type != AnyPropertyType && *actual != type) || !data) {
         if (data)
             XFree(data);
         *n = 0;
         return NULL;
     }
     return data;
+}
+
+static unsigned char *get_prop(Window w, Atom prop, Atom type, unsigned long *n)
+{
+    Atom actual;
+    int format;
+    return get_prop_typed(w, prop, type, n, &actual, &format);
 }
 
 /* Drops a UTF-8 sequence that a cut left unfinished at the end of s. */
@@ -60,18 +69,50 @@ static void trim_utf8(char *s)
     }
 }
 
-static void copy_prop(Window w, Atom prop, Atom type, char *out, size_t cap)
+/* ICCCM's STRING type is Latin-1: writes in's first n bytes (up to a NUL) to out as UTF-8, NUL-ended. A character
+   whose encoding would not fit whole is left out, with everything after it, so out never ends in a cut sequence. */
+static void latin1_to_utf8(const unsigned char *in, size_t n, char *out, size_t cap)
+{
+    size_t o = 0;
+    for (size_t i = 0; i < n && in[i]; i++) {
+        size_t need = in[i] < 0x80 ? 1 : 2;
+        if (o + need >= cap)
+            break;
+        if (need == 1) {
+            out[o++] = (char)in[i];
+        } else {
+            out[o++] = (char)(0xC0 | (in[i] >> 6));
+            out[o++] = (char)(0x80 | (in[i] & 0x3F));
+        }
+    }
+    out[o] = '\0';
+}
+
+/* A text property as UTF-8: UTF8_STRING as it is, STRING converted from Latin-1. COMPOUND_TEXT and any other type
+   read as empty, because only those two are ASCII-compatible encodings the kit can pass on as UTF-8. */
+static void copy_text(Window w, Atom prop, char *out, size_t cap)
 {
     unsigned long n = 0;
-    unsigned char *d = get_prop(w, prop, type, &n);
+    Atom type;
+    int format;
+    unsigned char *d = get_prop_typed(w, prop, AnyPropertyType, &n, &type, &format);
     out[0] = '\0';
     if (!d)
         return;
-    size_t len = n < cap - 1 ? (size_t)n : cap - 1;
-    memcpy(out, d, len);
-    out[len] = '\0';
+    if (format == 8 && type == a_utf8) {
+        size_t len = n < cap - 1 ? (size_t)n : cap - 1;
+        memcpy(out, d, len);
+        out[len] = '\0';
+        trim_utf8(out);
+    } else if (format == 8 && type == XA_STRING) {
+        latin1_to_utf8(d, (size_t)n, out, cap);
+    }
     XFree(d);
-    trim_utf8(out);
+}
+
+static void copy_latin1(const char *s, char *out, size_t cap)
+{
+    latin1_to_utf8((const unsigned char *)(s ? s : ""), s ? strlen(s) : 0, out, cap);
 }
 
 static int has_state(Window w, Atom state)
@@ -129,27 +170,30 @@ static int snapshot(probe_win *out, int cap)
             XFree(pid);
         if (p <= 0 || !probe_child_has_pid(p))
             continue;
+        /* Unmapped windows count too: a minimized main window (ICCCM's Iconic state unmaps it) or one on another
+           workspace is still the main window, _NET_ACTIVE_WINDOW restores it, and its attributes keep its full size.
+           The client list holds only the windows the window manager manages, so nothing internal slips in. */
         XWindowAttributes wa;
-        if (!XGetWindowAttributes(g_dpy, list[i], &wa) || wa.map_state != IsViewable)
+        if (!XGetWindowAttributes(g_dpy, list[i], &wa))
             continue;
         probe_win *w = &out[count++];
         memset(w, 0, sizeof *w);
         w->id = (uint64_t)list[i];
         w->pid = p;
         w->area = (long long)wa.width * wa.height;
-        copy_prop(list[i], a_name, a_utf8, w->title, sizeof w->title);
+        copy_text(list[i], a_name, w->title, sizeof w->title);
         if (!w->title[0])
-            copy_prop(list[i], XA_WM_NAME, AnyPropertyType, w->title, sizeof w->title);
+            copy_text(list[i], XA_WM_NAME, w->title, sizeof w->title);
         XClassHint hint;
         if (XGetClassHint(g_dpy, list[i], &hint)) {
-            snprintf(w->instance, sizeof w->instance, "%s", hint.res_name ? hint.res_name : "");
-            snprintf(w->cls, sizeof w->cls, "%s", hint.res_class ? hint.res_class : "");
+            copy_latin1(hint.res_name, w->instance, sizeof w->instance);
+            copy_latin1(hint.res_class, w->cls, sizeof w->cls);
             if (hint.res_name)
                 XFree(hint.res_name);
             if (hint.res_class)
                 XFree(hint.res_class);
         }
-        copy_prop(list[i], a_role, XA_STRING, w->role, sizeof w->role);
+        copy_text(list[i], a_role, w->role, sizeof w->role);
         w->topmost = has_state(list[i], a_above);
     }
     if (list)
@@ -251,6 +295,8 @@ static int session(void)
                    : "Wayland has no portable window list: the watch cannot see or raise the browser's windows";
     else if (strcmp(x11, "not_built") == 0)
         note = "built without libX11: no windows to list";
+    else if (strcmp(x11, "no_client_list") == 0)
+        note = "X11 opened, but the window manager keeps no _NET_CLIENT_LIST (no EWMH): no windows to list";
     else if (strcmp(kind, "x11") == 0)
         note = can ? "the window manager's client list" : "no usable X11 connection";
     else
