@@ -42,72 +42,74 @@ def run_powershell(test, cmd, cwd=None):
 
 
 class LinuxSetupTest(unittest.TestCase):
+    """Linux is Firefox only: setup writes the Firefox host manifest and nothing else."""
+
     def setUp(self):
-        self.root = pathlib.Path(tempfile.mkdtemp())
         self.home = pathlib.Path(tempfile.mkdtemp())
         self.ids = write_ids(tempfile.mkdtemp())
+        self.hosts = self.home / ".mozilla/native-messaging-hosts"
+        self.manifest = self.hosts / "app.cptk.overlay.json"
 
-    def run_setup(self, *extra):
-        return linux_setup.main(
-            ["--ids", str(self.ids), "--host", "/usr/libexec/cptk/probe_host", "--root", str(self.root),
-             "--home", str(self.home), *extra]
-        )
+    def run_setup(self, *extra, ids=None):
+        return linux_setup.main(["--ids", str(ids or self.ids), "--host", "/usr/libexec/cptk/probe_host",
+                                 "--home", str(self.home), *extra])
 
-    def test_writes_policy_and_host_files(self):
+    def test_writes_only_the_firefox_host_manifest(self):
         self.assertEqual(self.run_setup(), 0)
-        chrome = json.loads((self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").read_text())
-        self.assertEqual(chrome["ExtensionInstallForcelist"], ["a" * 32 + ";https://clients2.google.com/service/update2/crx"])
-        edge = json.loads((self.root / "etc/opt/edge/policies/managed/cptk-overlay.json").read_text())
-        self.assertFalse(edge["StartupBoostEnabled"])
-        host = json.loads((self.root / "etc/opt/edge/native-messaging-hosts/app.cptk.overlay.json").read_text())
-        self.assertEqual(host["allowed_origins"], ["chrome-extension://" + "a" * 32 + "/", "chrome-extension://" + "b" * 32 + "/"])
-        ff = json.loads((self.home / ".mozilla/native-messaging-hosts/app.cptk.overlay.json").read_text())
+        ff = json.loads(self.manifest.read_text())
         self.assertEqual(ff["allowed_extensions"], ["overlay-probe@cptk.app"])
         self.assertEqual(ff["path"], "/usr/libexec/cptk/probe_host")
+        self.assertEqual(ff["type"], "stdio")
+        written = sorted(p.relative_to(self.home).as_posix() for p in self.home.rglob("*") if p.is_file())
+        self.assertEqual(written, [".mozilla/native-messaging-hosts/app.cptk.overlay.json"])
+        self.assertEqual(list(linux_setup.plan(IDS, "/usr/libexec/cptk/probe_host", str(self.home))), [self.manifest])
 
-    def test_setup_is_idempotent_and_keeps_foreign_entries(self):
-        other = self.root / "etc/opt/chrome/policies/managed/zz-it.json"
-        other.parent.mkdir(parents=True)
-        other.write_text(json.dumps({"ExtensionInstallForcelist": ["c" * 32 + ";https://x"]}))
-        self.run_setup()
-        first = (self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").read_text()
-        self.run_setup()
-        self.assertEqual((self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").read_text(), first)
-        self.assertIn("c" * 32, other.read_text())
-        self.assertEqual(linux_setup.conflicts(self.root, "cptk-overlay.json"), [str(other)])
+    def test_refuses_the_retired_root_option(self):
+        # An old command line that still names /etc gets an error, never a silent policy write.
+        with mock.patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+            self.run_setup("--root", "/")
+        self.assertEqual(os.listdir(self.home), [])
 
-    def test_remove_deletes_only_its_files(self):
-        other = self.root / "etc/opt/chrome/policies/managed/zz-it.json"
-        other.parent.mkdir(parents=True)
-        other.write_text(json.dumps({"ExtensionInstallForcelist": ["c" * 32 + ";https://x"]}))
+    def test_setup_is_idempotent_and_keeps_foreign_manifests(self):
+        other = self.hosts / "org.example.other.json"
+        self.hosts.mkdir(parents=True)
+        other.write_text('{"name": "org.example.other"}')
+        self.assertEqual(self.run_setup(), 0)
+        first = self.manifest.read_text()
+        self.assertEqual(self.run_setup(), 0)
+        self.assertEqual(self.manifest.read_text(), first)
+        self.assertEqual(other.read_text(), '{"name": "org.example.other"}')
+
+    def test_remove_deletes_only_its_file(self):
+        other = self.hosts / "org.example.other.json"
+        self.hosts.mkdir(parents=True)
+        other.write_text('{"name": "org.example.other"}')
         self.run_setup()
         self.run_setup("--remove")
-        self.assertFalse((self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").exists())
-        self.assertFalse((self.home / ".mozilla/native-messaging-hosts/app.cptk.overlay.json").exists())
+        self.assertFalse(self.manifest.exists())
         self.assertTrue(other.exists())
 
     def test_lists_the_folders_it_will_create(self):
-        target = self.home / ".mozilla/native-messaging-hosts"
-        self.assertEqual(linux_setup.missing_dirs(target), [self.home / ".mozilla", target])
-        target.mkdir(parents=True)
-        self.assertEqual(linux_setup.missing_dirs(target), [])
+        self.assertEqual(linux_setup.missing_dirs(self.hosts), [self.home / ".mozilla", self.hosts])
+        self.hosts.mkdir(parents=True)
+        self.assertEqual(linux_setup.missing_dirs(self.hosts), [])
 
     def test_refuses_a_relative_host_path(self):
         with self.assertRaises(SystemExit):
-            linux_setup.main(["--ids", str(self.ids), "--host", "probe_host", "--root", str(self.root),
-                              "--home", str(self.home)])
+            linux_setup.main(["--ids", str(self.ids), "--host", "probe_host", "--home", str(self.home)])
 
-    def test_refuses_bad_ids(self):
-        for bad in ({**IDS, "chrome_web_store": "A" * 32}, {**IDS, "edge_addons": "b" * 31},
-                    {k: v for k, v in IDS.items() if k != "gecko"}, {**IDS, "gecko": "overlay@cptk.app"}):
-            ids = write_ids(tempfile.mkdtemp(), bad)
-            argv = ["--ids", str(ids), "--host", "/usr/libexec/cptk/probe_host", "--root", str(self.root),
-                    "--home", str(self.home)]
+    def test_refuses_a_bad_gecko_id(self):
+        for bad in ({k: v for k, v in IDS.items() if k != "gecko"}, {**IDS, "gecko": "overlay@cptk.app"}):
             with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
-                self.assertEqual(linux_setup.main(argv), 1, bad)
+                self.assertEqual(self.run_setup(ids=write_ids(tempfile.mkdtemp(), bad)), 1, bad)
             self.assertIn("ids file", err.getvalue())
-        self.assertEqual(os.listdir(self.root), [])
         self.assertEqual(os.listdir(self.home), [])
+
+    def test_ignores_the_windows_only_store_ids(self):
+        # ids.json is shared with Windows; its Chrome and Edge ids play no part on Linux, malformed or missing.
+        for ids in ({"gecko": "overlay-probe@cptk.app"}, {**IDS, "chrome_web_store": "A" * 32}):
+            with self.subTest(ids=ids):
+                self.assertEqual(self.run_setup(ids=write_ids(tempfile.mkdtemp(), ids)), 0)
 
     def test_under_sudo_gives_the_user_back_what_it_made_in_their_home(self):
         def getpwnam(name):
@@ -117,17 +119,16 @@ class LinuxSetupTest(unittest.TestCase):
         fake_pwd = types.ModuleType("pwd")
         fake_pwd.getpwnam = getpwnam
         calls = []
-        argv = ["--ids", str(self.ids), "--host", "/usr/libexec/cptk/probe_host", "--root", str(self.root)]
+        argv = ["--ids", str(self.ids), "--host", "/usr/libexec/cptk/probe_host"]
         with mock.patch.dict(sys.modules, {"pwd": fake_pwd}), mock.patch.dict(os.environ, {"SUDO_USER": "alice"}), \
                 mock.patch.object(os, "chown", lambda p, u, g: calls.append((pathlib.Path(p), u, g)), create=True):
             self.assertEqual(linux_setup.main(argv), 0)
-            hosts = self.home / ".mozilla/native-messaging-hosts"
-            self.assertEqual(calls, [(self.home / ".mozilla", 1001, 1002), (hosts, 1001, 1002),
-                                     (hosts / "app.cptk.overlay.json", 1001, 1002)])
+            self.assertEqual(calls, [(self.home / ".mozilla", 1001, 1002), (self.hosts, 1001, 1002),
+                                     (self.manifest, 1001, 1002)])
             calls.clear()
             self.assertEqual(linux_setup.main(argv), 0)
-            self.assertEqual(calls, [(hosts / "app.cptk.overlay.json", 1001, 1002)])
-        self.assertTrue((self.root / "etc/opt/chrome/policies/managed/cptk-overlay.json").exists())
+            self.assertEqual(calls, [(self.manifest, 1001, 1002)])
+        self.assertTrue(self.manifest.exists())
 
 
 class FirefoxProfileTest(unittest.TestCase):

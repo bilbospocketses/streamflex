@@ -15,8 +15,8 @@ text-field probe page (G18). Until a kit task adds them, G17 runs partial and G1
 
 **Amended 2026-11-03 (decided together):** Linux supports Firefox only. G10 (Linux Chrome and Edge policy) and G12
 (Linux Edge and Widevine) are retired, their ids not reused, and `results.md` records them as `retired`. Every other
-Linux run uses Firefox only. The kit built below still writes the Linux Chrome and Edge policy files in
-`linux_setup.py` (Task 6); a guest run on Linux needs only its host registration, and the kit is not changed for it.
+Linux run uses Firefox only. Task 6 below built `linux_setup.py` with Linux Chrome and Edge policy files;
+`design/plans/2026-11-03-overlay-phase0-kit-g17-g18.md` (Task 1) cut it to the Firefox host manifest alone.
 
 **Architecture:** A self-contained kit under `tools/overlay-phase0/`, never built by the root `CMakeLists.txt` and
 never shipped: a C native-messaging probe host, a C spawner (process supervision, key injection, key logging, SDL3

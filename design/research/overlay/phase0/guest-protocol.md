@@ -58,8 +58,7 @@ repo (`<repo>` below), except the build, which runs from `<repo>` itself.
   - The extension's other reports (`key`, `fullscreen`, `play`) are `msg` lines the same way, named by `body.event`.
 - **Browsers:** Windows Edge `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, Chrome
   `C:\Program Files\Google\Chrome\Application\chrome.exe`, Firefox `C:\Program Files\Mozilla Firefox\firefox.exe`;
-  Linux `/opt/microsoft/msedge/msedge`, `/opt/google/chrome/chrome`, and the full Firefox's own path. Record each
-  browser's version with every result.
+  Linux, the full Firefox's own path (Linux runs Firefox only). Record each browser's version with every result.
 - **Fresh profiles:** every run uses a new, empty profile directory unless the item says otherwise.
 - **Chromium launch line:** `<exe> --user-data-dir=<profile> --app=<url> --start-fullscreen --no-first-run
   --disable-session-crashed-bubble`. **Firefox:** run
@@ -194,8 +193,9 @@ and Widevine (the research's S1), is not run. Its id is not reused. Record it in
 ### G13. The Firefox profile sideload
 
 Windows and Linux, current release Firefox, with an everyday Firefox installed. Register the native host first, as
-in G9: on Windows `windows.ps1` as in G1 step 1, on Linux `sudo python3 setup/linux_setup.py --ids ids.json --host
-<abs probe_host>`. Without it nothing reaches `probe.log`.
+in G9: on Windows `windows.ps1` as in G1 step 1, on Linux `python3 setup/linux_setup.py --ids ids.json --host
+<abs probe_host>` as the desktop user (it writes only the Firefox host manifest, in that user's home). Without it
+nothing reaches `probe.log`.
 1. Prepare a fresh profile; start Firefox `-kiosk` on `http://127.0.0.1:8765/probe.html#cptk=<token>`. **Read:**
    an extension start report with `allUrls: true` in `probe.log`.
 2. Close it, copy in `cptk-overlay-probe-0.0.2.xpi` (the signed 0.0.2 from the handoff folder, *Common setup*) with

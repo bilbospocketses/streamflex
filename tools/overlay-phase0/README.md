@@ -56,7 +56,7 @@ kit runs on a clean Windows 11, `setup\`, `pages\`, `extension\`
 | `probe_spawn` | `run` (supervise a browser), `keys` (inject keys), `keylog` (log raw keys), `pad` (gamepad in the background), `focus` (does the launcher get focus back). |
 | `extension/` | CPTK Overlay Probe 0.0.1 (Gecko id `overlay-probe@cptk.app`), the probe extension under its own store listings, and `build.py`, which makes the Chromium and Firefox packages. The signed Firefox package is `cptk-overlay-probe-0.0.1.xpi`; the native host is still `app.cptk.overlay`. |
 | `pages/` | `probe.html` (fullscreen and media-start targets), `keylog.html` (what a page sees), `serve.ps1` (a page server for Windows guests). |
-| `setup/` | `windows.ps1`, `linux_setup.py`: policy and host registration. `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |
+| `setup/` | `windows.ps1`: policy and host registration. `linux_setup.py`: the Firefox host registration (Linux is Firefox only; no policy). `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |
 | `ids.json` | The three store ids, recorded when the probe is published. |
 | `listing.md` | The store listing text, the same for all three stores; `design/research/overlay/phase0/store-steps.md` says where each part goes. |
 | `privacy-policy.md` | The probe's privacy policy, which the store listings link to. |
