@@ -30,8 +30,8 @@ repo (`<repo>` below), except the build, which runs from `<repo>` itself.
   are the absolute paths `<repo>/build-phase0/probe_host` and `<repo>/build-phase0/probe_spawn`.
 - **`probe_spawn`** below means `.\probe_spawn.exe` in the Windows kit folder and `<repo>/build-phase0/probe_spawn`
   (its absolute path) on Linux.
-- **The interactive session (Windows):** G5, G6 and G7 run in the guest's interactive desktop session, never over
-  SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no desktop the browser is on.
+- **The interactive session (Windows):** G5, G6, G7, G17 step 4 and G18 run in the guest's interactive desktop
+  session, never over SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no desktop the browser is on.
 - **Linux runs Firefox only** (decided together, 2026-11-03): every Linux step below uses the full Firefox, and G10 and
   G12 are retired.
 - **Store listings:** G1, G5 and G15's Chrome and Edge runs (Windows) force-install the probe's published Chrome Web
@@ -239,9 +239,13 @@ it loads in both browsers and the probe box appears. (Development only.)
 
 ### G17. Picture-in-picture
 
-**Kit:** steps 1-3 need only the browsers and the Shaka demo. Step 4 needs a `probe_spawn pip` watch (report each
-new top-level window of the launched browser's processes, and raise the main one), which the kit does not have yet;
-until a kit task adds it, record step 4 as not run and the row as partial.
+**Kit:** steps 1-3 need only the browsers and the Shaka demo. Step 4 uses `probe_spawn pip`, which runs the browser
+as `run` does (`close` and `kill` on its stdin work the same) and reports each new top-level window of the browser's
+processes. When one looks like picture-in-picture (its title is *Picture in picture* or *Picture-in-Picture*, in
+any case, or on X11 its `WM_WINDOW_ROLE` is `PictureInPicture`), it closes that window (`WM_CLOSE` on Windows, a
+`_NET_CLOSE_WINDOW` request on X11, as the window's own close button would), which returns the video to the page,
+then raises the browser's main window, the largest of its other windows. It acts on the browser's windows only,
+never on the page. On Windows run it in the guest's interactive session, as G5.
 
 Chrome, Edge and Firefox on Windows, and Firefox on Linux (GNOME Wayland, KDE Wayland, an X11 session), fresh
 profiles:
@@ -264,34 +268,66 @@ profiles:
 3. **Automatic picture-in-picture (Chrome and Edge).** In each profile from step 1, with the asset playing, press
    Ctrl+T and record whether a picture-in-picture window opens, and whether the `Preferences` key still reads block
    after the browser closes. Repeat in a fresh profile with the key left unset, as the baseline.
-4. **The launcher's watch.** `probe_spawn pip <browser launch line>`, then open picture-in-picture as in step 2.
-   **Read:** the watch's line for the new window and its raise of the main window, with the time from the window's
-   appearance.
+4. **The launcher's watch.** `probe_spawn pip <browser launch line>` on the Shaka demo, play a clear asset, then
+   open picture-in-picture as in step 2. **Read:** the `pip_session` line (what the watch can see on this desktop);
+   each `window` line (`pid`, `title`, `class`, and on Linux `instance` and `role`), the picture-in-picture window's
+   among them; its `pip_seen` line; the `pip_closed` line (`call_ok`, `method`, `ms`) and the `pip_gone` line (`ms`:
+   when the window was actually gone); the `raised` line (`call_ok`, and `method`: which way the raise got through);
+   the `foreground` line, whose `ms` is the time from the window's first appearance until the main window had the
+   focus; and `pip_summary`. Every `ms` counts from the window's first appearance. Then record whether the video
+   kept playing in the page after the window closed, or paused, or left the asset (screenshot). A
+   picture-in-picture window the watch did not call one (`pip: false` in its `window` line) is recorded with its
+   title and class: the rule needs that browser's.
+5. **A minimized main window (Chrome and Edge, Windows).** As step 4, in step 3's baseline profile (the key left
+   unset), but with the asset playing press Win+M, which minimizes the browser's main window, instead of opening
+   picture-in-picture by hand. Whether automatic picture-in-picture opens a window then is not known: record whether
+   one opened. Where one did, **Read:** its `pip_seen` line, whose `main` is the `id` of the minimized main window's
+   `window` line; then the `pip_closed`, `raised` and `foreground` lines for that window; and whether the main window
+   came back restored (screenshot). Record it either way; it is not a pass condition.
 
 **Pass:** every setting reads the same after the restart; where Firefox's settings are set, the site's request
 opens no window and the page keeps playing; the block in Chrome's and Edge's `Preferences` stops step 3's window
 where the baseline opened one, across launches (record either way: where the browser resets it, the fallbacks
-carry it); the watch sees the window and raises the main window
-within 2000 ms on Windows and X11. On Wayland record what the watch can see, as data.
+carry it); the watch calls the picture-in-picture window one, closes it (`pip_gone` follows `pip_closed`), and its
+`foreground` line reads `ms` of 2000 or less, on Windows and X11. Whether the video kept playing in the page is
+recorded either way; it is not a pass condition. On Wayland record the `pip_session` line and every `window` line,
+as data.
 
 ### G18. Typing through the launcher
 
-**Kit:** this item needs a `probe_spawn text` command (each character as trusted keystrokes: `SendInput` with
-`KEYEVENTF_UNICODE` on Windows, uinput with the key and Shift or AltGr the session's layout gives on Linux) and a
-probe page with a React-controlled text field that reports its value, its React state and each event's
-`isTrusted`. The kit has neither yet; until a kit task adds both, G18 is not run.
+**Kit:** `probe_spawn text` types each character as trusted keystrokes: `SendInput` with `KEYEVENTF_UNICODE` on
+Windows, and on Linux uinput with the key and Shift or AltGr that the session's layout gives it, else the dead-key
+or compose sequence that the locale's compose table gives it (each `char` line's `path`: `direct`, `dead` or
+`compose`). A character with no path is named in an `untyped` line and a stderr line, and nothing is typed for it.
+Its exit status is 0 when every character was typed, 3 when some were named untyped and the rest typed, 2 when the
+string was refused before anything was typed, and 1 on a failure to set up or send. The string goes in a UTF-8 file
+passed with `--file`, never on the command line: Windows PowerShell 5.1 drops a native command's embedded double
+quotes, and on Windows `text` refuses a command line that the C runtime and `CommandLineToArgvW` split differently
+(`text_refused`, reason `argv_mismatch`, exit 2). The page `http://127.0.0.1:8765/text.html` holds a
+React-controlled text field and reports the field's value, the React state, each event's `isTrusted`, and which of
+the string's characters are missing from the field. `pages/text-g18.txt` holds the string.
 
 Chrome, Edge and Firefox on Windows, and Firefox on Linux (GNOME Wayland, KDE Wayland, an X11 session), with the
 session's keyboard layout set to US, then to a layout with AltGr (German):
-1. Focus the page's text field and run `probe_spawn text 3000 <string>`, bringing the browser to the front within
-   the 3 s, as in G5. The string holds lowercase and uppercase letters, digits, the keyboard's punctuation, and every
-   character of the keyboard's *àé* page.
-2. On Linux, record how `probe_spawn` learned the session's layout, and on Wayland whether it could at all.
+1. Open `http://127.0.0.1:8765/text.html` in a fresh profile (no token: the probe extension plays no part here)
+   and click the text field. Caps Lock off. Run `probe_spawn text 3000 --file pages\text-g18.txt` (Linux
+   `pages/text-g18.txt`), bringing the browser to the front within the 3 s, as in G5. The file holds the lowercase
+   and uppercase letters, the digits, a space, the keyboard's punctuation and every character of the keyboard's *àé*
+   page, 156 characters. On Windows run it in the guest's interactive session, and note whether the PowerShell
+   window running `pages\serve.ps1` was elevated and whether it served the page: whether `serve.ps1` can listen on
+   `127.0.0.1` unelevated is not known yet. On Linux run it as the desktop user, never with `sudo` (which hides the
+   session's settings from it), after opening uinput to that user once per boot:
+   `sudo setfacl -m "u:$USER:rw" /dev/uinput` (undo with `sudo setfacl -x "u:$USER" /dev/uinput`).
+2. On Linux, record the `layout_source` lines (each source tried, and what it answered: `ok`, or why not, a source
+   whose output overflows the probe's buffer reading as `failed`), the `layout` line (the source used, the layout
+   and the variant), the `compose` line (the locale, and whether its table loaded), and each character's `path`; and
+   on Wayland whether any of the session's own sources answered.
 
-**Read:** the page's report: the field's value, the React state, and `isTrusted` per event. **Pass:** every
-character arrives in the field, every event is trusted, and the React state equals the value, on every browser,
-OS and desktop. A character the layout cannot produce counts as passed when `probe_spawn` refuses it by name and
-types nothing for it.
+**Read:** the page (screenshot): `value`, `state`, `state equals value`, the `events` line with its `untrusted`
+count, `G18 characters missing` and `characters not in G18`; and `probe_spawn`'s `untyped` lines and exit status.
+**Pass:** every character arrives in the field, every event is trusted, and the React state equals the value, on
+every browser, OS and desktop. A character the layout cannot produce counts as passed when `probe_spawn` refuses it
+by name and types nothing for it.
 
 ## Results format
 

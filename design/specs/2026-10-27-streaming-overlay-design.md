@@ -299,8 +299,11 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
    - it translates gamepad input into keys for the browser (**The input bridge**);
    - it keeps the display awake (`SDL_DisableScreenSaver`) and parks the pointer in a corner at launch;
    - if a picture-in-picture window opens anyway (Chrome's automatic picture-in-picture, the browser's own control, a
-     site's button), the launcher brings the browser's main window back to the front, since the remote cannot drive
-     the small floating window; on Windows it sees the new top-level window among the job's processes;
+     site's button), the launcher closes the picture-in-picture window and brings the browser's main window back to
+     the front, since the remote cannot drive the small floating window and it stays on top of every other window;
+     closing it returns the video to the page. The close acts on the browser's window (`WM_CLOSE`, or
+     `_NET_CLOSE_WINDOW` on X11, as the window's own close button would), never on a provider's page (file 30). On
+     Windows it sees the new top-level window among the job's processes;
    - it logs `Overlay: <provider> started in <browser> (pid <n>)`.
 6. **Home** (**The input bridge**) closes the browser: `WM_CLOSE` to every top-level window of the job's processes, or
    `SIGTERM` to the process group; after a **5 s grace period** (a functional timer, logged when it fires), the job is
@@ -390,9 +393,9 @@ written by the launcher and setup, never writes to a provider's page (file 30):
 - **Chrome:** no other setting. Chrome has no picture-in-picture policy, so a site's own button and the browser's
   hover control stay as the browser has them.
 - **The fallbacks stay on every browser:** Back in the player never sends the page a key that opens
-  picture-in-picture (**The engine**, Player), and the launcher brings the main window back to the front when a
-  picture-in-picture window opens anyway (**The launch path**, step 5). On Chrome beyond the automatic setting, and
-  on Edge beyond it and the hover button, they are the only protection.
+  picture-in-picture (**The engine**, Player), and the launcher closes a picture-in-picture window that opens anyway
+  and brings the main window back to the front (**The launch path**, step 5). On Chrome beyond the automatic setting,
+  and on Edge beyond it and the hover button, they are the only protection.
 - *Set up streaming* says so: *StreamFlex's browser profile turns picture-in-picture off where the browser allows
   it, because a video in a floating window can't be driven from the remote.*
 
@@ -772,8 +775,8 @@ numbers in brackets are `SYNTHESIS.md` §7's.
 | G14 [32] | A fresh Firefox profile downloads its Widevine CDM, and how long it takes | it does | setup pre-warms each new profile |
 | G15 [4] | A one-hour DRM test-stream soak with the extension active, per browser | no error | shrink the content script's footprint |
 | G16 [3, 34] | Chrome and Edge on Windows, `Extensions.loadUnpacked` over a debug pipe (the development loop only) | loads | development uses the store builds |
-| G17 [new] | Picture-in-picture, per browser and OS (the three on Windows, Firefox on Linux): each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's and Edge's `auto-picture-in-picture` block in the profile's `Preferences` holds across launches or is reset; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; a reset `auto-picture-in-picture` block is left to the fallbacks; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
-| G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and in Linux Firefox (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
+| G17 [new] | Picture-in-picture, per browser and OS (the three on Windows, Firefox on Linux): each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's and Edge's `auto-picture-in-picture` block in the profile's `Preferences` holds across launches or is reset; the launcher sees a picture-in-picture window, closes it and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and closed, and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; a reset `auto-picture-in-picture` block is left to the fallbacks; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
+| G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and in Linux Firefox (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; the probe records each character's path (direct, dead or compose); on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
 
 **On the user's HTPC (one run sheet, written for the user, about an hour):**
 

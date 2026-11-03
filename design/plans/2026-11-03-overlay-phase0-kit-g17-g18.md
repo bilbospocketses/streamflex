@@ -4704,7 +4704,6 @@ pip_x11.c and text_linux.c. Output field names in the tests match the `snprintf`
 `untyped`, `ms_since_seen`, `call_ok`, `listed`).
 
 **4. Review Focus.** Each of the six lines (the sixth added with the dead-key revision) has its test in its owning
-task, named above. Checked and left out of the
-five, because no unit test can reach them: a localized browser title (the `window` lines carry it as data), Caps Lock
-on in the guest (the protocol says Caps Lock off), and an X11 window closing mid-read (handled by
-`ignore_x_error`, reviewed by reading).
+task, named above. Checked and left out of the six, because no unit test can reach them: a localized browser title
+(the `window` lines carry it as data), Caps Lock on in the guest (the protocol says Caps Lock off), and an X11 window
+closing mid-read (handled by `ignore_x_error`, reviewed by reading).

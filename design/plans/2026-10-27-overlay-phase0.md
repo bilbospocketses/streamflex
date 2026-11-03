@@ -9,9 +9,9 @@ Overlay Probe 0.0.1 (unlisted), in all three stores, and write the guest protoco
 Overlay listing is not created until R1.
 
 **Added 2026-11-03:** G17 (picture-in-picture) and G18 (typing through the launcher) joined the spec's Phase 0 after
-this plan's tasks were written. Their protocol entries are in `guest-protocol.md`. They need kit additions that no
-task below builds yet: a `probe_spawn pip` watch (G17 step 4), and a `probe_spawn text` command with a React
-text-field probe page (G18). Until a kit task adds them, G17 runs partial and G18 does not run.
+this plan's tasks were written. Their protocol entries are in `guest-protocol.md`. The kit additions they need, a
+`probe_spawn pip` watch (G17 step 4), and a `probe_spawn text` command with a React text-field probe page (G18),
+are built by `design/plans/2026-11-03-overlay-phase0-kit-g17-g18.md`.
 
 **Amended 2026-11-03 (decided together):** Linux supports Firefox only. G10 (Linux Chrome and Edge policy) and G12
 (Linux Edge and Widevine) are retired, their ids not reused, and `results.md` records them as `retired`. Every other
