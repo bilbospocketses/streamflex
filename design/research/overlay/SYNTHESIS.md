@@ -199,7 +199,7 @@ Launcher (C99/SDL2) versus extension (JS). Config-format details are my inferenc
 
 **Extension code (new sub-project):**
 
-- Two generated MV3 manifests from one source (Chromium: service worker; Firefox: event page plus `browser_specific_settings.gecko`), a shadow-root API wrapper, content script (ISOLATED) per service, MAIN-world Netflix helper, Shadow-DOM overlay host, geometric engine, adapter loader (remote JSON + bundled fallback), player mode, on-screen keyboard (native-setter + `InputEvent` recipe, VERIFIED for React), cursor fallback, `cursor:none` while in D-pad mode, `disablePictureInPicture` (dropped 2026-11-03, `30-terms-review-2026-11.md`), Native Messaging client, YouTube `/tv` pass-through, Backspace/Esc handling in the capture phase at the top window and inside frames.
+- Two generated MV3 manifests from one source (Chromium: service worker; Firefox: event page plus `browser_specific_settings.gecko`), a shadow-root API wrapper, content script (ISOLATED) per service, MAIN-world Netflix helper, Shadow-DOM overlay host, geometric engine, adapter loader (remote JSON + bundled fallback), player mode, on-screen keyboard (native-setter + `InputEvent` recipe, VERIFIED for React), cursor fallback, `cursor:none` while in D-pad mode (not carried into the design: the launcher parks the pointer instead), `disablePictureInPicture` (dropped 2026-11-03, `30-terms-review-2026-11.md`), Native Messaging client, YouTube `/tv` pass-through, Backspace/Esc handling in the capture phase at the top window and inside frames.
 
 **What carries over from the Android TV / Fire TV lessons (ATV file), and what does not:**
 

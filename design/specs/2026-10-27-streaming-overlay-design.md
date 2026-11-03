@@ -240,6 +240,9 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
    - it serves the overlay channel;
    - it translates gamepad input into keys for the browser (**The input bridge**);
    - it keeps the display awake (`SDL_DisableScreenSaver`) and parks the pointer in a corner at launch;
+   - if a picture-in-picture window opens anyway (Chrome's automatic picture-in-picture, the browser's own control, a
+     site's button), the launcher brings the browser's main window back to the front, since the remote cannot drive
+     the small floating window; on Windows it sees the new top-level window among the job's processes;
    - it logs `Overlay: <provider> started in <browser> (pid <n>)`.
 6. **Home** (**The input bridge**) closes the browser: `WM_CLOSE` to every top-level window of the job's processes, or
    `SIGTERM` to the process group; after a **5 s grace period** (a functional timer, logged when it fires), the job is
@@ -400,15 +403,23 @@ Their names are used only to identify them, and their marks belong to their owne
   playing. Keys follow the adapter's `player.keys`; without an adapter: OK and Space play or pause, Left and Right seek
   with the arrow keys, Up and Down are volume. Player keys are sent as **trusted keys** through the launcher, since
   sites read `isTrusted`. The engine writes nothing to the player: picture-in-picture is whatever the provider allows
-  (decided together, 2026-11-03, file 30).
+  (decided together, 2026-11-03, file 30). **Back in the player** leaves player mode and sends nothing to the page,
+  unless the adapter's `player.keys` maps `Back` to one action (a `sendKey`, or a `click` on the player's own back
+  control); the remote's Back key itself never reaches the page. This matters on Hulu, whose Esc minimizes the video
+  to picture-in-picture (file 21, Hulu §5, REPORTED): a Hulu adapter never maps Back to Escape, and names Hulu's
+  documented control once a guest test confirms it. A picture-in-picture window that opens anyway is the launcher's
+  to undo (**The launch path**, step 5).
 - **Keyboard.** Opens when a text field or `contenteditable` gets focus. Its layouts come from 3c's on-screen
   keyboard (`osk.c`'s layout tables, exported to JSON at build time, so both keyboards stay one design: QWERTY, the ABC
-  grid, the *àé* page). Each key typed is sent as a **trusted key** through the launcher (`send_keys`) to the focused
-  field, as a real keyboard types, and the key handler lets through the keys it asked the launcher to send. The engine
-  never sets a field's value and never dispatches an `InputEvent` (the rule against writing to the page, below). A real
+  grid, the *àé* page). Each character typed goes to the launcher (`send_text`, **The channel**), which types it into
+  the focused field as trusted OS keystrokes, as a real keyboard does; the key handler lets through the keystrokes it
+  asked for. The engine never sets a field's value and never dispatches an `InputEvent` (the rule against writing to
+  the page, below), so the only thing that reaches the provider's page is what a real keyboard would type. A real
   keyboard types as usual.
 - **Pointer.** The fallback when an adapter is broken or a site is unknown: arrows ask the launcher to move the real
-  pointer (accelerating on hold, in wall time), OK is a real click. Chosen from the overlay menu; Back leaves it.
+  pointer (accelerating on hold, in wall time), OK is a real click. Chosen from the overlay menu; Back leaves it, and
+  the launcher parks the pointer in its corner again (`pointer` `park`). The overlay never hides the pointer with a
+  style on the page (no `cursor: none`).
 
 ### Rules the engine enforces
 
@@ -436,8 +447,9 @@ Their names are used only to identify them, and their marks belong to their owne
   focus with `focus()` (and scrolls the focused element into view), and draws inside its own closed-shadow-root layer.
   It sets no attribute, style, class, `tabindex` or property on the provider's elements, the `<video>` included, and
   adds, moves or removes none of their nodes; its one layer element is its own. Typing goes through trusted keys
-  (**The engine**). Removing the launch token from the address (`history.replaceState`, **The launch path**) changes
-  only the URL's fragment StreamFlex added, never a page element.
+  (**The engine**), and the pointer is parked by the launcher, never hidden with a page style. Removing the launch
+  token from the address (`history.replaceState`, **The launch path**) changes only the URL's fragment StreamFlex
+  added, never a page element.
 
 ## The adapter format
 
@@ -573,7 +585,8 @@ malformed frame closes the connection.
 | `{"type":"adapter"}` | `{"type":"adapter","adapter":{…}}` or `{"type":"adapter","adapter":null,"reason":…}` |
 | `{"type":"home"}` | closes the browser (**The launch path**, step 6) |
 | `{"type":"send_keys","keys":[…]}` | `{"type":"ok"}` or `{"type":"error","error":…}` after injecting |
-| `{"type":"pointer","op":"move","dx":…,"dy":…}` or `{"type":"pointer","op":"click","x":…,"y":…}` | same |
+| `{"type":"send_text","text":…}` | `{"type":"ok"}`, or `{"type":"error","error":…,"untyped":…}` naming the characters it could not type |
+| `{"type":"pointer","op":"move","dx":…,"dy":…}`, `{"type":"pointer","op":"click","x":…,"y":…}` or `{"type":"pointer","op":"park"}` | same |
 | `{"type":"log","level":…,"line":…}` | none; written to StreamFlex's log as `Overlay: <provider>: <line>`, at most 20 lines a second |
 
 | Pushed by the launcher | Meaning |
@@ -581,7 +594,12 @@ malformed frame closes the connection.
 | `{"type":"adapter_updated"}` | ask for the adapter again |
 
 Every message except `hello` needs a connection that has received `welcome`. `send_keys` takes only key names from the
-same fixed list adapters use; `pointer` moves are clamped to the browser's display.
+same fixed list adapters use; `pointer` moves are clamped to the browser's display. `send_text` carries the on-screen
+keyboard's typed characters, printable ones only (no control characters), at most 256 a message, and its text is
+never logged. The launcher types each character as trusted keystrokes: on Windows `SendInput` with
+`KEYEVENTF_UNICODE`; on Linux through uinput, with the key and Shift or AltGr that produce it in the session's
+keyboard layout. A character that layout cannot produce is not typed and is named back in `untyped`, and the overlay
+keyboard says so with a toast.
 
 ## Logging
 
@@ -619,7 +637,8 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
   focus re-placed, or a key's `focus` or `click` action), and a skip-intro or skip-recap control gets focus when it
   appears and is never pressed by the engine; that no adapter field can turn on automatic pressing (the schema is
   closed, and a fixture that tries fails); schema validation, including that every repo adapter passes and each broken
-  fixture fails; the keyboard types only through `send_keys`, never setting a field's value or dispatching an event;
+  fixture fails; the keyboard types only through `send_text`, never setting a field's value or dispatching an event;
+  in player mode the remote's Back never reaches the page, and only an adapter's `Back` mapping sends anything;
   what the layer may cover: the ring's drawn box lies outside the focused control's border box on every side and
   draws nothing inside it, and while an `adShowing` selector matches a visible element the layer draws only the ring
   (a toast waits, Menu opens nothing, the keyboard does not open). **Playwright** runs each built-in adapter against
