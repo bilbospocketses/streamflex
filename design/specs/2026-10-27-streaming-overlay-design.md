@@ -58,6 +58,7 @@ dated amendments). The decisions below were made in this design's brainstorm and
 | Ads and skip buttons | **One rule for every provider, enforced by the engine** (user, 2026-11-03): ads are never blocked; no skip button is ever pressed automatically, for an ad, an intro or a recap, and StreamFlex has no auto-skip function. A provider's skip-ad control is reachable with the D-pad but never focused automatically. A skip-intro or skip-recap control is reachable and gets focus when it appears, and is never pressed automatically. This supersedes README D2 (a per-service ban carried in data) and refines D3 (**Rules the engine enforces**). |
 | Scrubbing | **Allowed everywhere** (decided together, 2026-11-03): the remote sends only the site's own seek keys, so a site that refuses to seek during an ad still refuses. |
 | The provider's player | **No write to any provider's player** (decided together, 2026-11-03, from the terms review, file 30): `disablePictureInPicture` is dropped, so picture-in-picture is whatever the provider allows. |
+| Picture-in-picture | **Off where the browser allows it, with the fallbacks kept everywhere** (decided together, 2026-11-03): browser settings in StreamFlex's own profile and setup turn it off (Firefox's prefs, Edge's hover button on Windows; Chrome has no setting), never a write to the page; the player's Back rule and the launcher's window raise cover every browser (**Setup: what each browser needs**, Phase 0 G17). |
 | The provider's page | **No write to the provider's page at all** (decided together, 2026-11-03, file 30): the overlay reads, moves focus with `focus()`, and draws inside its own layer; it sets no attribute, style, class or DOM node on the provider's elements. A test enforces it. The on-screen keyboard therefore types only through trusted keys (my call, from this rule; **The engine**). |
 | What the overlay draws | **Our layers never hide the provider's player UI, advertising or notices for long** (decided together, 2026-11-03, file 30): the focus ring outlines and never covers; the keyboard and the overlay menu are temporary and close away; nothing the overlay draws covers an ad or the provider's copyright or trademark notices (**The overlay layer**). |
 | Provider names and marks | **Not affiliated** (decided together, 2026-11-03, file 30): the README and the overlay's *About* text say StreamFlex is not affiliated with or endorsed by the streaming services it opens. The tile icons stay as `assets/icons/library/brands/NOTICE.md` handles them. |
@@ -220,9 +221,14 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
      user_pref("extensions.autoDisableScopes", 0);
      user_pref("extensions.startupScanScopes", 1);
      user_pref("media.autoplay.default", 0);
+     user_pref("media.videocontrols.picture-in-picture.enabled", false);
+     user_pref("media.videocontrols.picture-in-picture.video-toggle.enabled", false);
+     user_pref("dom.media-pip.enabled", false);
+     user_pref("dom.documentpip.enabled", false);
      user_pref("general.useragent.override", "<TV UA>");
      ```
-     (the last line only for `user_agent=tv`; `startupScanScopes` makes Firefox rescan the profile scope at every
+     (the four picture-in-picture lines: **Picture-in-picture**, under Setup; the last line only for
+     `user_agent=tv`; `startupScanScopes` makes Firefox rescan the profile scope at every
      start, so a replaced XPI is picked up, which Phase 0 G13 confirms), and copy the signed XPI shipped with
      StreamFlex to `<dir>/extensions/overlay@cptk.app.xpi` when it differs. Then
      `<exe> -kiosk <url>#cptk=<token> -profile <dir> -no-remote`, plus `-wait-for-browser` on Windows.
@@ -288,8 +294,9 @@ with no elevation:
   `<CWS id>;https://clients2.google.com/service/update2/crx`, added beside any existing values, never replacing them;
 - `HKCU\Software\Policies\Microsoft\Edge\ExtensionInstallForcelist`: the same with the Edge Add-ons id and
   `https://edge.microsoft.com/extensionwebstorebase/v1/crx`; plus `StartupBoostEnabled=0` and
-  `BackgroundModeEnabled=0`, without which Edge outlives its window. The setup page says these also apply to the
-  user's everyday Edge.
+  `BackgroundModeEnabled=0`, without which Edge outlives its window, and `PictureInPictureOverlayEnabled=0`
+  (**Picture-in-picture**, below). The setup page says these also apply to the user's everyday Edge, and that the
+  last one also hides the picture-in-picture hover button in the everyday Edge on that Windows account.
 - `HKCU\Software\{Google\Chrome,Microsoft\Edge,Mozilla}\NativeMessagingHosts\app.cptk.overlay` pointing at two host
   manifests in `<data>/overlay/` (Chromium's with `allowed_origins` naming both store ids; Firefox's with
   `allowed_extensions`), whose `path` is the absolute path of `cptk-overlay-host.exe` beside `streamflex.exe`.
@@ -312,6 +319,29 @@ with no elevation:
 - Chromium takes each policy from the lexicographically last managed file that sets it, replacing lists (file 24 §6.1).
   *Set up streaming* scans both managed directories and reports any other file that sets `ExtensionInstallForcelist`
   as *Another policy file overrides StreamFlex's*, naming it; it never edits other files.
+
+**Picture-in-picture** (decided together, 2026-11-03). A video in a floating window cannot be driven from the
+remote, so StreamFlex turns picture-in-picture off where the browser itself allows it. These are browser settings,
+written by the launcher and setup, never writes to a provider's page (file 30):
+- **Firefox:** four prefs in the profile's own `user.js` (**The launch path**, step 2), all false:
+  `media.videocontrols.picture-in-picture.enabled`, `media.videocontrols.picture-in-picture.video-toggle.enabled`,
+  `dom.media-pip.enabled` (a site's `requestPictureInPicture()`) and `dom.documentpip.enabled` (Document
+  picture-in-picture). They are not locked, but the launcher rewrites `user.js` before every start, so each launch
+  begins with them off. No Firefox policy is written: a policy reaches every profile of that Firefox, the user's
+  everyday one included, and README D10 scopes Firefox by profile.
+- **Edge (Windows):** `PictureInPictureOverlayEnabled=0`, beside the hygiene policies. It hides only the hover button
+  on a video, needs Edge 118 or later, and does not apply to a profile signed in with a Microsoft account. Edge has
+  no other picture-in-picture policy, and none on Linux.
+- **Chrome:** nothing. Chrome has no picture-in-picture policy. Its automatic picture-in-picture is a per-site
+  content setting (`auto-picture-in-picture`: allow, block or ask, default ask) that no policy sets. Seeding block
+  into the StreamFlex profile's `Preferences` before first launch is undocumented, so it is adopted only if Phase 0
+  G17 shows it holds.
+- **The fallbacks stay on every browser:** Back in the player never sends the page a key that opens
+  picture-in-picture (**The engine**, Player), and the launcher brings the main window back to the front when a
+  picture-in-picture window opens anyway (**The launch path**, step 5). On Chrome, and on Edge beyond the hover
+  button, they are the only protection.
+- *Set up streaming* says so: *StreamFlex's browser profile turns picture-in-picture off where the browser allows
+  it, because a video in a floating window can't be driven from the remote.*
 
 **Status.** *Set up streaming* shows, per installed browser: policy present (or the overriding file), host registered,
 and whether the extension has ever said `hello` in that browser. The last is the only proof the extension is installed.
@@ -685,6 +715,8 @@ numbers in brackets are `SYNTHESIS.md` §7's.
 | G14 [32] | A fresh Firefox profile downloads its Widevine CDM, and how long it takes | it does | setup pre-warms each new profile |
 | G15 [4] | A one-hour DRM test-stream soak with the extension active, per browser | no error | shrink the content script's footprint |
 | G16 [3, 34] | Chrome and Edge `Extensions.loadUnpacked` over a debug pipe (the development loop only) | loads | development uses the store builds |
+| G17 [new] | Picture-in-picture, per browser and OS: each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's seeded `auto-picture-in-picture` block holds or not; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; Chrome's seed is not used if it does not hold; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
+| G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and on Linux (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
 
 **On the user's HTPC (one run sheet, written for the user, about an hour):**
 

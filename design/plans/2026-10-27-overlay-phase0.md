@@ -4,9 +4,14 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the throwaway probe kit Phase 0 measures with, publish the probe extension as its own listing, CPTK
-Overlay Probe 0.0.1 (unlisted), in all three stores, and write the guest protocol (G1-G16) and the user's run sheet
+Overlay Probe 0.0.1 (unlisted), in all three stores, and write the guest protocol (G1-G18) and the user's run sheet
 (H1-H4), so that qa-harness-sf and the user can produce every result the spec's Phase 0 asks for. The real CPTK
 Overlay listing is not created until R1.
+
+**Added 2026-11-03:** G17 (picture-in-picture) and G18 (typing through the launcher) joined the spec's Phase 0 after
+this plan's tasks were written. Their protocol entries are in `guest-protocol.md`. They need kit additions that no
+task below builds yet: a `probe_spawn pip` watch (G17 step 4), and a `probe_spawn text` command with a React
+text-field probe page (G18). Until a kit task adds them, G17 runs partial and G18 does not run.
 
 **Architecture:** A self-contained kit under `tools/overlay-phase0/`, never built by the root `CMakeLists.txt` and
 never shipped: a C native-messaging probe host, a C spawner (process supervision, key injection, key logging, SDL3
@@ -2994,6 +2999,20 @@ Start each browser with `--user-data-dir=<fresh> --remote-debugging-pipe --enabl
 small CDP client and send `Extensions.loadUnpacked` with `extension/dist/chromium`. **Read:** the extension list
 (screenshot), any banner, `navigator.webdriver` in the `start` line. **Pass:** it loads. (Development only.)
 
+### G17. Picture-in-picture (added 2026-11-03)
+
+Each setting in the spec's **Picture-in-picture** holds after a restart; a site's own picture-in-picture request
+fails harmlessly where Firefox's settings are set; Chrome's seeded `auto-picture-in-picture` block holds or not; a
+`probe_spawn pip` watch sees the window and raises the main one. The full steps are in `guest-protocol.md`; step 4
+needs the `pip` watch, which no task here builds.
+
+### G18. Typing through the launcher (added 2026-11-03)
+
+`probe_spawn text` types letters, digits, punctuation and the *àé* page into a React text field as trusted input,
+on Windows (`KEYEVENTF_UNICODE`) and Linux (uinput through the session's layout; on Wayland the layout may not be
+knowable). The full steps are in `guest-protocol.md`; it needs the `text` command and the React page, which no task
+here builds.
+
 ## Results format
 
 `results.md`, one row per item: `| G<n> | pass / fail / partial | browsers and versions | evidence path | note |`.
@@ -3010,7 +3029,8 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "docs: 
 
 Write `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/README.md` naming: the protocol's path on
 `master` (after this branch merges), the built kit's location, `ids.json`, the signed XPI, and which items wait
-for the store reviews (G1, G5, G10, G15; G13 waits only for the signed XPIs). Then send qa-harness-sf one message starting
+for the store reviews (G1, G5, G10, G15; G13 waits only for the signed XPIs), and that G17 step 4 and G18 wait for
+the kit additions named in the Goal. Then send qa-harness-sf one message starting
 `From the streamflex tab: Phase 0 of the streaming overlay is ready for your guests`, with that folder's path. Its
 plan, bookings and guests are its own.
 
@@ -3151,7 +3171,7 @@ Runs after qa-harness-sf's results and the user's run sheet have come back. It c
 
 ```powershell
 $text = Get-Content -Raw C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec/design/research/overlay/phase0/results.md
-foreach ($id in (1..16 | ForEach-Object { "G$_" }) + (1..4 | ForEach-Object { "H$_" })) { if ($text -notmatch "\b$id\b") { "missing $id" } }
+foreach ($id in (1..18 | ForEach-Object { "G$_" }) + (1..4 | ForEach-Object { "H$_" })) { if ($text -notmatch "\b$id\b") { "missing $id" } }
 ```
 
 Expected: no output.

@@ -249,6 +249,59 @@ of `extension/dist/chromium`, then open `http://127.0.0.1:8765/probe.html#cptk=0
 the browser refuses the native port and the box's `host: <reason>` line is expected here, not a failure. **Pass:**
 it loads in both browsers and the probe box appears. (Development only.)
 
+### G17. Picture-in-picture
+
+**Kit:** steps 1-3 need only the browsers and the Shaka demo. Step 4 needs a `probe_spawn pip` watch (report each
+new top-level window of the launched browser's processes, and raise the main one), which the kit does not have yet;
+until a kit task adds it, record step 4 as not run and the row as partial.
+
+Each browser on Windows and on Linux (GNOME Wayland, KDE Wayland, an X11 session), fresh profiles:
+1. **The settings.** Apply the settings the spec's **Picture-in-picture** lists, by hand: Firefox's four
+   `user_pref(..., false)` lines appended to the profile's `user.js` after the profile script (it keeps user lines),
+   and, after the first close, the profile script run again before the restart, so the restart follows the
+   launcher's rewrite of `user.js`; Edge on Windows with
+   `reg add "HKCU\Software\Policies\Microsoft\Edge" /v PictureInPictureOverlayEnabled /t REG_DWORD /d 0`, from a shell
+   that can write that key (G2 says whether a standard user's can); Chrome:
+   in one throwaway profile, set *Automatic picture-in-picture* to *Don't allow* in `chrome://settings/content`,
+   close Chrome, and note the key that changed in that profile's `Default/Preferences`; then write the same key into
+   a fresh profile's `Default/Preferences` before its first launch. Start each browser, read `about:config` /
+   `about:policies`, `edge://policy` or `chrome://settings/content` (screenshots), close it, start it again, and
+   read them again.
+2. **A site's own request.** Open `https://shaka-player-demo.appspot.com/`, play any clear (non-DRM) asset, hover
+   the video, and press the player's picture-in-picture control (in its overflow menu) with the mouse. Record whether
+   a picture-in-picture window opened, which kind (a video window or a document window), whether the browser's own
+   hover button showed, and any error on the page (screenshot).
+3. **Chrome's automatic picture-in-picture.** In the Chrome profile from step 1, with the asset playing, press
+   Ctrl+T and record whether a picture-in-picture window opens. Repeat in a fresh profile with no seed, as the
+   baseline.
+4. **The launcher's watch.** `probe_spawn pip <browser launch line>`, then open picture-in-picture as in step 2.
+   **Read:** the watch's line for the new window and its raise of the main window, with the time from the window's
+   appearance.
+
+**Pass:** every setting reads the same after the restart; where Firefox's settings are set, the site's request
+opens no window and the page keeps playing; Chrome's seeded block stops step 3's window where the baseline opened
+one (record either way: it decides whether the seed is used); the watch sees the window and raises the main window
+within 2000 ms on Windows and X11. On Wayland record what the watch can see, as data.
+
+### G18. Typing through the launcher
+
+**Kit:** this item needs a `probe_spawn text` command (each character as trusted keystrokes: `SendInput` with
+`KEYEVENTF_UNICODE` on Windows, uinput with the key and Shift or AltGr the session's layout gives on Linux) and a
+probe page with a React-controlled text field that reports its value, its React state and each event's
+`isTrusted`. The kit has neither yet; until a kit task adds both, G18 is not run.
+
+Each browser on Windows and on Linux (GNOME Wayland, KDE Wayland, an X11 session), with the session's keyboard layout
+set to US, then to a layout with AltGr (German):
+1. Focus the page's text field and run `probe_spawn text 3000 <string>`, bringing the browser to the front within
+   the 3 s, as in G5. The string holds lowercase and uppercase letters, digits, the keyboard's punctuation, and every
+   character of the keyboard's *àé* page.
+2. On Linux, record how `probe_spawn` learned the session's layout, and on Wayland whether it could at all.
+
+**Read:** the page's report: the field's value, the React state, and `isTrusted` per event. **Pass:** every
+character arrives in the field, every event is trusted, and the React state equals the value, on every browser,
+OS and desktop. A character the layout cannot produce counts as passed when `probe_spawn` refuses it by name and
+types nothing for it.
+
 ## Results format
 
 `results.md`, one row per item: `| G<n> | pass / fail / partial | browsers and versions | evidence path | note |`.
