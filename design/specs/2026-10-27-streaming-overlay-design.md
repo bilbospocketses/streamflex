@@ -1,7 +1,8 @@
 # The D-pad streaming overlay: design
 
-**Date:** 2026-10-27
-**Status:** approved in brainstorming (2026-10-27), awaiting spec review.
+**Date:** 2026-10-27, revised 2026-11-03
+**Status:** approved in brainstorming (2026-10-27), awaiting spec review. Revised 2026-11-03: eight built-in
+providers, and one rule for ads and skip buttons on every provider (**Decisions**, **Rules the engine enforces**).
 **Covers:** todo item 24: streaming services in a real browser, run fullscreen by StreamFlex and driven by a remote or
 a gamepad through an injected 10-foot overlay.
 **Ships as:** Phase 0 (measurements, no product code), then five releases, v0.7.0 to v0.11.0 (**Phases and
@@ -35,7 +36,8 @@ shown to the user, never a reason to drop one.
 
 The research's decisions (user, 2026-09-28) are in `design/research/overlay/README.md` and are not repeated here; this
 design follows all of them, as amended by the research's own later rulings (Linux Edge is non-DRM, the targets are
-like-for-like). The decisions below were made in this design's brainstorm.
+like-for-like) and by this design's 2026-11-03 revision, which supersedes D2 and refines D3 (both recorded there as
+dated amendments). The decisions below were made in this design's brainstorm and its 2026-11-03 revision.
 
 | Question | Decision |
 |---|---|
@@ -50,6 +52,9 @@ like-for-like). The decisions below were made in this design's brainstorm.
 | Adapters | **Pure declarative data** with a closed four-action vocabulary (my call, from the Chrome Web Store's remote-code policy, file 26 §5 and file 29). |
 | Extension reach | **Host permissions on all URLs, inert until a launch token arrives** (my call while writing this spec: self-hosted providers and custom sites live on origins unknown at build time). |
 | Libraries | **libcurl** (HTTPS), **libsodium** (Ed25519, SHA-256), **yyjson** (JSON, vendored), **qrcodegen** (QR, vendored) (my call, from file 28). |
+| Built-in providers | **Eight:** YouTube, Netflix, Jellyfin, Plex and Emby, plus **Tubi, Pluto TV and Twitch** (decided together, 2026-11-03). |
+| Ads and skip buttons | **One rule for every provider, enforced by the engine** (user, 2026-11-03): ads are never blocked; no skip button is ever pressed automatically, for an ad, an intro or a recap, and StreamFlex has no auto-skip function. A provider's skip-ad control is reachable with the D-pad but never focused automatically. A skip-intro or skip-recap control is reachable and gets focus when it appears, and is never pressed automatically. This supersedes README D2 (a per-service ban carried in data) and refines D3 (**Rules the engine enforces**). |
+| Scrubbing | **Allowed everywhere** (decided together, 2026-11-03): the remote sends only the site's own seek keys, so a site that refuses to seek during an ad still refuses. |
 
 ## Architecture
 
@@ -92,8 +97,8 @@ when the port closes (file 28 §5), so it only relays. The extension owns what h
 
 ### The catalog
 
-`assets/streaming/providers.ini` holds the **built-in providers: YouTube, Netflix, Jellyfin, Plex and Emby.** Each has
-a library icon already (`branding/library/brands.ini`). One section per provider:
+`assets/streaming/providers.ini` holds the **eight built-in providers: YouTube, Netflix, Jellyfin, Plex, Emby, Tubi,
+Pluto TV and Twitch.** Each has a library icon already (`branding/library/brands.ini`). One section per provider:
 
 ```ini
 [netflix]
@@ -101,7 +106,6 @@ title=Netflix
 icon=netflix
 url=https://www.netflix.com/browse
 drm=yes
-adskip=allowed
 
 [youtube]
 title=YouTube
@@ -110,14 +114,30 @@ url=https://www.youtube.com/tv
 fallback_url=https://www.youtube.com/
 user_agent=tv
 drm=no
-adskip=banned
 
 [jellyfin]
 title=Jellyfin
 icon=jellyfin
 url=ask
 drm=no
-adskip=allowed
+
+[tubi]
+title=Tubi
+icon=tubi
+url=https://tubitv.com/
+drm=yes
+
+[pluto-tv]
+title=Pluto TV
+icon=pluto-tv
+url=https://pluto.tv/
+drm=yes
+
+[twitch]
+title=Twitch
+icon=twitch
+url=https://www.twitch.tv/
+drm=no
 ```
 
 - `url=ask` marks a self-hosted provider (Jellyfin, Emby): adding its tile asks for the server address with the
@@ -125,8 +145,11 @@ adskip=allowed
 - `drm=yes` means the provider needs a working CDM: it is not offered under Linux Edge (non-DRM by decision until
   Phase 0 item G12 passes) nor on Linux aarch64 (no Widevine for Firefox there, file 27 §9; Chrome arm64's CDM is
   unmeasured). A provider can also name OSes it never plays on (`blocked_os=linux` for a service that blocks Linux).
-- `adskip=banned` is the per-service ad-skip ban (README D2). The **catalog** carries it, not the adapter, so an
-  adapter can never lift it.
+- Tubi and Pluto TV are `drm=yes` until research test S2 (`SERVICES.md` §5) shows whether they use DRM; the research
+  marks it unknown. A wrong `yes` only keeps them off the non-DRM targets; a wrong `no` would offer a service that
+  cannot play there. Twitch plays without DRM (`SERVICES.md`).
+- There is no ad or skip field. One rule covers every provider (**Rules the engine enforces**), so no catalog entry, and
+  no entry from the adapter source, can change it.
 - `user_agent=tv` selects StreamFlex's built-in TV user-agent string (README D4); `fallback_url` is used when the
   browser cannot override the user agent or the `/tv` page refuses it.
 
@@ -304,7 +327,7 @@ XPI ships inside each StreamFlex release (no `update_url`), so Firefox gets engi
 2. With no stored token, stop: no listener, no port, no DOM change. This is the inert switch for the user's everyday
    profile (README D10).
 3. Otherwise the top frame asks the background to open the native port and say `hello`. A `welcome` brings the
-   provider and its policy; `inert` stops the script as in step 2.
+   provider and the theme; `inert` stops the script as in step 2.
 4. It asks for the adapter. With one, the engine runs it; with `{adapter: null, reason}`, a full-screen notice shows
    the reason and only Home and Back work; a custom site runs the generic engine with no adapter.
 
@@ -357,10 +380,24 @@ shows sends `home`.
 
 ### Rules the engine enforces
 
-- **One press, one action** (README D3). Nothing acts on a timer: no auto-skip, no auto-next.
-- **The ad-skip ban** (README D2): with the catalog's `adskip=banned`, elements matching the adapter's
-  `adSkipControls` are never candidates and never clicked, in any mode. In pointer mode the extension reports each
-  click's page coordinates first, and the launcher refuses a click inside one of those elements' boxes.
+- **One press, one action** (README D3, as refined 2026-11-03). Nothing acts on a timer or on its own: no auto-skip,
+  no auto-next, and no setting or field that turns either on. The one thing that happens without a press is focus
+  moving to a skip-intro or skip-recap control when it appears (below). It moves focus only; only a press acts.
+- **Ads and skip buttons: one rule for every provider** (user, 2026-11-03; it supersedes README D2's per-service ban):
+  - Ads are never blocked, and no skip button is ever pressed automatically, for an ad, an intro or a recap.
+    Automatic skipping of intros and recaps is the provider's own setting, where it offers one.
+  - **A skip-ad control** (the adapter's `adSkipControls`) is an ordinary candidate: the user reaches it with the
+    D-pad and presses OK (in player mode, Back leaves player mode first, as for any control). The engine never moves
+    focus to it on its own: an `initialFocus`, the reading-order default, re-placing a lost focus, and a key's
+    `focus` or `click` action never land on it. In pointer mode a click on it is the user's own click, like any other.
+  - **A skip-intro or skip-recap control** (`player.controls.skipIntro`, `player.controls.skipRecap`) is reachable
+    the same way, and when one appears the engine moves focus to it, so one OK skips. It appears when an element
+    matching the selectors becomes a visible, enabled candidate where none was; the `MutationObserver` that
+    re-collects candidates sees it, and it is focused once per appearance, not taken back if the user moves away.
+    While it has focus, OK presses it in any mode; in player mode any other key does what the player map says and
+    takes focus off it.
+  - **Manual scrubbing is allowed everywhere** (decided together, 2026-11-03). The remote sends only the site's own
+    seek keys (jump back or forward, hold to fast-forward), so a site that refuses to seek during an ad still refuses.
 - **Trust is never faked:** no `dispatchEvent` of keyboard or mouse events for anything a site checks; such actions go
   to the launcher. The extension never touches EME, the media pipeline, or the site's network traffic.
 
@@ -384,7 +421,7 @@ that it stays on the allowed side; the precedent is a remotely refreshed JSON ru
   ],
   "focus":   { "include": [".card", ".listItem"], "exclude": [".hide"], "row": ".itemsContainer" },
   "player":  { "keys": { "OK": { "sendKey": "Space" }, "Left": { "sendKey": "ArrowLeft" } },
-               "controls": { "skipIntro": [".skipIntro"] } },
+               "controls": { "skipIntro": [".skipIntro"], "skipRecap": [] } },
   "adSkipControls": [],
   "typing":  { "trusted": false },
   "browsers": { "firefox": { "focus": { "include": [".card", ".listItem", ".itemAction"] } } }
@@ -396,6 +433,11 @@ that it stays on the allowed side; the precedent is a remotely refreshed JSON ru
 - **Actions** are exactly four: `focus` (a selector list), `click` (a selector list), `sendKey` (a key name from a
   fixed list), `scroll` (a direction). A key maps to **one** action. There are no sequences, conditions, expressions,
   variables or regular expressions.
+- **Skip controls** come in two kinds, so the engine can treat them apart (**Rules the engine enforces**):
+  `adSkipControls` names the provider's skip-ad controls (reachable, never focused or pressed by the engine), and
+  `player.controls.skipIntro` and `player.controls.skipRecap` name its skip-intro and skip-recap controls (focused when
+  they appear, never pressed by the engine). All three are selector lists, not actions, so the four-action vocabulary
+  is unchanged. The schema has no field that makes the engine press anything on its own.
 - **Selectors** are CSS selector lists tried in order, first match wins. **Paths** are globs over the URL's path and
   fragment (`*` is any run of characters).
 - **Versioning.** `format` is the schema's major version; the engine refuses one it does not know. `minEngine` is the
@@ -486,7 +528,7 @@ malformed frame closes the connection.
 
 | From the extension | The launcher's reply |
 |---|---|
-| `{"type":"hello","token":…,"browser":…,"extVersion":…}` | `{"type":"welcome","provider":…,"policy":{"adskip":…},"theme":{…},"engineMin":…}`, or `{"type":"inert"}` when the token is unknown or dead |
+| `{"type":"hello","token":…,"browser":…,"extVersion":…}` | `{"type":"welcome","provider":…,"theme":{…},"engineMin":…}`, or `{"type":"inert"}` when the token is unknown or dead |
 | `{"type":"adapter"}` | `{"type":"adapter","adapter":{…}}` or `{"type":"adapter","adapter":null,"reason":…}` |
 | `{"type":"home"}` | closes the browser (**The launch path**, step 6) |
 | `{"type":"send_keys","keys":[…]}` | `{"type":"ok"}` or `{"type":"error","error":…}` after injecting |
@@ -525,13 +567,18 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
 ## Testing
 
 - **C unit tests (ctest):** recipe command lines and profile preparation per browser and OS (`user.js` content, the
-  XPI copy rule, the fragment token); catalog resolution and the plays-here rules; discovery against fake trees; the
+  XPI copy rule, the fragment token); catalog resolution and the plays-here rules for all eight built-in providers,
+  and that the catalog has no ad or skip key (an unknown key changes nothing); discovery against fake trees; the
   cache with a fixed clock (signature, hash, the adapter-bytes cut, replay refusal, a rollback to a lower version, expiry, last good copy, `401` and
   `403`); channel framing and limits; the token table; the host's relay against a fake launcher; QR output against
   known vectors.
 - **Extension (vitest):** candidate collection and direction scoring on fixed layouts; route and initial-focus
-  handling; mode switching and key ownership; the ad-skip ban; schema validation, including that every repo adapter
-  passes and each broken fixture fails. **Playwright** runs each built-in adapter against saved page snapshots in
+  handling; mode switching and key ownership; the skip controls: a skip-ad control is reachable with the D-pad but
+  never focused or pressed by the engine (not on appearance, not by `initialFocus`, the reading-order default, a lost
+  focus re-placed, or a key's `focus` or `click` action), and a skip-intro or skip-recap control gets focus when it
+  appears and is never pressed by the engine; that no adapter field can turn on automatic pressing (the schema is
+  closed, and a fixture that tries fails); schema validation, including that every repo adapter passes and each broken
+  fixture fails. **Playwright** runs each built-in adapter against saved page snapshots in
   Chromium with the extension loaded; Firefox runs through `web-ext` and WebDriver BiDi.
 - **Headless harness, a new lane:** real `google-chrome` and a full Firefox on Xvfb in the Debian image, a Jellyfin
   container with fixture media, the extension installed by the policy file (Chrome) and by the profile sideload
@@ -595,7 +642,7 @@ Each release has its own plan, its smoke rows, and its own CHANGELOG section.
 | **P0** | Phase 0 (above). No release. | every G and H item has a result and its branch is recorded |
 | **R1 v0.7.0: launch and Home** | `providers.ini` with the built-in providers; discovery; recipes (Firefox without the XPI); the supervisor; the Home binding and hook; the gamepad bridge; `:stream`; *Streaming service ›* and *Custom site ›* in the add flow; *Settings › Streaming › Streaming browser*. No extension. | a remote starts Netflix in Edge at full quality, the site's own keyboard navigation works, and one Home press returns to the menu, every time |
 | **R2 v0.8.0: the engine** | the extension (both flavors) and its store submissions; `cptk-overlay-host`; the channel and tokens; the cache, seeded from built-in adapters only (no network); *Set up streaming*; the Linux package files and udev rule; the engine on **Jellyfin, Plex and Emby** (Emby on its Desktop layout, since its TV layout is not free, file 29) | browse, open a title, play and come back with the D-pad alone on each, in all three browsers |
-| **R3 v0.9.0: Netflix and YouTube** | the Netflix adapter and player mode; YouTube `/tv` with its user agent and the fallback; the overlay keyboard; pointer mode; the overlay menu | an evening of use with no keyboard or mouse, including one search and one sign-in per service |
+| **R3 v0.9.0: Netflix, YouTube, Tubi, Pluto TV and Twitch** | the Netflix adapter and player mode; YouTube `/tv` with its user agent and the fallback; the Tubi, Pluto TV and Twitch adapters; the overlay keyboard; pointer mode; the overlay menu | an evening of use with no keyboard or mouse, including one search per service and one sign-in on Netflix and on YouTube |
 | **R4 v0.10.0: the adapter source and Account** | the networked source, the manifest's catalog entries and reasons; *Account* and linking | a linked TV takes adapters from the source, and keeps working while the source is unreachable |
 | **R5 v0.11.0: Linux browser install** | the any-of-three offer when no usable browser is found (Firefox preselected; Edge hidden off amd64), the `pkexec` helper per distro with the text fallback; final Linux Edge DRM gating from G12 | a default Ubuntu box gets a working full Firefox from one button; a box with a usable browser never sees the offer |
 
@@ -604,9 +651,11 @@ the remote-code policy, and waits for the answer before submitting.
 
 ## Out of scope
 
-- Automatic actions of any kind (auto-skip, auto-next): README D3, revisited per service later.
+- Automatic skipping of any kind, for ads, intros or recaps, and any function to turn it on (user, 2026-11-03): a
+  provider's own auto-skip setting, where it has one, is the user's to set with the provider.
+- Auto-next and other automatic actions: README D3, revisited per service later.
 - Detecting site changes and alerting users to adapter updates: the two follow-ups todo item 24 schedules after the
   initial services ship.
 - HDR switching and refresh-rate matching: sub-project 4 and later.
 - A phone keyboard, macOS and Safari, snap and Flatpak browsers, Chromium.
-- Every provider beyond the built-in five: their adapters come through the adapter source.
+- Every provider beyond the built-in eight: their adapters come through the adapter source.
