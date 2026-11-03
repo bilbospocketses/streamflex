@@ -6,6 +6,7 @@ This is the research for a later StreamFlex sub-project: it would make a Windows
 - Files `1x-*.md` are the deeper research, one per topic, written by research agents on 2026-09-28.
 - `SYNTHESIS.md` combines them into findings, open questions, and a recommended prototype path.
 - Files `26-` to `29-` are the 2026-10-27 refresh, written for the design (`design/specs/2026-10-27-streaming-overlay-design.md`): `26` re-checks the time-sensitive facts and the store policies, `27` closes the Firefox gaps, `28` covers the native side (libraries, Native Messaging, SDL3, supervision, injection, Windows policy without an installer), and `29` covers Emby and the adapter format.
+- `30-terms-review-2026-11.md` (2026-11-03) reads each provider's current terms of service in full against what the overlay does, and records the four design rules taken from it (no write to a provider's player or page, layers that never hide the provider's UI, advertising or notices for long, and a not-affiliated statement).
 
 Background, from the StreamFlex session: an Android-in-a-VM approach was rejected. An AOSP guest cannot reach Widevine L1.
 

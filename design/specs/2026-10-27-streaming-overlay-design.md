@@ -2,14 +2,16 @@
 
 **Date:** 2026-10-27, revised 2026-11-03
 **Status:** approved in brainstorming (2026-10-27), awaiting spec review. Revised 2026-11-03: eight built-in
-providers, and one rule for ads and skip buttons on every provider (**Decisions**, **Rules the engine enforces**).
+providers, one rule for ads and skip buttons on every provider, and four rules from the terms review in
+`design/research/overlay/30-terms-review-2026-11.md` (**Decisions**, **Rules the engine enforces**, **The overlay
+layer**).
 **Covers:** todo item 24: streaming services in a real browser, run fullscreen by StreamFlex and driven by a remote or
 a gamepad through an injected 10-foot overlay.
 **Ships as:** Phase 0 (measurements, no product code), then five releases, v0.7.0 to v0.11.0 (**Phases and
 releases**). Each release has its own implementation plan.
 **Builds on:**
 - the research in `design/research/overlay/`: `README.md` (decisions D1-D11), `SYNTHESIS.md` (research passes R1-R7), `SERVICES.md`,
-  and the 2026-10-27 refresh, files `26-` to `29-`;
+  the 2026-10-27 refresh, files `26-` to `29-`, and the terms review, file `30-` (2026-11-03);
 - `design/specs/2026-09-29-menu-editing-design.md` (3c): its add flow, its on-screen keyboard and its layouts;
 - `design/specs/2026-09-29-settings-all-settings-design.md` (3b): the bindings page and the list picker;
 - `design/specs/2026-10-06-sdl3-port-design.md`: SDL3, the floors, and the rule that a duration the user feels is
@@ -55,6 +57,10 @@ dated amendments). The decisions below were made in this design's brainstorm and
 | Built-in providers | **Eight:** YouTube, Netflix, Jellyfin, Plex and Emby, plus **Tubi, Pluto TV and Twitch** (decided together, 2026-11-03). |
 | Ads and skip buttons | **One rule for every provider, enforced by the engine** (user, 2026-11-03): ads are never blocked; no skip button is ever pressed automatically, for an ad, an intro or a recap, and StreamFlex has no auto-skip function. A provider's skip-ad control is reachable with the D-pad but never focused automatically. A skip-intro or skip-recap control is reachable and gets focus when it appears, and is never pressed automatically. This supersedes README D2 (a per-service ban carried in data) and refines D3 (**Rules the engine enforces**). |
 | Scrubbing | **Allowed everywhere** (decided together, 2026-11-03): the remote sends only the site's own seek keys, so a site that refuses to seek during an ad still refuses. |
+| The provider's player | **No write to any provider's player** (decided together, 2026-11-03, from the terms review, file 30): `disablePictureInPicture` is dropped, so picture-in-picture is whatever the provider allows. |
+| The provider's page | **No write to the provider's page at all** (decided together, 2026-11-03, file 30): the overlay reads, moves focus with `focus()`, and draws inside its own layer; it sets no attribute, style, class or DOM node on the provider's elements. A test enforces it. The on-screen keyboard therefore types only through trusted keys (my call, from this rule; **The engine**). |
+| What the overlay draws | **Our layers never hide the provider's player UI, advertising or notices for long** (decided together, 2026-11-03, file 30): the focus ring outlines and never covers; the keyboard and the overlay menu are temporary and close away; nothing the overlay draws covers an ad or the provider's copyright or trademark notices (**The overlay layer**). |
+| Provider names and marks | **Not affiliated** (decided together, 2026-11-03, file 30): the README and the overlay's *About* text say StreamFlex is not affiliated with or endorsed by the streaming services it opens. The tile icons stay as `assets/icons/library/brands/NOTICE.md` handles them. |
 
 ## Architecture
 
@@ -182,6 +188,8 @@ A tile is an ordinary menu entry whose command is a new special command:
 - ***Set up streaming ›***: runs and shows **Setup** for each installed browser, with a status line per browser
   (*Ready*, or what is missing).
 - ***Account ›***: **Linking a TV**.
+- At the foot, one line: *StreamFlex is not affiliated with or endorsed by the streaming services it opens. Their
+  names are used only to identify them, and their marks belong to their owners.* The overlay's *About* says the same.
 
 ## Browser discovery
 
@@ -329,12 +337,29 @@ XPI ships inside each StreamFlex release (no `update_url`), so Firefox gets engi
 3. Otherwise the top frame asks the background to open the native port and say `hello`. A `welcome` brings the
    provider and the theme; `inert` stops the script as in step 2.
 4. It asks for the adapter. With one, the engine runs it; with `{adapter: null, reason}`, a full-screen notice shows
-   the reason and only Home and Back work; a custom site runs the generic engine with no adapter.
+   the reason and only Home and Back work, and either one closes the browser and returns to StreamFlex, so the notice
+   never stays over a page in use; a custom site runs the generic engine with no adapter.
 
 **The overlay layer.** One element per top frame with a **closed** shadow root and adopted stylesheets, so page CSS
 cannot reach it. It draws the focus ring, toasts, the overlay menu, the on-screen keyboard and notices, at StreamFlex's
 sizes and colors (the theme's colors are passed in `welcome`). The pointer is the OS pointer; the layer draws a large
-halo around it in pointer mode.
+ring around it in pointer mode. The layer element is the overlay's own and the only node it adds to the page
+(**Rules the engine enforces**).
+
+**What the layer may cover** (decided together, 2026-11-03; the providers' terms ask that the player, its controls,
+its advertising and its copyright and trademark notices stay visible, file 30). The layer never hides the provider's
+player UI, advertising or notices for long:
+- **The focus ring outlines the focused control and never covers it.** It is drawn outside the control's border box,
+  around it, with nothing inside the box.
+- **Everything else the layer draws is temporary and closes away.** The keyboard closes when typing is done or on
+  Back; the overlay menu closes on Back or when an item is chosen; a toast closes on its own after a few seconds (a
+  functional timer, one constant); a notice closes on Home or Back. In player mode nothing but the ring stays on
+  screen.
+- **Nothing the layer draws covers an ad or the provider's copyright or trademark notices.** While the adapter's
+  `adShowing` selectors match a visible element (**The adapter format**), the layer draws only the focus ring: a toast
+  waits until the ad ends, and the menu and the keyboard do not open (Home still works, through the launcher). With
+  no adapter the engine cannot see an ad, and the rule rests on the layer's other limits: an outline only, and
+  temporary panels.
 
 **Keys.** One handler on `window` in the capture phase owns every key in every mode (one owner per key per mode):
 
@@ -348,7 +373,9 @@ halo around it in pointer mode.
 **Back at the start route** shows a toast, *Press Back again to return to StreamFlex*; a second Back while the toast
 shows sends `home`.
 
-**The overlay menu:** *Home*, *Pointer mode*, *Reload*, *Back to <provider>'s start*.
+**The overlay menu:** *Home*, *Pointer mode*, *Reload*, *Back to <provider>'s start*, *About*. *About* shows the
+extension's version and the line *StreamFlex is not affiliated with or endorsed by the streaming services it opens.
+Their names are used only to identify them, and their marks belong to their owners.*, and closes on Back.
 
 ### The engine
 
@@ -360,7 +387,9 @@ shows sends `home`.
   - **Moving:** the nearest candidate in the pressed direction, scored by the WICG spatial-navigation distance (the
     spec's algorithm, implemented here; the polyfill is archived). With an adapter `focus.row`, Up and Down keep the
     column, as a TV row does.
-  - **Showing:** the focused element is scrolled to the center (`scrollIntoView({block: 'center'})`) and ringed.
+  - **Showing:** the focused element is scrolled to the center (`scrollIntoView({block: 'center'})`) and ringed. A
+    candidate that can take `focus()` gets it; one that cannot (a clickable element with no `tabindex`) is held as the
+    engine's own focus and only ringed. The engine never adds a `tabindex` or any other attribute to make it focusable.
   - **Change:** a `MutationObserver` re-collects candidates when the page adds content; the focus survives if its
     element does.
   - **Routes:** on every route change (history API or the URL changing) the adapter's `initialFocus` for that route is
@@ -370,11 +399,14 @@ shows sends `home`.
 - **Player.** Entered when the route is an adapter's player route, or a `<video>` larger than half the viewport is
   playing. Keys follow the adapter's `player.keys`; without an adapter: OK and Space play or pause, Left and Right seek
   with the arrow keys, Up and Down are volume. Player keys are sent as **trusted keys** through the launcher, since
-  sites read `isTrusted`. `disablePictureInPicture` is set on the video.
+  sites read `isTrusted`. The engine writes nothing to the player: picture-in-picture is whatever the provider allows
+  (decided together, 2026-11-03, file 30).
 - **Keyboard.** Opens when a text field or `contenteditable` gets focus. Its layouts come from 3c's on-screen
   keyboard (`osk.c`'s layout tables, exported to JSON at build time, so both keyboards stay one design: QWERTY, the ABC
-  grid, the *àé* page). Typing uses the field's native value setter plus an `InputEvent`, the recipe React accepts; an
-  adapter's `typing.trusted` switches to trusted keys from the launcher. A real keyboard types as usual.
+  grid, the *àé* page). Each key typed is sent as a **trusted key** through the launcher (`send_keys`) to the focused
+  field, as a real keyboard types, and the key handler lets through the keys it asked the launcher to send. The engine
+  never sets a field's value and never dispatches an `InputEvent` (the rule against writing to the page, below). A real
+  keyboard types as usual.
 - **Pointer.** The fallback when an adapter is broken or a site is unknown: arrows ask the launcher to move the real
   pointer (accelerating on hold, in wall time), OK is a real click. Chosen from the overlay menu; Back leaves it.
 
@@ -400,6 +432,12 @@ shows sends `home`.
     seek keys (jump back or forward, hold to fast-forward), so a site that refuses to seek during an ad still refuses.
 - **Trust is never faked:** no `dispatchEvent` of keyboard or mouse events for anything a site checks; such actions go
   to the launcher. The extension never touches EME, the media pipeline, or the site's network traffic.
+- **No write to the provider's page** (decided together, 2026-11-03, file 30). The overlay only reads the page, moves
+  focus with `focus()` (and scrolls the focused element into view), and draws inside its own closed-shadow-root layer.
+  It sets no attribute, style, class, `tabindex` or property on the provider's elements, the `<video>` included, and
+  adds, moves or removes none of their nodes; its one layer element is its own. Typing goes through trusted keys
+  (**The engine**). Removing the launch token from the address (`history.replaceState`, **The launch path**) changes
+  only the URL's fragment StreamFlex added, never a page element.
 
 ## The adapter format
 
@@ -423,7 +461,7 @@ that it stays on the allowed side; the precedent is a remotely refreshed JSON ru
   "player":  { "keys": { "OK": { "sendKey": "Space" }, "Left": { "sendKey": "ArrowLeft" } },
                "controls": { "skipIntro": [".skipIntro"], "skipRecap": [] } },
   "adSkipControls": [],
-  "typing":  { "trusted": false },
+  "adShowing": [],
   "browsers": { "firefox": { "focus": { "include": [".card", ".listItem", ".itemAction"] } } }
 }
 ```
@@ -438,6 +476,9 @@ that it stays on the allowed side; the precedent is a remotely refreshed JSON ru
   `player.controls.skipIntro` and `player.controls.skipRecap` name its skip-intro and skip-recap controls (focused when
   they appear, never pressed by the engine). All three are selector lists, not actions, so the four-action vocabulary
   is unchanged. The schema has no field that makes the engine press anything on its own.
+- **Ad state.** `adShowing` is a selector list whose visible match means an ad is on screen (the player's ad state, or
+  an ad element on a page). It only keeps the layer clear of the ad (**What the layer may cover**); it never changes
+  what a key does, and it is not an action. There is no typing field: the keyboard always types through trusted keys.
 - **Selectors** are CSS selector lists tried in order, first match wins. **Paths** are globs over the URL's path and
   fragment (`*` is any run of characters).
 - **Versioning.** `format` is the schema's major version; the engine refuses one it does not know. `minEngine` is the
@@ -578,8 +619,17 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
   focus re-placed, or a key's `focus` or `click` action), and a skip-intro or skip-recap control gets focus when it
   appears and is never pressed by the engine; that no adapter field can turn on automatic pressing (the schema is
   closed, and a fixture that tries fails); schema validation, including that every repo adapter passes and each broken
-  fixture fails. **Playwright** runs each built-in adapter against saved page snapshots in
-  Chromium with the extension loaded; Firefox runs through `web-ext` and WebDriver BiDi.
+  fixture fails; the keyboard types only through `send_keys`, never setting a field's value or dispatching an event;
+  what the layer may cover: the ring's drawn box lies outside the focused control's border box on every side and
+  draws nothing inside it, and while an `adShowing` selector matches a visible element the layer draws only the ring
+  (a toast waits, Menu opens nothing, the keyboard does not open). **Playwright** runs each built-in adapter against
+  saved page snapshots in Chromium with the extension loaded; Firefox runs through `web-ext` and WebDriver BiDi.
+- **No write to the provider's page (Playwright, both browsers):** for each built-in adapter's snapshots, served with
+  their own scripts removed so every mutation is the overlay's, a `MutationObserver` on the document (`subtree`,
+  `childList`, `attributes`, `characterData`) records every mutation of a provider-owned node during a scripted
+  session (browse, open a title, player mode, the keyboard typing a search, the overlay menu, pointer mode, Back), and
+  the test requires zero. The overlay's own layer element, everything inside it, and the one insertion that adds it
+  are excluded; nothing else is.
 - **Headless harness, a new lane:** real `google-chrome` and a full Firefox on Xvfb in the Debian image, a Jellyfin
   container with fixture media, the extension installed by the policy file (Chrome) and by the profile sideload
   (Firefox), the stub adapter source. Keys go in through XTEST; checks read the `Overlay:` lines (launch, `hello`,

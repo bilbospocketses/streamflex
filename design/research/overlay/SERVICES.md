@@ -70,6 +70,8 @@ The Linux Chrome, Edge and Firefox columns for the majors come from `21` (pass 3
 
 ### 1b. Difficulty, terms of service and biggest risk
 
+Re-read in full on 2026-11-03: see `30-terms-review-2026-11.md`.
+
 | Service | Tier | Overlay difficulty | ToS risk, in one line | Single biggest risk |
 |---|---|---|---|---|
 | Netflix | 1 | Medium | Bans "insert any code or product or manipulate the content of the Netflix service in any way" (terms dated 2026-04-10) V | A programmatic `video.currentTime` seek triggers error M7375 R; seek must use key events, buttons or the internal player API |
