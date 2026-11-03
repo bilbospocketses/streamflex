@@ -16,7 +16,9 @@
 # The command's stdout and stderr go to this step's output and to FILE (when given; a temporary
 # file otherwise). On a stall it prints a hang record (what was running, how long, when the last
 # line came, the last lines, the process tree and the containers), stops the command's process
-# group and its containers, and exits 124. Otherwise it exits with the command's own status.
+# group and the containers that started while it ran, and exits 124. Containers already running
+# when the step began are left alone: on a shared docker host (a box that runs other containers)
+# they are someone else's. Otherwise it exits with the command's own status.
 # Either way it reports how long the step took and how much the runner received, as a notice, so
 # slow trends show without failing anything. For this script's own tests, STALL_S overrides
 # STALL_MIN in seconds, STALL_POLL_S sets the poll interval, STALL_DRAIN_S the drain's quiet
@@ -96,6 +98,9 @@ procs() {
   done
 }
 
+# The containers running before the command starts, so a stall kills only the ones it started
+containers_before=$(docker ps -q --no-trunc 2> /dev/null | sort)
+
 start=$(date +%s)
 tee "$log" < "$fifo" &
 reader=$!
@@ -136,7 +141,8 @@ while alive "$cmd"; do
     kill -TERM -- "-$cmd" 2> /dev/null
     sleep 10
     kill -KILL -- "-$cmd" 2> /dev/null
-    docker ps -q 2> /dev/null | xargs -r docker kill > /dev/null 2>&1 || true
+    docker ps -q --no-trunc 2> /dev/null | sort | comm -13 <(printf '%s\n' "$containers_before") - \
+      | xargs -r docker kill > /dev/null 2>&1 || true
     break
   fi
 done
