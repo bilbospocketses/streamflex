@@ -182,7 +182,7 @@ browser (decided together, 2026-11-03). A key `quality.<windows|linux>.<edge|chr
 only) holds space-separated words:
 - one status: `supported` (the provider lists the browser, or it is reported to play there), `unlisted` (the
   provider's list leaves it out; it may still play) or `blocked` (the provider refuses it);
-- the highest resolution reported (`2160p`, `1080p`, `720p`, `480p`), or `unknown`;
+- the highest resolution reported (`2160p`, `1080p`, `720p`, `480p`), or `unknown`; a `blocked` key carries none;
 - any of `hdr`, `dv` (Dolby Vision) and `atmos`.
 
 A missing key means nothing is known, and no caveat is shown. A `blocked` browser is treated as `blocked_os` is: the
