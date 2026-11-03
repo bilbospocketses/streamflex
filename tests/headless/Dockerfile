@@ -28,7 +28,7 @@ RUN printf '%s\n' \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential file git cmake pkg-config \
-      libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev \
+      libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev libdbus-1-dev \
       xvfb xauth xdotool x11-xkb-utils x11-apps x11-xserver-utils libgl1-mesa-dri mesa-vulkan-drivers libvulkan1 \
       fonts-noto-cjk fonts-noto-color-emoji weston python3 \
  && dbgsym= \

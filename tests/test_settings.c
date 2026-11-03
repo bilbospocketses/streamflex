@@ -3180,6 +3180,248 @@ static void test_icon_page(void)
     menuedit_free(menus);
 }
 
+// A function to tell whether the page on show has a row by its label, failing nothing when it has not
+static bool has_row(SettingsState *state, const char *label)
+{
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    int count = settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    for (int i = 0; i < count; i++) {
+        if (strcmp(rows[i].label, label) == 0)
+            return true;
+    }
+    return false;
+}
+
+// A function to test Controls' Desktop media keys row: Linux only, and only once a desktop is set; it reads On
+// while the desktop holds a key, else Off. Whether shortcuts are saved is the screen's to know, never the row's:
+// the headless checks (68-media-keys.sh) read Off with a save and without one
+static void test_media_keys_row(void)
+{
+    SettingsState *state = open_model();
+    open_page(state, "Controls");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
+    CHECK(!has_row(state, "Desktop media keys"));                   // No desktop: no row
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
+#ifdef _WIN32
+    CHECK(!has_row(state, "Desktop media keys"));                   // Windows: never a row
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
+    CHECK(!has_row(state, "Desktop media keys"));
+#else
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Gamepad");                            // Last: after Gamepad (and Keyboard, with bindings)
+    CHECK_STR(rows[1].label, "Desktop media keys");
+    CHECK_INT(rows[1].kind, SETTINGS_ROW_LINK);
+    CHECK_INT(rows[1].target, SETTINGS_PAGE_DESKTOP_KEYS);
+    CHECK_STR(rows[1].value, "On");
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);        // Off still opens its page, to give them back
+    const SettingsRow *off = row_labeled(state, rows, "Desktop media keys");
+    CHECK_STR(off->value, "Off");
+    CHECK(off->enabled);
+    CHECK(off->why == NULL);
+    CHECK_INT(off->kind, SETTINGS_ROW_LINK);
+    CHECK_INT(off->target, SETTINGS_PAGE_DESKTOP_KEYS);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
+    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "On");
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
+    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "Off");
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
+    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->value, "On");
+
+    // A desktop that is neither again takes the row away, the cursor off it
+    cursor_to(state, "Desktop media keys");
+    settings_set_media_keys(state, MEDIAKEYS_NONE, false);
+    CHECK(!has_row(state, "Desktop media keys"));
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 1);
+    CHECK_INT(settings_cursor(state), 0);
+
+    // Shortcuts that could not be read: the row is grayed, reads Unknown and says why, the cursor rests on it,
+    // and OK opens nothing; nor does the prompt open. A read that answers takes the gray away
+    settings_set_media_keys_unreadable(state, MEDIAKEYS_PLASMA, "the session bus did not answer");
+    const SettingsRow *row = row_labeled(state, rows, "Desktop media keys");
+    CHECK_INT(row->kind, SETTINGS_ROW_LINK);
+    CHECK(!row->enabled);
+    CHECK_STR(row->value, "Unknown");
+    CHECK_STR(row->why, "Couldn't read Plasma's shortcuts: the session bus did not answer");
+    cursor_to(state, "Desktop media keys");
+    CHECK_INT(settings_cursor(state), 1);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
+    settings_show_media_keys(state);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
+    CHECK(!settings_media_keys_prompt_open(state));
+    settings_set_media_keys_unreadable(state, MEDIAKEYS_GNOME, "could not get previous: gsettings exited with status 1");
+    CHECK_STR(row_labeled(state, rows, "Desktop media keys")->why,
+              "Couldn't read GNOME's shortcuts: could not get previous: gsettings exited with status 1");
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
+    row = row_labeled(state, rows, "Desktop media keys");
+    CHECK(row->enabled);
+    CHECK(row->why == NULL);
+    CHECK_STR(row->value, "On");
+
+    // No desktop named: no row, as before
+    settings_set_media_keys_unreadable(state, MEDIAKEYS_NONE, "the session bus did not answer");
+    CHECK(!has_row(state, "Desktop media keys"));
+#endif
+    settings_free(state);
+}
+
+#ifndef _WIN32
+// A function to test the Desktop media keys page: Give them back to the desktop, grayed while it holds a key,
+// and Turn them off, grayed while it holds none, each with its reason and its event; nothing they do is a
+// changed setting, and the page stays for the screen to refresh. Then the failure page over it.
+static void test_desktop_keys_page(void)
+{
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
+    open_page(state, "Controls");
+    open_page(state, "Desktop media keys");
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_DESKTOP_KEYS);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Desktop media keys");
+    CHECK(!settings_media_keys_prompt_open(state));
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_STR(rows[0].label, "Give them back to KDE Plasma");
+    CHECK(!rows[0].enabled);
+    CHECK_STR(rows[0].why, "KDE Plasma already has them");
+    CHECK_STR(rows[1].label, "Turn them off");
+    CHECK(rows[1].enabled);
+    CHECK(rows[1].why == NULL);
+    CHECK_INT(settings_cursor(state), 0);                           // Grayed with a reason: the cursor rests there
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_DOWN);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_OFF);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_DESKTOP_KEYS);
+    CHECK(!settings_any_changed(state));
+
+    // Turned off, as the screen gives it again: Give them back now, Turn them off grayed
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK(rows[0].enabled);
+    CHECK(rows[0].why == NULL);
+    CHECK(!rows[1].enabled);
+    CHECK_STR(rows[1].why, "They are already off");
+    CHECK_INT(settings_cursor(state), 1);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_NONE);
+    settings_command(state, SETTINGS_UP);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_RESTORE);
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, false);   // Given again: still Give them back
+    CHECK(row_labeled(state, rows, "Give them back to KDE Plasma")->enabled);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_RESTORE);
+    CHECK(!settings_any_changed(state));
+
+    // The failure page, over the page that tried: its reason, OK, and back to that page with OK or Back
+    settings_show_media_keys_failed(state, "kglobalaccel did not answer", false);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS_FAILED);
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Controls" ARROW "Desktop media keys" ARROW "Couldn't change shortcuts");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 2);
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_NOTE);
+    CHECK_STR(rows[0].note, "Couldn't change Plasma's shortcuts: kglobalaccel did not answer. Nothing was changed.");
+    CHECK_STR(rows[1].label, "OK");
+    CHECK_INT(settings_cursor(state), 1);
+    settings_show_media_keys_failed(state, "the session bus is gone", false);   // A second failure: the new reason, one page
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].note, "Couldn't change Plasma's shortcuts: the session bus is gone. Nothing was changed.");
+    settings_show_media_keys_failed(state, "the session bus is gone; nextmedia could not be put back", true);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);           // A key not put back: it says so, not "Nothing"
+    CHECK_STR(rows[0].note, "Couldn't change Plasma's shortcuts: the session bus is gone; nextmedia could not be put "
+                            "back. Some of them may have changed.");
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_DESKTOP_KEYS);
+    settings_show_media_keys_failed(state, "gsettings did not answer", false);
+    CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_DESKTOP_KEYS);
+    CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_MOVED);   // Not the prompt: Back goes back
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_CONTROLS);
+
+    // GNOME's page names GNOME
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
+    open_page(state, "Desktop media keys");
+    CHECK_STR(row_labeled(state, rows, "Give them back to GNOME")->why, "GNOME already has them");
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, false);
+    CHECK_STR(row_labeled(state, rows, "Turn them off")->why, "They are already off");
+    settings_show_media_keys_failed(state, "gsettings did not answer", false);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].note, "Couldn't change GNOME's shortcuts: gsettings did not answer. Nothing was changed.");
+    settings_free(state);
+}
+#endif
+
+// A function to test the Media keys prompt settings open on at start: it replaces the pages open, its note
+// names the desktop, Turn them off and Don't ask again send their events, and Not now and Back close
+// settings with nothing changed; with no desktop set it never opens
+static void test_media_keys_prompt(void)
+{
+    static const char *const KDE_NOTE = "KDE Plasma uses the next-track and previous-track keys for its own media "
+        "controls, so StreamFlex never receives them. Turn Plasma's shortcuts for them off? Other music players "
+        "will stop responding to these keys until you turn them back on in Settings \xE2\x80\xBA Controls "
+        "\xE2\x80\xBA Desktop media keys.";
+    static const char *const GNOME_NOTE = "GNOME uses the next-track and previous-track keys for its own media "
+        "controls, so StreamFlex never receives them. Turn GNOME's shortcuts for them off? Other music players "
+        "will stop responding to these keys until you turn them back on in Settings \xE2\x80\xBA Controls "
+        "\xE2\x80\xBA Desktop media keys.";
+    SettingsState *state = open_model();
+    SettingsRow rows[SETTINGS_MAX_ROWS];
+    char path[256];
+    settings_show_media_keys(state);                               // No desktop: no prompt
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
+    CHECK(!settings_media_keys_prompt_open(state));
+    settings_show_media_keys_failed(state, "kglobalaccel did not answer", false);   // No desktop to name: no failure page
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_TOP);
+    open_page(state, "General");
+    settings_set_media_keys(state, MEDIAKEYS_PLASMA, true);
+    settings_show_media_keys(state);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS);
+    CHECK(settings_media_keys_prompt_open(state));
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Media keys");
+    CHECK_INT(settings_rows(state, rows, SETTINGS_MAX_ROWS), 4);
+    CHECK_INT(rows[0].kind, SETTINGS_ROW_NOTE);
+    CHECK_STR(rows[0].note, KDE_NOTE);
+    CHECK_STR(rows[1].label, "Turn them off");
+    CHECK_STR(rows[2].label, "Not now");
+    CHECK_STR(rows[3].label, "Don't ask again");
+    CHECK_INT(settings_cursor(state), 1);
+
+    // Each row's event; the screen acts and closes settings, so the page stays in the model
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_OFF);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS);
+    settings_command(state, SETTINGS_DOWN);
+    SettingsEvent event = settings_command(state, SETTINGS_OK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_CLOSE);                   // Not now: the usual close, nothing to apply
+    CHECK(event.slot == NULL);
+    settings_command(state, SETTINGS_DOWN);
+    CHECK_INT(settings_command(state, SETTINGS_OK).kind, SETTINGS_EVENT_MEDIA_KEYS_NEVER);
+    event = settings_command(state, SETTINGS_BACK);
+    CHECK_INT(event.kind, SETTINGS_EVENT_CLOSE);                   // Back is Not now
+    CHECK(event.slot == NULL);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS);
+    CHECK(!settings_any_changed(state));
+    CHECK_INT(settings_command(state, SETTINGS_HOME).kind, SETTINGS_EVENT_CLOSE_HOME);
+
+    // A failure over the prompt: the prompt is still open under it, and Back goes back to it, then closes
+    settings_show_media_keys_failed(state, "kglobalaccel did not answer", false);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS_FAILED);
+    CHECK(settings_media_keys_prompt_open(state));
+    settings_path(state, path, sizeof(path));
+    CHECK_STR(path, "Settings" ARROW "Media keys" ARROW "Couldn't change shortcuts");
+    CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_MOVED);
+    CHECK_INT(settings_page(state), SETTINGS_PAGE_MEDIA_KEYS);
+    CHECK_INT(settings_command(state, SETTINGS_BACK).kind, SETTINGS_EVENT_CLOSE);
+    settings_free(state);
+
+    // GNOME's note names GNOME
+    state = open_model();
+    settings_set_media_keys(state, MEDIAKEYS_GNOME, true);
+    settings_show_media_keys(state);
+    settings_rows(state, rows, SETTINGS_MAX_ROWS);
+    CHECK_STR(rows[0].note, GNOME_NOTE);
+    settings_free(state);
+}
+
 int main(void)
 {
     test_add_binding();
@@ -3237,6 +3479,11 @@ int main(void)
     test_remodel_menus_cursor();
     test_remodel_slot_edit_follows_rename();
     test_remodel_save_after_remove_and_rename();
+    test_media_keys_row();
+#ifndef _WIN32
+    test_desktop_keys_page();
+#endif
+    test_media_keys_prompt();
     return check_report();
 }
 
