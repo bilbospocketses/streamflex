@@ -1,8 +1,10 @@
 """Tests for probe_spawn text. PROBE_SPAWN names the built executable. Nothing here types into the desktop: every
 real send is either --dry-run or refused before it starts."""
 import os
+import signal
 import subprocess
 import tempfile
+import time
 import unittest
 
 from test_spawn import SPAWN, events
@@ -86,7 +88,6 @@ class TextRefusalTest(unittest.TestCase):
 
 
 @unittest.skipUnless(SPAWN, "set PROBE_SPAWN to the built probe_spawn")
-@unittest.skipUnless(os.name == "nt", "Linux types only once its layouts are built")  # Task 5 removes this line
 class TextDryRunTest(unittest.TestCase):
     def chars(self, proc):
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -120,9 +121,19 @@ class TextDryRunTest(unittest.TestCase):
                 data = b"\xef\xbb\xbf" + "\U0001F600".encode() * 256 + b"\r\n"
                 self.assertEqual(len(data), 1029)
                 path = write_bytes(tmp, data)
-                chars, end = self.chars(text(self, "--dry-run", "--layout", "us", "0", "--file", path))
-            self.assertEqual((len(chars), end["chars"]), (256, 256))
-            self.assertEqual({c["char"] for c in chars}, {"\U0001F600"})
+                proc = text(self, "--dry-run", "--layout", "us", "0", "--file", path)
+            if os.name == "nt":
+                chars, end = self.chars(proc)
+                self.assertEqual((len(chars), end["chars"]), (256, 256))
+                self.assertEqual({c["char"] for c in chars}, {"\U0001F600"})
+            else:
+                # No key or sequence of the us layout gives U+1F600 on Linux: the file is still accepted, and each
+                # character is named untyped rather than the whole file refused.
+                self.assertEqual(proc.returncode, 3, proc.stderr)
+                evs = events(proc.stdout)
+                self.assertNotIn("text_refused", [e["event"] for e in evs])
+                self.assertEqual([e["cp"] for e in evs if e["event"] == "untyped"], ["U+1F600"] * 256)
+                self.assertEqual((evs[-1]["event"], evs[-1]["chars"]), ("text_end", 256))
 
 
 @unittest.skipUnless(SPAWN and os.name == "nt", "KEYEVENTF_UNICODE is Windows' path")
@@ -173,3 +184,227 @@ class TextWindowsTest(unittest.TestCase):
                 proc = text(self, "--dry-run", "0", s)
                 self.assertEqual(proc.returncode, 0, proc.stderr)
                 self.assertEqual([e["char"] for e in events(proc.stdout) if e["event"] == "char"], list(s))
+
+
+def gone(pid):
+    """Whether pid has exited (no /proc entry, or only a zombie waiting to be reaped)."""
+    try:
+        with open("/proc/%d/stat" % pid, encoding="utf-8") as f:
+            stat = f.read()
+    except OSError:
+        return True
+    return stat[stat.rindex(")") + 2] == "Z"
+
+
+def group_members(pgid):
+    """The live processes whose process group is pgid."""
+    found = []
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        try:
+            with open("/proc/%s/stat" % name, encoding="utf-8") as f:
+                stat = f.read()
+        except OSError:
+            continue
+        fields = stat[stat.rindex(")") + 2:].split()
+        if int(fields[2]) == pgid and fields[0] != "Z":
+            found.append(int(name))
+    return found
+
+
+@unittest.skipUnless(SPAWN and os.name == "posix", "the Linux layouts")
+class TextLinuxTest(unittest.TestCase):
+    def keys(self, layout, s):
+        proc = text(self, "--dry-run", "--layout", layout, "0", s)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        evs = events(proc.stdout)
+        self.assertEqual([e["source"] for e in evs if e["event"] == "layout"], ["argument"])
+        chars = [e for e in evs if e["event"] == "char"]
+        self.assertEqual({e["path"] for e in chars}, {"direct"})
+        return [(e["char"], e["key"], e["mods"]) for e in chars]
+
+    def compose_env(self, tmp, locale, **extra):
+        """This environment with LC_ALL set to locale and no compose file of the user's own in play."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("XCOMPOSEFILE", "LC_CTYPE", "LANG", "XDG_CONFIG_HOME", "DISPLAY", "XDG_CURRENT_DESKTOP")}
+        env.update(LC_ALL=locale, HOME=tmp, **extra)
+        return env
+
+    def sequences(self, proc):
+        return [(e["char"], e["path"], [(k["key"], k["mods"]) for k in e.get("keys", [])])
+                for e in events(proc.stdout) if e["event"] == "char"]
+
+    def test_dead_keys_in_the_german_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = text(self, "--dry-run", "--layout", "de", "0", "éêà", env=self.compose_env(tmp, "en_US.UTF-8"))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual([(e["locale"], e["table"]) for e in events(proc.stdout) if e["event"] == "compose"],
+                         [("en_US.UTF-8", "ok")])
+        # de: dead acute on the key right of ß (13), dead grave with Shift on it, dead circumflex left of 1 (41).
+        self.assertEqual(self.sequences(proc), [("é", "dead", [(13, []), (18, [])]),
+                                                ("ê", "dead", [(41, []), (18, [])]),
+                                                ("à", "dead", [(13, ["Shift"]), (30, [])])])
+
+    def test_compose_through_a_compose_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".config"))
+            with open(os.path.join(tmp, ".config", "kxkbrc"), "w", encoding="utf-8") as f:
+                f.write("[Layout]\nLayoutList=us\nOptions=compose:ralt\nUse=true\n")
+            env = self.compose_env(tmp, "en_US.UTF-8", WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="KDE",
+                                   PATH=os.path.join(tmp, "bin"))
+            proc = text(self, "--dry-run", "0", "é", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        (char,) = [e for e in events(proc.stdout) if e["event"] == "char"]
+        self.assertEqual(char["path"], "compose")
+        self.assertEqual(len(char["keys"]), 3)
+        self.assertEqual(char["keys"][0], {"key": 100, "mods": []})  # Multi_key on the right Alt
+
+    def test_a_character_with_no_path_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = text(self, "--dry-run", "--layout", "de", "0", "a中", env=self.compose_env(tmp, "en_US.UTF-8"))
+        self.assertEqual(proc.returncode, 3)
+        evs = events(proc.stdout)
+        self.assertEqual([(e["char"], e["cp"]) for e in evs if e["event"] == "untyped"], [("中", "U+4E2D")])
+        self.assertEqual([e["char"] for e in evs if e["event"] == "char"], ["a"])
+        self.assertIn("cannot type U+4E2D", proc.stderr)
+
+    def test_no_compose_table_for_the_locale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = text(self, "--dry-run", "--layout", "de", "0", "aé", env=self.compose_env(tmp, "xx_NOSUCH.UTF-8"))
+        self.assertEqual(proc.returncode, 3)
+        evs = events(proc.stdout)
+        self.assertEqual([(e["locale"], e["table"]) for e in evs if e["event"] == "compose"],
+                         [("xx_NOSUCH.UTF-8", "none")])
+        self.assertEqual([e["char"] for e in evs if e["event"] == "char"], ["a"])
+        (untyped,) = [e for e in evs if e["event"] == "untyped"]
+        self.assertEqual(untyped["char"], "é")
+        self.assertIn("no compose table", untyped["why"])
+
+    def test_us_layout(self):
+        self.assertEqual(self.keys("us", "aA1!"),
+                         [("a", 30, []), ("A", 30, ["Shift"]), ("1", 2, []), ("!", 2, ["Shift"])])
+
+    def test_german_layout_uses_altgr_and_its_own_keys(self):
+        self.assertEqual(self.keys("de", "@€zyßä"),
+                         [("@", 16, ["AltGr"]), ("€", 18, ["AltGr"]), ("z", 21, []), ("y", 44, []), ("ß", 12, []),
+                          ("ä", 40, [])])
+
+    def test_a_character_the_layout_lacks_is_refused_by_name(self):
+        proc = text(self, "--dry-run", "--layout", "us", "0", "aé")
+        self.assertEqual(proc.returncode, 3)
+        evs = events(proc.stdout)
+        self.assertEqual([(e["index"], e["char"], e["cp"]) for e in evs if e["event"] == "untyped"], [(1, "é", "U+00E9")])
+        self.assertEqual([e["char"] for e in evs if e["event"] == "char"], ["a"])
+        self.assertEqual((evs[-1]["typable"], evs[-1]["untyped"]), (1, 1))
+        self.assertIn("cannot type U+00E9 (é)", proc.stderr)
+
+    def test_an_unknown_layout_name(self):
+        proc = text(self, "--dry-run", "--layout", "nosuchlayout", "0", "a")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual([e["step"] for e in events(proc.stdout) if e["event"] == "text_failed"], ["keymap"])
+
+    def session_env(self, tmp, **extra):
+        """No display, no desktop, and only tmp/bin on PATH, so no real gsettings or localectl answers."""
+        os.makedirs(os.path.join(tmp, "bin"), exist_ok=True)
+        env = {"PATH": os.path.join(tmp, "bin"), "HOME": tmp, "LANG": "C.UTF-8"}
+        env.update(extra)
+        return env
+
+    def fake(self, tmp, name, body):
+        path = os.path.join(tmp, "bin", name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n" + body)
+        os.chmod(path, 0o755)
+
+    def sources(self, proc):
+        return [(e["source"], e["result"]) for e in events(proc.stdout) if e["event"] == "layout_source"]
+
+    def layout(self, proc):
+        return [e for e in events(proc.stdout) if e["event"] == "layout"]
+
+    def test_kde_layout_from_kxkbrc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".config"))
+            with open(os.path.join(tmp, ".config", "kxkbrc"), "w", encoding="utf-8") as f:
+                f.write("[Layout]\nLayoutList=de,us\nVariantList=,\nUse=true\n")
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="KDE")
+            proc = text(self, "--dry-run", "0", "z", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.sources(proc), [("kde:kxkbrc", "ok")])
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["source"], layout["layout"], layout["variant"]), ("kde:kxkbrc", "de", ""))
+        self.assertEqual([e["key"] for e in events(proc.stdout) if e["event"] == "char"], [21])
+
+    def test_gnome_layout_from_gsettings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="ubuntu:GNOME")
+            self.fake(tmp, "gsettings", 'case "$3" in\n'
+                                        "  mru-sources) echo \"[('xkb', 'de+nodeadkeys'), ('xkb', 'us')]\" ;;\n"
+                                        "  xkb-options) echo \"['compose:ralt']\" ;;\n"
+                                        "  *) echo \"@a(ss) []\" ;;\n"
+                                        "esac\n")
+            proc = text(self, "--dry-run", "0", "z", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "ok")])
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["layout"], layout["variant"], layout["options"]), ("de", "nodeadkeys", "compose:ralt"))
+        self.assertEqual([e["key"] for e in events(proc.stdout) if e["event"] == "char"], [21])
+
+    def test_an_x11_session_tries_its_display_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = text(self, "--dry-run", "0", "a", env=self.session_env(tmp, DISPLAY=":99"))
+        self.assertEqual(self.sources(proc), [("x11:_XKB_RULES_NAMES", "open_failed"), ("localectl", "not_found")])
+        self.assertEqual(proc.returncode, 1)
+
+    def test_a_stalled_source_is_named_and_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
+            self.fake(tmp, "gsettings", "exec /bin/sleep 600\n")  # no output, no CPU: stalled, never slow
+            proc = text(self, "--dry-run", "0", "a", env=env)
+        self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "stalled"),
+                                              ("localectl", "not_found")])
+        self.assertEqual(self.layout(proc), [])
+        self.assertEqual(proc.returncode, 1)
+
+    def test_a_stalled_wrapper_source_is_killed_with_its_children(self):
+        # A wrapper that does not exec: the shell waits on its own child, so neither uses CPU. The whole process
+        # group is watched, judged stalled, and killed, and the next source is tried.
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
+            pids = os.path.join(tmp, "pids")
+            self.fake(tmp, "gsettings", "/bin/sleep 600 &\necho $$ $! > '%s'\nwait\n:\n" % pids)
+            proc = text(self, "--dry-run", "0", "a", env=env)
+            with open(pids, encoding="utf-8") as f:
+                shell_pid, sleep_pid = (int(v) for v in f.read().split())
+        try:
+            self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "stalled"),
+                                                  ("localectl", "not_found")])
+            self.assertEqual(self.layout(proc), [])
+            self.assertEqual(proc.returncode, 1)
+            # SIGKILL is delivered at once; this loop only waits for the kernel to finish the exit (hang guard 120 s).
+            deadline = time.monotonic() + 120
+            while not gone(sleep_pid) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertTrue(gone(sleep_pid), "HUNG: the source's child %d outlived the stall kill" % sleep_pid)
+            self.assertEqual(group_members(shell_pid), [])
+        finally:
+            if not gone(sleep_pid):
+                os.kill(sleep_pid, signal.SIGKILL)
+
+    def test_no_source_refuses_and_types_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = text(self, "0", "a", env=self.session_env(tmp))  # a real send: it must stop before uinput
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(self.sources(proc), [("localectl", "not_found")])
+        evs = events(proc.stdout)
+        self.assertEqual(evs[-1]["event"], "layout_unknown")
+        self.assertEqual([e for e in evs if e["event"] in ("char", "uinput_failed")], [])
+        self.assertIn("pass --layout", proc.stderr)
+
+    @unittest.skipIf(os.access("/dev/uinput", os.W_OK), "this box could really type")
+    def test_a_send_without_uinput_types_nothing(self):
+        proc = text(self, "--layout", "us", "0", "a")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual([e["event"] for e in events(proc.stdout) if e["event"] != "layout_note"],
+                         ["layout_source", "layout", "compose", "uinput_failed"])

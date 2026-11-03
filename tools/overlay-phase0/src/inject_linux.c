@@ -15,6 +15,7 @@
 #include "common.h"
 #include "keys.h"
 #include "spawn.h"
+#include "uinput_linux.h"
 
 static int g_fd = -1;
 
@@ -50,15 +51,16 @@ static int uinput_fail(const char *step)
     return 1;
 }
 
-static int uinput_open(void)
+int probe_uinput_open(const unsigned short *codes, unsigned n)
 {
     g_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (g_fd < 0)
         return uinput_fail("open");
     if (ioctl(g_fd, UI_SET_EVBIT, EV_KEY) < 0)
         return uinput_fail("UI_SET_EVBIT");
-    for (unsigned i = 0; i < probe_keys_count; i++) {
-        if (ioctl(g_fd, UI_SET_KEYBIT, probe_keys_table[i].evdev) < 0)
+    unsigned count = codes ? n : 247;
+    for (unsigned i = 0; i < count; i++) {
+        if (ioctl(g_fd, UI_SET_KEYBIT, (int)(codes ? codes[i] : i + 1)) < 0)
             return uinput_fail("UI_SET_KEYBIT");
     }
     struct uinput_setup us;
@@ -75,9 +77,30 @@ static int uinput_open(void)
     return 0;
 }
 
+int probe_uinput_key(unsigned short code, int down)
+{
+    return emit_ev(g_fd, EV_KEY, code, down ? 1 : 0) == 0 && emit_ev(g_fd, EV_SYN, SYN_REPORT, 0) == 0 ? 0 : -1;
+}
+
+void probe_uinput_close(void)
+{
+    sleep_ms(500); /* let the desktop read the last key-up before the device goes away */
+    ioctl(g_fd, UI_DEV_DESTROY);
+    close(g_fd);
+    g_fd = -1;
+}
+
+static int keys_open(void)
+{
+    unsigned short codes[64];
+    for (unsigned i = 0; i < probe_keys_count; i++)
+        codes[i] = probe_keys_table[i].evdev;
+    return probe_uinput_open(codes, probe_keys_count);
+}
+
 static void send_key(const probe_key *k, int up)
 {
-    if (emit_ev(g_fd, EV_KEY, k->evdev, up ? 0 : 1) == 0 && emit_ev(g_fd, EV_SYN, SYN_REPORT, 0) == 0)
+    if (probe_uinput_key(k->evdev, !up) == 0)
         return;
     int err = errno;
     char fields[160];
@@ -87,15 +110,7 @@ static void send_key(const probe_key *k, int up)
     g_send_failed = 1;
 }
 
-static void uinput_close(void)
-{
-    sleep_ms(500); /* let the desktop read the last key-up before the device goes away */
-    ioctl(g_fd, UI_DEV_DESTROY);
-    close(g_fd);
-    g_fd = -1;
-}
-
-static const probe_key_sender sender = { uinput_open, send_key, sleep_ms, uinput_close };
+static const probe_key_sender sender = { keys_open, send_key, sleep_ms, probe_uinput_close };
 
 int probe_keys(int argc, char **argv)
 {

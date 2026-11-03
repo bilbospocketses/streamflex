@@ -20,6 +20,7 @@ cc --version | head -n 1
 cmake --version | head -n 1
 echo "SDL3 $(pkg-config --modversion sdl3)"
 echo "x11 $(pkg-config --modversion x11)"
+echo "xkbcommon $(pkg-config --modversion xkbcommon)"
 python3 --version
 echo "node $(node --version)"
 

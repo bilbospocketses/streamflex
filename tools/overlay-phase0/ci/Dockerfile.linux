@@ -1,11 +1,11 @@
 # The Phase 0 probe kit's Linux check image: Debian trixie (the same base and digest as tests/headless/Dockerfile),
-# with the C build tools, cmake, the distro's SDL3 (at least 3.2.10; the build stops below it) and libX11, python3 for
-# the test suites and nodejs for the extension simulation tests. The checks run as `tester`, because root ignores
-# file permissions. linux-check.sh says how it is used.
+# with the C build tools, cmake, the distro's SDL3 (at least 3.2.10; the build stops below it), libX11, libxkbcommon
+# and the XKB data, python3 for the test suites and nodejs for the extension simulation tests. The checks run as
+# `tester`, because root ignores file permissions. linux-check.sh says how it is used.
 FROM mirror.gcr.io/library/debian:trixie@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential cmake pkg-config libsdl3-dev libx11-dev python3 nodejs \
+      build-essential cmake pkg-config libsdl3-dev libx11-dev libxkbcommon-dev xkb-data python3 nodejs \
  && rm -rf /var/lib/apt/lists/* \
  && sdl="$(pkg-config --modversion sdl3)" \
  && { dpkg --compare-versions "$sdl" ge 3.2.10 \

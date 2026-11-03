@@ -13,8 +13,10 @@ cmake -S tools/overlay-phase0 -B build-phase0 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG
 cmake --build build-phase0 --config Release
 ```
 
-Linux (the distro's SDL3 and libX11 development packages: Debian and Ubuntu `libsdl3-dev libx11-dev`, Fedora
-`SDL3-devel libX11-devel`; without libX11, `pip` lists no windows and says so):
+Linux (the distro's SDL3, libX11 and libxkbcommon 1.6 or later development packages and the XKB data: Debian and
+Ubuntu `libsdl3-dev libx11-dev libxkbcommon-dev xkb-data`, Fedora `SDL3-devel libX11-devel libxkbcommon-devel
+xkeyboard-config`; the compose tables come with libX11's data. Without libX11 `pip` lists no windows, and without
+libxkbcommon `text` types nothing, and each says so):
 
 ```sh
 cmake -S tools/overlay-phase0 -B build-phase0 -DCMAKE_BUILD_TYPE=Release
