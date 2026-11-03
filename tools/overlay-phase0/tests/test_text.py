@@ -55,10 +55,16 @@ class TextRefusalTest(unittest.TestCase):
 
     def test_malformed_utf8_in_a_file_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # an encoded surrogate, an overlong slash, a stray byte, a cut sequence
-            for data in (b"a\xed\xa0\x80b", b"\xc0\xaf", b"a\xff", b"\xe2\x82"):
+            # an encoded surrogate, an overlong slash (2, 3 and 4 bytes), a value above U+10FFFF, a stray byte, a cut
+            # sequence
+            for data in (b"a\xed\xa0\x80b", b"\xc0\xaf", b"\xe0\x80\xaf", b"\xf0\x80\x80\xaf", b"\xf4\x90\x80\x80",
+                         b"a\xff", b"\xe2\x82"):
                 with self.subTest(data=data):
                     self.refused(text(self, "--dry-run", "0", "--file", write_bytes(tmp, data)), "not_utf8")
+
+    def test_an_argument_that_is_not_text_is_refused(self):
+        # a lone surrogate: Windows passes it in the UTF-16 command line; Linux's surrogateescape makes it byte FF
+        self.refused(text(self, "--dry-run", "0", "a\udcffb"), "not_utf8")
 
     def test_an_inner_line_break_in_a_file_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,8 +111,18 @@ class TextDryRunTest(unittest.TestCase):
                     self.assertEqual([c["char"] for c in chars], ["a", "b"])
 
     def test_256_characters_are_accepted(self):
-        chars, end = self.chars(text(self, "--dry-run", "--layout", "us", "0", "a" * 256))
-        self.assertEqual((len(chars), end["chars"]), (256, 256))
+        with self.subTest(source="argument"):
+            chars, end = self.chars(text(self, "--dry-run", "--layout", "us", "0", "a" * 256))
+            self.assertEqual((len(chars), end["chars"]), (256, 256))
+        with self.subTest(source="file"):
+            with tempfile.TemporaryDirectory() as tmp:
+                # the largest file accepted: a BOM, 256 four-byte characters and a CRLF, 1029 bytes
+                data = b"\xef\xbb\xbf" + "\U0001F600".encode() * 256 + b"\r\n"
+                self.assertEqual(len(data), 1029)
+                path = write_bytes(tmp, data)
+                chars, end = self.chars(text(self, "--dry-run", "--layout", "us", "0", "--file", path))
+            self.assertEqual((len(chars), end["chars"]), (256, 256))
+            self.assertEqual({c["char"] for c in chars}, {"\U0001F600"})
 
 
 @unittest.skipUnless(SPAWN and os.name == "nt", "KEYEVENTF_UNICODE is Windows' path")
@@ -127,3 +143,33 @@ class TextWindowsTest(unittest.TestCase):
                 layout = events(proc.stdout)[0]
                 self.assertEqual((layout["event"], layout["source"]), ("layout", "not_needed"))
                 self.assertEqual(layout.get("ignored"), ignored)
+
+    def test_a_command_line_the_two_parsers_split_differently_is_refused(self):
+        # The wide argument at text's index would be another one's text, so the command refuses rather than type a
+        # fragment.
+        cases = (
+            # The C runtime reads "" inside quotes as a quote and stays quoted (one argument: a " b);
+            # CommandLineToArgvW ends the quotes there (two: a " and b). A string, not a list, so Python passes
+            # this command line as it is.
+            ("a raw command line with \"\" in quotes", '"%s" text --dry-run 0 "a "" b"' % SPAWN),
+            # The ANSI command line the C runtime splits holds a fullwidth quote as its best fit, a real quote.
+            ("a fullwidth quote", [SPAWN, "text", "--dry-run", "0", "a＂ b"]),
+        )
+        for name, command in cases:
+            with self.subTest(name):
+                try:
+                    proc = subprocess.run(command, capture_output=True, encoding="utf-8", timeout=120)
+                except subprocess.TimeoutExpired:
+                    self.fail("HUNG: probe_spawn text with %s did not end" % name)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                evs = events(proc.stdout)
+                self.assertEqual([(e["event"], e.get("reason")) for e in evs], [("text_refused", "argv_mismatch")])
+                self.assertIn("nothing was typed", proc.stderr)
+
+    def test_text_the_ansi_code_page_cannot_hold_is_no_mismatch(self):
+        # The C runtime's ANSI argv holds each such character as '?', so it must not read as the parsers disagreeing.
+        for s in ("\U0001F600", "日本語"):
+            with self.subTest(s=ascii(s)):
+                proc = text(self, "--dry-run", "0", s)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertEqual([e["char"] for e in events(proc.stdout) if e["event"] == "char"], list(s))

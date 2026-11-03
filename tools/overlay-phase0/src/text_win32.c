@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #include "common.h"
 #include "spawn.h"
@@ -36,6 +37,35 @@ static const char *arg_utf8(int argc, char **argv, int i)
     if (wargv)
         LocalFree(wargv);
     return res;
+}
+
+/* Whether ANSI argument a, as the C runtime split it, is wide argument w: w in the ANSI code page, converted as the
+   ANSI command line was (best fit, '?' for what the page cannot hold), must be a byte for byte. Comparing only a pure
+   ASCII a would refuse real text: a character the page cannot hold arrives in a as '?', which is ASCII. */
+static int same_arg(const char *a, const wchar_t *w)
+{
+    int need = WideCharToMultiByte(CP_ACP, 0, w, -1, NULL, 0, NULL, NULL);
+    char *m = need > 0 ? malloc((size_t)need) : NULL;
+    int same = m && WideCharToMultiByte(CP_ACP, 0, w, -1, m, need, NULL, NULL) && strcmp(m, a) == 0;
+    free(m);
+    return same;
+}
+
+/* arg_utf8 counts from the end of the command line, so it names the argument text.c parsed only when the C runtime
+   and CommandLineToArgvW split the command line alike. They do not always ("" inside quotes is one example): then the
+   wide argument at text's index is some other argument's text, and typing it would type a fragment. So the word
+   before the tail must be "text" and every tail argument must agree. */
+static int argv_agrees(int argc, char **argv)
+{
+    int wargc = 0;
+    wchar_t **wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+    int base = wargc - argc;
+    int ok = wargv && base >= 1 && wcscmp(wargv[base - 1], L"text") == 0;
+    for (int i = 0; ok && i < argc; i++)
+        ok = same_arg(argv[i], wargv[base + i]);
+    if (wargv)
+        LocalFree(wargv);
+    return ok;
 }
 
 static int units_of(uint32_t cp, WORD units[2])
@@ -100,5 +130,11 @@ const probe_text_platform probe_text_platform_impl = { arg_utf8, prepare, plan, 
 
 int probe_text(int argc, char **argv)
 {
+    if (!argv_agrees(argc, argv)) {
+        probe_emit("\"event\":\"text_refused\",\"reason\":\"argv_mismatch\"");
+        fputs("probe_spawn text: refused (argv_mismatch): the C runtime and CommandLineToArgvW split the command line "
+              "differently; nothing was typed\n", stderr);
+        return 2;
+    }
     return probe_text_main(argc, argv, &probe_text_platform_impl);
 }
