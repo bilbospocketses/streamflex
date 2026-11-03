@@ -39,6 +39,7 @@ int probe_child_has_pid(long pid);
 
 int probe_run(int argc, char **argv);    /* run <program> [args...]; stdin lines: close | kill */
 int probe_pip(int argc, char **argv);    /* pip [--no-close] [--no-raise] <program> [args...] | pip --classify <title> [<role>] */
+int probe_text(int argc, char **argv);   /* text [--dry-run] [--layout <l>] <delay_ms> (<string> | --file <path>) */
 int probe_keys(int argc, char **argv);   /* keys [--dry-run] <delay_ms> <key>[+<key>...] ... */
 int probe_keylog(int argc, char **argv); /* keylog <seconds> */
 int probe_pad(int argc, char **argv);    /* pad <seconds> <default|xinput|rawinput|wgi> */

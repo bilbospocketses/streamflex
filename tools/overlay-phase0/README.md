@@ -54,7 +54,7 @@ kit runs on a clean Windows 11, `setup\`, `pages\`, `extension\`
 | Piece | Job |
 |---|---|
 | `probe_host` | The native-messaging host `app.cptk.overlay`: logs every message to `probe.log` and acknowledges it. |
-| `probe_spawn` | `run` (supervise a browser), `keys` (inject keys), `keylog` (log raw keys), `pad` (gamepad in the background), `focus` (does the launcher get focus back), `pip` (supervise a browser, report each new window, and when picture-in-picture opens close it and raise the main one). |
+| `probe_spawn` | `run` (supervise a browser), `keys` (inject keys), `keylog` (log raw keys), `pad` (gamepad in the background), `focus` (does the launcher get focus back), `pip` (supervise a browser, report each new window, and when picture-in-picture opens close it and raise the main one), `text` (type a string, or a UTF-8 file's text, as trusted keystrokes). |
 | `extension/` | CPTK Overlay Probe 0.0.1 (Gecko id `overlay-probe@cptk.app`), the probe extension under its own store listings, and `build.py`, which makes the Chromium and Firefox packages. The signed Firefox package is `cptk-overlay-probe-0.0.1.xpi`; the native host is still `app.cptk.overlay`. |
 | `pages/` | `probe.html` (fullscreen and media-start targets), `keylog.html` (what a page sees), `serve.ps1` (a page server for Windows guests). |
 | `setup/` | `windows.ps1`: policy and host registration. `linux_setup.py`: the Firefox host registration (Linux is Firefox only; no policy). `firefox-profile.ps1`, `firefox_profile.py`: a Firefox profile with the sideloaded XPI. |

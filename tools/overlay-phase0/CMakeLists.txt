@@ -20,12 +20,12 @@ if (WIN32)
   target_link_libraries(probe_host PRIVATE shell32) # CommandLineToArgvW
 endif ()
 
-add_executable(probe_spawn src/spawn_main.c src/sdlprobe.c src/pip.c)
+add_executable(probe_spawn src/spawn_main.c src/sdlprobe.c src/pip.c src/text.c)
 if (WIN32)
-  target_sources(probe_spawn PRIVATE src/proc_win32.c src/inject_win32.c src/pip_win32.c)
-  target_link_libraries(probe_spawn PRIVATE user32)
+  target_sources(probe_spawn PRIVATE src/proc_win32.c src/inject_win32.c src/pip_win32.c src/text_win32.c)
+  target_link_libraries(probe_spawn PRIVATE user32 shell32) # shell32: CommandLineToArgvW
 else ()
-  target_sources(probe_spawn PRIVATE src/proc_linux.c src/inject_linux.c src/pip_x11.c)
+  target_sources(probe_spawn PRIVATE src/proc_linux.c src/inject_linux.c src/pip_x11.c src/text_linux.c)
   # Optional: without libX11, pip's pip_session line reads "x11":"not_built" and the watch lists no windows.
   find_package(X11)
   if (X11_FOUND)

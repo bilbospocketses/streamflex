@@ -4,12 +4,16 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* Wall-clock time in milliseconds since the Unix epoch. */
 int64_t probe_now_ms(void);
 
 /* Milliseconds on a monotonic clock, for intervals; the event lines' t stays wall time. */
 int64_t probe_mono_ms(void);
+
+/* fopen(path, "rb") for a UTF-8 path, on Windows too. */
+FILE *probe_fopen_utf8(const char *path);
 
 /* Print one JSON event line, {"t":<now>,<fields>}, to stdout and flush it. */
 void probe_emit(const char *fields);

@@ -23,6 +23,14 @@ int64_t probe_mono_ms(void)
 {
     return (int64_t)GetTickCount64();
 }
+
+FILE *probe_fopen_utf8(const char *path)
+{
+    wchar_t w[4096];
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, w, 4096))
+        return NULL;
+    return _wfopen(w, L"rb");
+}
 #else
 #include <time.h>
 
@@ -38,6 +46,11 @@ int64_t probe_mono_ms(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+FILE *probe_fopen_utf8(const char *path)
+{
+    return fopen(path, "rb");
 }
 #endif
 
