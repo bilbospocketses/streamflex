@@ -62,20 +62,22 @@ awk '
 result "harness: the frame line each key waits for follows the lines that frame drew (exit $(cat "$out/h-order.code"))" $ok
 grep -E "^Key |the cursor's row reads|^Test hook: a frame was drawn" "$out/h-order.log" | sed 's/^/      /'
 
-# A launcher that ignores TERM is killed 10 s later (exit 137), and its check fails on the exit
-# code alone: its sanitizers are quiet
-CFG=none exe=/tmp/harness/ignores-term run_keys h-kill
+# A launcher that ignores TERM is killed (exit 137), and its check fails on the exit code alone:
+# its sanitizers are quiet. STOP_LIMIT shortens guard_s to 10 s, well inside the stand-in's 60 s
+# sleep, so the kill is what ends it.
+STOP_LIMIT=10 CFG=none exe=/tmp/harness/ignores-term run_keys h-kill
 ok=1
 [ "$(cat "$out/h-kill.code")" = 137 ] && sanitizer_clean h-kill && ! ran_clean h-kill && ok=0
 result "harness: a launcher that ignores TERM is killed, and fails its check (exit $(cat "$out/h-kill.code"))" $ok
 
-# A launcher that exits without logging its first menu: the wait ends when it does, not 20 s
-# later, and the missing line fails the check though it exited 0
+# A launcher that exits without logging its first menu: the wait ends when it does, not guard_s
+# later, and the missing line fails the check though it exited 0. That is no hang, so no HUNG.
 SECONDS=0
 CFG=none exe=/tmp/harness/exits-at-once run_keys h-gone
 took=$SECONDS
 ok=1
-[ "$took" -lt 5 ] && ! ran_clean h-gone && grep -q "never logged 'Loading menu'" "$out/h-gone.code" && ok=0
+[ "$took" -lt 5 ] && ! ran_clean h-gone && grep -q "never logged 'Loading menu'" "$out/h-gone.code" \
+    && ! grep -q HUNG "$out/h-gone.code" && ok=0
 result "harness: a launcher that exits without logging ends the wait at once, and fails (exit $(cat "$out/h-gone.code"))" $ok
 echo "      the wait took $took s"
 
@@ -103,11 +105,12 @@ result "harness: a zombie is not running, with a space in its name or without" $
 kill "$zombies"; wait "$zombies" 2> /dev/null
 
 # A quick run (a StartupCmd that quits) that has to be stopped fails its check, though it exits
-# 0 on TERM as the launcher does; one that quits by itself passes. QUICK_LIMIT shortens the 30 s.
+# 0 on TERM as the launcher does; one that quits by itself passes. QUICK_LIMIT shortens guard_s, so
+# this hang is proved in 2 s.
 QUICK_LIMIT=2 CFG=none exe=/tmp/harness/quits-on-term run_quick h-hang
 CFG=none exe=/tmp/harness/exits-at-once run_quick h-quits
 ok=1
-[ "$(cat "$out/h-hang.code")" = "0, and did not quit by itself within 2 s" ] && ! ran_clean h-hang \
+[ "$(cat "$out/h-hang.code")" = "0, and HUNG: did not quit by itself within 2 s" ] && ! ran_clean h-hang \
     && ran_clean h-quits && ok=0
 result "harness: a quick run that has to be stopped fails, one that quits passes (exit $(cat "$out/h-hang.code"))" $ok
 

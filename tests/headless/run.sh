@@ -464,20 +464,44 @@ running() {
     [ "${stat%% *}" != Z ]
 }
 
+# The bound on every wait for something a live launcher may never do: log a line, draw a key's
+# frame, quit by itself, or exit once told to. It is a hang guard, never a time limit on a launcher
+# that is only slow: 130 s, ten times the longest CI has seen a healthy launcher do nothing (13 s,
+# wait_frame says where), and at least 120 s. Healthy waits end on their event, most within a second
+# or two, so the guard costs nothing unless something hangs; a wait that reaches it says HUNG.
+guard_s=130
+
+# A function to wait up to SECONDS (whole seconds, at least that many) for the process PID to exit;
+# fails when it is still running then
+exited_within() {
+    local pid=$1 end=$((SECONDS + $2 + 1))
+    while running "$pid"; do
+        [ "$SECONDS" -lt "$end" ] || return 1
+        sleep 0.05
+    done
+}
+
 # A function to end the launcher PID's run and return its exit code: TERM (SDL turns it into a
-# quit event), then KILL 10 s later for a launcher stuck in a loop that never reads it (exit
-# 137). Every run ends through here, so every run has the same escalation. A launcher whose log
-# already says "Quitting program" (a key, a TERM of the check's own, a fatal error) is given up to
-# 10 s to exit by itself first: SDL_Quit() in its cleanup puts back TERM's default action, so a TERM
-# between it and the exit (about 20 ms, the leak pass's leak check) ends it with exit 143.
+# quit event), then KILL for a launcher that has not exited guard_s later (STOP_LIMIT, which only
+# the harness's own checks shorten), stuck in a loop that never reads TERM (exit 137). Every run
+# ends through here, so every run has the same escalation. A launcher whose log already says
+# "Quitting program" (a key, a TERM of the check's own, a fatal error) is given as long to exit by
+# itself first: SDL_Quit() in its cleanup puts back TERM's default action, so a TERM between it and
+# the exit (about 20 ms, longer for the leak pass's leak check) ends it with exit 143. A slow exit is
+# waited for, never cut short: a TERM or KILL it did not need would fail its check. Each step the
+# guard forces says HUNG on the console.
 stop_run() {
-    local pid=$1 i
-    if grep -q '^Quitting program' "$LOG" 2> /dev/null; then
-        for i in $(seq 200); do running "$pid" || break; sleep 0.05; done
+    local pid=$1 limit=${STOP_LIMIT:-$guard_s}
+    if grep -q '^Quitting program' "$LOG" 2> /dev/null && ! exited_within "$pid" "$limit"; then
+        echo "HUNG: the launcher (PID $pid) logged 'Quitting program' and had not exited $limit s later; sending it TERM"
     fi
-    kill -TERM "$pid" 2> /dev/null
-    for i in $(seq 50); do running "$pid" || break; sleep 0.2; done
-    kill -KILL "$pid" 2> /dev/null
+    if running "$pid"; then
+        kill -TERM "$pid" 2> /dev/null
+        if ! exited_within "$pid" "$limit"; then
+            echo "HUNG: the launcher (PID $pid) had not exited $limit s after TERM; killing it (exit 137)"
+            kill -KILL "$pid" 2> /dev/null
+        fi
+    fi
     # A killed run's "Killed" notice goes nowhere: its exit code, 137, says so
     wait "$pid" 2> /dev/null
 }
@@ -556,34 +580,41 @@ with_tracer_retry() {
 # A function to run a config whose StartupCmd quits by itself (run_quick_once), retried as above
 run_quick() { with_tracer_retry "$1" run_quick_once "$@"; }
 
-# A function to run a config whose StartupCmd quits by itself. One still running after 30 s
-# (QUICK_LIMIT, which only the harness's own checks shorten) is ended by stop_run, and "did not
-# quit by itself" goes into NAME.code beside the exit code, so its check fails even when TERM
-# made it exit 0.
+# A function to run a config whose StartupCmd quits by itself. One still running after guard_s
+# (QUICK_LIMIT, which only the harness's own checks shorten, to prove this path) has hung: it is
+# ended by stop_run, and "HUNG: did not quit by itself" goes into NAME.code beside the exit code, so
+# its check fails even when TERM made it exit 0. A healthy quick run quits within a few seconds.
 run_quick_once() {
-    local name=$1 limit=${QUICK_LIMIT:-30} pid code hung="" i
+    local name=$1 limit=${QUICK_LIMIT:-$guard_s} pid code hung=""
     local args; mapfile -t args < <(config_args "$name")
     rm -f "$LOG"
     "${TESTER[@]}" "$exe" "${args[@]}" -d > "$out/$name.out" 2> "$out/$name.err" &
     pid=$!
-    for i in $(seq $((limit * 5))); do running "$pid" || break; sleep 0.2; done
-    running "$pid" && hung=yes
+    exited_within "$pid" "$limit" || hung=yes
     stop_run "$pid"; code=$?
-    [ -z "$hung" ] || code="$code, and did not quit by itself within $limit s"
+    [ -z "$hung" ] || code="$code, and HUNG: did not quit by itself within $limit s"
     echo "$code" > "$out/$name.code"
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }
 
-# A function to wait up to 20 s for a line in the launcher's log. It fails when the line never
-# comes, or when the launcher (PID) exits without writing it.
+# A function to wait for a line in the launcher's log, up to guard_s. It fails when the line never
+# comes, or when the launcher (PID) exits without writing it. A wait that reached guard_s with the
+# launcher still running has hung: it says HUNG on the console, naming the line, and sets
+# line_hung (empty otherwise) for run_keys to say so in NAME.code.
 wait_line() {
-    local line=$1 pid=$2 i
-    for i in $(seq 100); do
+    local line=$1 pid=$2 end=$((SECONDS + guard_s + 1))
+    line_hung=""
+    while [ "$SECONDS" -lt "$end" ]; do
         grep -qF -- "$line" "$LOG" 2> /dev/null && return 0
         running "$pid" || break
         sleep 0.2
     done
-    grep -qF -- "$line" "$LOG" 2> /dev/null
+    grep -qF -- "$line" "$LOG" 2> /dev/null && return 0
+    if running "$pid"; then
+        line_hung=yes
+        echo "HUNG: waited $guard_s s for the log line '$line'; the launcher (PID $pid) is still running"
+    fi
+    return 1
 }
 
 # The lines that end a wait for a key's frame: the one the harness build logs once the first frame
@@ -598,14 +629,14 @@ frames_drawn() {
     echo "${n:-0}"
 }
 
-# A function to wait at least 60 s for the frame drawn after a key: for the count frames_drawn
+# A function to wait at least guard_s for the frame drawn after a key: for the count frames_drawn
 # gives to pass BEFORE, the count when the key was sent. A launcher (PID) that has exited ends the
-# wait too, as no frame comes after a key that ended it. Fails when nothing came. The bound is three
-# times wait_line's: CI has shown a launcher draw nothing for at least 13 s, how much longer is
-# unknown, and the bound costs nothing unless the frame never comes. SECONDS counts whole seconds,
-# hence the 61.
+# wait too, as no frame comes after a key that ended it. Fails when nothing came, which run_keys
+# reports as HUNG. CI has shown a launcher draw nothing for at least 13 s, how much longer is
+# unknown, so the bound is ten times that, and it costs nothing unless the frame never comes.
+# SECONDS counts whole seconds, hence the 1 more.
 wait_frame() {
-    local before=$1 pid=$2 end=$((SECONDS + 61))
+    local before=$1 pid=$2 end=$((SECONDS + guard_s + 1))
     while [ "$SECONDS" -lt "$end" ]; do
         [ "$(frames_drawn)" -gt "$before" ] && return 0
         running "$pid" || return 0
@@ -624,10 +655,10 @@ frames_settled() {
     awk -v frame="$frame_lines" '/^Key .* detected$/ { key = NR } $0 ~ frame { drawn = NR } END { exit !(key <= drawn) }' "$LOG"
 }
 
-# A function to wait as wait_frame does (at least 60 s, or until the launcher PID has exited) until
-# no key is owed its frame (frames_settled), then forget frame_owed; fails when one still is
+# A function to wait as wait_frame does (at least guard_s, or until the launcher PID has exited)
+# until no key is owed its frame (frames_settled), then forget frame_owed; fails when one still is
 frame_settle() {
-    local pid=$1 end=$((SECONDS + 61))
+    local pid=$1 end=$((SECONDS + guard_s + 1))
     while ! frames_settled; do
         running "$pid" || break
         [ "$SECONDS" -lt "$end" ] || return 1
@@ -638,7 +669,7 @@ frame_settle() {
 
 # A function to run a config that keeps running, and drive it. It starts the launcher, waits for
 # a line in its log (WAIT_FOR, by default the first "Loading menu"), sends the keys, waits for the
-# line UNTIL when that is set, then ends it with stop_run (TERM, and KILL 10 s later). After each
+# line UNTIL when that is set, then ends it with stop_run (TERM, then KILL if it hangs). After each
 # key it waits for the frame the launcher draws after it (xdotool and wait_frame), then a second
 # more: a slow launcher would otherwise handle several keys with no frame between them, and a line
 # that only a drawn frame logs would never come. A key written !KEY is pressed with no wait for its
@@ -654,7 +685,7 @@ run_keys() { with_tracer_retry "$1" run_keys_once "$@"; }
 run_keys_once() {
     local name=$1; shift
     local args; mapfile -t args < <(config_args "$name")
-    local start=${WAIT_FOR:-Loading menu} missing="" pid code k frame_pid="" frame_missed="" frame_owed="" frame_owed_by=""
+    local start=${WAIT_FOR:-Loading menu} missing="" missing_hung="" pid code k frame_pid="" frame_missed="" frame_owed="" frame_owed_by=""
     rm -f "$LOG" "$out/$name.seen" "$out/$name.pixels"
     "${TESTER[@]}" "$exe" "${args[@]}" -d > "$out/$name.out" 2> "$out/$name.err" &
     pid=$!
@@ -669,13 +700,19 @@ run_keys_once() {
             [ -z "$frame_missed" ] || break
         done
         frame_pid=
-        [ -n "$frame_missed" ] || [ -z "${UNTIL:-}" ] || wait_line "$UNTIL" "$pid" || missing=$UNTIL
+        [ -n "$frame_missed" ] || [ -z "${UNTIL:-}" ] || wait_line "$UNTIL" "$pid" || missing=$UNTIL missing_hung=$line_hung
     else
-        missing=$start
+        missing=$start missing_hung=$line_hung
     fi
     stop_run "$pid"; code=$?
-    [ -z "$missing" ] || code="$code, and never logged '$missing'"
-    [ -z "$frame_missed" ] || code="$code, and drew no frame within 60 s of $frame_missed"
+    # A line the launcher exited without logging is a plain failure; one it never logged while it
+    # ran on for guard_s is a hang
+    if [ -n "$missing_hung" ]; then
+        code="$code, and HUNG: never logged '$missing' within $guard_s s"
+    elif [ -n "$missing" ]; then
+        code="$code, and never logged '$missing'"
+    fi
+    [ -z "$frame_missed" ] || code="$code, and HUNG: drew no frame within $guard_s s of $frame_missed"
     echo "$code" > "$out/$name.code"
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }

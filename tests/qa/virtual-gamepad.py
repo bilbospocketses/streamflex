@@ -16,7 +16,7 @@ USAGE (as root)
     virtual-gamepad.py sequence "ButtonDPadDown ButtonDPadDown ButtonA" [--gap MS] [--hold MS]
     virtual-gamepad.py axis LStickX -32768 [--hold MS] [--stay]
     virtual-gamepad.py serve --keep-open SECONDS [--control PATH]
-    virtual-gamepad.py send "press ButtonStart --hold 2000" [--control PATH] [--no-wait]
+    virtual-gamepad.py send "press ButtonStart --hold 2000" [--control PATH] [--no-wait] [--timeout SECONDS]
     virtual-gamepad.py selftest
 
     Every command that makes a device also takes --keep-open SECONDS (keep the device
@@ -38,7 +38,9 @@ USAGE (as root)
         virtual-gamepad.py send "press ButtonStart"      # waits until the press is done
         virtual-gamepad.py send "quit"                   # or SIGTERM the serve process
     "serve" reads commands from a FIFO (default /run/virtual-gamepad.fifo) and appends
-    "done <id>" to PATH.done after each one, which is what "send" waits for.
+    "done <id>" to PATH.done after each one, which is what "send" waits for: up to 120 s,
+    or ten times the command's own holds and gaps when that is more. A "done" that never
+    comes means the serve process hung, and "send" says HUNG and exits 1.
 
     The D-pad is the hat ABS_HAT0X/ABS_HAT0Y, as xpad reports it. A press shorter than a
     frame can be missed, because StreamFlex samples the pad once a frame, so the default
@@ -56,8 +58,10 @@ REQUIREMENTS
 """
 
 import argparse
+import contextlib
 import errno
 import fcntl
+import io
 import os
 import select
 import shlex
@@ -187,6 +191,10 @@ DEFAULT_HOLD_MS = 150
 DEFAULT_GAP_MS = 500
 DEFAULT_SETTLE_MS = 1000
 DEFAULT_CONTROL = "/run/virtual-gamepad.fifo"
+# The least "send" waits for its "done". It is a hang guard, never a time limit on a serve process
+# that is only slow: a command's holds and gaps take what they take, so send waits ten times those
+# when that is more (send_guard_s). A press is done in well under a second, a held one in about 2 s.
+SEND_GUARD_S = 120
 
 
 class UinputError(Exception):
@@ -488,8 +496,30 @@ def send(control, text, wait, timeout_s):
             log("sent '%s' but the server stopped before confirming it" % text)
             return 1
         time.sleep(0.05)
-    log("sent '%s' but saw no 'done' within %d s" % (text, timeout_s))
+    log("HUNG: sent '%s' but the serve process confirmed no 'done' within %d s" % (text, timeout_s))
     return 1
+
+
+def action_seconds(line_parser, text):
+    """The seconds a serve process spends in one command's holds and gaps.
+
+    0 for "quit", an axis left where it is, and a command the serve process cannot read (it
+    answers that one at once, with an error)."""
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):   # argparse's usage text for a bad command
+            args = line_parser.parse_args(shlex.split(text))
+    except (ValueError, SystemExit):
+        return 0.0
+    hold, gap = max(args.hold, 0), max(args.gap, 0)
+    if args.command == "axis":
+        return 0.0 if args.stay else hold / 1000.0
+    names = args.control if args.command == "press" else args.controls.split()
+    return (len(names) * hold + max(len(names) - 1, 0) * gap) / 1000.0
+
+
+def send_guard_s(line_parser, text):
+    """How long "send" waits for the command TEXT's "done" when no --timeout is given."""
+    return max(SEND_GUARD_S, 10 * action_seconds(line_parser, text))
 
 
 # ---------------------------------------------------------------------------
@@ -616,7 +646,9 @@ def build_parser():
     p.add_argument("text", help='e.g. "press ButtonStart --hold 2000", or "quit"')
     p.add_argument("--control", default=DEFAULT_CONTROL, help="the FIFO (default %(default)s)")
     p.add_argument("--no-wait", action="store_true", help="return without waiting for 'done'")
-    p.add_argument("--timeout", type=float, default=60, help="seconds to wait for 'done'")
+    p.add_argument("--timeout", type=float, default=None, metavar="SECONDS",
+                   help="seconds to wait for 'done', after which the serve process has hung (default: %d, "
+                        "or ten times the command's own holds and gaps when that is more)" % SEND_GUARD_S)
     sub.add_parser("list", help="print the control names")
     sub.add_parser("selftest", help="check the packed layouts; needs no uinput")
 
@@ -648,7 +680,8 @@ def main(argv=None):
         return 0
     if args.command == "send":
         try:
-            return send(args.control, args.text, not args.no_wait, args.timeout)
+            timeout_s = args.timeout if args.timeout is not None else send_guard_s(line_parser, args.text)
+            return send(args.control, args.text, not args.no_wait, timeout_s)
         except NoServer as e:
             sys.stderr.write("virtual-gamepad: %s\n" % e)
             return 3
