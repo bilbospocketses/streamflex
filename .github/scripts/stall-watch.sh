@@ -4,7 +4,7 @@
 # Fedora headless shard of PR #63 five seconds after its last PASS line, because a slow Fedora
 # mirror had made the test image take 29 minutes to build. stall-watch.ps1 is its Windows twin.
 #
-#   stall-watch.sh [--log FILE] [--name NAME] -- COMMAND [ARGS...]
+#   stall-watch.sh [--log FILE] [--name NAME] [--containers KEY=VALUE] -- COMMAND [ARGS...]
 #
 # Progress is either of two things: a new line of output, or the runner receiving at least
 # STALL_RX_MIB MiB (default 4) since the last line or the last such crossing, read from
@@ -16,7 +16,11 @@
 # The command's stdout and stderr go to this step's output and to FILE (when given; a temporary
 # file otherwise). On a stall it prints a hang record (what was running, how long, when the last
 # line came, the last lines, the process tree and the containers), stops the command's process
-# group and its containers, and exits 124. Otherwise it exits with the command's own status.
+# group and its containers, and exits 124. Its containers are the ones carrying the docker label
+# --containers names, which the step gives each `docker run` it starts (`--label KEY=VALUE`, a
+# value made for that step). Without --containers no container is stopped: on a shared docker
+# host (a box running other tabs' containers, started before or during the step) a container
+# without the step's label is someone else's. Otherwise it exits with the command's own status.
 # Either way it reports how long the step took and how much the runner received, as a notice, so
 # slow trends show without failing anything. For this script's own tests, STALL_S overrides
 # STALL_MIN in seconds, STALL_POLL_S sets the poll interval, STALL_DRAIN_S the drain's quiet
@@ -25,10 +29,12 @@ set -u
 
 log=""
 name="step"
+containers=""
 while [ $# -gt 0 ]; do
   case $1 in
     --log) log=$2; shift 2 ;;
     --name) name=$2; shift 2 ;;
+    --containers) containers=$2; shift 2 ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -132,11 +138,15 @@ while alive "$cmd"; do
     procs
     echo "----- containers -----"
     docker ps 2> /dev/null || echo "(no docker here)"
+    if [ -n "$containers" ]; then echo "stopping the containers labeled $containers"
+    else echo "stopping no containers: none were named with --containers"; fi
     echo "===== END HANG RECORD ====="
     kill -TERM -- "-$cmd" 2> /dev/null
     sleep 10
     kill -KILL -- "-$cmd" 2> /dev/null
-    docker ps -q 2> /dev/null | xargs -r docker kill > /dev/null 2>&1 || true
+    if [ -n "$containers" ]; then
+      docker ps -q --filter "label=$containers" 2> /dev/null | xargs -r docker kill > /dev/null 2>&1 || true
+    fi
     break
   fi
 done

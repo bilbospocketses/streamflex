@@ -183,7 +183,9 @@ while (-not $proc.HasExited) {
             Write-Line '----- last 40 lines -----'
             foreach ($l in $tail) { Write-Line $l }
             Write-Line '----- process tree -----'
-            Show-Tree $proc.Id
+            # A failed process-list read must not end the script before the kill below: under
+            # $ErrorActionPreference = 'Stop' it would exit 1 and leave the hung command running
+            try { Show-Tree $proc.Id } catch { Write-Line "(the process list could not be read: $($_.Exception.Message))" }
             Write-Line '===== END HANG RECORD ====='
             try { $proc.Kill($true) } catch { }
             break
