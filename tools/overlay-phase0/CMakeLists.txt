@@ -1,0 +1,52 @@
+# The Phase 0 probe kit (design/plans/2026-10-27-overlay-phase0.md). Not part of StreamFlex's build.
+cmake_minimum_required(VERSION 3.18)
+project(cptk_overlay_phase0 LANGUAGES C)
+find_package(SDL3 3.2.10 REQUIRED CONFIG)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+if (MSVC)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+  add_compile_options(/W4)
+else ()
+  add_compile_options(-Wall -Wextra)
+endif ()
+
+add_library(probe_common STATIC src/common.c src/keys.c)
+target_include_directories(probe_common PUBLIC src)
+
+add_executable(probe_host src/probe_host.c)
+target_link_libraries(probe_host PRIVATE probe_common)
+if (WIN32)
+  target_link_libraries(probe_host PRIVATE shell32) # CommandLineToArgvW
+endif ()
+
+add_executable(probe_spawn src/spawn_main.c src/sdlprobe.c src/pip.c src/text.c)
+if (WIN32)
+  target_sources(probe_spawn PRIVATE src/proc_win32.c src/inject_win32.c src/pip_win32.c src/text_win32.c)
+  target_link_libraries(probe_spawn PRIVATE user32 shell32) # shell32: CommandLineToArgvW
+else ()
+  target_sources(probe_spawn PRIVATE src/proc_linux.c src/inject_linux.c src/pip_x11.c src/text_linux.c)
+  # Optional: without libX11, pip's pip_session line reads "x11":"not_built" and the watch lists no windows.
+  find_package(X11)
+  if (X11_FOUND)
+    target_link_libraries(probe_spawn PRIVATE X11::X11)
+    target_compile_definitions(probe_spawn PRIVATE PROBE_HAVE_X11=1)
+    message(STATUS "probe_spawn pip: X11 window watch built")
+  else ()
+    message(STATUS "probe_spawn pip: no libX11, so pip lists no windows")
+  endif ()
+  # Optional: without libxkbcommon (1.6 or later, for the compose table iterator), text learns no layout and types
+  # nothing; it says so.
+  find_package(PkgConfig)
+  if (PKG_CONFIG_FOUND)
+    pkg_check_modules(XKBCOMMON QUIET IMPORTED_TARGET xkbcommon>=1.6)
+  endif ()
+  if (XKBCOMMON_FOUND)
+    target_link_libraries(probe_spawn PRIVATE PkgConfig::XKBCOMMON)
+    target_compile_definitions(probe_spawn PRIVATE PROBE_HAVE_XKB=1)
+    message(STATUS "probe_spawn text: keyboard layouts built (xkbcommon ${XKBCOMMON_VERSION})")
+  else ()
+    message(STATUS "probe_spawn text: no libxkbcommon, so text types nothing on Linux")
+  endif ()
+endif ()
+target_link_libraries(probe_spawn PRIVATE probe_common SDL3::SDL3)
