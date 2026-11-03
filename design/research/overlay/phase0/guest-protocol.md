@@ -271,10 +271,14 @@ profiles:
    after the browser closes. Repeat in a fresh profile with the key left unset, as the baseline.
 4. **The launcher's watch.** In a fresh profile without step 1's settings (Firefox: the profile script alone, with
    none of the four `user_pref` lines, which stop the site's request; Chrome and Edge: a fresh profile, since their
-   settings do not stop it), `probe_spawn pip <browser launch line>` on the Shaka demo, play a clear asset, then
+   settings do not stop it; Edge's `PictureInPictureOverlayEnabled` policy from step 1, which a fresh profile does
+   not undo, only hides the browser's hover button and does not affect this step, which opens the window through the
+   site's own control), `probe_spawn pip <browser launch line>` on the Shaka demo, play a clear asset, then
    open picture-in-picture as in step 2. **Read:** the `pip_session` line (what the watch can see on this desktop);
-   each `window` and `window_changed` line (`pid`, `title`, `class`, and on Linux `instance` and `role`), the
-   picture-in-picture window's among them (a window retitled into one is classified on its `window_changed` line);
+   each `window` and `window_changed` line (`pid`, `title`, `class`, `topmost`, and on Linux `instance` and `role`),
+   the picture-in-picture window's among them (a window retitled into one is classified on its `window_changed`
+   line), and its `topmost`, which records whether the picture-in-picture window is always on top, so G17's data
+   shows whether the rule can also require it;
    its `pip_seen` line; the `pip_closed` line (`call_ok`, `method`, `ms`) and the `pip_gone` line (`ms`: when the
    window was actually gone); the `raised` line (`call_ok`, and `method`: which way the raise got through), or in
    its place a `raise_skipped` line, whose `why` says why there was no raise; the `foreground` line, whose `ms` is

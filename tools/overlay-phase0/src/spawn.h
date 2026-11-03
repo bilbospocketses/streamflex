@@ -16,8 +16,10 @@ typedef void (*probe_command_fn)(int cmd, void *ctx);
 /* Feeds n bytes; calls on_command for each command line they complete, in order. */
 void probe_lines_feed(probe_lines *l, const char *data, size_t n, probe_command_fn on_command, void *ctx);
 
-/* What a supervised run calls while its child runs: tick on every pass of run's loop (about every 50 ms, sooner when
-   the child's processes change), ended once, after the exited line. Either may be NULL. */
+/* What a supervised run calls while its child runs: tick on every pass of run's loop, ended once, after the exited
+   line. Either may be NULL. A pass comes about every 50 ms. On Windows it comes sooner when the job's completion port
+   reports a change in the child's processes; on Linux nothing about the child wakes the loop early (only input on
+   run's stdin ends the 50 ms wait), so a new or exited process is seen on the next pass. */
 typedef struct {
     void (*tick)(void *ctx);
     void (*ended)(void *ctx);
