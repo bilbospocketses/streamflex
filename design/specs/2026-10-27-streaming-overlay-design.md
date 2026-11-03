@@ -58,7 +58,7 @@ dated amendments). The decisions below were made in this design's brainstorm and
 | Ads and skip buttons | **One rule for every provider, enforced by the engine** (user, 2026-11-03): ads are never blocked; no skip button is ever pressed automatically, for an ad, an intro or a recap, and StreamFlex has no auto-skip function. A provider's skip-ad control is reachable with the D-pad but never focused automatically. A skip-intro or skip-recap control is reachable and gets focus when it appears, and is never pressed automatically. This supersedes README D2 (a per-service ban carried in data) and refines D3 (**Rules the engine enforces**). |
 | Scrubbing | **Allowed everywhere** (decided together, 2026-11-03): the remote sends only the site's own seek keys, so a site that refuses to seek during an ad still refuses. |
 | The provider's player | **No write to any provider's player** (decided together, 2026-11-03, from the terms review, file 30): `disablePictureInPicture` is dropped, so picture-in-picture is whatever the provider allows. |
-| Picture-in-picture | **Off where the browser allows it, with the fallbacks kept everywhere** (decided together, 2026-11-03): browser settings in StreamFlex's own profile and setup turn it off (Firefox's prefs, Edge's hover button on Windows; Chrome has no setting), never a write to the page; the player's Back rule and the launcher's window raise cover every browser (**Setup: what each browser needs**, Phase 0 G17). |
+| Picture-in-picture | **Off where the browser allows it, with the fallbacks kept everywhere** (decided together, 2026-11-03): browser settings in StreamFlex's own profile and setup turn it off (Firefox's prefs; Chrome's and Edge's automatic picture-in-picture set to block in the profile's `Preferences`; Edge's hover button on Windows), never a write to the page; the player's Back rule and the launcher's window raise cover every browser (**Setup: what each browser needs**, Phase 0 G17). |
 | The provider's page | **No write to the provider's page at all** (decided together, 2026-11-03, file 30): the overlay reads, moves focus with `focus()`, and draws inside its own layer; it sets no attribute, style, class or DOM node on the provider's elements. A test enforces it. The on-screen keyboard therefore types only through trusted keys (my call, from this rule; **The engine**). |
 | What the overlay draws | **Our layers never hide the provider's player UI, advertising or notices for long** (decided together, 2026-11-03, file 30): the focus ring outlines and never covers; the keyboard and the overlay menu are temporary and close away; nothing the overlay draws covers an ad or the provider's copyright or trademark notices (**The overlay layer**). |
 | Provider names and marks | **Not affiliated** (decided together, 2026-11-03, file 30): the README and the overlay's *About* text say StreamFlex is not affiliated with or endorsed by the streaming services it opens. The tile icons stay as `assets/icons/library/brands/NOTICE.md` handles them. |
@@ -214,7 +214,9 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
    - **Chromium (Chrome, Edge):** `<exe> --user-data-dir=<dir> --app=<url>#cptk=<token> --start-fullscreen
      --window-position=<x>,<y> --no-first-run --disable-session-crashed-bubble`, with the launcher's display origin as
      the position; on Linux add `--ozone-platform=wayland` or `x11` to match the session; for `user_agent=tv`, add
-     `--user-agent=<TV UA>`.
+     `--user-agent=<TV UA>`. Before each launch, and only while the profile is not running, the launcher sets the
+     `auto-picture-in-picture` content setting to block in the profile's `Default/Preferences` (**Picture-in-picture**,
+     under Setup), creating the file on first use and changing nothing else in it.
    - **Firefox:** before each launch, and only while that profile is not running (its `parent.lock` is free), write
      `user.js`:
      ```
@@ -329,17 +331,20 @@ written by the launcher and setup, never writes to a provider's page (file 30):
   picture-in-picture). They are not locked, but the launcher rewrites `user.js` before every start, so each launch
   begins with them off. No Firefox policy is written: a policy reaches every profile of that Firefox, the user's
   everyday one included, and README D10 scopes Firefox by profile.
-- **Edge (Windows):** `PictureInPictureOverlayEnabled=0`, beside the hygiene policies. It hides only the hover button
-  on a video, needs Edge 118 or later, and does not apply to a profile signed in with a Microsoft account. Edge has
-  no other picture-in-picture policy, and none on Linux.
-- **Chrome:** nothing. Chrome has no picture-in-picture policy. Its automatic picture-in-picture is a per-site
-  content setting (`auto-picture-in-picture`: allow, block or ask, default ask) that no policy sets. Seeding block
-  into the StreamFlex profile's `Preferences` before first launch is undocumented, so it is adopted only if Phase 0
-  G17 shows it holds.
+- **Chrome and Edge, automatic picture-in-picture** (decided together, 2026-11-03): the content setting
+  `auto-picture-in-picture` (allow, block or ask; default ask) is set to **block** in the StreamFlex profile's own
+  `Preferences` before each launch (**The launch path**, step 2). No policy sets it, and Chromium may reset a
+  protected pref it finds changed outside the browser, so Phase 0 G17 measures whether it holds; where it does not,
+  the fallbacks below cover it.
+- **Edge (Windows):** also `PictureInPictureOverlayEnabled=0`, beside the hygiene policies. It hides only the hover
+  button on a video, needs Edge 118 or later, and does not apply to a profile signed in with a Microsoft account.
+  Edge has no other picture-in-picture policy, and none on Linux.
+- **Chrome:** no other setting. Chrome has no picture-in-picture policy, so a site's own button and the browser's
+  hover control stay as the browser has them.
 - **The fallbacks stay on every browser:** Back in the player never sends the page a key that opens
   picture-in-picture (**The engine**, Player), and the launcher brings the main window back to the front when a
-  picture-in-picture window opens anyway (**The launch path**, step 5). On Chrome, and on Edge beyond the hover
-  button, they are the only protection.
+  picture-in-picture window opens anyway (**The launch path**, step 5). On Chrome beyond the automatic setting, and
+  on Edge beyond it and the hover button, they are the only protection.
 - *Set up streaming* says so: *StreamFlex's browser profile turns picture-in-picture off where the browser allows
   it, because a video in a floating window can't be driven from the remote.*
 
@@ -715,7 +720,7 @@ numbers in brackets are `SYNTHESIS.md` §7's.
 | G14 [32] | A fresh Firefox profile downloads its Widevine CDM, and how long it takes | it does | setup pre-warms each new profile |
 | G15 [4] | A one-hour DRM test-stream soak with the extension active, per browser | no error | shrink the content script's footprint |
 | G16 [3, 34] | Chrome and Edge `Extensions.loadUnpacked` over a debug pipe (the development loop only) | loads | development uses the store builds |
-| G17 [new] | Picture-in-picture, per browser and OS: each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's seeded `auto-picture-in-picture` block holds or not; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; Chrome's seed is not used if it does not hold; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
+| G17 [new] | Picture-in-picture, per browser and OS: each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's and Edge's `auto-picture-in-picture` block in the profile's `Preferences` holds across launches or is reset; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; a reset `auto-picture-in-picture` block is left to the fallbacks; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
 | G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and on Linux (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
 
 **On the user's HTPC (one run sheet, written for the user, about an hour):**

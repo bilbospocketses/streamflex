@@ -261,26 +261,28 @@ Each browser on Windows and on Linux (GNOME Wayland, KDE Wayland, an X11 session
    and, after the first close, the profile script run again before the restart, so the restart follows the
    launcher's rewrite of `user.js`; Edge on Windows with
    `reg add "HKCU\Software\Policies\Microsoft\Edge" /v PictureInPictureOverlayEnabled /t REG_DWORD /d 0`, from a shell
-   that can write that key (G2 says whether a standard user's can); Chrome:
-   in one throwaway profile, set *Automatic picture-in-picture* to *Don't allow* in `chrome://settings/content`,
-   close Chrome, and note the key that changed in that profile's `Default/Preferences`; then write the same key into
-   a fresh profile's `Default/Preferences` before its first launch. Start each browser, read `about:config` /
-   `about:policies`, `edge://policy` or `chrome://settings/content` (screenshots), close it, start it again, and
-   read them again.
+   that can write that key (G2 says whether a standard user's can); Chrome and Edge: in one throwaway profile per
+   browser, set *Automatic picture-in-picture* to *Don't allow* (`chrome://settings/content`,
+   `edge://settings/content`), close the browser, and note the key that changed in that profile's
+   `Default/Preferences`; then write the same key into a fresh profile's `Default/Preferences` before its first
+   launch, and again before each later launch, as the launcher does. Start each browser, read `about:config`,
+   `edge://policy` and `edge://settings/content`, or `chrome://settings/content` (screenshots), close it, start it
+   again, and read them again.
 2. **A site's own request.** Open `https://shaka-player-demo.appspot.com/`, play any clear (non-DRM) asset, hover
    the video, and press the player's picture-in-picture control (in its overflow menu) with the mouse. Record whether
    a picture-in-picture window opened, which kind (a video window or a document window), whether the browser's own
    hover button showed, and any error on the page (screenshot).
-3. **Chrome's automatic picture-in-picture.** In the Chrome profile from step 1, with the asset playing, press
-   Ctrl+T and record whether a picture-in-picture window opens. Repeat in a fresh profile with no seed, as the
-   baseline.
+3. **Automatic picture-in-picture (Chrome and Edge).** In each profile from step 1, with the asset playing, press
+   Ctrl+T and record whether a picture-in-picture window opens, and whether the `Preferences` key still reads block
+   after the browser closes. Repeat in a fresh profile with the key left unset, as the baseline.
 4. **The launcher's watch.** `probe_spawn pip <browser launch line>`, then open picture-in-picture as in step 2.
    **Read:** the watch's line for the new window and its raise of the main window, with the time from the window's
    appearance.
 
 **Pass:** every setting reads the same after the restart; where Firefox's settings are set, the site's request
-opens no window and the page keeps playing; Chrome's seeded block stops step 3's window where the baseline opened
-one (record either way: it decides whether the seed is used); the watch sees the window and raises the main window
+opens no window and the page keeps playing; the block in Chrome's and Edge's `Preferences` stops step 3's window
+where the baseline opened one, across launches (record either way: where the browser resets it, the fallbacks
+carry it); the watch sees the window and raises the main window
 within 2000 ms on Windows and X11. On Wayland record what the watch can see, as data.
 
 ### G18. Typing through the launcher

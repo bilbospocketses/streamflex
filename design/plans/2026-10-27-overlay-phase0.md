@@ -3002,7 +3002,8 @@ small CDP client and send `Extensions.loadUnpacked` with `extension/dist/chromiu
 ### G17. Picture-in-picture (added 2026-11-03)
 
 Each setting in the spec's **Picture-in-picture** holds after a restart; a site's own picture-in-picture request
-fails harmlessly where Firefox's settings are set; Chrome's seeded `auto-picture-in-picture` block holds or not; a
+fails harmlessly where Firefox's settings are set; Chrome's and Edge's `auto-picture-in-picture` block in the
+profile's `Preferences` holds across launches or not; a
 `probe_spawn pip` watch sees the window and raises the main one. The full steps are in `guest-protocol.md`; step 4
 needs the `pip` watch, which no task here builds.
 
