@@ -1,7 +1,7 @@
 <#
 Assembles the Phase 0 kit into one folder for the run sheet and the guests: probe_host.exe, probe_spawn.exe and
 every DLL beside them (SDL3.dll), the Visual C++ runtime DLLs from -RuntimeDir (app-local, because a clean
-Windows 11 has no VCRUNTIME140.dll), setup\, pages\, extension\ (src\ and build.py, never dist\), ids.json when it
+Windows 11 has no VCRUNTIME140.dll), setup\, pages\ (the vendored React under pages\vendor\ included), extension\ (src\ and build.py, never dist\), ids.json when it
 exists, and the signed XPI when -Xpi names one. Re-running refreshes every file; it deletes nothing.
 Windows PowerShell 5.1 compatible. Run it from 64-bit PowerShell: a 32-bit one reads SysWOW64's 32-bit runtime.
 #>

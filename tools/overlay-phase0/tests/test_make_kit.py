@@ -14,6 +14,9 @@ SOURCE_FILES = {
     "setup/__pycache__/linux_setup.cpython-313.pyc": "cache",
     "pages/probe.html": "probe",
     "pages/serve.ps1": "serve",
+    "pages/text.html": "text",
+    "pages/text-g18.txt": "g18",
+    "pages/vendor/react-18.3.1/react.production.min.js": "react",
     "extension/build.py": "build",
     "extension/src/content.js": "content",
     "extension/src/background.js": "background",
@@ -26,6 +29,7 @@ RUNTIME_FILES = ["vcruntime140.dll", "msvcp140.dll", "kernel32.dll"]
 KIT_FILES = {
     "probe_host.exe", "probe_spawn.exe", "SDL3.dll", "vcruntime140.dll", "msvcp140.dll",
     "setup/windows.ps1", "setup/linux_setup.py", "pages/probe.html", "pages/serve.ps1",
+    "pages/text.html", "pages/text-g18.txt", "pages/vendor/react-18.3.1/react.production.min.js",
     "extension/build.py", "extension/src/content.js", "extension/src/background.js",
 }
 
@@ -75,6 +79,7 @@ class MakeKitTest(unittest.TestCase):
         lines = proc.stdout.splitlines()
         self.assertIn(f"kit: {self.kit}", lines)
         self.assertIn("  extension\\src\\content.js", lines)
+        self.assertIn("  pages\\vendor\\react-18.3.1\\react.production.min.js", lines)
         self.assertIn("  vcruntime140.dll", lines)
         self.assertIn("  msvcp140.dll", lines)
         self.assertEqual(lines[-1], f"make-kit: copied {len(KIT_FILES) + 2} files")
