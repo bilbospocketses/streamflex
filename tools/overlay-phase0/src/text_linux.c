@@ -481,9 +481,30 @@ typedef struct {
     step s[MAX_SEQ];
 } route;
 
+/* Whether an evdev key code is on the numeric keypad. The keypad gives *, +, -, /, = and the digits with nothing held,
+   so it would win over a main-row key that needs Shift (us: * is Shift+8, + is Shift+=). */
+static int is_keypad(int code)
+{
+    switch (code) {
+    case KEY_KPASTERISK:
+    case KEY_KPENTER:
+    case KEY_KPSLASH:
+    case KEY_KPEQUAL:
+    case KEY_KPPLUSMINUS:
+    case KEY_KPCOMMA:
+    case KEY_KPJPCOMMA:
+    case KEY_KPLEFTPAREN:
+    case KEY_KPRIGHTPAREN:
+        return 1;
+    default:
+        return code >= KEY_KP7 && code <= KEY_KPDOT; /* KP7 (71) to KPDOT (83): the digits, minus and plus */
+    }
+}
+
 /* The first key, in code order, that gives the character cp (when sym is 0) or the keysym sym, with no modifier,
-   then Shift, then AltGr, then both. A modifier's own key is skipped only while it is held, so a Multi_key on the
-   right Alt (compose:ralt) is still found with nothing held. */
+   then Shift, then AltGr, then both, over every key but the keypad's; only when none gives it, the same search over
+   the keypad's keys. A modifier's own key is skipped only while it is held, so a Multi_key on the right Alt
+   (compose:ralt) is still found with nothing held. */
 static int find_step(uint32_t cp, xkb_keysym_t sym, step *out)
 {
     static const int combos[4] = { 0, MOD_SHIFT, MOD_ALTGR, MOD_SHIFT | MOD_ALTGR };
@@ -492,26 +513,31 @@ static int find_step(uint32_t cp, xkb_keysym_t sym, step *out)
         lo = 9; /* evdev code 1 */
     if (hi > 255)
         hi = 255; /* evdev code 247, the last the device declares */
-    for (int c = 0; c < 4; c++) {
-        struct xkb_state *st = xkb_state_new(g_map);
-        if (!st)
-            return 0;
-        if (combos[c] & MOD_SHIFT)
-            xkb_state_update_key(st, KEY_LEFTSHIFT + 8, XKB_KEY_DOWN);
-        if (combos[c] & MOD_ALTGR)
-            xkb_state_update_key(st, KEY_RIGHTALT + 8, XKB_KEY_DOWN);
-        for (xkb_keycode_t kc = lo; kc <= hi; kc++) {
-            if (((combos[c] & MOD_SHIFT) && kc == KEY_LEFTSHIFT + 8) || ((combos[c] & MOD_ALTGR) && kc == KEY_RIGHTALT + 8))
-                continue;
-            int match = sym ? xkb_state_key_get_one_sym(st, kc) == sym : xkb_state_key_get_utf32(st, kc) == cp;
-            if (match) {
-                out->code = (int)kc - 8;
-                out->mods = combos[c];
-                xkb_state_unref(st);
-                return 1;
+    for (int keypad = 0; keypad < 2; keypad++) {
+        for (int c = 0; c < 4; c++) {
+            struct xkb_state *st = xkb_state_new(g_map);
+            if (!st)
+                return 0;
+            if (combos[c] & MOD_SHIFT)
+                xkb_state_update_key(st, KEY_LEFTSHIFT + 8, XKB_KEY_DOWN);
+            if (combos[c] & MOD_ALTGR)
+                xkb_state_update_key(st, KEY_RIGHTALT + 8, XKB_KEY_DOWN);
+            for (xkb_keycode_t kc = lo; kc <= hi; kc++) {
+                if (is_keypad((int)kc - 8) != keypad)
+                    continue;
+                if (((combos[c] & MOD_SHIFT) && kc == KEY_LEFTSHIFT + 8)
+                    || ((combos[c] & MOD_ALTGR) && kc == KEY_RIGHTALT + 8))
+                    continue;
+                int match = sym ? xkb_state_key_get_one_sym(st, kc) == sym : xkb_state_key_get_utf32(st, kc) == cp;
+                if (match) {
+                    out->code = (int)kc - 8;
+                    out->mods = combos[c];
+                    xkb_state_unref(st);
+                    return 1;
+                }
             }
+            xkb_state_unref(st);
         }
-        xkb_state_unref(st);
     }
     return 0;
 }

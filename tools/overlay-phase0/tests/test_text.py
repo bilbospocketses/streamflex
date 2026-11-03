@@ -285,6 +285,17 @@ class TextLinuxTest(unittest.TestCase):
         self.assertEqual(self.keys("us", "aA1!"),
                          [("a", 30, []), ("A", 30, ["Shift"]), ("1", 2, []), ("!", 2, ["Shift"])])
 
+    def test_punctuation_comes_from_the_main_row_not_the_keypad(self):
+        # The keypad gives *, +, / and = with nothing held, so a search that tries every key before Shift would type
+        # them there; a main-row key is always taken first.
+        self.assertEqual(self.keys("us", "*+"), [("*", 9, ["Shift"]), ("+", 13, ["Shift"])])
+        # de: * is Shift on the key right of Ü (27), / is Shift+7 (8), = is Shift+0 (11).
+        self.assertEqual(self.keys("de", "*/="), [("*", 27, ["Shift"]), ("/", 8, ["Shift"]), ("=", 11, ["Shift"])])
+
+    def test_a_character_only_the_keypad_gives_is_still_typed_there(self):
+        # No main-row key of us gives ±; the keypad's plus-minus key (118) does, so it is typed there.
+        self.assertEqual(self.keys("us", "±"), [("±", 118, [])])
+
     def test_german_layout_uses_altgr_and_its_own_keys(self):
         self.assertEqual(self.keys("de", "@€zyßä"),
                          [("@", 16, ["AltGr"]), ("€", 18, ["AltGr"]), ("z", 21, []), ("y", 44, []), ("ß", 12, []),
