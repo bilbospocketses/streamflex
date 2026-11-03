@@ -18,6 +18,11 @@ int64_t probe_now_ms(void)
     u.HighPart = ft.dwHighDateTime;
     return (int64_t)((u.QuadPart - 116444736000000000ULL) / 10000ULL);
 }
+
+int64_t probe_mono_ms(void)
+{
+    return (int64_t)GetTickCount64();
+}
 #else
 #include <time.h>
 
@@ -25,6 +30,13 @@ int64_t probe_now_ms(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+int64_t probe_mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 #endif

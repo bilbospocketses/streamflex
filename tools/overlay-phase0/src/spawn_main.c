@@ -28,7 +28,7 @@ void probe_lines_feed(probe_lines *l, const char *data, size_t n, probe_command_
 
 static int usage(void)
 {
-    fputs("usage: probe_spawn run|keys|keylog|pad|focus ...\n", stderr);
+    fputs("usage: probe_spawn run|keys|keylog|pad|focus|pip ...\n", stderr);
     return 2;
 }
 
@@ -47,5 +47,7 @@ int main(int argc, char **argv)
         return probe_pad(argc - 2, argv + 2);
     if (strcmp(cmd, "focus") == 0)
         return probe_focus(argc - 2, argv + 2);
+    if (strcmp(cmd, "pip") == 0)
+        return probe_pip(argc - 2, argv + 2);
     return usage();
 }

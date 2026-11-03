@@ -56,6 +56,27 @@ static int job_is_empty(void)
         && acct.ActiveProcesses == 0;
 }
 
+int probe_child_pids(unsigned long *out, int cap)
+{
+    /* The list struct holds one pid; the array after it gives room for 255 more. */
+    struct {
+        JOBOBJECT_BASIC_PROCESS_ID_LIST list;
+        ULONG_PTR more[255];
+    } buf;
+    if (!g_job)
+        return 0;
+    memset(&buf, 0, sizeof buf);
+    if (!QueryInformationJobObject(g_job, JobObjectBasicProcessIdList, &buf, sizeof buf, NULL)
+        && GetLastError() != ERROR_MORE_DATA)
+        return 0;
+    int n = (int)buf.list.NumberOfProcessIdsInList;
+    if (n > cap)
+        n = cap;
+    for (int i = 0; i < n; i++)
+        out[i] = (unsigned long)buf.list.ProcessIdList[i];
+    return n;
+}
+
 static int put(wchar_t *out, size_t cap, size_t *len, wchar_t c)
 {
     if (*len + 1 >= cap)
@@ -130,8 +151,13 @@ static int child_handles(HANDLE *nul, HANDLE *err)
 
 int probe_run(int argc, char **argv)
 {
+    return probe_supervise(argc, argv, "usage: probe_spawn run <program> [args...]\n", NULL);
+}
+
+int probe_supervise(int argc, char **argv, const char *usage, const probe_watch *watch)
+{
     if (argc < 1) {
-        fputs("usage: probe_spawn run <program> [args...]\n", stderr);
+        fputs(usage, stderr);
         return 2;
     }
     static wchar_t cmdline[32768];
@@ -217,6 +243,8 @@ int probe_run(int argc, char **argv)
             break;
         if (job_is_empty())
             break;
+        if (watch && watch->tick)
+            watch->tick(watch->ctx);
         if (InterlockedExchange(&g_close, 0)) {
             int windows = 0;
             closed = 1;
@@ -235,5 +263,7 @@ int probe_run(int argc, char **argv)
     long long since = closed ? (long long)(GetTickCount64() - t_close) : -1;
     snprintf(fields, sizeof fields, "\"event\":\"exited\",\"code\":%lu,\"ms_since_close\":%lld", exit_code, since);
     probe_emit(fields);
+    if (watch && watch->ended)
+        watch->ended(watch->ctx);
     return 0;
 }

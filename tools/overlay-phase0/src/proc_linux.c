@@ -20,22 +20,14 @@
 struct run_state {
     pid_t pid;       /* the leader, whose pid is also the group id */
     int closed;      /* a close came */
-    int64_t t_close; /* mono_ms of the last close */
+    int64_t t_close; /* probe_mono_ms of the last close */
     int killing;     /* a kill came: SIGKILL every direct child on each pass */
 };
-
-/* Milliseconds on the monotonic clock, for intervals; the event lines' t stays wall time. */
-static int64_t mono_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
 
 /* Milliseconds since the last close, or -1 when none came. */
 static long long since_close(const struct run_state *s)
 {
-    return s->closed ? (long long)(mono_ms() - s->t_close) : -1;
+    return s->closed ? (long long)(probe_mono_ms() - s->t_close) : -1;
 }
 
 /* The leader's exit code as run reports it: 128 + the signal when a signal ended it, -1 when it was never reaped. */
@@ -55,6 +47,37 @@ static int spawn_failed(const char *step, int error)
     return 1;
 }
 
+static int g_supervising; /* probe_supervise has started a child */
+
+/* The PPid in /proc/<pid>/status, or -1. */
+static long parent_of(long pid)
+{
+    char path[64], line[128];
+    snprintf(path, sizeof path, "/proc/%ld/status", pid);
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return -1;
+    long ppid = -1;
+    while (fgets(line, sizeof line, f))
+        if (sscanf(line, "PPid: %ld", &ppid) == 1)
+            break;
+    fclose(f);
+    return ppid;
+}
+
+int probe_child_has_pid(long pid)
+{
+    long self = (long)getpid();
+    if (!g_supervising || pid == self)
+        return 0;
+    for (int depth = 0; pid > 1 && depth < 64; depth++) {
+        pid = parent_of(pid);
+        if (pid == self)
+            return 1;
+    }
+    return 0;
+}
+
 /* SIGKILLs every direct child: the leader, and the descendants this subreaper inherited, which may have left the
    group. Run on every pass after a kill, so a descendant orphaned by the last pass is caught by the next. */
 static void kill_children(void)
@@ -62,25 +85,14 @@ static void kill_children(void)
     DIR *d = opendir("/proc");
     if (!d)
         return;
-    int self = (int)getpid();
+    long self = (long)getpid();
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
         char *end;
         long p = strtol(e->d_name, &end, 10);
         if (*end || p <= 0)
             continue;
-        char path[64];
-        snprintf(path, sizeof path, "/proc/%ld/status", p);
-        FILE *f = fopen(path, "r");
-        if (!f)
-            continue;
-        char line[128];
-        int ppid = -1;
-        while (fgets(line, sizeof line, f))
-            if (sscanf(line, "PPid: %d", &ppid) == 1)
-                break;
-        fclose(f);
-        if (ppid == self)
+        if (parent_of(p) == self)
             kill((pid_t)p, SIGKILL);
     }
     closedir(d);
@@ -91,7 +103,7 @@ static void on_command(int cmd, void *ctx)
     struct run_state *s = ctx;
     if (cmd == PROBE_CMD_CLOSE) {
         s->closed = 1;
-        s->t_close = mono_ms();
+        s->t_close = probe_mono_ms();
         kill(-s->pid, SIGTERM);
         probe_emit("\"event\":\"close_sent\""); /* no windows field: a Linux close is a signal, not WM_CLOSE */
     } else {
@@ -118,8 +130,13 @@ static void exec_child(char **argv, int err_fd)
 
 int probe_run(int argc, char **argv)
 {
+    return probe_supervise(argc, argv, "usage: probe_spawn run <program> [args...]\n", NULL);
+}
+
+int probe_supervise(int argc, char **argv, const char *usage, const probe_watch *watch)
+{
     if (argc < 1) {
-        fputs("usage: probe_spawn run <program> [args...]\n", stderr);
+        fputs(usage, stderr);
         return 2;
     }
     /* Orphaned descendants reparent to us, so exited can wait for every one of them. */
@@ -149,6 +166,7 @@ int probe_run(int argc, char **argv)
     char fields[160];
     snprintf(fields, sizeof fields, "\"event\":\"started\",\"pid\":%d", (int)pid);
     probe_emit(fields);
+    g_supervising = 1;
 
     struct run_state s = { pid, 0, 0, 0 };
     probe_lines lines;
@@ -179,6 +197,8 @@ int probe_run(int argc, char **argv)
         }
         if (no_child)
             break;
+        if (watch && watch->tick)
+            watch->tick(watch->ctx);
         if (s.killing)
             kill_children();
         if (!stdin_open) {
@@ -201,5 +221,7 @@ int probe_run(int argc, char **argv)
     snprintf(fields, sizeof fields, "\"event\":\"exited\",\"code\":%d,\"ms_since_close\":%lld",
              exit_code(leader_reaped, status), since_close(&s));
     probe_emit(fields);
+    if (watch && watch->ended)
+        watch->ended(watch->ctx);
     return 0;
 }
