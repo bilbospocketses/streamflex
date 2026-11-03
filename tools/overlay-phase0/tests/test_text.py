@@ -456,6 +456,9 @@ class TextLinuxTest(unittest.TestCase):
                 self.assertEqual(self.sources(proc), [("argument", "bad_argument")])
                 self.assertEqual(self.layout(proc), [])
                 self.assertEqual(events(proc.stdout)[-1]["event"], "layout_unknown")
+                # the hint names the argument's form; "pass --layout" is only for a session no source could read
+                self.assertIn("--layout must be <layout>[(<variant>)]", proc.stderr)
+                self.assertNotIn("pass --layout", proc.stderr)
 
     def test_the_system_default_from_localectl(self):
         with tempfile.TemporaryDirectory() as tmp:

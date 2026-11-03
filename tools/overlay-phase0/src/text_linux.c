@@ -614,8 +614,14 @@ static int prepare(const char *arg)
         snprintf(fields, sizeof fields, "\"event\":\"layout_unknown\",\"session\":\"%s\",\"desktop\":%s",
                  probe_session_kind(getenv("WAYLAND_DISPLAY"), getenv("XDG_SESSION_TYPE"), getenv("DISPLAY")), a);
         probe_emit(fields);
-        fputs("probe_spawn text: could not learn the session's keyboard layout (pass --layout); nothing was typed\n",
-              stderr);
+        if (arg) /* the argument itself was refused: no source was asked, so passing --layout is not the answer */
+            fputs("probe_spawn text: --layout must be <layout>[(<variant>)], each part 1-63 bytes; "
+                  "nothing was typed\n",
+                  stderr);
+        else
+            fputs("probe_spawn text: could not learn the session's keyboard layout (pass --layout); "
+                  "nothing was typed\n",
+                  stderr);
         return 1;
     }
     const char *rules = r.rules[0] ? r.rules : "evdev";
