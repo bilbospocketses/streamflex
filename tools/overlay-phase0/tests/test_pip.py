@@ -207,5 +207,42 @@ class PipTest(unittest.TestCase):
         self.assertEqual((evs[-1]["pip"], evs[-1]["closed"]), (1, 0))
 
 
+@unittest.skipUnless(SPAWN and os.name == "posix", "the Linux watch's session report")
+class PipLinuxSessionTest(unittest.TestCase):
+    """The Linux check image has libX11 and no display, so each session kind reports what it cannot see."""
+
+    def session(self, **env):
+        proc = run_spawn(self, ["pip", sys.executable, "-c", "pass"], env=bare_env(**env))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        evs = events(proc.stdout)
+        self.assertEqual(evs[0]["event"], "pip_session")
+        self.assertEqual(evs[-1]["event"], "pip_summary")
+        self.assertFalse(evs[-1]["listed"])
+        return evs[0]
+
+    def test_no_display(self):
+        s = self.session()
+        self.assertEqual((s["session"], s["x11"], s["can_list"], s["can_raise"]), ("none", "no_display", False, False))
+        self.assertEqual(s["note"], "no display: no windows to list")
+
+    def test_wayland_says_it_cannot_list(self):
+        s = self.session(WAYLAND_DISPLAY="wayland-cptk-test")
+        self.assertEqual((s["session"], s["x11"], s["can_list"], s["can_raise"]), ("wayland", "no_display", False, False))
+        self.assertIn("Wayland has no portable window list", s["note"])
+
+    def test_the_session_type_alone_means_wayland(self):
+        self.assertEqual(self.session(XDG_SESSION_TYPE="wayland")["session"], "wayland")
+
+    def test_an_x11_display_that_cannot_open(self):
+        s = self.session(DISPLAY=":99")
+        self.assertEqual((s["session"], s["display"], s["x11"], s["can_list"]), ("x11", ":99", "open_failed", False))
+        self.assertEqual(s["note"], "no usable X11 connection")
+
+    def test_an_xwayland_display_that_cannot_open(self):
+        s = self.session(WAYLAND_DISPLAY="wayland-cptk-test", DISPLAY=":99")
+        self.assertEqual((s["session"], s["x11"], s["can_list"]), ("wayland", "open_failed", False))
+        self.assertIn("Wayland has no portable window list", s["note"])
+
+
 if __name__ == "__main__":
     unittest.main()
