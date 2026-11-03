@@ -406,8 +406,9 @@ class TextLinuxTest(unittest.TestCase):
                 self.assertEqual(proc.returncode, 1)
 
     def test_a_grandchild_that_writes_on_after_its_source_exits_is_cut_off(self):
-        # The source exits 0 while its own child keeps writing: the command still ends, and the writer ends once the
-        # read end is closed. Its output holds no xkb source, so that is what is named.
+        # The source exits 0 while its own child keeps writing. This proves only that the command still ends and the
+        # writer dies afterwards; it never reaches the drain after the source's exit. Its output holds no xkb source,
+        # so that is what is named.
         with tempfile.TemporaryDirectory() as tmp:
             env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
             pids = os.path.join(tmp, "pids")

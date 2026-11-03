@@ -36,8 +36,8 @@ class TextPageTest(unittest.TestCase):
         m = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', page())
         self.assertIsNotNone(m)
         policy = [d.strip() for d in m.group(1).split(";")]
-        self.assertIn("default-src 'none'", policy)
-        self.assertIn("script-src 'self' 'unsafe-inline'", policy)
+        self.assertEqual(policy, ["default-src 'none'", "script-src 'self' 'unsafe-inline'",
+                                  "style-src 'unsafe-inline'"])
         self.assertNotIn("connect-src", m.group(1))  # default-src 'none' already covers every request
 
     def test_the_g18_string_is_the_kit_file(self):
@@ -112,8 +112,12 @@ class ServeTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.proc.kill()
-        cls.proc.wait(timeout=120)
-        cls.proc.stderr.close()
+        try:
+            cls.proc.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            raise AssertionError("HUNG: serve.ps1 did not exit after it was stopped")
+        finally:
+            cls.proc.stderr.close()
 
     def get(self, path):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=120)
@@ -121,6 +125,8 @@ class ServeTest(unittest.TestCase):
             conn.request("GET", path)
             r = conn.getresponse()
             return r.status, r.getheader("Content-Type"), r.read()
+        except (TimeoutError, socket.timeout):
+            self.fail("HUNG: serve.ps1 did not answer GET %s" % path)
         finally:
             conn.close()
 
@@ -140,11 +146,11 @@ class ServeTest(unittest.TestCase):
 
     def test_refuses_everything_else(self):
         for path in ("/serve.ps1", "/vendor/react-18.3.1/LICENSE", "/vendor/react-18.3.1/README.md",
-                     "/text-g18.txt", "/a/b/text.html", "/nosuch.html"):
+                     "/text-g18.txt", "/a/b/text.html", "/nosuch.html", "/vendor/", "/vendor/react-18.3.1/"):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path)[0], 404)
-        # http.sys may answer 400 for a path that climbs above the root before serve.ps1 sees it; either way no
-        # file is served.
+        # http.sys may refuse a path that climbs above the root with 400 or 403 (measured: 403) before serve.ps1
+        # sees it; either way no file is served.
         for path, outside in (("/../setup/windows.ps1", KIT / "setup" / "windows.ps1"),
                               ("/vendor/../serve.ps1", PAGES / "serve.ps1")):
             with self.subTest(path=path):
