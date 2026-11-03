@@ -93,6 +93,10 @@ void probe_uinput_close(void)
 static int keys_open(void)
 {
     unsigned short codes[64];
+    if (probe_keys_count > sizeof codes / sizeof codes[0]) {
+        errno = E2BIG; /* the key table outgrew this buffer: a build mistake, named rather than overrun */
+        return uinput_fail("key_table");
+    }
     for (unsigned i = 0; i < probe_keys_count; i++)
         codes[i] = probe_keys_table[i].evdev;
     return probe_uinput_open(codes, probe_keys_count);

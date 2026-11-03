@@ -392,6 +392,116 @@ class TextLinuxTest(unittest.TestCase):
             if not gone(sleep_pid):
                 os.kill(sleep_pid, signal.SIGKILL)
 
+    def test_a_source_that_writes_forever_is_cut_off(self):
+        # Output is kept only up to the capture buffer; then the read end is closed, so a writer that never stops
+        # ends on SIGPIPE, and the source is named failed. No clock is involved.
+        for name, body in (("a program", "exec /usr/bin/yes\n"), ("a shell loop", "while :; do echo xkb; done\n")):
+            with self.subTest(name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
+                    self.fake(tmp, "gsettings", body)
+                    proc = text(self, "--dry-run", "0", "a", env=env)
+                self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "failed"),
+                                                      ("localectl", "not_found")])
+                self.assertEqual(proc.returncode, 1)
+
+    def test_a_grandchild_that_writes_on_after_its_source_exits_is_cut_off(self):
+        # The source exits 0 while its own child keeps writing: the command still ends, and the writer ends once the
+        # read end is closed. Its output holds no xkb source, so that is what is named.
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
+            pids = os.path.join(tmp, "pids")
+            self.fake(tmp, "gsettings", "/usr/bin/yes &\necho $! >> '%s'\n/bin/sleep 0.5\nexit 0\n" % pids)
+            proc = text(self, "--dry-run", "0", "a", env=env)
+            with open(pids, encoding="utf-8") as f:
+                writers = [int(v) for v in f.read().split()]
+        try:
+            self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "no_xkb_source"),
+                                                  ("localectl", "not_found")])
+            self.assertEqual(proc.returncode, 1)
+            deadline = time.monotonic() + 120  # hang guard: SIGPIPE ends each writer once the read end is closed
+            while not all(gone(p) for p in writers) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertEqual([p for p in writers if not gone(p)], [], "HUNG: a writer outlived the closed read end")
+        finally:
+            for p in writers:
+                if not gone(p):
+                    os.kill(p, signal.SIGKILL)
+
+    def test_the_environment_cannot_change_the_compiled_layout(self):
+        # xkbcommon would fill an unset model, variant or options from XKB_DEFAULT_*; us(intl) and compose:ralt both
+        # give é, so either one honored would type what the printed layout line cannot.
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.compose_env(tmp, "en_US.UTF-8", XKB_DEFAULT_VARIANT="intl", XKB_DEFAULT_OPTIONS="compose:ralt",
+                                   XKB_DEFAULT_MODEL="pc105")
+            proc = text(self, "--dry-run", "--layout", "us", "0", "aé", env=env)
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["model"], layout["variant"], layout["options"]), ("", "", ""))
+        self.assertEqual([e["char"] for e in events(proc.stdout) if e["event"] == "untyped"], ["é"])
+
+    def test_a_layout_argument_with_a_variant(self):
+        proc = text(self, "--dry-run", "--layout", "de(nodeadkeys)", "0", "z")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.sources(proc), [("argument", "ok")])
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["layout"], layout["variant"]), ("de", "nodeadkeys"))
+        self.assertEqual([e["key"] for e in events(proc.stdout) if e["event"] == "char"], [21])
+
+    def test_a_bad_layout_argument_is_refused(self):
+        for arg in ("", "(intl)", "x" * 64, "de(", "de(nodeadkeys)x", "de()", "de(%s)" % ("v" * 64)):
+            with self.subTest(arg=arg):
+                proc = text(self, "--dry-run", "--layout", arg, "0", "a")
+                self.assertEqual(proc.returncode, 1)
+                self.assertEqual(self.sources(proc), [("argument", "bad_argument")])
+                self.assertEqual(self.layout(proc), [])
+                self.assertEqual(events(proc.stdout)[-1]["event"], "layout_unknown")
+
+    def test_the_system_default_from_localectl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp)
+            self.fake(tmp, "localectl", "/bin/cat <<'EOF'\n"
+                                        "   System Locale: LANG=en_US.UTF-8\n"
+                                        "       VC Keymap: de-nodeadkeys\n"
+                                        "      X11 Layout: de,us\n"
+                                        "       X11 Model: pc105\n"
+                                        "     X11 Variant: nodeadkeys,\n"
+                                        "     X11 Options: compose:ralt\n"
+                                        "EOF\n")
+            proc = text(self, "--dry-run", "0", "z", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.sources(proc), [("localectl", "ok")])
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["model"], layout["layout"], layout["variant"], layout["options"]),
+                         ("pc105", "de", "nodeadkeys", "compose:ralt"))
+        self.assertEqual([e["key"] for e in events(proc.stdout) if e["event"] == "char"], [21])
+
+    def test_gnome_falls_back_to_sources_when_mru_sources_is_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="GNOME")
+            self.fake(tmp, "gsettings", 'case "$3" in\n'
+                                        "  mru-sources) echo \"@a(ss) []\" ;;\n"
+                                        "  sources) echo \"[('ibus', 'mozc-jp'), ('xkb', 'de')]\" ;;\n"
+                                        "  *) echo \"@as []\" ;;\n"
+                                        "esac\n")
+            proc = text(self, "--dry-run", "0", "z", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.sources(proc), [("gnome:org.gnome.desktop.input-sources", "ok")])
+        (layout,) = self.layout(proc)
+        self.assertEqual((layout["layout"], layout["variant"], layout["options"]), ("de", "", ""))
+        self.assertEqual([e["key"] for e in events(proc.stdout) if e["event"] == "char"], [21])
+
+    def test_kxkbrc_not_in_use_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, ".config"))
+            with open(os.path.join(tmp, ".config", "kxkbrc"), "w", encoding="utf-8") as f:
+                f.write("[Layout]\nLayoutList=de\nUse=false\n")
+            env = self.session_env(tmp, WAYLAND_DISPLAY="wayland-0", XDG_CURRENT_DESKTOP="KDE")
+            proc = text(self, "--dry-run", "0", "z", env=env)
+        self.assertEqual(self.sources(proc), [("kde:kxkbrc", "not_in_use"), ("localectl", "not_found")])
+        self.assertEqual(self.layout(proc), [])
+        self.assertEqual(proc.returncode, 1)
+
     def test_no_source_refuses_and_types_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = text(self, "0", "a", env=self.session_env(tmp))  # a real send: it must stop before uinput

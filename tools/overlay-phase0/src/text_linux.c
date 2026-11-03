@@ -127,10 +127,28 @@ static long long group_cpu_ticks(pid_t pgid)
     return total;
 }
 
+/* Appends what is waiting on fd to out, up to cap - 1 bytes in all. Returns 1 while there may be more to read, or 0
+   once fd is at its end, failed, or out is full: then the read end is no longer wanted. */
+static int read_more(int fd, char *out, size_t cap, size_t *len)
+{
+    char buf[512];
+    size_t room = cap - 1 - *len;
+    ssize_t n = read(fd, buf, room < sizeof buf ? room : sizeof buf);
+    if (n < 0)
+        return errno == EINTR || errno == EAGAIN;
+    if (n == 0)
+        return 0;
+    memcpy(out + *len, buf, (size_t)n);
+    *len += (size_t)n;
+    out[*len] = '\0';
+    return *len < cap - 1;
+}
+
 /* Runs argv from PATH in a process group of its own, with stdin and stderr on /dev/null and its stdout into out (the
    first cap - 1 bytes). Returns "ok", or why not: "not_found" (exit 127), "failed" (another failure), "stalled"
    (STALL_MS with no output, no CPU use anywhere in its process group and no exit; the whole group is killed). A
-   source that keeps working is never cut off. */
+   source that keeps working is never cut off, but once out is full the read end is closed, so a source that writes
+   without end meets SIGPIPE and ends, and it reads as failed. */
 static const char *capture(char *const argv[], char *out, size_t cap)
 {
     int fds[2];
@@ -145,6 +163,7 @@ static const char *capture(char *const argv[], char *out, size_t cap)
     }
     if (pid == 0) {
         setpgid(0, 0); /* its own group, so a wrapper's children are watched and killed with it */
+        signal(SIGPIPE, SIG_DFL); /* a writer must end when the read end closes, whatever this process inherited */
         int null_fd = open("/dev/null", O_RDWR);
         if (null_fd >= 0) {
             dup2(null_fd, STDIN_FILENO);
@@ -159,25 +178,22 @@ static const char *capture(char *const argv[], char *out, size_t cap)
     setpgid(pid, pid); /* the same from this side, so the group exists before the first reading; once the child has
                           run exec this fails harmlessly, the child having set it itself */
     close(fds[1]);
+    int rd = fds[0]; /* the read end; -1 once closed */
     size_t len = 0;
-    int pipe_open = 1, status = 0;
+    int status = 0;
     long long cpu = group_cpu_ticks(pid);
     int64_t last = probe_mono_ms();
     for (;;) {
-        if (pipe_open) {
-            struct pollfd pfd = { fds[0], POLLIN, 0 };
+        if (rd >= 0) {
+            struct pollfd pfd = { rd, POLLIN, 0 };
             if (poll(&pfd, 1, 100) > 0) {
-                char buf[512];
-                ssize_t n = read(fds[0], buf, sizeof buf);
-                if (n > 0) {
-                    size_t keep = len + (size_t)n < cap - 1 ? (size_t)n : cap - 1 - len;
-                    memcpy(out + len, buf, keep);
-                    len += keep;
-                    out[len] = '\0';
-                    last = probe_mono_ms();
-                } else if (n == 0 || errno != EINTR) {
-                    pipe_open = 0;
+                size_t before = len;
+                if (!read_more(rd, out, cap, &len)) {
+                    close(rd);
+                    rd = -1;
                 }
+                if (len != before)
+                    last = probe_mono_ms();
             }
         } else {
             poll(NULL, 0, 100);
@@ -192,21 +208,17 @@ static const char *capture(char *const argv[], char *out, size_t cap)
         if (probe_mono_ms() - last > STALL_MS) {
             kill(-pid, SIGKILL); /* the whole group: a wrapper's children too */
             waitpid(pid, NULL, 0);
-            close(fds[0]);
+            if (rd >= 0)
+                close(rd);
             return "stalled";
         }
     }
-    /* What it wrote just before it exited. */
-    struct pollfd pfd = { fds[0], POLLIN, 0 };
-    ssize_t n;
-    char buf[512];
-    while (pipe_open && poll(&pfd, 1, 0) > 0 && (n = read(fds[0], buf, sizeof buf)) > 0) {
-        size_t keep = len + (size_t)n < cap - 1 ? (size_t)n : cap - 1 - len;
-        memcpy(out + len, buf, keep);
-        len += keep;
-        out[len] = '\0';
-    }
-    close(fds[0]);
+    /* What it wrote just before it exited, up to the same cap, so a child of it that writes on cannot hold this. */
+    struct pollfd pfd = { rd, POLLIN, 0 };
+    while (rd >= 0 && poll(&pfd, 1, 0) > 0 && read_more(rd, out, cap, &len))
+        ;
+    if (rd >= 0)
+        close(rd);
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
         return "ok";
     return WIFEXITED(status) && WEXITSTATUS(status) == 127 ? "not_found" : "failed";
@@ -623,7 +635,8 @@ static int prepare(const char *arg)
         snprintf(g_name, sizeof g_name, "%s", r.layout);
     struct xkb_rule_names names = { rules, r.model[0] ? r.model : NULL, r.layout, r.variant[0] ? r.variant : NULL,
                                     r.options[0] ? r.options : NULL };
-    g_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    /* No XKB_DEFAULT_* fills a field the source left empty, so the keymap is exactly the layout line printed above. */
+    g_ctx = xkb_context_new(XKB_CONTEXT_NO_ENVIRONMENT_NAMES);
     g_map = g_ctx ? xkb_keymap_new_from_names(g_ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
     if (!g_map) {
         snprintf(fields, sizeof fields, "\"event\":\"text_failed\",\"step\":\"keymap\",\"layout\":%s,\"variant\":%s", c, d);
