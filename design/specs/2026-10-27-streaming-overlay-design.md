@@ -4,7 +4,8 @@
 **Status:** approved in brainstorming (2026-10-27), awaiting spec review. Revised 2026-11-03: eight built-in
 providers, one rule for ads and skip buttons on every provider, and four rules from the terms review in
 `design/research/overlay/30-terms-review-2026-11.md` (**Decisions**, **Rules the engine enforces**, **The overlay
-layer**).
+layer**); Linux supports Firefox only, and Windows keeps three browsers with Edge recommended and each provider's
+caveats shown (**Quality by browser**).
 **Covers:** todo item 24: streaming services in a real browser, run fullscreen by StreamFlex and driven by a remote or
 a gamepad through an injected 10-foot overlay.
 **Ships as:** Phase 0 (measurements, no product code), then five releases, v0.7.0 to v0.11.0 (**Phases and
@@ -27,19 +28,22 @@ The streaming services are the reason a living-room PC needs a 10-foot launcher,
 in a desktop browser except YouTube. Running Android in a VM was rejected because an AOSP guest cannot reach Widevine
 L1 (todo item 24). The research settled the direction on 2026-09-28: **a real browser, fullscreen, in a profile of its
 own per service, with a force-installed extension that turns remote keys into site navigation.** It runs on Chrome,
-Edge and Firefox, on Windows and on Linux.
+Edge and Firefox on Windows, with Edge the recommended default, and on Firefox (the full, non-snap build) on Linux
+(decided together, 2026-11-03).
 
 Quality is decided by the browser and the OS, not by this design (`SYNTHESIS.md` §3): Edge on Windows is the only path
 to Netflix 4K with HDR and Atmos; Chrome on Windows gets Netflix 4K in SDR (on by default since Chrome 143, file 26);
-Firefox gets 1080p; Linux browsers are Widevine L3 (about 720p, Prime SD). These are known limits of each target,
-shown to the user, never a reason to drop one.
+Firefox gets 1080p; Linux Firefox is Widevine L3 (about 720p, Prime SD), and on Linux arm64 (a Raspberry Pi) Firefox has
+no Widevine, so DRM services are not offered there (file 27 §9). These are known limits of each target, shown to the
+user (**Quality by browser**), never a reason to drop one.
 
 ## Decisions
 
 The research's decisions (user, 2026-09-28) are in `design/research/overlay/README.md` and are not repeated here; this
-design follows all of them, as amended by the research's own later rulings (Linux Edge is non-DRM, the targets are
-like-for-like) and by this design's 2026-11-03 revision, which supersedes D2 and refines D3 (both recorded there as
-dated amendments). The decisions below were made in this design's brainstorm and its 2026-11-03 revision.
+design follows all of them, as amended by the research's own later rulings and by this design's 2026-11-03 revision,
+which supersedes D2, refines D3, and replaces the like-for-like targets with Linux Firefox only (all recorded there as
+dated amendments; the Linux Edge ruling is moot). The decisions below were made in this design's brainstorm and its
+2026-11-03 revision.
 
 | Question | Decision |
 |---|---|
@@ -48,6 +52,8 @@ dated amendments). The decisions below were made in this design's brainstorm and
 | Shape | **One spec, phased releases**, each with its own plan (decided together, 2026-10-27). |
 | Adding a service | **A provider catalog:** *Add a streaming service* in the 3c add flow lists the providers, each with its icon and where it plays. A custom URL entry exists for any other site, with the generic engine only (decided together, 2026-10-27). |
 | Which browser | **A global *Streaming browser* setting plus a per-tile override** (decided together, 2026-10-27). |
+| Linux browsers | **Firefox only, the full non-snap build** (decided together, 2026-11-03; it amends the research's like-for-like targets, README and `SERVICES.md`): on Linux, Chrome and Firefox get the same DRM ceiling (Widevine L3); Linux Edge has no Widevine; Firefox is scoped per profile with no root (D10), while Chrome's force-install needs the root-owned `/etc/opt/chrome/policies`; and each extra Linux browser is another set of quirks to maintain. Chrome may be added later only if a provider plays in Chrome but not in Firefox there, or to give a Raspberry Pi DRM. Known limit: Firefox has no Widevine on Linux arm64, so a Raspberry Pi gets no DRM services (file 27 §9); known limits never defer Linux. Phase 0 G10 and G12 are retired. |
+| Windows browsers | **Chrome, Edge and Firefox, with Edge the recommended default; the user sees each provider's caveats per browser** (decided together, 2026-11-03): Netflix gets 4K HDR, Dolby Vision and Atmos only in Edge (PlayReady), and Edge is never worse than the other two in `SERVICES.md` §1a. A provider that does not list a browser shows that as a caveat (**Quality by browser**). |
 | Typing in a site | **The overlay's own on-screen keyboard**, in StreamFlex's look; a real keyboard also works. No OS keyboard ever appears, in the browser too (decided together, 2026-10-27; it extends the 3c rule). |
 | Names | **CPTK identifiers from day one** for everything the overlay installs (decided together, 2026-10-27; todo item 27 renames the app later and moves nothing the overlay installed). |
 | Native architecture | **A thin relay host; the launcher owns all state** (approach A, decided together, 2026-10-27). |
@@ -81,8 +87,8 @@ dated amendments). The decisions below were made in this design's brainstorm and
 
 | Unit | File | Job |
 |---|---|---|
-| Provider catalog | `catalog.c` | Loads the built-in providers and any the adapter source adds; answers "can provider P play in browser B on this OS". |
-| Browser discovery | `browsers.c` | Finds usable Chrome, Edge and full Firefox; refuses snap, Flatpak and Chromium with a reason. |
+| Provider catalog | `catalog.c` | Loads the built-in providers and any the adapter source adds; answers "can provider P play in browser B on this OS" and "what does P get there" (**Quality by browser**). |
+| Browser discovery | `browsers.c` | Finds usable Chrome, Edge and Firefox on Windows, and a full Firefox on Linux; refuses a snap or Flatpak Firefox with a reason. |
 | Launch recipes | `recipe.c` | Builds the command line and prepares the profile for a provider in a browser. |
 | Supervisor | `supervise.c`, `platform/supervise_win32.c`, `platform/supervise_linux.c` | Spawns the browser, detects its exit, closes it on Home. |
 | Input bridge | `inputbridge.c` + platform files | The Home hook, gamepad-to-key translation while the browser is in front, trusted key and pointer injection. |
@@ -113,6 +119,10 @@ title=Netflix
 icon=netflix
 url=https://www.netflix.com/browse
 drm=yes
+quality.windows.edge=supported 2160p hdr dv atmos
+quality.windows.chrome=supported 2160p
+quality.windows.firefox=supported 1080p
+quality.linux.firefox=supported 720p
 
 [youtube]
 title=YouTube
@@ -149,20 +159,56 @@ drm=no
 
 - `url=ask` marks a self-hosted provider (Jellyfin, Emby): adding its tile asks for the server address with the
   on-screen keyboard, prefilled `http://`. Plex uses `https://app.plex.tv/desktop` and needs no address.
-- `drm=yes` means the provider needs a working CDM: it is not offered under Linux Edge (non-DRM by decision until
-  Phase 0 item G12 passes) nor on Linux aarch64 (no Widevine for Firefox there, file 27 §9; Chrome arm64's CDM is
-  unmeasured). A provider can also name OSes it never plays on (`blocked_os=linux` for a service that blocks Linux).
+- `drm=yes` means the provider needs a working CDM: it is not offered on Linux aarch64, where Firefox has no Widevine
+  (file 27 §9), so a Raspberry Pi gets no DRM services. A provider can also name OSes it never plays on
+  (`blocked_os=linux` for a service that blocks Linux).
 - Tubi and Pluto TV are `drm=yes` until research test S2 (`SERVICES.md` §5) shows whether they use DRM; the research
-  marks it unknown. A wrong `yes` only keeps them off the non-DRM targets; a wrong `no` would offer a service that
+  marks it unknown. A wrong `yes` only keeps them off Linux aarch64; a wrong `no` would offer a service that
   cannot play there. Twitch plays without DRM (`SERVICES.md`).
 - There is no ad or skip field. One rule covers every provider (**Rules the engine enforces**), so no catalog entry, and
   no entry from the adapter source, can change it.
+- `quality.<os>.<browser>` is the provider's row in **Quality by browser** (below), one key per OS and browser.
 - `user_agent=tv` selects StreamFlex's built-in TV user-agent string (README D4); `fallback_url` is used when the
   browser cannot override the user agent or the `/tv` page refuses it.
 
 **Providers from the adapter source.** The adapter source's manifest may list further providers with the same fields
 (**The adapter source and cache**). They join the catalog at run time; one whose adapter is unavailable to this device
 shows the manifest's reason text on its tile and in the add list. StreamFlex adds no wording of its own to that text.
+
+### Quality by browser
+
+Each provider carries what it gets in each browser on each OS, so the user sees the caveats before choosing a
+browser (decided together, 2026-11-03). A key `quality.<windows|linux>.<edge|chrome|firefox>` (on Linux, `firefox`
+only) holds space-separated words:
+- one status: `supported` (the provider lists the browser, or it is reported to play there), `unlisted` (the
+  provider's list leaves it out; it may still play) or `blocked` (the provider refuses it);
+- the highest resolution reported (`2160p`, `1080p`, `720p`, `480p`), or `unknown`;
+- any of `hdr`, `dv` (Dolby Vision) and `atmos`.
+
+A missing key means nothing is known, and no caveat is shown. A `blocked` browser is treated as `blocked_os` is: the
+provider is not offered there. A key with an unknown word is ignored whole, with a log line naming it
+(`Overlay: <provider>: unreadable quality key <key>`); the provider stays.
+
+The text is neutral, facts only, built from the key: *up to 4K, HDR, Dolby Vision, Atmos*; *up to 1080p*; *does not
+list this browser*; *does not play in this browser* (2160p reads 4K). A provider that does not list a browser shows
+that as its caveat there. The built-in values are seeded from `SERVICES.md` §1a (the 2026-09-28 research, reported
+cells included), and change only with new research:
+
+| Provider | Windows Edge | Windows Chrome | Windows Firefox | Linux Firefox |
+|---|---|---|---|---|
+| Netflix | supported 2160p hdr dv atmos | supported 2160p | supported 1080p | supported 720p |
+| YouTube | supported 2160p | supported 2160p | supported 2160p | supported 2160p |
+| Jellyfin, Plex | supported unknown | supported unknown | supported unknown | supported unknown |
+| Emby | no key (§1a has no row) | no key | no key | no key |
+| Tubi | supported unknown | supported unknown | supported unknown | unlisted unknown |
+| Pluto TV | supported unknown | supported unknown | supported unknown | supported unknown |
+| Twitch | supported 1080p | supported 1080p | supported 1080p | supported unknown |
+
+**Where it shows.** On Windows, *Settings › Streaming › Streaming browser* marks Edge *(recommended)* and gives each
+browser row, for every provider with a tile in the menus, that provider's line wherever the browsers differ for it,
+for example *Edge (recommended): Netflix up to 4K, HDR, Dolby Vision, Atmos · Chrome: Netflix up to 4K · Firefox:
+Netflix up to 1080p*. A tile's ***Browser ›*** page gives each browser row the tile's own provider line. On Linux
+there is one browser, so the lines show only on the tile's page, as what the provider gets there.
 
 ### A streaming tile
 
@@ -177,15 +223,19 @@ A tile is an ordinary menu entry whose command is a new special command:
 - 3c's add flow gains ***Streaming service ›*** beside *App ›*: the catalog, alphabetical, each row showing the
   provider's icon and either nothing (it plays here) or why it does not (*Needs a DRM browser*, *Not available on
   Linux*, or the manifest's reason). Choosing one writes the entry with the provider's title and icon.
-- The tile's page (hold OK) gains ***Browser ›***: *Follow the streaming browser* or one installed browser.
+- The tile's page (hold OK) gains ***Browser ›*** on Windows: *Follow the streaming browser* or one installed browser,
+  each with the provider's line from **Quality by browser**. On Linux, Firefox is the only browser, and the page shows
+  its line.
 - ***Custom site ›*** in the same list takes a URL through the keyboard and writes `:stream custom url=<url>`: the
   generic engine and pointer mode only, no adapter.
 
 ### The *Streaming* settings page
 
 *Settings › Streaming* holds:
-- ***Streaming browser ›***: the installed, usable browsers only. Default: Edge on Windows, Firefox on Linux (README D9).
-  With none usable it reads *No browser found* and leads to the install offer (release R5).
+- ***Streaming browser ›***: on Windows, the installed, usable browsers only, each with its **Quality by browser**
+  lines; the default is Edge, marked *(recommended)* (decided together, 2026-11-03). On Linux the row shows the full
+  Firefox, the only Linux browser. With none usable it reads *No browser found* and leads to the install offer
+  (release R5).
 - ***Set up streaming ›***: runs and shows **Setup** for each installed browser, with a status line per browser
   (*Ready*, or what is missing).
 - ***Account ›***: **Linking a TV**.
@@ -198,11 +248,11 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
 
 - **Windows:** each browser's `App Paths` registry key (`HKLM` then `HKCU`) and its known install folders; the file
   must exist.
-- **Linux** (file 24): an ELF at `/opt/google/chrome/chrome` and `/opt/microsoft/msedge/msedge`; a full Firefox is an ELF
+- **Linux** (file 24): Firefox only (decided together, 2026-11-03). A full Firefox is an ELF
   `firefox` (or `firefox-bin`) beside `application.ini` or `omni.ja` in `/usr/lib/firefox`, `/usr/lib64/firefox`,
   `/usr/lib/firefox-esr`, `/opt/firefox`, `~/.local/opt/firefox`, or the realpath of `firefox` on `PATH`. A
-  `/usr/bin/firefox` that resolves into a snap, a Flatpak-only browser (`flatpak info`), and Chromium are refused,
-  each with its reason, because their sandboxes cannot reach the native host or they have no CDM.
+  `/usr/bin/firefox` that resolves into a snap and a Flatpak-only Firefox (`flatpak info`) are refused, each with its
+  reason, because their sandboxes cannot reach the native host. Chrome and Edge are not looked for on Linux.
 - The result is a list of usable browsers with their absolute paths. Launches use those paths, never `PATH`.
 
 ## The launch path
@@ -211,9 +261,9 @@ Run at startup and when *Settings › Streaming* opens; a few `stat()` calls or 
    usable now, or the provider cannot play there, StreamFlex shows a notice naming why and launches nothing.
 2. **Prepare the profile** `<data>/profiles/<browser>/<provider>/` (created on first use; one per browser per provider,
    because profile formats differ; a custom site gets `custom-<first 16 hex of the URL's SHA-256>`).
-   - **Chromium (Chrome, Edge):** `<exe> --user-data-dir=<dir> --app=<url>#cptk=<token> --start-fullscreen
+   - **Chromium (Chrome, Edge; Windows only):** `<exe> --user-data-dir=<dir> --app=<url>#cptk=<token> --start-fullscreen
      --window-position=<x>,<y> --no-first-run --disable-session-crashed-bubble`, with the launcher's display origin as
-     the position; on Linux add `--ozone-platform=wayland` or `x11` to match the session; for `user_agent=tv`, add
+     the position; for `user_agent=tv`, add
      `--user-agent=<TV UA>`. Before each launch, and only while the profile is not running, the launcher sets the
      `auto-picture-in-picture` content setting to block in the profile's `Default/Preferences` (**Picture-in-picture**,
      under Setup), creating the file on first use and changing nothing else in it.
@@ -310,17 +360,15 @@ with no elevation:
 - At every start the launcher re-checks the host registration and silently rewrites the HKCU host keys if the zip was
   moved. Policy is written only from the setup page.
 
-**Linux.** Every package (`.deb`, the Fedora tarball, Arch) installs, as root:
-- `/etc/opt/chrome/policies/managed/cptk-overlay.json` and `/etc/opt/edge/policies/managed/cptk-overlay.json`
-  (`ExtensionInstallForcelist`, and for Edge the two hygiene policies);
-- the Chromium host manifest in `/etc/opt/chrome/native-messaging-hosts/` and `/etc/opt/edge/native-messaging-hosts/`,
-  and the Firefox one in `/usr/lib/mozilla/native-messaging-hosts/` (`.deb`, Arch) or `/usr/lib64/mozilla/...`
+**Linux** (Firefox only, decided together 2026-11-03; no browser policy is written). Every package (`.deb`, the
+Fedora tarball, Arch) installs, as root:
+- the Firefox host manifest in `/usr/lib/mozilla/native-messaging-hosts/` (`.deb`, Arch) or `/usr/lib64/mozilla/...`
   (Fedora); the launcher also writes the per-user `~/.mozilla/native-messaging-hosts/app.cptk.overlay.json`, which
   every non-sandboxed Firefox reads;
 - the signed XPI in `/usr/share/streamflex/overlay/`, and the uinput udev rule.
-- Chromium takes each policy from the lexicographically last managed file that sets it, replacing lists (file 24 §6.1).
-  *Set up streaming* scans both managed directories and reports any other file that sets `ExtensionInstallForcelist`
-  as *Another policy file overrides StreamFlex's*, naming it; it never edits other files.
+- The extension reaches the profile by the sideload (**The launch path**, step 2), so nothing under `/etc/opt` is
+  written: Chrome's force-install would need the root-owned `/etc/opt/chrome/policies`, one reason Linux is Firefox
+  only.
 
 **Picture-in-picture** (decided together, 2026-11-03). A video in a floating window cannot be driven from the
 remote, so StreamFlex turns picture-in-picture off where the browser itself allows it. These are browser settings,
@@ -338,7 +386,7 @@ written by the launcher and setup, never writes to a provider's page (file 30):
   the fallbacks below cover it.
 - **Edge (Windows):** also `PictureInPictureOverlayEnabled=0`, beside the hygiene policies. It hides only the hover
   button on a video, needs Edge 118 or later, and does not apply to a profile signed in with a Microsoft account.
-  Edge has no other picture-in-picture policy, and none on Linux.
+  Edge has no other picture-in-picture policy.
 - **Chrome:** no other setting. Chrome has no picture-in-picture policy, so a site's own button and the browser's
   hover control stay as the browser has them.
 - **The fallbacks stay on every browser:** Back in the player never sends the page a key that opens
@@ -348,14 +396,14 @@ written by the launcher and setup, never writes to a provider's page (file 30):
 - *Set up streaming* says so: *StreamFlex's browser profile turns picture-in-picture off where the browser allows
   it, because a video in a floating window can't be driven from the remote.*
 
-**Status.** *Set up streaming* shows, per installed browser: policy present (or the overriding file), host registered,
+**Status.** *Set up streaming* shows, per installed browser: policy present (Windows), host registered,
 and whether the extension has ever said `hello` in that browser. The last is the only proof the extension is installed.
 
 ## The extension
 
 **Build.** One TypeScript source in `extension/src/`, bundled with esbuild into two packages from two generated
 manifests:
-- **Chromium (Chrome and Edge):** MV3, a service-worker background.
+- **Chromium (Chrome and Edge, on Windows):** MV3, a service-worker background.
 - **Firefox:** MV3, an event-page background, `browser_specific_settings.gecko.id`, `strict_min_version` at the oldest
   supported ESR (140 today, file 27 §8).
 
@@ -662,7 +710,11 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
 
 - **C unit tests (ctest):** recipe command lines and profile preparation per browser and OS (`user.js` content, the
   XPI copy rule, the fragment token); catalog resolution and the plays-here rules for all eight built-in providers,
-  and that the catalog has no ad or skip key (an unknown key changes nothing); discovery against fake trees; the
+  and that the catalog has no ad or skip key (an unknown key changes nothing); the quality keys: each built-in
+  provider's seeded row, the caveat text built from a key (Netflix's four lines, word for word), *does not list this
+  browser* for `unlisted`, a `blocked` browser not offered, an unknown word ignoring its whole key with the log line,
+  and *(recommended)* on Windows Edge only; discovery against fake trees, including that Linux reports no Chrome or
+  Edge; the
   cache with a fixed clock (signature, hash, the adapter-bytes cut, replay refusal, a rollback to a lower version, expiry, last good copy, `401` and
   `403`); channel framing and limits; the token table; the host's relay against a fake launcher; QR output against
   known vectors.
@@ -684,12 +736,12 @@ Never logged: the device token, the launch tokens, typed text, and any page addr
   session (browse, open a title, player mode, the keyboard typing a search, the overlay menu, pointer mode, Back), and
   the test requires zero. The overlay's own layer element, everything inside it, and the one insertion that adds it
   are excluded; nothing else is.
-- **Headless harness, a new lane:** real `google-chrome` and a full Firefox on Xvfb in the Debian image, a Jellyfin
-  container with fixture media, the extension installed by the policy file (Chrome) and by the profile sideload
-  (Firefox), the stub adapter source. Keys go in through XTEST; checks read the `Overlay:` lines (launch, `hello`,
+- **Headless harness, a new lane:** a full Firefox on Xvfb in the Debian image (Linux's one browser), a Jellyfin
+  container with fixture media, the extension installed by the profile sideload, the stub adapter source. Keys go in
+  through XTEST; checks read the `Overlay:` lines (launch, `hello`,
   route, focus moves, player mode, Home, exit). Runs in CI like the other shards.
 - **qa-harness guests:** the Windows path end to end (setup without elevation, Edge, Chrome and Firefox against
-  Jellyfin, Plex and Emby containers), and the Linux desktops.
+  Jellyfin, Plex and Emby containers), and Firefox on the Linux desktops.
 - **Smoke doc:** a new module, **19. Streaming overlay**, gains its rows and automation halves in each release's PR
   (the binding rule for user-visible changes). Its hands-on rows are only what no lane can see: picture and sound
   quality through the user's display chain, and a real remote.
@@ -707,21 +759,21 @@ numbers in brackets are `SYNTHESIS.md` §7's.
 | G1 [2] | Windows 11 Home: the unlisted store items force-install from **HKCU** policy (Chrome, Edge) into a fresh per-service profile, and the content script runs in an `--app=` window; the same from HKLM | installed and running at first launch, no prompt | HKLM only: setup's elevated path becomes the default. Neither: back to the user (Alternative B, WebView2, or Chrome Enterprise Core) |
 | G2 [new] | A standard user can write `HKCU\Software\Policies\…` | the write succeeds | setup uses the elevated helper |
 | G3 [new] | The UAC consent prompt can be answered with arrows, Tab and Enter | answered | the elevated setup is documented as a keyboard step |
-| G4 [5] | Exit detection for all three browsers on both OSes, and Edge lingering with the hygiene policies | the launcher sees the exit within 2 s of the last window closing | fall back to watching the browser's windows |
+| G4 [5] | Exit detection for the three Windows browsers and Linux Firefox, and Edge lingering with the hygiene policies | the launcher sees the exit within 2 s of the last window closing | fall back to watching the browser's windows |
 | G5 [7] | `SendInput` and uinput keys arrive `isTrusted` and grant user activation (fullscreen, media start); uinput keys reach the focused browser on GNOME and KDE Wayland | yes everywhere | Chromium: CDP `Input.*` for trusted actions; Firefox: back to the user |
 | G6 [8] | After the browser closes the launcher is in front and takes input (Windows 11, GNOME Wayland, KDE, X11), 20 of 20 | yes | `SDL_HINT_FORCE_RAISEWINDOW` and a raise retry; on GNOME Wayland the launcher keeps its window fullscreen behind the browser so closing reveals it |
 | G7 [6, partial] | The key codes Home, Back, Menu and the media keys produce through each path the launcher hooks | the hook sees them | rebind the defaults |
 | G8 [14] | The gamepad reaches SDL while the browser has focus, per Windows backend (XInput, RawInput, WGI) with an emulated Xbox pad, and on Linux evdev | at least one Windows backend, and Linux | the bridge pins the working backend; with none, gamepads are documented as launcher-only on that OS |
 | G9 [20] | Windows Firefox: native messaging from a kiosk profile, `-wait-for-browser` inside the job | round trip works; exit seen | adjust the Firefox glue |
-| G10 [26] | Linux Chrome and Edge: policy from `/etc/opt/*/policies/managed/`, unlisted items force-install by id, the last-file-wins conflict, host manifests from `/etc/opt/*/native-messaging-hosts/` | all pass for native packages | Edge ignoring the policy, or an unlisted item refused: back to the user |
+| G10 [26] | **Retired 2026-11-03** (Linux supports Firefox only; decided together). It measured Linux Chrome and Edge policy from `/etc/opt/*/policies/managed/`. The id is not reused. | not run | none |
 | G11 [24] | Linux discovery classifies Ubuntu default (snap), Ubuntu with Mozilla's deb, Debian ESR, Fedora, Arch, a `/opt` tarball and a Flatpak-only box correctly | all right | fix the probes |
-| G12 [27] | Linux Edge plays Widevine content (a DRM test stream) without an unsupported flag | it plays | Linux Edge stays non-DRM (already decided) |
+| G12 [27] | **Retired 2026-11-03** (Linux supports Firefox only; decided together). It measured Linux Edge Widevine, the research's S1, which is moot. The id is not reused. | not run | none |
 | G13 [28-31, 33, 35] | The Firefox profile sideload: enabled with no prompt, runs in `-kiosk`, a replaced XPI is picked up (with and without `startupScanScopes`), the everyday Firefox untouched, host permissions granted | all pass | Firefox takes the policy fallback with the inert switch (README D10) |
 | G14 [32] | A fresh Firefox profile downloads its Widevine CDM, and how long it takes | it does | setup pre-warms each new profile |
 | G15 [4] | A one-hour DRM test-stream soak with the extension active, per browser | no error | shrink the content script's footprint |
-| G16 [3, 34] | Chrome and Edge `Extensions.loadUnpacked` over a debug pipe (the development loop only) | loads | development uses the store builds |
-| G17 [new] | Picture-in-picture, per browser and OS: each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's and Edge's `auto-picture-in-picture` block in the profile's `Preferences` holds across launches or is reset; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; a reset `auto-picture-in-picture` block is left to the fallbacks; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
-| G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and on Linux (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
+| G16 [3, 34] | Chrome and Edge on Windows, `Extensions.loadUnpacked` over a debug pipe (the development loop only) | loads | development uses the store builds |
+| G17 [new] | Picture-in-picture, per browser and OS (the three on Windows, Firefox on Linux): each setting in **Picture-in-picture** holds after a restart, Firefox's four prefs across the `user.js` rewrite at each start; a site's `requestPictureInPicture()` (and Document picture-in-picture) fails harmlessly where Firefox's prefs are set; Chrome's and Edge's `auto-picture-in-picture` block in the profile's `Preferences` holds across launches or is reset; the launcher sees a picture-in-picture window and brings the main window back (Windows through the job's processes, Linux X11, Linux Wayland, where it may not be able to list windows) | every setting holds; the site's request fails with no broken page; the window is seen and the main window raised within 2 s on Windows and X11 | a setting that does not hold is dropped and the fallbacks carry it; a reset `auto-picture-in-picture` block is left to the fallbacks; where the launcher cannot see the window (Wayland is the likely case), the Back rule is the only protection there, documented as a known limit |
+| G18 [new] | Typing: `send_text` reaches a React text field as trusted input on Windows (`KEYEVENTF_UNICODE`) and in Linux Firefox (uinput through the session's layout, on GNOME and KDE Wayland and X11), letters, digits, punctuation and the *àé* page; on Wayland, whether the launcher can learn the session's layout at all is unknown | every character arrives in the field, `isTrusted`, and the React state matches | Windows: type the keyboard's characters through virtual-key codes where `KEYEVENTF_UNICODE` fails; Linux: a character the layout cannot produce is refused with its toast; if the layout cannot be learned on Wayland, back to the user |
 
 **On the user's HTPC (one run sheet, written for the user, about an hour):**
 
@@ -745,12 +797,12 @@ Each release has its own plan, its smoke rows, and its own CHANGELOG section.
 
 | | Ships | Done when |
 |---|---|---|
-| **P0** | Phase 0 (above). No release. | every G and H item has a result and its branch is recorded |
+| **P0** | Phase 0 (above). No release. | every G item not retired and every H item has a result, and its branch is recorded |
 | **R1 v0.7.0: launch and Home** | `providers.ini` with the built-in providers; discovery; recipes (Firefox without the XPI); the supervisor; the Home binding and hook; the gamepad bridge; `:stream`; *Streaming service ›* and *Custom site ›* in the add flow; *Settings › Streaming › Streaming browser*. No extension. | a remote starts Netflix in Edge at full quality, the site's own keyboard navigation works, and one Home press returns to the menu, every time |
-| **R2 v0.8.0: the engine** | the extension (both flavors) and its store submissions; `cptk-overlay-host`; the channel and tokens; the cache, seeded from built-in adapters only (no network); *Set up streaming*; the Linux package files and udev rule; the engine on **Jellyfin, Plex and Emby** (Emby on its Desktop layout, since its TV layout is not free, file 29) | browse, open a title, play and come back with the D-pad alone on each, in all three browsers |
+| **R2 v0.8.0: the engine** | the extension (both flavors) and its store submissions; `cptk-overlay-host`; the channel and tokens; the cache, seeded from built-in adapters only (no network); *Set up streaming*; the Linux package files and udev rule; the engine on **Jellyfin, Plex and Emby** (Emby on its Desktop layout, since its TV layout is not free, file 29) | browse, open a title, play and come back with the D-pad alone on each, in the three Windows browsers and Linux Firefox |
 | **R3 v0.9.0: Netflix, YouTube, Tubi, Pluto TV and Twitch** | the Netflix adapter and player mode; YouTube `/tv` with its user agent and the fallback; the Tubi, Pluto TV and Twitch adapters; the overlay keyboard; pointer mode; the overlay menu | an evening of use with no keyboard or mouse, including one search per service and one sign-in on Netflix and on YouTube; research test S2 has run on Linux, and Tubi's and Pluto TV's `drm` match what it found |
 | **R4 v0.10.0: the adapter source and Account** | the networked source, the manifest's catalog entries and reasons; *Account* and linking | a linked TV takes adapters from the source, and keeps working while the source is unreachable |
-| **R5 v0.11.0: Linux browser install** | the any-of-three offer when no usable browser is found (Firefox preselected; Edge hidden off amd64), the `pkexec` helper per distro with the text fallback; final Linux Edge DRM gating from G12 | a default Ubuntu box gets a working full Firefox from one button; a box with a usable browser never sees the offer |
+| **R5 v0.11.0: Linux browser install** | the full-Firefox offer when no usable Firefox is found (README D9, as amended 2026-11-03), the `pkexec` helper per distro with the text fallback | a default Ubuntu box gets a working full Firefox from one button; a box with a usable browser never sees the offer |
 
 **Before R2's submissions:** the plan writes to Chrome Web Store support asking whether the adapter format is within
 the remote-code policy, and waits for the answer before submitting.
@@ -764,4 +816,6 @@ the remote-code policy, and waits for the answer before submitting.
   initial services ship.
 - HDR switching and refresh-rate matching: sub-project 4 and later.
 - A phone keyboard, macOS and Safari, snap and Flatpak browsers, Chromium.
+- Chrome and Edge on Linux (decided together, 2026-11-03). Chrome may be added later only if a provider plays in
+  Chrome but not in Firefox on Linux, or to give a Raspberry Pi DRM; Linux Edge has no Widevine.
 - Every provider beyond the built-in eight: their adapters come through the adapter source.

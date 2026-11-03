@@ -13,6 +13,11 @@ this plan's tasks were written. Their protocol entries are in `guest-protocol.md
 task below builds yet: a `probe_spawn pip` watch (G17 step 4), and a `probe_spawn text` command with a React
 text-field probe page (G18). Until a kit task adds them, G17 runs partial and G18 does not run.
 
+**Amended 2026-11-03 (decided together):** Linux supports Firefox only. G10 (Linux Chrome and Edge policy) and G12
+(Linux Edge and Widevine) are retired, their ids not reused, and `results.md` records them as `retired`. Every other
+Linux run uses Firefox only. The kit built below still writes the Linux Chrome and Edge policy files in
+`linux_setup.py` (Task 6); a guest run on Linux needs only its host registration, and the kit is not changed for it.
+
 **Architecture:** A self-contained kit under `tools/overlay-phase0/`, never built by the root `CMakeLists.txt` and
 never shipped: a C native-messaging probe host, a C spawner (process supervision, key injection, key logging, SDL3
 gamepad and focus probes), a plain-JavaScript probe extension in both flavors with a Python build script, two probe
@@ -2717,7 +2722,7 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "tools:
 ### Task 7: The store accounts and CPTK Overlay Probe 0.0.1 (the user's steps, then the record)
 
 This task is mostly the user's: three accounts, three uploads. Start it as soon as Task 5 is done, because store
-review can take days and G1, G5, G10 and G15 cannot run before the listings are live (G13 needs only the signed
+review can take days and G1, G5 and G15 cannot run before the listings are live (G13 needs only the signed
 XPIs and `ids.json`).
 
 **Files:**
@@ -2827,7 +2832,7 @@ Expected: `True`.
 
 - [ ] **Step 8: Wait for both reviews**
 
-Each store emails when the item is published. G1, G5, G10 and G15 need both live, and so do the run sheet's Part B,
+Each store emails when the item is published. G1, G5 and G15 need both live, and so do the run sheet's Part B,
 H3 and H4; G13 needs only the signed XPIs and `ids.json`; the other G items need no listing.
 
 - [ ] **Step 9: Commit**
@@ -2947,7 +2952,7 @@ Profile prepared with `firefox-profile.ps1`; `windows.ps1` run for the host keys
 line on probe.html>`; press F once; then Alt+F4. **Read:** `probe.log` `start` from Firefox; `exited` seen.
 **Pass:** both.
 
-### G10. Linux Chrome and Edge policy
+### G10. Linux Chrome and Edge policy (retired 2026-11-03: Linux supports Firefox only)
 
 `sudo python3 setup/linux_setup.py --ids ids.json --host <abs probe_host>`, then start each browser on the probe
 page. Add a second managed file `zz-other.json` that sets `ExtensionInstallForcelist` to another id and start
@@ -2963,7 +2968,7 @@ spec's **Browser discovery** list whether it exists, is an ELF, has `application
 where `realpath $(command -v firefox)` points. **Pass:** the spec's rules classify every box correctly (full
 Firefox found only where one is installed natively).
 
-### G12. Linux Edge and Widevine
+### G12. Linux Edge and Widevine (retired 2026-11-03: Linux supports Firefox only)
 
 Stock Edge on Ubuntu and Fedora; open `edge://components` (screenshot: is a Widevine CDM listed?) and play the
 Shaka Player demo's Widevine stream (`https://shaka-player-demo.appspot.com/`, asset "Angel One (multicodec,
@@ -3030,8 +3035,8 @@ git -C C:/Users/jscha/ClaudeScratch/wt-streamflex-overlay-spec commit -m "docs: 
 
 Write `C:/Users/jscha/ClaudeScratch/streamflex-handoff/overlay-phase0/README.md` naming: the protocol's path on
 `master` (after this branch merges), the built kit's location, `ids.json`, the signed XPI, and which items wait
-for the store reviews (G1, G5, G10, G15; G13 waits only for the signed XPIs), and that G17 step 4 and G18 wait for
-the kit additions named in the Goal. Then send qa-harness-sf one message starting
+for the store reviews (G1, G5, G15; G13 waits only for the signed XPIs; G10 and G12 are retired), and that G17
+step 4 and G18 wait for the kit additions named in the Goal. Then send qa-harness-sf one message starting
 `From the streamflex tab: Phase 0 of the streaming overlay is ready for your guests`, with that folder's path. Its
 plan, bookings and guests are its own.
 

@@ -304,8 +304,9 @@ powershell -ExecutionPolicy Bypass -File "$repo\tools\overlay-phase0\make-kit.ps
 
 ## 11. Wait for both reviews
 
-Each store emails you when the item is published. Tell the streamflex tab when each one goes live. Guest rows G1, G5,
-G10 and G15 need both live, and so do Part B, H3 and H4 of your run sheet. Guest row G13 needs neither: only the two
+Each store emails you when the item is published. Tell the streamflex tab when each one goes live. Guest rows G1, G5
+and G15 need both live (G10 is retired: Linux supports Firefox only), and so do Part B, H3 and H4 of your run sheet.
+Guest row G13 needs neither: only the two
 signed XPIs and `ids.json`. The other rows need no listing.
 
 If you submitted with the PR #73 permalink for the privacy policy, then once PR #73 has merged, replace the privacy

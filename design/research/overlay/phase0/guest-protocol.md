@@ -32,7 +32,9 @@ repo (`<repo>` below), except the build, which runs from `<repo>` itself.
   (its absolute path) on Linux.
 - **The interactive session (Windows):** G5, G6 and G7 run in the guest's interactive desktop session, never over
   SSH. `SendInput` and raw input in session 0, where an SSH command runs, reach no desktop the browser is on.
-- **Store listings:** G1, G5, G10 and G15's Chrome and Edge runs force-install the probe's published Chrome Web
+- **Linux runs Firefox only** (decided together, 2026-11-03): every Linux step below uses the full Firefox, and G10 and
+  G12 are retired.
+- **Store listings:** G1, G5 and G15's Chrome and Edge runs (Windows) force-install the probe's published Chrome Web
   Store and Edge Add-ons items, so they wait until both listings are live. G13 needs only the two AMO-signed XPIs
   and `ids.json` (its host registration reads it), and no Chrome or Edge listing; no other item needs a listing.
 - **The page server:** Windows `powershell -ExecutionPolicy Bypass -File pages\serve.ps1`; Linux
@@ -106,7 +108,7 @@ As an administrator, start `powershell -Command "Start-Process powershell -Verb 
 prompt with keys only: Left, Right, Tab and Enter, sent through the guest's keyboard. Record which button has focus
 first and which keys reach Yes. **Pass:** the prompt can be answered Yes without a mouse.
 
-### G4. Exit detection (all three browsers, both OSes)
+### G4. Exit detection (the three Windows browsers, and Firefox on Linux)
 
 `probe_spawn run <browser launch line>`; after 20 s close the window with Alt+F4 through the guest's keyboard,
 and note the time sent. Then repeat and send `close` on `probe_spawn`'s stdin instead. **Read:** the `exited` line's
@@ -118,8 +120,9 @@ Edge without the hygiene policies too, as information.
 
 ### G5. Trusted injection
 
-With `http://127.0.0.1:8765/probe.html#cptk=<token>` open in each browser (setup as G1 on Windows, `linux_setup.py`
-as in G10 on Linux), run `probe_spawn keys 3000 F` and, after reloading, `probe_spawn keys 3000 P`. `keys` sends to
+With `http://127.0.0.1:8765/probe.html#cptk=<token>` open in each browser (setup as G1 on Windows; on Linux, Firefox
+only, its profile prepared and the host registered as in G13), run `probe_spawn keys 3000 F` and, after reloading,
+`probe_spawn keys 3000 P`. `keys` sends to
 whatever window has focus once its delay ends, and the window the command was typed in has it, so within the 3 s
 bring the browser to the front (click it, or Alt+Tab). It must be the
 kit's probe page: anywhere else the `key` reports name F and P only as `char`. On Linux run it on GNOME Wayland and
@@ -170,23 +173,10 @@ line on probe.html#cptk=<token>>`; press F once; then Alt+F4. **Read:** a host s
 `probe.log`; `exited` seen. With no host start line, screenshot the probe box before Alt+F4: its `host: <reason>`
 line is the failure's reason. **Pass:** both.
 
-### G10. Linux Chrome and Edge policy
+### G10. Retired 2026-11-03
 
-`sudo python3 setup/linux_setup.py --ids ids.json --host <abs probe_host>`, then start each browser on
-`http://127.0.0.1:8765/probe.html#cptk=<token>` and wait 60 s. For each, record `first_load: probe box present
-yes/no` (screenshot). If no, reload that tab once (Ctrl+R; the token is still in its address), wait 30 s, and
-record `after one reload: yes/no` (screenshot); if `first_load` is yes, record `after one reload: not needed`.
-Then add a second managed file,
-`/etc/opt/chrome/policies/managed/zz-other.json`, that sets `ExtensionInstallForcelist` to another id, run the same
-`linux_setup.py` command again, and start Chrome again on the token URL. **Read:** `chrome://policy`,
-`edge://policy` (screenshots), the host start lines and extension start reports in `probe.log`, and the re-run's
-conflict line. Where a browser installed the extension but `probe.log` has no line from it, screenshot the probe
-box: its `host: <reason>` line is the failure's reason. With `zz-other.json` in place, record as data which
-`ExtensionInstallForcelist` entry `chrome://policy` shows Chrome applied, and whether the probe extension is still
-installed: this item does not assume which managed file wins. **Pass:** both browsers install the extension on the
-first launch, and the probe starts and reports after at most one reload, with no prompt; and the re-run prints the
-conflict line naming `zz-other.json`. `first_load` is not a pass condition. It is data for the launcher's design:
-it tells R1 whether the launcher must open the token URL only after the extension is installed.
+Linux supports Firefox only (decided together, 2026-11-03), so Linux Chrome and Edge policy is not measured and this
+item is not run. Its id is not reused. Record it in `results.md` as `retired`.
 
 ### G11. Linux browser discovery
 
@@ -196,12 +186,10 @@ spec's **Browser discovery** list whether it exists, is an ELF, has `application
 where `realpath $(command -v firefox)` points. **Pass:** the spec's rules classify every box correctly (full
 Firefox found only where one is installed natively).
 
-### G12. Linux Edge and Widevine
+### G12. Retired 2026-11-03
 
-Stock Edge on Ubuntu and Fedora; open `edge://components` (screenshot: is a Widevine CDM listed?) and play the
-Shaka Player demo's Widevine stream (`https://shaka-player-demo.appspot.com/`, asset "Angel One (multicodec,
-multilingual, Widevine)"). **Pass:** it plays without `--enable-features=msWidevinePlatform`. Record the result
-with the flag too, as information.
+Linux supports Firefox only (decided together, 2026-11-03), so Linux Edge is not a target and this item, Linux Edge
+and Widevine (the research's S1), is not run. Its id is not reused. Record it in `results.md` as `retired`.
 
 ### G13. The Firefox profile sideload
 
@@ -237,7 +225,7 @@ same asset; a page that reloaded or left the asset counts as a reload. **Read:**
 at the start and at the end of the hour (screenshots), and the twelve after-pair records. **Pass:** the probe box is
 present in both screenshots, no playback error, no reload.
 
-### G16. Chrome and Edge `Extensions.loadUnpacked` (the development loop)
+### G16. Chrome and Edge `Extensions.loadUnpacked` (the development loop, Windows)
 
 Build the unpacked extension first: `python extension/build.py` in the kit (Python 3), or build it on the host and
 copy `extension/dist/chromium` in. Start each browser with `--user-data-dir=<fresh> --remote-debugging-pipe
@@ -255,7 +243,8 @@ it loads in both browsers and the probe box appears. (Development only.)
 new top-level window of the launched browser's processes, and raise the main one), which the kit does not have yet;
 until a kit task adds it, record step 4 as not run and the row as partial.
 
-Each browser on Windows and on Linux (GNOME Wayland, KDE Wayland, an X11 session), fresh profiles:
+Chrome, Edge and Firefox on Windows, and Firefox on Linux (GNOME Wayland, KDE Wayland, an X11 session), fresh
+profiles:
 1. **The settings.** Apply the settings the spec's **Picture-in-picture** lists, by hand: Firefox's four
    `user_pref(..., false)` lines appended to the profile's `user.js` after the profile script (it keeps user lines),
    and, after the first close, the profile script run again before the restart, so the restart follows the
@@ -292,8 +281,8 @@ within 2000 ms on Windows and X11. On Wayland record what the watch can see, as 
 probe page with a React-controlled text field that reports its value, its React state and each event's
 `isTrusted`. The kit has neither yet; until a kit task adds both, G18 is not run.
 
-Each browser on Windows and on Linux (GNOME Wayland, KDE Wayland, an X11 session), with the session's keyboard layout
-set to US, then to a layout with AltGr (German):
+Chrome, Edge and Firefox on Windows, and Firefox on Linux (GNOME Wayland, KDE Wayland, an X11 session), with the
+session's keyboard layout set to US, then to a layout with AltGr (German):
 1. Focus the page's text field and run `probe_spawn text 3000 <string>`, bringing the browser to the front within
    the 3 s, as in G5. The string holds lowercase and uppercase letters, digits, the keyboard's punctuation, and every
    character of the keyboard's *àé* page.
@@ -307,5 +296,6 @@ types nothing for it.
 ## Results format
 
 `results.md`, one row per item: `| G<n> | pass / fail / partial | browsers and versions | evidence path | note |`.
-G1 and G10 put each browser's `first_load` and `after one reload` values in the note. G1's note also gives each
+G1 puts each browser's `first_load` and `after one reload` values in the note; G10 and G12 read `retired`. G1's note
+also gives each
 browser's `HKCU: pass/fail` and `HKLM: pass/fail`.

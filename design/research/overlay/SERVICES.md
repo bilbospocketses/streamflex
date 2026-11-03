@@ -4,7 +4,8 @@ Sources: `21-services-majors-a.md` (Netflix, Disney+, Prime Video, Max, Apple TV
 
 **Binding decisions applied** (`README.md`, plus the user's decision of 2026-09-28 on Linux Edge):
 - There are six targets: Chrome, Edge and Firefox on Windows and on Linux (Linux Firefox means the full, non-snap build). macOS is out of scope.
-- **Linux Edge is a non-DRM browser only.** It covers YouTube, Jellyfin, Plex web, Twitch and similar services. Any service that needs Widevine is "not supported on Linux Edge until the Phase 0 Edge/Widevine test (S1) passes".
+  - **Amended 2026-11-03 (decided together): four targets.** Linux supports Firefox only (the full, non-snap build); Windows keeps Chrome, Edge and Firefox, with Edge the recommended default. The reasons and the known limits (no Widevine for Firefox on Linux arm64, so a Raspberry Pi gets no DRM services) are in `README.md`'s amendment of the same date. The LX Chrome and LX Edge columns below stay as the record of the research; they no longer describe a target.
+- **Linux Edge is a non-DRM browser only.** It covers YouTube, Jellyfin, Plex web, Twitch and similar services. Any service that needs Widevine is "not supported on Linux Edge until the Phase 0 Edge/Widevine test (S1) passes". (Moot from 2026-11-03: Linux Edge is not a target.)
 - Low Linux quality ceilings (Widevine L3, about 480p to 720p) are **known limits** of a target. They are recorded here and are never a reason to defer Linux.
 - The majors come first, then a few others.
 
@@ -194,6 +195,8 @@ The user took the recommended answer on every decision. They are recorded in `RE
 ## 5. New Phase 0 tests
 
 This list adds to SYNTHESIS §7. Where a test extends an existing item, the item number is given as it stood on 2026-09-28; SYNTHESIS may be renumbered in parallel.
+
+**Amended 2026-11-03 (decided together):** Linux supports Firefox only. S1 is moot and is not run; its id is not reused. The Linux parts of S2 to S6 run in full Firefox only, and their Linux Chrome and Linux Edge parts are dropped. S2 still decides whether Tubi and Pluto TV use DRM.
 
 - **S1.** Linux Edge Widevine (file 24, the same as SYNTHESIS item 27). On clean Ubuntu and Fedora VMs, install stable Edge from packages.microsoft.com. Check `edge://flags/#edge-widevine-drm` and `edge://components`, then play Netflix or the Bitmovin/Shaka DRM demo with and without `--enable-features=msWidevinePlatform`. Record the Edge version and the result.
 - **S2.** One hour on Linux: Spotify, Plex, Tubi, Pluto TV and Twitch in Chrome, Edge and full Firefox. Record plays or fails, and whether Tubi and Pluto use DRM, which decides their Linux Edge cells.
