@@ -51,11 +51,17 @@ class LinuxSetupTest(unittest.TestCase):
         self.manifest = self.hosts / "app.cptk.overlay.json"
 
     def run_setup(self, *extra, ids=None):
-        return linux_setup.main(["--ids", str(ids or self.ids), "--host", "/usr/libexec/cptk/probe_host",
-                                 "--home", str(self.home), *extra])
+        """Runs setup with its stdout captured in self.out, so the lines it prints are checked, never shown."""
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            try:
+                return linux_setup.main(["--ids", str(ids or self.ids), "--host", "/usr/libexec/cptk/probe_host",
+                                         "--home", str(self.home), *extra])
+            finally:
+                self.out = out.getvalue()
 
     def test_writes_only_the_firefox_host_manifest(self):
         self.assertEqual(self.run_setup(), 0)
+        self.assertEqual(self.out, f"setup: wrote {self.manifest}\n")
         ff = json.loads(self.manifest.read_text())
         self.assertEqual(ff["allowed_extensions"], ["overlay-probe@cptk.app"])
         self.assertEqual(ff["path"], "/usr/libexec/cptk/probe_host")
@@ -84,10 +90,16 @@ class LinuxSetupTest(unittest.TestCase):
         other = self.hosts / "org.example.other.json"
         self.hosts.mkdir(parents=True)
         other.write_text('{"name": "org.example.other"}')
-        self.run_setup()
-        self.run_setup("--remove")
+        self.assertEqual(self.run_setup(), 0)
+        self.assertEqual(self.run_setup("--remove"), 0)
+        self.assertEqual(self.out, f"setup: removed {self.manifest}\n")
         self.assertFalse(self.manifest.exists())
         self.assertTrue(other.exists())
+
+    def test_remove_with_nothing_there_says_so(self):
+        self.assertEqual(self.run_setup("--remove"), 0)
+        self.assertEqual(self.out, f"setup: nothing to remove at {self.manifest}\n")
+        self.assertEqual(os.listdir(self.home), [])
 
     def test_lists_the_folders_it_will_create(self):
         self.assertEqual(linux_setup.missing_dirs(self.hosts), [self.home / ".mozilla", self.hosts])
@@ -95,8 +107,10 @@ class LinuxSetupTest(unittest.TestCase):
         self.assertEqual(linux_setup.missing_dirs(self.hosts), [])
 
     def test_refuses_a_relative_host_path(self):
-        with self.assertRaises(SystemExit):
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err, self.assertRaises(SystemExit):
             linux_setup.main(["--ids", str(self.ids), "--host", "probe_host", "--home", str(self.home)])
+        self.assertIn("--host must be an absolute path", err.getvalue())
+        self.assertEqual(os.listdir(self.home), [])
 
     def test_refuses_a_bad_gecko_id(self):
         for bad in ({k: v for k, v in IDS.items() if k != "gecko"}, {**IDS, "gecko": "overlay@cptk.app"}):
@@ -121,13 +135,15 @@ class LinuxSetupTest(unittest.TestCase):
         calls = []
         argv = ["--ids", str(self.ids), "--host", "/usr/libexec/cptk/probe_host"]
         with mock.patch.dict(sys.modules, {"pwd": fake_pwd}), mock.patch.dict(os.environ, {"SUDO_USER": "alice"}), \
-                mock.patch.object(os, "chown", lambda p, u, g: calls.append((pathlib.Path(p), u, g)), create=True):
+                mock.patch.object(os, "chown", lambda p, u, g: calls.append((pathlib.Path(p), u, g)), create=True), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
             self.assertEqual(linux_setup.main(argv), 0)
             self.assertEqual(calls, [(self.home / ".mozilla", 1001, 1002), (self.hosts, 1001, 1002),
                                      (self.manifest, 1001, 1002)])
             calls.clear()
             self.assertEqual(linux_setup.main(argv), 0)
             self.assertEqual(calls, [(self.manifest, 1001, 1002)])
+        self.assertEqual(out.getvalue(), f"setup: wrote {self.manifest}\n" * 2)
         self.assertTrue(self.manifest.exists())
 
 

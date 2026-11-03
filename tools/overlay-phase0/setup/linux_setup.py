@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Phase 0 setup on Linux: the Firefox native-messaging host manifest. Linux is Firefox only, so no browser policy is
-written. Run it as the desktop user; under sudo it writes into the invoking user's home and gives them the files."""
+written. Run it as the desktop user; under sudo, without --home, it writes into the invoking user's home and gives them
+the files."""
 import argparse
 import json
 import os
@@ -66,7 +67,9 @@ def main(argv=None):
         if args.remove:
             if path.exists():
                 path.unlink()
-            print(f"setup: removed {path}")
+                print(f"setup: removed {path}")
+            else:
+                print(f"setup: nothing to remove at {path}")
             continue
         made = missing_dirs(path.parent)
         path.parent.mkdir(parents=True, exist_ok=True)
