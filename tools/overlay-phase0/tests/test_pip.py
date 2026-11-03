@@ -46,10 +46,12 @@ class Lines:
         """Returns the first event whose fields equal fields; fails as HUNG, naming what, after the hang guard."""
         end = time.monotonic() + 120
         while True:
+            # Read before the scan: a reader that appends the line and ends between the two still has it scanned.
+            alive = self.thread.is_alive()
             for e in self.events():
                 if all(e.get(k) == v for k, v in fields.items()):
                     return e
-            if not self.thread.is_alive():
+            if not alive:
                 test.fail("probe_spawn ended before %s: %s" % (what, "".join(self.lines)))
             if time.monotonic() > end:
                 test.fail("HUNG: no %s" % what)
@@ -137,19 +139,27 @@ class PipTest(unittest.TestCase):
             open(os.path.join(tmp, "open"), "w").close()
             video = lines.wait_for(self, "the second window's line", event="window", title="cptk video")
             self.assertFalse(video["pip"])
+            time.sleep(0.3)
+            t_r = time.time() * 1000  # wall ms, as the lines' t, just before the retitle is cued
             open(os.path.join(tmp, "retitle"), "w").close()
             changed = lines.wait_for(self, "the retitled window's line", event="window_changed", id=video["id"])
             self.assertEqual((changed["title"], changed["pip"], changed["rule"]), ("Picture-in-Picture", True, "title"))
             seen = lines.wait_for(self, "the pip_seen line", event="pip_seen", id=video["id"])
             self.assertEqual(seen["main"], main["id"])
-            self.assertGreaterEqual(seen["ms_since_seen"], 0)
+            # A lower bound, not a duration limit: the window was first listed at video["t"] and retitled no sooner
+            # than t_r, so a count from its first appearance is at least that span. A count restarted at the retitle
+            # would be near 0. 32 ms covers the ~15.6 ms granularity of each of the two Windows clocks.
+            self.assertGreaterEqual(seen["ms_since_seen"], t_r - video["t"] - 32)
             steps(lines, main, video)
             proc.stdin.write("close\n")
             proc.stdin.flush()
             lines.thread.join(120)
             if lines.thread.is_alive():
                 self.fail("HUNG: probe_spawn pip did not end after close")
-            proc.wait(timeout=120)
+            try:
+                proc.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                self.fail("HUNG: probe_spawn pip did not exit after its stdout closed")
         finally:
             if proc.poll() is None:
                 proc.kill()  # the job closes with it and ends the child

@@ -174,8 +174,11 @@ static void pip_tick(void *unused)
         tracked *t = find(s->id);
         if (!t) {
             if (g.n == PROBE_PIP_MAX_WINDOWS) {
-                if (!g.limit_reported)
-                    probe_emit("\"event\":\"pip_window_limit\",\"max\":256");
+                if (!g.limit_reported) {
+                    char fields[64];
+                    snprintf(fields, sizeof fields, "\"event\":\"pip_window_limit\",\"max\":%d", PROBE_PIP_MAX_WINDOWS);
+                    probe_emit(fields);
+                }
                 g.limit_reported = 1;
                 continue;
             }

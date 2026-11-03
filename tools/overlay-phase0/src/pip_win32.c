@@ -49,9 +49,17 @@ static BOOL CALLBACK add_window(HWND hwnd, LPARAM lp)
     GetClassNameW(hwnd, text, 40);
     utf8_of(text, w->cls, (int)sizeof w->cls);
     w->topmost = (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    /* A minimized window's rect is its small caption bar, so it would lose the main-window ranking to any popup; its
+       restored size is the one that counts. */
     RECT r;
-    if (GetWindowRect(hwnd, &r))
+    WINDOWPLACEMENT wp;
+    wp.length = sizeof wp;
+    if (IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp)) {
+        r = wp.rcNormalPosition;
         w->area = (long long)(r.right - r.left) * (r.bottom - r.top);
+    } else if (GetWindowRect(hwnd, &r)) {
+        w->area = (long long)(r.right - r.left) * (r.bottom - r.top);
+    }
     return TRUE;
 }
 
@@ -86,12 +94,13 @@ static int close_window(uint64_t id, char *method, size_t cap)
    one within reach is "the calling process received the last input event". One empty mouse INPUT (no flags: it moves
    and presses nothing) makes this process that one. If the call still fails, the fallback joins the foreground
    thread's input state for the call, then leaves it. The method used is reported, so G17 records which one each
-   browser needed. */
+   browser needed. The restore and the move to the top are asynchronous (ShowWindowAsync, SWP_ASYNCWINDOWPOS), so a
+   hung browser window cannot block run's loop and leave close and kill on stdin unhandled. */
 static int raise_window(uint64_t id, char *method, size_t cap)
 {
     HWND main = (HWND)(uintptr_t)id;
     if (IsIconic(main))
-        ShowWindow(main, SW_RESTORE);
+        ShowWindowAsync(main, SW_RESTORE);
     INPUT in;
     memset(&in, 0, sizeof in);
     in.type = INPUT_MOUSE;
@@ -103,7 +112,7 @@ static int raise_window(uint64_t id, char *method, size_t cap)
     HWND fg = GetForegroundWindow();
     DWORD fg_thread = fg ? GetWindowThreadProcessId(fg, NULL) : 0, me = GetCurrentThreadId();
     BOOL joined = fg_thread && fg_thread != me && AttachThreadInput(me, fg_thread, TRUE);
-    BringWindowToTop(main);
+    SetWindowPos(main, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
     BOOL ok = SetForegroundWindow(main);
     if (joined)
         AttachThreadInput(me, fg_thread, FALSE);
