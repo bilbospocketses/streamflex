@@ -11,7 +11,7 @@
 # falls back to an opaque one, as its third lost renderer does too; Transparent is then tried again
 # once another Mode is chosen in settings, though the cursor never rests on it. The cases that race the
 # attempts' 2 s are in 48-device-loss-timing.sh.
-# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup and f48-wingiveup wait for are paced 2 s apart in wall time and end inside the 20 s line wait, f48-wingiveup's 3 s sleep is a floor too (a correct run makes no sixth attempt, however long; one that does makes it in the pass after the fallback's reload) and its display step is a bounded poll for a log line, f48-winchosen's two steps of Mode are sent while the launcher is stopped, so it handles both in one pass however loaded the box is, and the three losses of f48-wincap and f48-lostthrice are each sent once the one before has reloaded, and no case races a deadline
+# Not timing-sensitive: every wait ends on a log line or a bounded screen poll, but for the 1 s sleeps, which are floors after a log line (before each screenshot, so a frame drawn after the reset is on screen; before f48-sizereset ends, so a second reload would be logged), and a late shot cannot fail a correct run, whose frame is the same before and after the reset; the size and the reset that must share a batch are written while the launcher is stopped; f48-applost's 3 s sleep is a floor too (a correct run makes no attempt while the app runs, however long), the five attempts f48-giveup and f48-wingiveup wait for are paced 2 s apart in wall time and end inside the line wait's bound (run.sh's guard_s, 130 s), f48-wingiveup's 3 s sleep is a floor too (a correct run makes no sixth attempt, however long; one that does makes it in the pass after the fallback's reload) and its display step is a bounded poll for a log line, f48-winchosen's two steps of Mode are sent while the launcher is stopped, so it handles both in one pass however loaded the box is, and the three losses of f48-wincap and f48-lostthrice are each sent once the one before has reloaded, and no case races a deadline
 D48_EVENT=/tmp/d48-event D48_SIZE=/tmp/d48-size D48_APP=/tmp/d48-app
 # A function to put the render events WORDS in the hook's file in one step (a rename), so the hook
 # never reads half of them
@@ -43,37 +43,20 @@ d48_reset_seen() { d48_send reset; wait_line 'Reload: done at ' "$2"; }
 d48_app_in() { : > "$D48_APP"; wait_line 'Application detected' "$2"; }
 d48_app_out() { rm -f "$D48_APP"; wait_line 'Application finished' "$2"; }
 d48_at() { grep -nxF -- "$2" "$out/$1.log" | head -1 | cut -d: -f1; }
-# A function to count the log's lines that are exactly LINE
-d48_count() {
-    local n
-    n=$(grep -cxF -- "$1" "$LOG" 2> /dev/null)
-    echo "${n:-0}"
-}
-# A function to wait up to 20 s, as wait_line does, for the exact LINE to be in the log more than
-# BEFORE times; it fails when it never is, or when the launcher (PID) exits first
-d48_more() {
-    local line=$1 pid=$2 before=$3 i
-    for i in $(seq 100); do
-        [ "$(d48_count "$line")" -gt "$before" ] && return 0
-        running "$pid" || break
-        sleep 0.2
-    done
-    [ "$(d48_count "$line")" -gt "$before" ]
-}
 # A resize as 47-screen.sh's s47_resize makes one: SDL's own event first (which delivers it on Xvfb),
 # the size hook when that line never comes; NAME.path says which
 d48_resize() {
     local name=$1 pid=$2 size=$3 line=$4 before
-    before=$(d48_count "$line")
+    before=$(log_count -x "$line")
     xdotool search --name '^StreamFlex$' windowsize %@ "${size%x*}" "${size#*x}" > /dev/null 2>&1
-    if d48_more "$line" "$pid" "$before"; then
+    if wait_count -x "$line" "$((before + 1))" "$pid"; then
         echo event > "$out/$name.path"
         return 0
     fi
     xdotool search --name '^StreamFlex$' windowsize %@ 1920 1080 > /dev/null 2>&1
     echo "$size" > "$D48_SIZE"
     echo hook > "$out/$name.path"
-    d48_more "$line" "$pid" "$before"
+    wait_count -x "$line" "$((before + 1))" "$pid"
 }
 d48_to_720_later() { d48_resize "$1" "$2" 1280x720 'Screen: 1280x720 px, was 1920x1080; reloading when the app is done'; }
 d48_reset_runs() { rm -f "$D48_EVENT" "$D48_EVENT.new" "$D48_SIZE" "$D48_APP" "$out/$1.boxes" "$out/$1.seen" "$out/$1.path"; }
@@ -194,9 +177,9 @@ sed 's/^/      /' "$out/f48-settings.seen" 2> /dev/null
 # them and close the browser). The probe is check 60's shows_blue, written here as check 60 may run
 # in the other shard. The count before the reset is taken once the image's first line is in.
 D48_BLUE='Settings: the preview shows /home/tester/Pictures/blue.png'
-d48_browsing() { d48_blue=; wait_line "$D48_BLUE" "$2" && d48_blue=$(d48_count "$D48_BLUE"); }
+d48_browsing() { d48_blue=; wait_line "$D48_BLUE" "$2" && d48_blue=$(log_count -x "$D48_BLUE"); }
 d48_browse_after() {
-    [ -n "$d48_blue" ] && wait_line 'Reload: done at 1920x1080 px' "$2" && d48_more "$D48_BLUE" "$2" "$d48_blue" \
+    [ -n "$d48_blue" ] && wait_line 'Reload: done at 1920x1080 px' "$2" && wait_count -x "$D48_BLUE" "$((d48_blue + 1))" "$2" \
         && look "$1" "$2" after "$D48_BLUE" 30,30=40,70,160
 }
 d48_reset_runs f48-browse
@@ -360,18 +343,11 @@ D48_DISPLAY=/tmp/d48-display
 d48_given_up() { wait_line 'Video: no renderer can draw a transparent window (' "$2" && wait_line 'Reload: done at 1920x1080 px, for ' "$2"; sleep 3; }
 d48_moved() { sed -n '/^Test hook: the window moved to a display$/,$p' "$1" 2> /dev/null; }
 d48_new_window() {
-    local i
     : > "$D48_DISPLAY"
-    for i in $(seq 100); do
-        if d48_moved "$LOG" | grep -q '^Screen: now on display '; then
-            echo "windows $(xdotool search --name '^StreamFlex$' 2> /dev/null | wc -l)" >> "$out/$1.seen"
-            return 0
-        fi
-        running "$2" || return 1
-        sleep 0.2
-    done
-    return 1
+    wait_for "the new window's display line after the move" "$2" d48_on_display || return 1
+    echo "windows $(xdotool search --name '^StreamFlex$' 2> /dev/null | wc -l)" >> "$out/$1.seen"
 }
+d48_on_display() { d48_moved "$LOG" | grep -q '^Screen: now on display '; }
 d48_reset_runs f48-wingiveup
 rm -f "$D48_DISPLAY"
 echo 1920x1079 > "$out/f48-wingiveup.display"   # 95-every-run.sh: this run's screen starts one row short
@@ -429,8 +405,8 @@ grep -E "^(Video|Reload|Background set up):|^Settings: \[Background\] Mode |^Tes
 d48_lose_thrice() {
     local reload=$3
     wait_line 'Begin program loop' "$2" || return 1
-    d48_send lost && d48_more "$reload" "$2" 0 \
-        && d48_send 'lost ' && d48_more "$reload" "$2" 1 \
+    d48_send lost && wait_count -x "$reload" 1 "$2" \
+        && d48_send 'lost ' && wait_count -x "$reload" 2 "$2" \
         && d48_send lost
 }
 d48_wincap() {
@@ -458,7 +434,7 @@ grep -E '^(Renderer|Video|Reload|Background set up):' "$log" | sed 's/^/      /'
 # renderers and three reloads, and no fallback
 d48_lostthrice() {
     d48_lose_thrice "$1" "$2" 'Reload: done at 1920x1080 px, for a device reset or loss' \
-        && d48_more 'Reload: done at 1920x1080 px, for a device reset or loss' "$2" 2
+        && wait_count -x 'Reload: done at 1920x1080 px, for a device reset or loss' 3 "$2"
 }
 d48_reset_runs f48-lostthrice
 CFG=$FX/f48-loss.ini STREAMFLEX_TEST_RENDER_EVENT=$D48_EVENT run_keys f48-lostthrice +d48_lostthrice

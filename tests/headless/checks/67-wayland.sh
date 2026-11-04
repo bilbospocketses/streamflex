@@ -12,7 +12,7 @@
 # Weston has no keys to press, so the key-driven checks stay on Xvfb; the harness's virtual pad
 # drives these runs once the window holds the keyboard. The launch case, whose result reads a 2 s
 # bound, is in 67-wayland-timing.sh.
-# Not timing-sensitive: every wait ends on a log line or a file (Weston's socket, polled for 30 s; the launcher's lines, 20 s), the 1 s sleeps are floors after a log line, and no case reads a duration
+# Not timing-sensitive: every wait ends on a log line or a file (Weston's socket and the launcher's lines, each up to run.sh's guard_s, 130 s), the 1 s sleeps are floors after a log line, and no case reads a duration
 W67_XDG=/tmp/w67-xdg
 rm -rf "$W67_XDG" /tmp/w67-child /tmp/w67-app /tmp/w67-pad /tmp/w67-client.pid
 mkdir -p "$W67_XDG" /tmp/w67-child
@@ -24,9 +24,9 @@ w67_weston=
 # A function to start a headless Weston as the test user on the socket NAME, with an output of
 # WIDTH x HEIGHT logical pixels at SCALE (its mode is WIDTH*SCALE x HEIGHT*SCALE), and the fake
 # seat from Weston 15 on; its PID goes in w67_weston, its log in weston-NAME.log. Fails when its
-# socket never appears within 30 s, or Weston exits first.
+# socket never appears (within run.sh's guard_s), or Weston exits first.
 w67_start() {
-    local socket=$1 width=$2 height=$3 scale=$4 seat=() i
+    local socket=$1 width=$2 height=$3 scale=$4 seat=()
     [ "${w67_major:-0}" -ge 15 ] && seat=(--fake-seat)
     rm -f "$W67_XDG/$socket" "$W67_XDG/$socket.lock"
     setpriv --reuid=tester --regid=tester --init-groups -- env HOME="$TESTER_HOME" XDG_RUNTIME_DIR="$W67_XDG" \
@@ -34,12 +34,7 @@ w67_start() {
         --height="$height" --scale="$scale" --idle-time=0 --no-config "${seat[@]}" \
         > "$out/weston-$socket.log" 2>&1 &
     w67_weston=$!
-    for i in $(seq 300); do
-        [ -S "$W67_XDG/$socket" ] && return 0
-        running "$w67_weston" || break
-        sleep 0.1
-    done
-    [ -S "$W67_XDG/$socket" ]
+    wait_for "Weston's socket $W67_XDG/$socket" "$w67_weston" test -S "$W67_XDG/$socket"
 }
 
 # A function to end the Weston that w67_start started
@@ -73,7 +68,7 @@ w67_restarted_once() {
     "${TESTER[@]}" "$exe" --restarted -c "$FX/f67-wayland.ini" -d > "$out/$name.out" 2> "$out/$name.err" &
     pid=$!
     wait_line 'Gained keyboard focus' "$pid"
-    stop_run "$pid"; code=$?
+    stop_run "$pid" "$name"; code=$?
     echo "$code" > "$out/$name.code"
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
 }

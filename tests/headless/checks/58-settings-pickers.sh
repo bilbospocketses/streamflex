@@ -126,7 +126,7 @@ sed 's/^/      /' "$out/f58-swatches.pixels" 2> /dev/null | tail -6
 # editor all end above the key hint. The log gives where the editor's row would end and the bottom.
 Xvfb :98 -screen 0 3840x480x24 -ac > /dev/null 2>&1 &
 p58_xvfb=$!
-for i in $(seq 100); do DISPLAY=:98 xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+wait_for 'Xvfb :98 (3840x480) to take connections' "$p58_xvfb" display_up :98
 p58_short=()
 for word in "${TESTER[@]}"; do
     case $word in
@@ -411,13 +411,7 @@ rm -rf "$TESTER_HOME/duo"
 mkdir -p "$TESTER_HOME/duo"
 cp "$TESTER_HOME/Pictures/blue.png" "$TESTER_HOME/Pictures/green.png" "$TESTER_HOME/duo/"
 chown -R tester:tester "$TESTER_HOME/duo"
-p58_measured() {
-    local i
-    for i in $(seq 100); do
-        [ "$(grep -c 'Background: the image on show has a mean luminance of' "$LOG" 2> /dev/null)" -ge 2 ] && return
-        sleep 0.2
-    done
-}
+p58_measured() { wait_count 'Background: the image on show has a mean luminance of' 2 "$2"; }
 p58_values() { grep -o 'Background: the image on show has a mean luminance of [0-9.]*' "$1" | sed 's/.* //'; }
 WAIT_FOR='Background set up: Slideshow' CFG=$FX/f58-fade.ini run_keys f58-fade +p58_measured
 log=$out/f58-fade.log

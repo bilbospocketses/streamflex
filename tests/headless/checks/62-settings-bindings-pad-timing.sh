@@ -128,7 +128,7 @@ rm -f /tmp/pad-a
 # only once the file had gone. The press is the next "Gamepad ButtonA detected" line, counted before
 # it, as an earlier press would have logged one too; it is let go 0.1-0.3 s after it (the wait polls
 # every 0.2 s), short of the repeat's 500 ms.
-# A function to wait, as wait_line does (up to 20 s, or until the launcher PID exits), for more than
+# A function to wait (up to 20 s, or until the launcher PID exits; run.sh's wait_line waits guard_s), for more than
 # BEFORE lines holding LINE in the launcher's log; fails when they never come
 b62_wait_next() {
     local line=$1 before=$2 pid=$3 i n

@@ -5,9 +5,9 @@
 # says why; a folder that is not there holds no apps, and one that cannot be read fails the scan; closing
 # settings while it runs stops it and waits for its thread; and a thread that cannot start leaves settings
 # working. The list on screen, "Finding apps... (N)" included, is check 82's.
-# Not timing-sensitive: every wait ends on a log line (20 s) or a key's frame (60 s); the scan held by
-# STREAMFLEX_TEST_APP_SCAN=delay:600000 is stopped by the close however late the close comes, and a close
-# that waited it out would miss its frame's 60 s; no result reads a duration
+# Not timing-sensitive: every wait ends on a log line or a key's frame, each up to run.sh's guard_s (130 s);
+# the scan held by STREAMFLEX_TEST_APP_SCAN=delay:600000 is stopped by the close however late the close
+# comes, and a close that waited its 600 s out would miss its frame's 130 s; no result reads a duration
 
 A81=$FX/apps
 A81_DIRS=$A81/user:$A81/system:$A81/flatpak:$A81/system

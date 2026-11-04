@@ -21,7 +21,7 @@
 # format up on its first load, unsynchronized), and a priming that fails says so.
 # An icon that is a text file named .svg, which nanosvg parses to an empty image, 0 x 0, logs the SVG
 # reason, and its menu still renders, with nothing scaled by a zero size (Task 1.17).
-# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s by the clock as a key's frame is
+# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, each bounded by run.sh's guard_s (130 s), as a key's frame is
 rm -rf "$TESTER_HOME/t60"
 mkdir -p "$TESTER_HOME/t60"
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/icon.png" 0,200,200 rgba
@@ -142,20 +142,21 @@ echo "      ${slide:-no Timing: background: line}"
 
 # The selected icon: the highlighted entry draws its _selected copy (green frame) and the other entry
 # its own icon (red frame). A function for a +key (run_keys), once the program loop has begun: once both
-# frames are on screen, write the box each color spans to NAME.seen, trying until 60 s have passed by the
-# clock (SECONDS), however long each screenshot and its reads take, as long as run_keys waits for a key's
-# frame (a loaded runner has drawn nothing for 13 s); a try begun before then is the last
+# frames are on screen, write the box each color spans to NAME.seen, trying (run.sh's wait_for) up to
+# guard_s by the clock, however long each screenshot and its reads take, as long as run_keys waits for a
+# key's frame (a loaded runner has drawn nothing for 13 s); a try begun before then is the last
 t60_selected() {
-    local name=$1 shot=/tmp/t60-selected.xwd end=$((SECONDS + 60))
-    while [ "$SECONDS" -lt "$end" ]; do
-        : > "$out/$name.seen"
-        xwd -root -silent -out "$shot" \
-            && echo "selected $(python3 "$HERE/pixels.py" "$shot" count 40,200,40 inside 40,200,40)" >> "$out/$name.seen" \
-            && echo "plain $(python3 "$HERE/pixels.py" "$shot" count 200,40,40 inside 200,40,40)" >> "$out/$name.seen" \
-            && grep -q '^selected box ' "$out/$name.seen" && grep -q '^plain box ' "$out/$name.seen" && return
-        sleep 0.2
-    done
-    cp "$shot" "$out/$name.xwd" 2> /dev/null
+    wait_for "the selected and plain icons' frames on screen ($1)" "$2" t60_selected_read "$1" && return
+    cp /tmp/t60-selected.xwd "$out/$1.xwd" 2> /dev/null
+}
+# One screenshot for t60_selected (NAME), read into NAME.seen; succeeds when both frames are on show
+t60_selected_read() {
+    local name=$1 shot=/tmp/t60-selected.xwd
+    : > "$out/$name.seen"
+    xwd -root -silent -out "$shot" \
+        && echo "selected $(python3 "$HERE/pixels.py" "$shot" count 40,200,40 inside 40,200,40)" >> "$out/$name.seen" \
+        && echo "plain $(python3 "$HERE/pixels.py" "$shot" count 200,40,40 inside 200,40,40)" >> "$out/$name.seen" \
+        && grep -q '^selected box ' "$out/$name.seen" && grep -q '^plain box ' "$out/$name.seen"
 }
 CFG=$FX/f60-selected.ini WAIT_FOR='Begin program loop' run_keys f60-selected +t60_selected
 t60_selected_right=$(sed -n 's/^selected box [0-9]*,[0-9]* to \([0-9]*\),.*/\1/p' "$out/f60-selected.seen")

@@ -20,37 +20,25 @@ chown -R tester:tester "$TESTER_HOME/r64" "$TESTER_HOME/r64-marks"
 # A function to empty the markers' folder before a run
 f64_clear_marks() { rm -f "$TESTER_HOME/r64-marks/startup.txt" "$TESTER_HOME/r64-marks/quit.txt"; }
 
-# A function to count a marker's lines, waiting up to 5 s for the file when WAIT is set: a QuitCmd
-# runs through :fork, so its line can come after the launcher has gone
+# A function to count a marker's lines, waiting (up to run.sh's guard_s) for the file when WAIT is
+# set: a QuitCmd runs through :fork, so its line can come after the launcher has gone. The 0.5 s after
+# it is a floor, for a second line. A HUNG line goes to stderr, out of the count.
 f64_marks() {
-    local file=$TESTER_HOME/r64-marks/$1.txt i
+    local file=$TESTER_HOME/r64-marks/$1.txt
     if [ -n "${2:-}" ]; then
-        for i in $(seq 25); do [ -s "$file" ] && break; sleep 0.2; done
+        wait_for "the $1 marker $file" '' test -s "$file"
         sleep 0.5
     fi
     [ -f "$file" ] && wc -l < "$file" || echo 0
 }
 
-# A function to wait up to 20 s for the launcher's log to hold N lines holding LINE. The launcher's
-# PID runs on through a restart, whose program takes its place.
-f64_wait_count() {
-    local line=$1 n=$2 pid=$3 i c
-    for i in $(seq 100); do
-        c=$(grep -cF -- "$line" "$LOG" 2> /dev/null)
-        [ "${c:-0}" -ge "$n" ] && return 0
-        running "$pid" || break
-        sleep 0.2
-    done
-    c=$(grep -cF -- "$line" "$LOG" 2> /dev/null)
-    [ "${c:-0}" -ge "$n" ]
-}
-
-# A function for a +key, called with the run's NAME and PID: wait for the Nth start-up's program
-# loop, then keep the command line the PID runs now, its name (comm, which pgrep and ps read) and
-# how many of its files are the log
+# A function for a +key, called with the run's NAME and PID: wait (run.sh's wait_count; the PID runs
+# on through a restart, whose program takes its place) for the Nth start-up's program loop, then keep
+# the command line the PID runs now, its name (comm, which pgrep and ps read) and how many of its
+# files are the log
 f64_fresh() {
     local name=$1 pid=$2 n=$3
-    if f64_wait_count 'Begin program loop' "$n" "$pid"; then
+    if wait_count 'Begin program loop' "$n" "$pid"; then
         tr '\0' ' ' < "/proc/$pid/cmdline" > "$out/$name.cmdline$n"
         cat "/proc/$pid/comm" > "$out/$name.comm$n"
         # As the launcher's own user: root in the container may not read another user's fds

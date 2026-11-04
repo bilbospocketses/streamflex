@@ -165,12 +165,12 @@ result "settings: without render targets the caption and its note are still draw
 # The slideshow's loader thread is held back before its read by the test hook
 # STREAMFLEX_TEST_SLIDESHOW_HOLD (in the harness's build only), as a slow disk would hold it, until
 # the file the hook names exists: the check makes that file once it has looked. Functions for +keys:
-# wait up to 30 s for the loader thread to be running, tell whether it still is at a later moment,
-# and let the loader go, telling whether it was still held a second after the step or the quit was
-# sent. Each writes its file only when the thread is there.
+# wait (up to run.sh's guard_s) for the loader thread to be running, tell whether it still is at a
+# later moment, and let the loader go, telling whether it was still held a second after the step or
+# the quit was sent. Each writes its file only when the thread is there.
 LOADER_RELEASE=/tmp/loader-release
 loader_running() { grep -q '^Slideshow' /proc/[0-9]*/task/*/comm 2> /dev/null; }
-loader_held() { local i; for i in $(seq 150); do loader_running && { : > /tmp/loader-held; return; }; sleep 0.2; done; }
+loader_held() { wait_for "the slideshow's loader thread to be running" "$2" loader_running && : > /tmp/loader-held; }
 still_held() { loader_running && : > /tmp/loader-still-held; }
 release_loader() { loader_running && : > /tmp/loader-held-at-release; : > "$LOADER_RELEASE"; sleep 1; }
 

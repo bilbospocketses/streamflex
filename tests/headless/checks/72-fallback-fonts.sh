@@ -5,17 +5,31 @@
 
 # A function for a +key (run_keys), with the run's NAME and PID: once the menu is drawn, count the
 # title color's exact pixels inside the box they span (Color=#FF00FF, which nothing else on the screen
-# has) into NAME.box, trying for up to 10 s to see a filled glyph
+# has) into NAME.box, trying (up to run.sh's guard_s) to see a filled glyph
 f72_shot() {
-    local name=$1 pid=$2 shot=/tmp/f72.xwd i
+    local name=$1 pid=$2
     command xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
     wait_line 'Begin program loop' "$pid" || return 0
-    for i in $(seq 25); do
-        sleep 0.4
-        { xwd -root -silent -out "$shot" && python3 "$HERE/pixels.py" "$shot" count 255,0,255 inside 255,0,255; } \
-            > "$out/$name.box" 2>&1
-        f72_filled "$name" && return 0
-    done
+    wait_for "a filled glyph on screen ($name)" "$pid" f72_read "$name"
+}
+# The same for a run whose glyph must stay hollow: once the title's box is on screen at all (up to
+# guard_s), it is read for 10 s more, in which a filled glyph would show (the window f72_shot's old
+# bound gave it). The 10 s ends the run's reading, not a wait: a hollow box at its end is the pass.
+f72_shot_hollow() {
+    local name=$1 pid=$2 i
+    command xdotool search --name '^StreamFlex$' windowmove %@ 0 0 windowsize %@ 1920 1080 > /dev/null 2>&1
+    wait_line 'Begin program loop' "$pid" || return 0
+    wait_for "the title's box on screen ($name)" "$pid" f72_read_any "$name" || return 0
+    for i in $(seq 25); do f72_read "$name" && return 0; done
+}
+f72_read_any() { f72_read "$1"; grep -q '^box ' "$out/$1.box"; }
+# One screenshot for f72_shot (NAME), 0.4 s after the last, read into NAME.box; succeeds when the
+# glyph is filled
+f72_read() {
+    sleep 0.4
+    { xwd -root -silent -out /tmp/f72.xwd && python3 "$HERE/pixels.py" /tmp/f72.xwd count 255,0,255 inside 255,0,255; } \
+        > "$out/$1.box" 2>&1
+    f72_filled "$1"
 }
 
 # A function to tell whether NAME.box shows a filled glyph: at least 100 pixels, filling 90 % of their
@@ -42,7 +56,7 @@ grep '^Fonts:' "$log" | sed 's/^/      /'
 sed 's/^/      /' "$out/f72-box.box" 2> /dev/null
 
 # No font has 中: the title keeps Open Sans's hollow box, and the log says so once (not a debug line)
-FONTCONFIG_FILE=$TESTER_HOME/fcempty/fonts.conf CFG=$FX/f72-box.ini run_keys f72-empty +f72_shot
+FONTCONFIG_FILE=$TESTER_HOME/fcempty/fonts.conf CFG=$FX/f72-box.ini run_keys f72-empty +f72_shot_hollow
 log=$out/f72-empty.log
 ok=1
 grep -qxF 'Fonts: 0 fallback candidates from fontconfig' "$log" \
