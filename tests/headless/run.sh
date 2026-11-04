@@ -277,12 +277,40 @@ shard_begin '(build)'
 result "the build has no compiler warnings outside src/external" $ok
 shard_end '(build)'
 
+# The bound on every wait for something that may never happen: a log line, a key's frame, a screen
+# showing what it should, a file, a quit by itself, an exit once told to. It is a hang guard, never a
+# time limit on a launcher that is only slow: 130 s, ten times the longest CI has seen a healthy
+# launcher do nothing (13 s, wait_frame says where), and at least 120 s. Healthy waits end on their
+# event, most within a second or two, so the guard costs nothing unless something hangs; a wait that
+# reaches it says HUNG on the console (stderr, so a wait inside a $(...) keeps its output clean),
+# which also keeps a red run printing for CI's stall watch.
+guard_s=130
+
+# A function to wait, polling every 0.2 s, until the command after WHAT and PID succeeds. PID, when
+# not empty, is the launcher's: once it has exited, the command is tried once more and the wait ends
+# there, as nothing more comes from it. Fails when the command never succeeds; a wait that reached
+# guard_s says "HUNG: waited 130 s for WHAT".
+wait_for() {
+    local what=$1 pid=$2 end=$((SECONDS + guard_s + 1))
+    shift 2
+    while [ "$SECONDS" -lt "$end" ]; do
+        "$@" && return 0
+        if [ -n "$pid" ] && ! running "$pid"; then "$@"; return; fi
+        sleep 0.2
+    done
+    "$@" && return 0
+    echo "HUNG: waited $guard_s s for $what" >&2
+    return 1
+}
+
+# A function to tell whether the X display DISPLAY (:N) takes connections
+display_up() { DISPLAY=$1 command xdotool getdisplaygeometry > /dev/null 2>&1; }
+
 # Xvfb reports a refresh rate of 0, which the launcher must survive (item 22). -ac lets the
 # unprivileged test user connect to it.
 Xvfb :99 -screen 0 1920x1080x24 -ac > /dev/null 2>&1 &
 export DISPLAY=:99
-for i in $(seq 100); do xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
-xdotool getdisplaygeometry > /dev/null 2>&1 || { echo "Xvfb DID NOT START"; exit 2; }
+wait_for 'Xvfb :99 to take connections' '' display_up :99 || { echo "Xvfb DID NOT START"; exit 2; }
 
 # A function standing in for xdotool. A function key pressed, let go or both (key, keydown or keyup
 # with one F key) goes through key.py, by its keycode with no modifier held: Fedora's keymap makes
@@ -464,13 +492,6 @@ running() {
     [ "${stat%% *}" != Z ]
 }
 
-# The bound on every wait for something a live launcher may never do: log a line, draw a key's
-# frame, quit by itself, or exit once told to. It is a hang guard, never a time limit on a launcher
-# that is only slow: 130 s, ten times the longest CI has seen a healthy launcher do nothing (13 s,
-# wait_frame says where), and at least 120 s. Healthy waits end on their event, most within a second
-# or two, so the guard costs nothing unless something hangs; a wait that reaches it says HUNG.
-guard_s=130
-
 # A function to wait up to SECONDS (whole seconds, at least that many) for the process PID to exit;
 # fails when it is still running then
 exited_within() {
@@ -481,7 +502,7 @@ exited_within() {
     done
 }
 
-# A function to end the launcher PID's run and return its exit code: TERM (SDL turns it into a
+# A function to end the launcher PID's run, NAME, and return its exit code: TERM (SDL turns it into a
 # quit event), then KILL for a launcher that has not exited guard_s later (STOP_LIMIT, which only
 # the harness's own checks shorten), stuck in a loop that never reads TERM (exit 137). Every run
 # ends through here, so every run has the same escalation. A launcher whose log already says
@@ -491,14 +512,14 @@ exited_within() {
 # waited for, never cut short: a TERM or KILL it did not need would fail its check. Each step the
 # guard forces says HUNG on the console.
 stop_run() {
-    local pid=$1 limit=${STOP_LIMIT:-$guard_s}
+    local pid=$1 name=$2 limit=${STOP_LIMIT:-$guard_s}
     if grep -q '^Quitting program' "$LOG" 2> /dev/null && ! exited_within "$pid" "$limit"; then
-        echo "HUNG: the launcher (PID $pid) logged 'Quitting program' and had not exited $limit s later; sending it TERM"
+        echo "HUNG: the run $name (PID $pid) logged 'Quitting program' and had not exited $limit s later; sending it TERM" >&2
     fi
     if running "$pid"; then
         kill -TERM "$pid" 2> /dev/null
         if ! exited_within "$pid" "$limit"; then
-            echo "HUNG: the launcher (PID $pid) had not exited $limit s after TERM; killing it (exit 137)"
+            echo "HUNG: the run $name (PID $pid) had not exited $limit s after TERM; killing it (exit 137)" >&2
             kill -KILL "$pid" 2> /dev/null
         fi
     fi
@@ -591,7 +612,7 @@ run_quick_once() {
     "${TESTER[@]}" "$exe" "${args[@]}" -d > "$out/$name.out" 2> "$out/$name.err" &
     pid=$!
     exited_within "$pid" "$limit" || hung=yes
-    stop_run "$pid"; code=$?
+    stop_run "$pid" "$name"; code=$?
     [ -z "$hung" ] || code="$code, and HUNG: did not quit by itself within $limit s"
     echo "$code" > "$out/$name.code"
     cp "$LOG" "$out/$name.log" 2> /dev/null || : > "$out/$name.log"
@@ -612,9 +633,35 @@ wait_line() {
     grep -qF -- "$line" "$LOG" 2> /dev/null && return 0
     if running "$pid"; then
         line_hung=yes
-        echo "HUNG: waited $guard_s s for the log line '$line'; the launcher (PID $pid) is still running"
+        echo "HUNG: waited $guard_s s for the log line '$line'; the launcher (PID $pid) is still running" >&2
     fi
     return 1
+}
+
+# A function to count the launcher log's lines holding LINE, or with -x first, the lines that are
+# exactly LINE
+log_count() {
+    local how=-cF n
+    [ "$1" != -x ] || { how=-cxF; shift; }
+    n=$(grep "$how" -- "$1" "$LOG" 2> /dev/null)
+    echo "${n:-0}"
+}
+
+# A function to tell whether the log holds at least N lines holding LINE ([-x] LINE N, as log_count)
+log_has() {
+    local x=()
+    [ "$1" != -x ] || { x=(-x); shift; }
+    [ "$(log_count "${x[@]}" "$1")" -ge "$2" ]
+}
+
+# A function to wait, as wait_line does, until the launcher's log holds at least N lines holding LINE,
+# or with -x first, exactly LINE ([-x] LINE N PID); a count taken before an event, plus one, waits for
+# its next line. It fails when they never come, or when the launcher (PID) exits first. The launcher's
+# PID runs on through a restart, whose program takes its place.
+wait_count() {
+    local x=() how=holding
+    [ "$1" != -x ] || { x=(-x) how=reading; shift; }
+    wait_for "$2 log lines $how '$1'" "$3" log_has "${x[@]}" "$1" "$2"
 }
 
 # The lines that end a wait for a key's frame: the one the harness build logs once the first frame
@@ -704,7 +751,7 @@ run_keys_once() {
     else
         missing=$start missing_hung=$line_hung
     fi
-    stop_run "$pid"; code=$?
+    stop_run "$pid" "$name"; code=$?
     # A line the launcher exited without logging is a plain failure; one it never logged while it
     # ran on for guard_s is a hang
     if [ -n "$missing_hung" ]; then
@@ -720,12 +767,12 @@ run_keys_once() {
 # A function to run run_keys on a second X display of SIZE (WxH), for a check of how settings fit a
 # screen the main display is not: SIZE, then the run's NAME and its keys as run_keys takes them
 run_keys_at() {
-    local size=$1 xvfb i word at=()
+    local size=$1 xvfb word at=()
     shift
     echo "$size" > "$out/$1.display"   # 95-every-run.sh reads the size of the display this run used
     Xvfb :97 -screen 0 "${size}x24" -ac > /dev/null 2>&1 &
     xvfb=$!
-    for i in $(seq 100); do DISPLAY=:97 command xdotool getdisplaygeometry > /dev/null 2>&1 && break; sleep 0.2; done
+    wait_for "Xvfb :97 ($size) to take connections" "$xvfb" display_up :97
     for word in "${TESTER[@]}"; do
         case $word in
             DISPLAY=:99) at+=(DISPLAY=:97) ;;
@@ -796,22 +843,21 @@ preview_point() {
     echo "$((px + $1 * pw / 1920)),$((py + $2 * ph / 1080))"
 }
 
-# A function to wait up to 10 s for the screen to show the colors asked for, each x,y=r,g,b:
+# A function to wait (up to guard_s) for the screen to show the colors asked for, each x,y=r,g,b:
 # it takes a screenshot, reads the points and tries again until they match. Every reading, and
 # any error taking the screenshot, is kept in NAME.pixels under TAG, and the last screenshot in
 # NAME-TAG.xwd when they never match.
 screen_shows() {
     local name=$1 tag=$2; shift 2
-    local shot=/tmp/screen.xwd i
-    for i in $(seq 50); do
-        if { echo "$tag:"; xwd -root -silent -out "$shot" && python3 "$HERE/pixels.py" "$shot" "$@"; } \
-            >> "$out/$name.pixels" 2>&1; then
-            return 0
-        fi
-        sleep 0.2
-    done
-    cp "$shot" "$out/$name-$tag.xwd" 2> /dev/null
+    wait_for "the screen to show $* ($name, $tag)" '' screen_reads "$name" "$tag" "$@" && return 0
+    cp /tmp/screen.xwd "$out/$name-$tag.xwd" 2> /dev/null
     return 1
+}
+# One screenshot and reading for screen_shows (NAME TAG POINTS...), kept in NAME.pixels
+screen_reads() {
+    local name=$1 tag=$2; shift 2
+    { echo "$tag:"; xwd -root -silent -out /tmp/screen.xwd && python3 "$HERE/pixels.py" /tmp/screen.xwd "$@"; } \
+        >> "$out/$name.pixels" 2>&1
 }
 
 # A function for a +key (see run_keys), called with the run's NAME and PID: wait for the log line

@@ -1,6 +1,7 @@
 # The harness's own helpers (run.sh), checked before anything relies on them: a launcher that
 # starts slowly still gets its keys, the frame line each key waits for follows that frame's own
-# lines, a launcher that ignores TERM is killed and fails its check, one that exits without
+# lines, a launcher that ignores TERM is killed and fails its check, one slow to exit after TERM is
+# waited for and passes, one that exits without
 # logging does not hold the run up, a zombie is not running whatever its name, a quick run that
 # has to be stopped fails, a log range must be closed to count, the log helpers take their strings
 # as written, a pixel probe must have points to read, the checks run with nullglob off, a listed
@@ -21,7 +22,16 @@ cat > /tmp/harness/ignores-term << EOF
 mkdir -p "$(dirname "$LOG")"
 echo "Loading menu 'Stand-in'" >> "$LOG"
 trap '' TERM
-exec sleep 60
+exec sleep 600
+EOF
+cat > /tmp/harness/slow-exit << EOF
+#!/bin/sh
+# Started again without the leak pass's preload, as quits-on-term is
+[ -z "\${LD_PRELOAD:-}" ] || exec env -u LD_PRELOAD "\$0" "\$@"
+mkdir -p "$(dirname "$LOG")"
+echo "Loading menu 'Stand-in'" >> "$LOG"
+trap 'sleep 12; exit 0' TERM
+while :; do sleep 0.2; done
 EOF
 cat > /tmp/harness/quits-on-term << EOF
 #!/bin/sh
@@ -63,12 +73,19 @@ result "harness: the frame line each key waits for follows the lines that frame 
 grep -E "^Key |the cursor's row reads|^Test hook: a frame was drawn" "$out/h-order.log" | sed 's/^/      /'
 
 # A launcher that ignores TERM is killed (exit 137), and its check fails on the exit code alone:
-# its sanitizers are quiet. STOP_LIMIT shortens guard_s to 10 s, well inside the stand-in's 60 s
+# its sanitizers are quiet. STOP_LIMIT shortens guard_s to 10 s, well inside the stand-in's 600 s
 # sleep, so the kill is what ends it.
 STOP_LIMIT=10 CFG=none exe=/tmp/harness/ignores-term run_keys h-kill
 ok=1
 [ "$(cat "$out/h-kill.code")" = 137 ] && sanitizer_clean h-kill && ! ran_clean h-kill && ok=0
 result "harness: a launcher that ignores TERM is killed, and fails its check (exit $(cat "$out/h-kill.code"))" $ok
+
+# A launcher that takes 12 s to exit after TERM, as a slow leak check at exit can, is waited for
+# under the default STOP_LIMIT (guard_s), never killed, and passes: the old 10 s would have made it 137
+CFG=none exe=/tmp/harness/slow-exit run_keys h-slowexit
+ok=1
+ran_clean h-slowexit && ok=0
+result "harness: a launcher that exits 12 s after TERM is waited for, and passes (exit $(cat "$out/h-slowexit.code"))" $ok
 
 # A launcher that exits without logging its first menu: the wait ends when it does, not guard_s
 # later, and the missing line fails the check though it exited 0. That is no hang, so no HUNG.
@@ -76,7 +93,7 @@ SECONDS=0
 CFG=none exe=/tmp/harness/exits-at-once run_keys h-gone
 took=$SECONDS
 ok=1
-[ "$took" -lt 5 ] && ! ran_clean h-gone && grep -q "never logged 'Loading menu'" "$out/h-gone.code" \
+[ "$took" -lt "$guard_s" ] && ! ran_clean h-gone && grep -q "never logged 'Loading menu'" "$out/h-gone.code" \
     && ! grep -q HUNG "$out/h-gone.code" && ok=0
 result "harness: a launcher that exits without logging ends the wait at once, and fails (exit $(cat "$out/h-gone.code"))" $ok
 echo "      the wait took $took s"
@@ -84,19 +101,21 @@ echo "      the wait took $took s"
 # A zombie (a process that has exited but not been waited for) is not running, also when its
 # name has a space: /proc/PID/stat shows the name in brackets, before the state. The stand-ins
 # are children of a sleep, which never waits for them, so they stay zombies until it ends; they
-# exit on a cue given once their parent has become the sleep.
+# exit on a cue given once their parent has become the sleep. The sleep is killed once the check
+# has looked; its 600 s only keep it from ending first, and each wait is run.sh's wait_for.
 rm -f /tmp/harness/cue /tmp/harness/plain.pid /tmp/harness/spaced.pid
 bash -c '/tmp/harness/exits-on-cue & echo $! > /tmp/harness/plain.pid
          "/tmp/harness/exits on cue" & echo $! > /tmp/harness/spaced.pid
-         exec sleep 10' &
+         exec sleep 600' &
 zombies=$!
-for i in $(seq 25); do [ "$(cat "/proc/$zombies/comm" 2> /dev/null)" = sleep ] && break; sleep 0.2; done
+h_became_sleep() { [ "$(cat "/proc/$zombies/comm" 2> /dev/null)" = sleep ]; }
+h_both_zombies() {
+    grep -qs ') Z ' "/proc/$(cat /tmp/harness/plain.pid 2> /dev/null)/stat" \
+        && grep -qs '(exits on cue) Z ' "/proc/$(cat /tmp/harness/spaced.pid 2> /dev/null)/stat"
+}
+wait_for "the stand-ins' parent to become the sleep (PID $zombies)" "$zombies" h_became_sleep
 : > /tmp/harness/cue
-for i in $(seq 25); do
-    grep -qs ') Z ' "/proc/$(cat /tmp/harness/plain.pid)/stat" \
-        && grep -qs '(exits on cue) Z ' "/proc/$(cat /tmp/harness/spaced.pid)/stat" && break
-    sleep 0.2
-done
+wait_for 'both stand-ins to be zombies' "$zombies" h_both_zombies
 ok=1
 grep -qs ') Z ' "/proc/$(cat /tmp/harness/plain.pid)/stat" \
     && grep -qs '(exits on cue) Z ' "/proc/$(cat /tmp/harness/spaced.pid)/stat" \

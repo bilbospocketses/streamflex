@@ -3,17 +3,14 @@
 # without it.
 # A function to tell whether a screenshot shows the highlight's #FF00FF box: a frame was drawn in it
 s47_drawn() { python3 "$HERE/pixels.py" "$1" count 255,0,255 inside 255,0,255 > /dev/null 2>&1; }
-# A function for a +key: once the program loop has begun, a screenshot every 0.2 s (10 s at most) until
-# one shows the box, kept in NAME.xwd, so a screen nothing was drawn on yet is never the one compared
+# A function for a +key: once the program loop has begun, a screenshot every 0.2 s (up to run.sh's
+# guard_s) until one shows the box, kept in NAME.xwd, so a screen nothing was drawn on yet is never the
+# one compared
 s47_shot() {
-    local i
     wait_line 'Begin program loop' "$2" || return 1
-    for i in $(seq 50); do
-        xwd -root -silent -out "$out/$1.xwd" && s47_drawn "$out/$1.xwd" && return 0
-        sleep 0.2
-    done
-    return 1
+    wait_for "a screenshot showing the highlight's box ($1)" "$2" s47_shot_drawn "$1"
 }
+s47_shot_drawn() { xwd -root -silent -out "$out/$1.xwd" && s47_drawn "$out/$1.xwd"; }
 CFG=$FX/f47-grid.ini run_keys f47-scale1 +s47_shot
 CFG=$FX/f47-grid.ini SDL_VIDEO_X11_SCALING_FACTOR=2 run_keys f47-scale2 +s47_shot
 # The two screenshots' pixels are compared, never the files: xwd may leave the pad byte of each
@@ -31,40 +28,24 @@ sed 's/^/      /' "$out/f47-same.txt"
 
 # A change of the window's pixel size runs the one reload, geometry first (spec section 6). Whether
 # SDL3's X11 driver reports a resize of a fullscreen window with no window manager is unverified, so
-# s47_resize tries SDL's own event first; when its line does not come within wait_line's bound it puts
-# the window back and has the test hook (STREAMFLEX_TEST_PIXEL_SIZE's file, S47_SIZE) force the size,
-# which proves the reload but not SDL's event. The first run decides, and s47.path keeps which path
-# every later run takes; each run's own NAME.path says which it took. The case of the 3 s launch
-# timeout, which a loaded box could change, is in 47-screen-timing.sh. Every wait here ends on a log
-# line or on the screen showing what it waits for, within a bound.
+# s47_resize tries SDL's own event first; when its line does not come within run.sh's guard_s (130 s,
+# whose HUNG line then says so) it puts the window back and has the test hook (STREAMFLEX_TEST_PIXEL_SIZE's
+# file, S47_SIZE) force the size, which proves the reload but not SDL's event. The first run decides,
+# and s47.path keeps which path every later run takes, so that wait is paid once at most; each run's own
+# NAME.path says which it took. The case of the 3 s launch timeout, which a loaded box could change, is
+# in 47-screen-timing.sh. Every wait here ends on a log line or on the screen showing what it waits
+# for, within run.sh's guard_s.
 S47_SIZE=/tmp/s47-size S47_APP=/tmp/s47-app
 S47_ARROW=$(printf ' \xE2\x80\xBA ')
 rm -f "$out/s47.path"
-# A function to count the log's lines that are exactly LINE
-s47_count() {
-    local n
-    n=$(grep -cxF -- "$1" "$LOG" 2> /dev/null)
-    echo "${n:-0}"
-}
-# A function to wait up to 20 s, as wait_line does, for the exact LINE to be in the log more than
-# BEFORE times, so a line logged before the change cannot end the wait; it fails when it never is, or
-# when the launcher (PID) exits first
-s47_more() {
-    local line=$1 pid=$2 before=$3 i
-    for i in $(seq 100); do
-        [ "$(s47_count "$line")" -gt "$before" ] && return 0
-        running "$pid" || break
-        sleep 0.2
-    done
-    [ "$(s47_count "$line")" -gt "$before" ]
-}
-# A function for a +key: make the window SIZE (WxH), then wait for the exact log LINE to come once more
+# A function for a +key: make the window SIZE (WxH), then wait for the exact log LINE to come once
+# more (run.sh's wait_count, on a count taken before, so a line logged before the change cannot end it)
 s47_resize() {
     local name=$1 pid=$2 size=$3 line=$4 before
-    before=$(s47_count "$line")
+    before=$(log_count -x "$line")
     if [ "$(cat "$out/s47.path" 2> /dev/null)" != hook ]; then
         xdotool search --name '^StreamFlex$' windowsize %@ "${size%x*}" "${size#*x}" > /dev/null 2>&1
-        if s47_more "$line" "$pid" "$before"; then
+        if wait_count -x "$line" "$((before + 1))" "$pid"; then
             echo event > "$out/$name.path"
             [ -f "$out/s47.path" ] || echo event > "$out/s47.path"
             return 0
@@ -78,7 +59,7 @@ s47_resize() {
     fi
     echo "$size" > "$S47_SIZE"
     echo hook > "$out/$name.path"
-    s47_more "$line" "$pid" "$before"
+    wait_count -x "$line" "$((before + 1))" "$pid"
 }
 s47_to_720() { s47_resize "$1" "$2" 1280x720 'Screen: 1280x720 px, was 1920x1080; reloading'; }
 s47_to_720_later() { s47_resize "$1" "$2" 1280x720 'Screen: 1280x720 px, was 1920x1080; reloading when the app is done'; }
@@ -92,18 +73,21 @@ s47_span() { sed -n 's/^\(.* \)\{0,1\}box \([0-9]*\),[0-9]* to \([0-9]*\),.*/\2 
 s47_x1y1() { sed -n "s/^$2 box [0-9]*,[0-9]* to \([0-9]*\),\([0-9]*\):.*/\1 \2/p" "$out/$1.boxes" 2> /dev/null | head -1; }
 s47_width() { grep "^$2 box " "$out/$1.boxes" 2> /dev/null | s47_span; }
 # A function to keep under TAG the box the highlight's #FF00FF spans, once the screen shows it, a
-# screenshot every 0.2 s for 10 s at most: for before, any box; for after, one narrower than before's,
-# which only a frame drawn at the new size has. The last reading is kept either way.
+# screenshot every 0.2 s up to run.sh's guard_s: for before, any box; for after, one narrower than
+# before's, which only a frame drawn at the new size has. The last reading is kept either way.
 s47_box() {
-    local name=$1 tag=$2 shot=/tmp/s47.xwd before reading="" width i
+    local name=$1 tag=$2 before
     before=$(s47_width "$name" before)
-    for i in $(seq 50); do
-        reading=$(xwd -root -silent -out "$shot" 2>&1 && python3 "$HERE/pixels.py" "$shot" count 255,0,255 inside 255,0,255)
-        width=$(s47_span <<< "$reading")
-        [ -n "$width" ] && { [ "$tag" = before ] || [ "$width" -lt "${before:-0}" ]; } && break
-        sleep 0.2
-    done
-    echo "$tag $reading" >> "$out/$name.boxes"
+    s47_reading=""
+    wait_for "the highlight's box ($name, $tag) on screen" '' s47_box_read "$tag" "$before"
+    echo "$tag $s47_reading" >> "$out/$name.boxes"
+}
+# One screenshot for s47_box (TAG BEFORE), its reading kept in s47_reading; succeeds when it is the box
+s47_box_read() {
+    local width
+    s47_reading=$(xwd -root -silent -out /tmp/s47.xwd 2>&1 && python3 "$HERE/pixels.py" /tmp/s47.xwd count 255,0,255 inside 255,0,255)
+    width=$(s47_span <<< "$s47_reading")
+    [ -n "$width" ] && { [ "$1" = before ] || [ "$width" -lt "${2:-0}" ]; }
 }
 s47_before() { wait_line 'Begin program loop' "$2" && s47_box "$1" before; }
 s47_after() { wait_line 'Reload: done at 1280x720 px' "$2" && s47_box "$1" after; }
@@ -214,7 +198,7 @@ grep -E '^(Screen|Reload|Application|Test hook: a size event)' "$out/f47-appback
 # without deferring it would never lay the size out; one that kept it would log that the size is back.
 # A stop that lands between the hook's push and the pump brings the size a pass after the launch, where
 # it waits as any size in front does: the same result. The 0.5 s only lets the key reach the X server,
-# and the give-up only has to come within UNTIL's 20 s.
+# and the give-up only has to come within UNTIL's bound (run.sh's guard_s).
 s47_batch() { kill -STOP "$2"; echo 1280x720 > "$S47_SIZE"; frame_nowait=yes xdotool key Return; sleep 0.5; kill -CONT "$2"; }
 rm -f "$S47_SIZE"
 CFG=$FX/f50-launch.ini STREAMFLEX_TEST_PIXEL_SIZE=$S47_SIZE UNTIL='Reload: done at 1280x720 px' run_keys f47-batch +s47_batch
@@ -231,15 +215,10 @@ grep -E "^(Screen|Reload|Application|Key |Test hook: (a size event found|the win
 rm -f /tmp/s47-display
 s47_moved() { sed -n '/^Test hook: the window moved to a display$/,$p' "$1" 2> /dev/null; }
 s47_display() {
-    local i
     : > /tmp/s47-display
-    for i in $(seq 100); do
-        s47_moved "$LOG" | grep -qx 'Frame timing: VSync at 60 Hz, 16 ms a frame' && return 0
-        running "$2" || return 1
-        sleep 0.2
-    done
-    return 1
+    wait_for 'the frame timing worked out again after the move' "$2" s47_display_timed
 }
+s47_display_timed() { s47_moved "$LOG" | grep -qx 'Frame timing: VSync at 60 Hz, 16 ms a frame'; }
 CFG=$FX/f47-grid.ini STREAMFLEX_TEST_DISPLAY_EVENT=/tmp/s47-display run_keys f47-display +s47_display
 log=$out/f47-display.log
 ok=1

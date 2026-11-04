@@ -10,7 +10,7 @@ result "the clock starts with LANG unset (exit $(cat "$out/f46-clock.code"))" $o
 grep -m3 -E 'AddressSanitizer|runtime error' "$out/f46-clock.err" | sed 's/^/      /'
 
 # LANG set, the clock on: the startup command writes the LANG it was given to ~/lang.txt
-lang_written() { local i; for i in $(seq 50); do [ -s "$TESTER_HOME/lang.txt" ] && return; sleep 0.2; done; }
+lang_written() { wait_for 'the startup command to write ~/lang.txt' "$2" test -s "$TESTER_HOME/lang.txt"; }
 rm -f "$TESTER_HOME/lang.txt"
 LANG=en_US.UTF-8 run_keys f46-lang +lang_written
 ok=1

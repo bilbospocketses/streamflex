@@ -531,15 +531,7 @@ for step in fontlist fontscan fontfolder fontthread; do
     result "fonts: a font list whose $step step fails does not open (exit $(cat "$out/$name.code"))" $ok
 done
 # Functions to wait for the first and the second font list let go
-f59_lost() {
-    local i
-    for i in $(seq 100); do
-        [ "$(grep -c 'so the list was let go' "$LOG" 2> /dev/null)" -ge "$2" ] && break
-        running "$1" || break
-        sleep 0.2
-    done
-    sleep 1
-}
+f59_lost() { wait_count 'so the list was let go' "$2" "$1"; sleep 1; }
 f59_lost1() { f59_lost "$2" 1; }
 f59_lost2() { f59_lost "$2" 2; }
 # A font list whose faces (faces) or whose files (fontadd, on the listing's own thread) run out of

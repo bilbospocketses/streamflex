@@ -25,21 +25,22 @@ chown -R tester:tester "$TESTER_HOME/keyed"
 # to nothing, Task 1.8b), so the box is the whole screen, corner to corner; a screen whose background
 # is not the key has none, or only the small box a stray pixel of that color spans.
 count_keyed() {
-    local name=$1 shot=/tmp/keyed.xwd i icon found
-    for i in $(seq 50); do
-        : > "$out/$name.seen"
-        found=yes
-        xwd -root -silent -out "$shot" || found=no
-        for icon in rgba:0,200,200 rgb:0,200,100 svg:0,100,200; do
-            echo "${icon%%:*} $(python3 "$HERE/pixels.py" "$shot" count 1,1,1 inside "${icon#*:}" 2>&1)" >> "$out/$name.seen"
-            grep -q "^${icon%%:*} box " "$out/$name.seen" || found=no
-        done
-        echo "background $(python3 "$HERE/pixels.py" "$shot" count 1,1,1 inside 1,1,1 2>&1)" >> "$out/$name.seen"
-        grep -q '^background box ' "$out/$name.seen" || found=no
-        [ "$found" = yes ] && return
-        sleep 0.2
+    wait_for "the three icons' frames on screen ($1)" "$2" count_keyed_read "$1" && return
+    cp /tmp/keyed.xwd "$out/$1.xwd" 2> /dev/null
+}
+# One screenshot for count_keyed (NAME), read into NAME.seen; succeeds when every box is on show. A
+# screenshot every 0.2 s, up to run.sh's guard_s.
+count_keyed_read() {
+    local name=$1 shot=/tmp/keyed.xwd icon found=yes
+    : > "$out/$name.seen"
+    xwd -root -silent -out "$shot" || found=no
+    for icon in rgba:0,200,200 rgb:0,200,100 svg:0,100,200; do
+        echo "${icon%%:*} $(python3 "$HERE/pixels.py" "$shot" count 1,1,1 inside "${icon#*:}" 2>&1)" >> "$out/$name.seen"
+        grep -q "^${icon%%:*} box " "$out/$name.seen" || found=no
     done
-    cp "$shot" "$out/$name.xwd" 2> /dev/null
+    echo "background $(python3 "$HERE/pixels.py" "$shot" count 1,1,1 inside 1,1,1 2>&1)" >> "$out/$name.seen"
+    grep -q '^background box ' "$out/$name.seen" || found=no
+    [ "$found" = yes ]
 }
 run_keys f70-chroma +count_keyed
 seen=$out/f70-chroma.seen

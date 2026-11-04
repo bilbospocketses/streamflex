@@ -21,7 +21,7 @@
 # format up on its first load, unsynchronized), and a priming that fails says so.
 # An icon that is a text file named .svg, which nanosvg parses to an empty image, 0 x 0, logs the SVG
 # reason, and its menu still renders, with nothing scaled by a zero size (Task 1.17).
-# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s by the clock as a key's frame is
+# Not timing-sensitive: no result reads how long anything took, only that a line's parts, each timed apart inside its total (or, for the decode threads, inside the total on each thread), add up to no more than it plus rounding, which holds however loaded the box is; the waits are for a log line, and for the icons on screen, bounded at 60 s by the clock (a key's frame is bounded by run.sh's guard_s, 130 s)
 rm -rf "$TESTER_HOME/t60"
 mkdir -p "$TESTER_HOME/t60"
 python3 "$HERE/make_images.py" --keyed "$TESTER_HOME/t60/icon.png" 0,200,200 rgba

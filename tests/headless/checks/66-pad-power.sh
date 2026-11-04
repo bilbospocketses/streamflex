@@ -8,7 +8,7 @@
 # - it is never drawn under the settings screen.
 # This proves StreamFlex's handling and the glyph's levels, colors and corner, not that SDL's drivers
 # read a real pad: only hands-on hardware can.
-# Not timing-sensitive: each step waits for its own log line (20 s), each screen read retries for 10 s, and what must not happen after a report is read from the log's order (the launcher handles a pushed report and draws its frame in one pass of its loop), never from a sleep
+# Not timing-sensitive: each step waits for its own log line, each screen read retries, both up to run.sh's guard_s (130 s), and what must not happen after a report is read from the log's order (the launcher handles a pushed report and draws its frame in one pass of its loop), never from a sleep
 F66_AMBER=255,176,0
 F66_RED=232,32,32
 F66_BLACK=0,0,0
@@ -24,19 +24,6 @@ f66_changes() {
     local n
     n=$(grep -c '^Gamepad power changed: ' "$LOG" 2> /dev/null)
     echo "${n:-0}"
-}
-
-# A function to wait up to 20 s for the log to hold N lines holding LINE (PID: the launcher)
-f66_wait_count() {
-    local line=$1 n=$2 pid=$3 i c
-    for i in $(seq 100); do
-        c=$(grep -cF -- "$line" "$LOG" 2> /dev/null)
-        [ "${c:-0}" -ge "$n" ] && return 0
-        running "$pid" || break
-        sleep 0.2
-    done
-    c=$(grep -cF -- "$line" "$LOG" 2> /dev/null)
-    [ "${c:-0}" -ge "$n" ]
 }
 
 # A function to read the screen at the glyph's left edge and inside its charge bar, for the glyph at
@@ -57,7 +44,7 @@ f66_step() {
     local name=$1 pid=$2 tag=$3 line=$4 color=$5 before
     before=$(f66_changes)
     f66_write "$line"
-    if ! f66_wait_count 'Gamepad power changed: ' "$((before + 1))" "$pid"; then
+    if ! wait_count 'Gamepad power changed: ' "$((before + 1))" "$pid"; then
         echo "$tag: the launcher never took '$line'" >> "$out/$name.pixels"
         echo "$tag no" >> "$out/$name.seen"
         return
@@ -102,7 +89,7 @@ f66_same() {
     local before
     before=$(f66_changes)
     f66_write 'A battery 46'
-    if f66_wait_count "Test hook: pad A's power is battery 46" 2 "$2" && f66_write 'battery 47' \
+    if wait_count "Test hook: pad A's power is battery 46" 2 "$2" && f66_write 'battery 47' \
         && wait_line ', on battery, 47%' "$2" && [ "$(f66_changes)" = "$((before + 1))" ]; then
         echo "same yes" >> "$out/$1.seen"
     else
@@ -149,7 +136,7 @@ result "battery: each report is logged with the pad's state and percent, and one
 sed 's/^/      /' "$seen" 2> /dev/null
 
 # Two pads: the lower is drawn, and pulling it out hides the glyph when the other is charging
-f66_plugged()  { f66_wait_count 'Gamepad power: ' 2 "$2" || echo "plug: the second pad never opened" >> "$out/$1.pixels"; }
+f66_plugged()  { wait_count 'Gamepad power: ' 2 "$2" || echo "plug: the second pad never opened" >> "$out/$1.pixels"; }
 f66_a_low()    { f66_step "$1" "$2" a-low 'A battery 40' "$F66_AMBER"; }
 f66_b_low()    { f66_step "$1" "$2" b-critical 'B battery 10' "$F66_RED"; }
 f66_a_charge() { f66_step "$1" "$2" a-charging 'A charging 50' "$F66_RED"; }
