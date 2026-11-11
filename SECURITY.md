@@ -36,7 +36,7 @@ Security fixes target the latest commit on `master`. Older commits and tags are 
 In scope: the launcher itself — config file parsing, the icon library manifest (`icons.ini`, read by `src/library.c`), application launching, image and font loading, and the Windows and Linux platform layers under `src/platform/`.
 
 Out of scope:
-- Vulnerabilities in third-party libraries (SDL3, SDL3_image, SDL3_ttf, fontconfig, inih, getopt) that are not specific to how streamflex uses them — report those to the library's maintainers.
+- Vulnerabilities in third-party libraries (SDL3, SDL3_image, SDL3_ttf, fontconfig, libdbus, inih, getopt) that are not specific to how streamflex uses them — report those to the library's maintainers.
 - Behavior that follows from a user deliberately configuring the launcher to run a given command. The config file is trusted input written by the machine's owner.
 
 Thanks for helping keep the project safe.

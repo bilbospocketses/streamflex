@@ -14,6 +14,7 @@ title: Compilation Guide
  - SDL3_image ≥ 3.2.4
  - SDL3_ttf ≥ 3.2.2
  - fontconfig (Linux only)
+ - libdbus-1 (Linux only)
  - inih
  - getopt (Windows only; provided by vcpkg)
 
@@ -24,17 +25,17 @@ First, install the dependencies. The steps to do so are dependent on your distro
 
 #### APT-based Distributions (Debian trixie, Ubuntu 25.10, Raspberry Pi OS trixie or newer, Mint, etc.)
 ```bash
-sudo apt install libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev
+sudo apt install libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev libfontconfig-dev libinih-dev libdbus-1-dev
 ```
 
 #### Pacman-based Distributions (Arch, Manjaro, etc.)
 ```bash
-sudo pacman -S sdl3 sdl3_image sdl3_ttf fontconfig libinih
+sudo pacman -S sdl3 sdl3_image sdl3_ttf fontconfig libinih dbus
 ```
 
 #### DNF-based Distributions (Fedora)
 ```bash
-sudo dnf install SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel
+sudo dnf install SDL3-devel SDL3_image-devel SDL3_ttf-devel fontconfig-devel inih-devel dbus-devel
 ```
 
 ### Building

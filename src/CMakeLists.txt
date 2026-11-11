@@ -65,6 +65,8 @@ set(SOURCES
   bindings.h
   keycodes.c
   keycodes.h
+  mediakeys.c
+  mediakeys.h
   browser.c
   browser.h
   applist.c
@@ -110,7 +112,7 @@ add_subdirectory("platform")
 # Link libraries together
 target_link_libraries(${EXECUTABLE_TITLE} platform SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3::SDL3)
 if (UNIX)
-  target_link_libraries(${EXECUTABLE_TITLE} Fontconfig::Fontconfig PkgConfig::INIH m)
+  target_link_libraries(${EXECUTABLE_TITLE} Fontconfig::Fontconfig PkgConfig::INIH PkgConfig::DBUS m)
 else ()
   target_link_libraries(${EXECUTABLE_TITLE}
     ${INIH}

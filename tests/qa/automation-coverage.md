@@ -7,14 +7,14 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 
 | Measure | Count |
 |---|---|
-| Rows | 709 |
-| Row halves | 1202 |
-| Verdicts per release (row x desktop) | 2876 |
+| Rows | 728 |
+| Row halves | 1221 |
+| Verdicts per release (row x desktop) | 2943 |
 | `streamflex-ctest` halves | 9 (45 verdicts) |
-| `streamflex-headless` halves | 334 (1336 verdicts) |
+| `streamflex-headless` halves | 335 (1340 verdicts) |
 | `qa-harness` halves | 160 (160 verdicts) |
-| `manual` halves | 699 (1335 verdicts) |
-| **Automated today** | 503 of 1202 halves; 1541 of 2876 verdicts (53 %) |
+| `manual` halves | 717 (1398 verdicts) |
+| **Automated today** | 504 of 1221 halves; 1545 of 2943 verdicts (52 %) |
 
 <!-- summary:end -->
 
@@ -871,6 +871,24 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 9.72 | `[All]` | manual | qa-harness item 75, planned |
 | 9.73 | `[Win]` | manual | qa-harness item 75, planned |
 | 9.74 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.75 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.76 | `[KDE]` | manual | qa-harness item 75, planned |
+| 9.77 | `[GNOME]` | manual | qa-harness item 75, planned |
+| 9.78 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.79 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.80 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.81 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.82 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.83 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.84 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.85 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.86 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.87 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.88 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.89 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.90 | `[Linux]` | manual | qa-harness item 75, planned |
+| 9.91 | `[Win]` | manual | qa-harness item 75, planned |
+| 9.92 | `[Linux]` | streamflex-headless | `68-media-keys.sh` run `f68-startup` |
 | 10.1 | `[All]` | manual | qa-harness item 75, planned |
 | 10.2 | `[All]` | manual | qa-harness item 75, planned |
 | 10.3 | `[All]` | manual | qa-harness item 75, planned |
@@ -1023,6 +1041,7 @@ Which rows of [`smoke-test.md`](smoke-test.md) are already proven without a pers
 | 14.17 | `[Win]` | manual | qa-harness item 75, planned |
 | 14.18 | `[Linux]` | streamflex-headless | `42-features.sh` run `f42-padswap` |
 | 14.18 | `[Win]` | manual | qa-harness item 75, planned |
+| 14.19 | `[All]` | manual | qa-harness item 75, planned |
 | 15.1 | `[Win]` | manual | qa-harness item 75, planned |
 | 15.2 | `[Linux]` | manual | qa-harness item 75, planned |
 | 15.3 | `[Fedora]` | manual | qa-harness item 75, planned |

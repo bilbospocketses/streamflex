@@ -15,10 +15,11 @@
 #define OWN_SECTION "S"         // The section a tile's line as read is weighed in, alone in a document
 #define OWN_HEADER "[" OWN_SECTION "]\n"
 
-// The sections the parser reads as settings, never as menus: util.c's settings_section(), and Hotkeys
+// The sections the parser reads as settings, never as menus: util.c's settings_section(), Hotkeys, and
+// Desktop Keys (mediakeys.h's MEDIAKEYS_SECTION)
 static const char *const RESERVED[] = {
     "General", "Layout", "Background", "Titles", "Highlight", "Scroll Indicators", "Clock", "Screensaver",
-    "Hotkeys", "Gamepad"
+    "Hotkeys", "Gamepad", "Desktop Keys"
 };
 
 static const char *const OUT_OF_MEMORY = "Out of memory";
