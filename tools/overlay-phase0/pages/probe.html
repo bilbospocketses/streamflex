@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CPTK probe page</title>
+<style>
+  body { background: #202020; color: #eeeeee; font: 20px sans-serif; margin: 40px; }
+  video { width: 640px; height: 360px; background: #000000; }
+</style>
+</head>
+<body>
+<h1>CPTK probe page</h1>
+<p>F asks for fullscreen. P starts the video with sound. The probe extension reports both.</p>
+<video playsinline></video>
+<script>
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 360;
+  const ctx = canvas.getContext("2d");
+  let hue = 0;
+  setInterval(() => {
+    hue = (hue + 3) % 360;
+    ctx.fillStyle = `hsl(${hue} 60% 40%)`;
+    ctx.fillRect(0, 0, 640, 360);
+  }, 100);
+  const audio = new AudioContext();
+  const tone = audio.createOscillator();
+  const sink = audio.createMediaStreamDestination();
+  tone.connect(sink);
+  tone.start();
+  const stream = canvas.captureStream(10);
+  stream.addTrack(sink.stream.getAudioTracks()[0]);
+  const video = document.querySelector("video");
+  video.srcObject = stream;
+  // The AudioContext starts suspended before any gesture; resume it once the user's P key has started the video.
+  video.addEventListener("play", () => {
+    audio.resume().catch((err) => console.warn("CPTK probe page: the tone could not resume:", err));
+  });
+</script>
+</body>
+</html>

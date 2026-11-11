@@ -135,6 +135,8 @@ StreamFlex is made possible by the following projects:
 
 The streaming and media service icons in the icon library are the trademarks of their owners; see [the brand notice](assets/icons/library/brands/NOTICE.md).
 
+StreamFlex is not affiliated with or endorsed by the streaming services it opens (Netflix, YouTube, Disney+, Prime Video and the others). Their names are used only to identify them, and their marks belong to their owners.
+
 StreamFlex's design, inherited from Flex Launcher, was strongly influenced by the excellent desktop application launcher [xlunch](https://github.com/Tomas-M/xlunch).
 
 ## License

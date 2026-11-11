@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CPTK key logger</title>
+<style>
+  body { background: #202020; color: #eeeeee; font: 18px monospace; margin: 24px; }
+  li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<h1>CPTK key logger</h1>
+<p>Press every button on the remote, short and long. Gamepads show after their first press.</p>
+<ol id="log"></ol>
+<script>
+  const log = document.getElementById("log");
+  function add(text) {
+    const li = document.createElement("li");
+    li.textContent = `${new Date().toISOString()} ${text}`;
+    log.prepend(li);
+  }
+  for (const type of ["keydown", "keyup"]) {
+    window.addEventListener(type, (e) => {
+      add(`${type} key=${e.key} code=${e.code} keyCode=${e.keyCode} repeat=${e.repeat} trusted=${e.isTrusted}`);
+      e.preventDefault();
+    }, true);
+  }
+  const held = new Map();
+  function poll() {
+    for (const pad of navigator.getGamepads()) {
+      if (!pad) continue;
+      pad.buttons.forEach((b, i) => {
+        const key = `${pad.index}:${i}`;
+        if (b.pressed !== Boolean(held.get(key))) {
+          held.set(key, b.pressed);
+          add(`gamepad ${pad.index} "${pad.id}" button ${i} ${b.pressed ? "down" : "up"}`);
+        }
+      });
+    }
+    requestAnimationFrame(poll);
+  }
+  requestAnimationFrame(poll);
+</script>
+</body>
+</html>
