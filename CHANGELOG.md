@@ -28,6 +28,7 @@ v0.4.1 is the last release built on SDL2. From v0.5.0, StreamFlex is built on SD
 - The headless harness gains checks 80 to 87 for menu editing, and the mutant driver runs unit mutants through `tests/unit.sh` and judges every mutant against its unmutated control.
 - The smoke doc gains module 18, *Menu editing*, and retires row 6.17 for 18.6.
 - The smoke doc gains rows 1.36 to 1.53, the Fedora tarball's install on Fedora Workstation and Fedora KDE, and its Fedora pre-flight installs the tarball.
+- CI checks the Docker images the repository names. `docker-images.json` declares each one with why it is kept: the containers of the Linux package builds, the bases of the two headless test images, and those two images, which CI builds. The new `Docker keeps` job runs the central checker, [`bilbospocketses/docker-keeps`](https://github.com/bilbospocketses/docker-keeps), pinned by commit in `build.yml`, and `build-and-test` fails when the code names an image the file does not declare or the file declares one nothing names.
 
 ### Known limits
 - A real keyboard's dead key does not combine with the next letter: on Linux it types nothing (the keyboard's *?123* page has `^`), and on Windows it types its own accent and the next key types on its own. An input method is bypassed, so a Japanese or Chinese layout types Latin letters; the keyboard's accents page covers the European accents.

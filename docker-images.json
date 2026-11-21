@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "images": [
+    {
+      "ref": "mirror.gcr.io/library/debian:trixie",
+      "kind": "pin",
+      "purpose": "the container of the Debian and Raspberry Pi package builds in CI"
+    },
+    {
+      "ref": "mirror.gcr.io/library/archlinux:latest",
+      "kind": "pin",
+      "purpose": "the container of the Arch Linux package build in CI"
+    },
+    {
+      "ref": "mirror.gcr.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80",
+      "kind": "pin",
+      "purpose": "the container of the Fedora 44 build and install check in CI, and the base of the Fedora headless test image"
+    },
+    {
+      "ref": "mirror.gcr.io/library/debian:trixie@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1",
+      "kind": "pin",
+      "purpose": "the base of the Debian headless test image"
+    },
+    {
+      "ref": "streamflex-test-debian",
+      "kind": "build",
+      "purpose": "the Debian headless test image, where the sanitized unit tests and the Debian headless shards run",
+      "dockerfile": "tests/headless/Dockerfile"
+    },
+    {
+      "ref": "streamflex-test-fedora",
+      "kind": "build",
+      "purpose": "the Fedora headless test image, where the Fedora headless shards run",
+      "dockerfile": "tests/headless/Dockerfile.fedora"
+    }
+  ]
+}
