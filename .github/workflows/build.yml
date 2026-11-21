@@ -194,7 +194,7 @@ jobs:
             package_ext: .deb
 
     container:
-      image: ${{matrix.config.docker_image}}
+      image: ${{matrix.config.docker_image}}  # the matrix image, declared where the matrix names it; docker-keep: ignore
 
     env:
       CMAKE_BUILD_TYPE: Release
@@ -549,6 +549,30 @@ jobs:
           BASE: ${{ github.base_ref || github.event.repository.default_branch }}
           SLUG: ${{ github.repository }}
 
+  # Every Docker image the code names is declared, with why it is kept, in docker-images.json, and
+  # every image declared there is still named, as the central checker (bilbospocketses/docker-keeps),
+  # pinned by commit, reads them. It reads only the tree of the commit under test, so a shallow
+  # checkout is enough. It is never skipped: build-and-test accepts no skip of it
+  docker_keeps:
+    name: Docker keeps
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out the checker
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bilbospocketses/docker-keeps
+          ref: 034462d0b093b2e916984cdec88a6e3653807944 # v1.0.0
+          path: .docker-keeps
+          persist-credentials: false
+
+      - name: Check the images this repository keeps
+        run: bash .github/scripts/stall-watch.sh --name "docker keeps" -- python3 .docker-keeps/docker_keeps.py check --repo . --ref HEAD --name streamflex
+
   # The unit tests again, built with AddressSanitizer and UBSan and the extra warnings, as the
   # local unit leg (CONTRIBUTING.md) runs them: the Linux job's Release build has no sanitizer, so
   # a test that reads before an array or a freed slot passes there when the memory happens to
@@ -621,7 +645,7 @@ jobs:
             image: streamflex-test-fedora
     env:
       DOCKERFILE: ${{ matrix.dockerfile }}
-      IMAGE: ${{ matrix.image }}
+      IMAGE: ${{ matrix.image }}  # the matrix image, declared where the matrix names it; docker-keep: ignore
       PASS: ${{ matrix.pass }}
       SHARD: ${{ matrix.shard }}
       LABEL: ci-${{ matrix.key }}-${{ matrix.pass }}-s${{ matrix.shard }}
@@ -635,7 +659,7 @@ jobs:
         id: build_image
         run: |
           bash .github/scripts/stall-watch.sh --name "Build the test image" -- \
-            docker build -t "$IMAGE" -f "tests/headless/$DOCKERFILE" tests/headless
+            docker build -t "$IMAGE" -f "tests/headless/$DOCKERFILE" tests/headless  # the matrix image, declared where the matrix names it; docker-keep: ignore
 
       # The console is kept under a name of its own, which the merge reads: the SHARD lines in it
       # are how merge.py knows the two shards make one complete run
@@ -649,7 +673,7 @@ jobs:
             --log "$RUNNER_TEMP/console/$LABEL.console.log" --containers "$tag" -- \
             docker run --rm --label "$tag" --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2"
+            "$IMAGE" bash /src/tests/headless/run.sh "$LABEL" "${mode[@]}" "$SHARD/2"  # the matrix image, declared where the matrix names it; docker-keep: ignore
 
       # Item 11's injected fault, a run of its own with no shards. It runs even when the shard
       # failed, so one run shows every failure, but not without an image to run in
@@ -661,7 +685,7 @@ jobs:
           bash .github/scripts/stall-watch.sh --name "Run scrollfail" --containers "$tag" -- \
             docker run --rm --label "$tag" --security-opt seccomp=unconfined \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/headless:/out" \
-            "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail
+            "$IMAGE" bash /src/tests/headless/run.sh "ci-${{ matrix.key }}-scrollfail" scrollfail  # the matrix image, declared where the matrix names it; docker-keep: ignore
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         name: Upload the shard's console
@@ -723,7 +747,8 @@ jobs:
             python3 tests/headless/merge.py --leg "$LEG" "${consoles[@]}"
 
   # Single required status check for the master branch ruleset. It passes only when promote,
-  # every platform build, the Fedora install check, the icon library check, the spelling check, the sanitized unit tests,
+  # every platform build, the Fedora install check, the icon library check, the spelling check, the
+  # docker keeps check, the sanitized unit tests,
   # every headless shard and every merge succeeded. The one exception: the sanitized unit tests,
   # the shards and the merges may be skipped on a push run when promote succeeded and said
   # `promoted=true`, because their PR passed them on the same files; the log and the summary name
@@ -733,7 +758,7 @@ jobs:
   # canceled.
   build-and-test:
     runs-on: ubuntu-24.04
-    needs: [promote, build_windows, build_linux, build_rpi, build_arch, build_fedora, fedora_install, library_check, spelling, unit_sanitizers, headless, headless_merge]
+    needs: [promote, build_windows, build_linux, build_rpi, build_arch, build_fedora, fedora_install, library_check, spelling, docker_keeps, unit_sanitizers, headless, headless_merge]
     if: always()
     steps:
       - name: Check the jobs
