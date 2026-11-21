@@ -8,6 +8,12 @@
 
 bool settings_is_open(void);
 void settings_open(void);
+#ifndef _WIN32
+// At start, before the StartupCmd: log which media keys KDE Plasma or GNOME holds, and while it holds either
+// and [Desktop Keys] Ask is not no, open settings on the Media keys prompt; true when it opened, and the
+// StartupCmd then waits until settings close
+bool settings_start_media_keys(void);
+#endif
 void settings_handle_command(const char *command);
 void settings_draw(void);
 void settings_close_now(void);

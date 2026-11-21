@@ -23,9 +23,20 @@
 #   ubuntu-guest.sh add-cafe-entry        add Entry5=Café to [Main] of the user config
 #   ubuntu-guest.sh pad-node              print the virtual pad's /dev/input node, its udev
 #                                         properties and its ACL (is it the desktop user's?)
+#   ubuntu-guest.sh media-keys release|restore|status
+#                                         the desktop's next- and previous-track shortcuts (KDE
+#                                         Plasma's kglobalaccel, GNOME's media-keys settings), read
+#                                         and changed as the desktop user: release keeps them in
+#                                         /root/sf-qa/media-keys.saved (never over a save already
+#                                         there) and clears them; restore puts the saved ones back
+#                                         and deletes the save; status prints them. Exit 0 done, 1 a
+#                                         key still held after release or not back after restore,
+#                                         2 neither KDE Plasma nor GNOME, 3 the desktop user's
+#                                         session bus (or the desktop on it) does not answer
 #
 # REQUIREMENTS
 #   Ubuntu 26.04 with the StreamFlex .deb installed (setup needs it), python3, root.
+#   media-keys needs the desktop user logged in to the desktop, and busctl (and gsettings on GNOME).
 set -u
 
 QA_USER=${QA_USER:-qa}
@@ -198,11 +209,154 @@ pad_node() {
     getfacl -p "$node" 2>/dev/null || ls -l "$node"
 }
 
+# The desktop's media keys (smoke rows 9.75 to 9.92): KDE Plasma and GNOME hold next and previous track as
+# shipped, and while they do, StreamFlex opens settings on its Media keys prompt at every start, so a Linux
+# pass frees them first. Only kglobalaccel inside KWin (Plasma 6 on Wayland) is proven; the standalone
+# daemon is unmeasured, here and in StreamFlex alike
+MEDIA_SAVED=/root/sf-qa/media-keys.saved
+MEDIA_SCHEMA=org.gnome.settings-daemon.plugins.media-keys
+KGA="busctl --user call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel"
+
+# run the sh script on stdin as the desktop user, on their session's bus
+as_desktop() {
+    su - "$QA_USER" -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus sh -s'
+}
+
+# quote a value for that script
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+media_key_names() {
+    if [ "$1" = kde ]; then echo nextmedia previousmedia; else echo next previous next-static previous-static; fi
+}
+
+# kde, gnome, neither, or unreachable; decided as StreamFlex decides: XDG_CURRENT_DESKTOP names the desktop
+# (the user manager's copy, and when it has none the bus and gsettings decide alone), and kglobalaccel owns
+# its bus name, or gsettings reads GNOME's schema
+media_desktop() {
+    as_desktop <<'EOF'
+busctl --user list > /dev/null 2>&1 || { echo unreachable; exit 0; }
+x=$(systemctl --user show-environment 2> /dev/null | sed -n 's/^XDG_CURRENT_DESKTOP=//p')
+names() { [ -z "$x" ] || printf '%s\n' "$x" | tr ':' '\n' | grep -qix "$1"; }
+if names KDE && [ "$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
+        NameHasOwner s org.kde.kglobalaccel 2> /dev/null)" = "b true" ]; then
+    echo kde
+elif names GNOME && gsettings get org.gnome.settings-daemon.plugins.media-keys next > /dev/null 2>&1; then
+    echo gnome
+else
+    echo neither
+fi
+EOF
+}
+
+# print each key's value as <key>=<value>: busctl's answer (a(ai) 1 4 16777347 0 0 0) or gsettings' text
+media_read() {
+    local get
+    if [ "$1" = kde ]; then get="$KGA shortcutKeys as 4 mediacontrol \"\$k\" mediacontrol \"\$k\""
+    else get="gsettings get $MEDIA_SCHEMA \"\$k\""; fi
+    as_desktop <<EOF
+for k in $(media_key_names "$1"); do
+    v=\$($get) || exit 1
+    echo "\$k=\$v"
+done
+EOF
+}
+
+# whether a value holds its key, as StreamFlex judges it: Plasma, a key sequence whose first key is not 0
+# (a(ai) N, then each sequence as its length and its keys); GNOME, a string in the array that is not empty
+media_held() {
+    if [ "$1" = gnome ]; then
+        printf '%s' "$2" | sed "s/''//g" | grep -q "'"
+        return
+    fi
+    local -a t
+    read -ra t <<< "$2"
+    local i=2 n=${t[1]:-0} m
+    while [ "$n" -gt 0 ] && [ "$i" -lt "${#t[@]}" ]; do
+        m=${t[i]}
+        [ "$m" -gt 0 ] && [ "${t[i+1]:-0}" != 0 ] && return 0
+        i=$((i + m + 1)); n=$((n - 1))
+    done
+    return 1
+}
+
+# set each key from a save (the file's <key>=<value> lines), or clear it (from = clear)
+media_write() {
+    local k v script=
+    for k in $(media_key_names "$1"); do
+        v=
+        [ "$2" = clear ] || v=$(sed -n "s/^$k=//p" "$2")
+        if [ "$1" = kde ]; then
+            # busctl's answer goes back as it came, less its type: a(ai) 1 4 16777347 0 0 0 sets 1 4 16777347 0 0 0
+            v=${v#'a(ai) '}
+            case "$v" in *[!0-9\ ]*) die "$k's saved value is not busctl's answer: $v" ;; esac
+            script+="$KGA setForeignShortcutKeys 'asa(ai)' 4 mediacontrol $k mediacontrol $k ${v:-0}"$'\n'
+        else
+            script+="gsettings set $MEDIA_SCHEMA $k $(shq "${v:-[]}")"$'\n'
+        fi
+    done
+    printf '%s' "$script" | as_desktop
+    [ "$1" = kde ] && sleep 1.5   # a read straight after a change can still see the old value
+    return 0
+}
+
+media_keys() {
+    local action=${1:-} desktop now k v failed=0
+    case "$action" in release|restore|status) ;; *) die "media-keys needs release, restore or status" ;; esac
+    desktop=$(media_desktop)
+    case "$desktop" in
+        kde|gnome) ;;
+        neither) echo "ubuntu-guest: the desktop is neither KDE Plasma (kglobalaccel) nor GNOME (its media-keys settings)" >&2
+                 exit 2 ;;
+        *) echo "ubuntu-guest: $QA_USER's session bus does not answer (is $QA_USER logged in to the desktop?)" >&2
+           exit 3 ;;
+    esac
+    echo "media-keys desktop=$desktop"
+    now=$(media_read "$desktop") || { echo "ubuntu-guest: the desktop did not answer a read of its shortcuts" >&2; exit 3; }
+    case "$action" in
+        release)
+            if [ -f "$MEDIA_SAVED" ]; then
+                echo "media-keys kept the existing save"
+            else
+                { echo "desktop=$desktop"; printf '%s\n' "$now"; } > "$MEDIA_SAVED.tmp" \
+                    && mv "$MEDIA_SAVED.tmp" "$MEDIA_SAVED" || die "could not write $MEDIA_SAVED"
+                echo "media-keys saved to $MEDIA_SAVED"
+            fi
+            media_write "$desktop" clear
+            ;;
+        restore)
+            if [ ! -f "$MEDIA_SAVED" ]; then
+                echo "media-keys nothing saved"
+            else
+                [ "$(sed -n 's/^desktop=//p' "$MEDIA_SAVED")" = "$desktop" ] \
+                    || { echo "ubuntu-guest: $MEDIA_SAVED was saved on another desktop" >&2; exit 1; }
+                media_write "$desktop" "$MEDIA_SAVED"
+                echo "media-keys restored"
+            fi
+            ;;
+    esac
+    if [ "$action" != status ]; then
+        now=$(media_read "$desktop") || { echo "ubuntu-guest: the desktop did not answer a read of its shortcuts" >&2; exit 3; }
+    fi
+    printf '%s\n' "$now" | sed 's/^/media-keys /'
+    for k in $(media_key_names "$desktop"); do
+        v=$(printf '%s\n' "$now" | sed -n "s/^$k=//p")
+        if [ "$action" = release ] && media_held "$desktop" "$v"; then
+            echo "ubuntu-guest: $k is still held" >&2; failed=1
+        elif [ "$action" = restore ] && [ -f "$MEDIA_SAVED" ] && [ "$v" != "$(sed -n "s/^$k=//p" "$MEDIA_SAVED")" ]; then
+            echo "ubuntu-guest: $k is not back as saved" >&2; failed=1
+        fi
+    done
+    [ "$failed" = 0 ] || exit 1
+    [ "$action" = restore ] && rm -f "$MEDIA_SAVED"
+    return 0
+}
+
 case "${1:-}" in
     facts) facts ;;
     setup) setup ;;
     reset-pass) reset_pass "${2:-}" ;;
     add-cafe-entry) add_cafe_entry ;;
     pad-node) pad_node ;;
+    media-keys) media_keys "${2:-}" ;;
     *) sed -n '2,/^set -u/p' "$0" | sed 's/^# \{0,1\}//' | head -n -1; exit 2 ;;
 esac

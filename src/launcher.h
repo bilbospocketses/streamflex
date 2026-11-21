@@ -2,6 +2,7 @@
 #include "derive.h"
 #include "padpower.h"
 #include "menuedit.h"
+#include "mediakeys.h"
 
 // Launcher parameters
 #define DEFAULT_REFRESH_RATE DERIVE_DEFAULT_REFRESH_RATE
@@ -323,6 +324,8 @@ typedef struct {
     bool clock_include_weekday;
     Uint32 slideshow_image_duration;
     Uint32 slideshow_transition_time;
+    bool media_keys_ask;                // [Desktop Keys] Ask is not "no": the media-keys prompt may show
+    MediaKeysState media_keys_saved;    // The desktop's shortcuts [Desktop Keys] saved; MEDIAKEYS_NONE when none
 } Config;
 
 void quit_slideshow(void);
